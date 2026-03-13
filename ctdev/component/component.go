@@ -1,0 +1,104 @@
+package component
+
+import (
+	"context"
+	"io"
+)
+
+type Category string
+
+const (
+	CategoryCLI      Category = "CLI Tools"
+	CategoryDesktop  Category = "Desktop Applications"
+	CategoryRuntime  Category = "Development Runtimes"
+	CategorySecurity Category = "Security & Encryption"
+	CategoryInfra    Category = "Infrastructure"
+	CategorySystem   Category = "System Tools"
+)
+
+type OS string
+
+const (
+	OSLinux OS = "linux"
+	OSMacOS OS = "macos"
+	OSAny   OS = "any"
+)
+
+type Component struct {
+	Name         string
+	Description  string
+	Category     Category
+	SupportedOS  []OS
+	Dependencies []string
+	Tags         []string
+
+	GoInstall   func(ctx context.Context, opts ExecOpts) error
+	GoUninstall func(ctx context.Context, opts ExecOpts) error
+
+	BashInstall   string
+	BashUninstall string
+}
+
+type ExecOpts struct {
+	DryRun  bool
+	Force   bool
+	Verbose bool
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
+func (inst *Component) SupportsOS(os OS) bool {
+	for _, supported := range inst.SupportedOS {
+		if supported == OSAny || supported == os {
+			return true
+		}
+	}
+	return false
+}
+
+func FilterByOS(components []Component, os OS) []Component {
+	var result []Component
+	for _, c := range components {
+		if c.SupportsOS(os) {
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
+func GroupByCategory(components []Component) map[Category][]Component {
+	groups := make(map[Category][]Component)
+	for _, c := range components {
+		groups[c.Category] = append(groups[c.Category], c)
+	}
+	return groups
+}
+
+func ResolveDependencies(all []Component, selected []string) []string {
+	lookup := make(map[string]*Component)
+	for i := range all {
+		lookup[all[i].Name] = &all[i]
+	}
+
+	seen := make(map[string]bool)
+	var result []string
+
+	var resolve func(name string)
+	resolve = func(name string) {
+		if seen[name] {
+			return
+		}
+		seen[name] = true
+		if c, ok := lookup[name]; ok {
+			for _, dep := range c.Dependencies {
+				resolve(dep)
+			}
+		}
+		result = append(result, name)
+	}
+
+	for _, name := range selected {
+		resolve(name)
+	}
+	return result
+}
