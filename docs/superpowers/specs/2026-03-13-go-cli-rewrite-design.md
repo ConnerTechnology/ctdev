@@ -60,8 +60,8 @@ User -> Cobra CLI (parse flags, route) -> Bubble Tea TUI (interactive UI)
 ### Dual Mode: TUI + Batch
 
 Every command works in two modes:
-- **Interactive (default):** Full Bubble Tea TUI when running in a terminal
-- **Batch:** Non-interactive mode via `--yes`/`--batch` flags, or when stdin is not a TTY. For scripting, CI, piping.
+- **Interactive (default):** Full Bubble Tea TUI when running in a terminal (stdin is a TTY)
+- **Batch:** Non-interactive mode when stdin is not a TTY, or when `--batch` global flag is passed. Equivalent to answering "yes" to all prompts and using defaults. Individual commands may also support `-y`/`--yes` as an alias for `--batch`.
 
 ## Component Model
 
@@ -76,6 +76,7 @@ const (
     CategoryRuntime  Category = "Development Runtimes"
     CategorySecurity Category = "Security & Encryption"
     CategorySystem   Category = "System Tools"
+    CategoryInfra    Category = "Infrastructure"
 )
 
 type OS string
@@ -154,10 +155,11 @@ All 36 components defined in `component/registry.go` as a slice of Component str
 
 | Category | Components |
 |----------|-----------|
-| CLI Tools | btop, bun, codex, docker, doctl, gh, git-spice, helm, jq, kubectl, shellcheck, sops, tmux |
+| CLI Tools | btop, bun, claude-code, codex, docker, doctl, gh, git-spice, helm, jq, kubectl, shellcheck, tmux |
 | Desktop Applications | 1password, chatgpt, chrome, cleanmymac, claude-desktop, dbeaver, ghostty, linear, logi-options, slack, vscode |
-| Development Runtimes | claude-code, fonts, git, node, ruby, zsh |
-| Security & Encryption | age, sops, tailscale, terraform |
+| Development Runtimes | fonts, git, node, ruby, zsh |
+| Security & Encryption | age, sops, tailscale |
+| Infrastructure | terraform |
 | System Tools | bleachbit, earlyoom, solaar |
 
 ## State Management (XDG)
@@ -195,7 +197,7 @@ Upgraded from flat timestamp files to JSON for richer state tracking.
 
 ### Migration
 
-On first run, the Go CLI detects existing `~/.config/ctdev/<name>.installed` marker files and migrates them to the new JSON format in `~/.local/state/ctdev/`.
+On first run, the Go CLI detects existing `~/.config/ctdev/<name>.installed` marker files and migrates them to the new JSON format in `~/.local/state/ctdev/`. The `installed_at` field is populated from the old file's timestamp content (ISO 8601). The `version` field is set to `"unknown"` and `updated_at` is set to `installed_at` since the old format didn't track these. Subsequent updates will populate them correctly.
 
 ## TUI Designs
 
@@ -212,7 +214,7 @@ On first run, the Go CLI detects existing `~/.config/ctdev/<name>.installed` mar
 - Dependency hints — selecting helm auto-suggests kubectl
 - Status bar: selection count, installed count, platform info
 
-**With args:** `ctdev install docker tmux` bypasses TUI, installs directly with progress output.
+**With args:** `ctdev install docker tmux` bypasses TUI, installs directly with progress output. Dependencies are auto-installed (with a note shown) — e.g., `ctdev install helm` also installs kubectl if not present.
 
 ### 2. Installation Progress
 
@@ -297,9 +299,27 @@ Rich dashboard display:
 
 ### Command-Specific Flags
 
-All existing flags preserved. New additions:
-- `ctdev setup --batch` — Non-interactive setup
-- `ctdev update --batch` — Alias for `--yes`
+All existing flags from the bash CLI are preserved:
+
+**`ctdev setup`:**
+- `--show` — Display current configuration
+- `--reset` — Reset configuration to defaults
+- `--skip-gpu` — Skip GPU driver setup
+- `--skip-configure` — Skip interactive configuration prompts
+
+**`ctdev update`:**
+- `-y, --yes` — Skip confirmation (alias for global `--batch`)
+- `--check` — List available updates without installing
+- `--refresh-keys [COMPONENT...]` — Refresh APT GPG keys before updating
+
+**`ctdev configure git`:**
+- `--name` — Set git user name
+- `--email` — Set git user email
+- `--local` — Apply to current repo only
+- `--show` — Show current git config
+
+**`ctdev gpu setup`:**
+- `--recover` — Re-enroll MOK after CMOS reset
 
 ## Dependencies
 
@@ -319,16 +339,24 @@ All existing flags preserved. New additions:
 
 ## Testing Strategy
 
-- Unit tests for component registry, platform detection, state management
-- Integration tests for executor (bash bridge)
-- TUI tests using Bubble Tea's test utilities (sending key messages, asserting model state)
+- Unit tests for component registry, platform detection, state management, marker migration
+- Integration tests for executor (bash bridge) — test with simple test scripts, not real package managers
+- TUI tests using Bubble Tea's `teatest` package — send key sequences, assert model state and view output. These run headless (no TTY required), safe for CI.
 - No mocking of package managers — test the orchestration layer, not apt/brew
+
+## Build & Version
+
+The binary version is injected at build time via Go linker flags (`-ldflags`), reading from the `VERSION` file:
+
+```bash
+go build -ldflags "-X main.version=$(cat ../VERSION)" -o ctdev ./
+```
 
 ## Migration Path
 
-1. Go binary built and placed at `ctdev/` in repo
-2. Build produces `ctdev` binary
-3. Install script updated to build Go binary (requires Go) or download pre-built binary
+1. Go module lives at `ctdev/` in the repo
+2. `go build` produces the `ctdev` binary
+3. Pre-built binaries published as GitHub release assets (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64). Install script downloads the right binary for the platform — no Go toolchain required on the target machine. Building from source is optional for development.
 4. Existing bash scripts remain in `components/` — Go shells out to them
 5. Components ported to pure Go incrementally (no rush)
 6. Old `cmds/` and `lib/` directories remain until all components are ported
