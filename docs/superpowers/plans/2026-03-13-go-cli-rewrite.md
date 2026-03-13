@@ -498,6 +498,7 @@ git commit -m "feat: add platform detection and system info"
 - Create: `ctdev/state/paths.go`
 - Create: `ctdev/state/paths_test.go`
 - Create: `ctdev/state/config.go`
+- Create: `ctdev/state/config_test.go`
 - Create: `ctdev/state/markers.go`
 - Create: `ctdev/state/markers_test.go`
 - Create: `ctdev/state/migrate.go`
@@ -1265,8 +1266,6 @@ package shell
 import (
 	"bytes"
 	"context"
-	"errors"
-	"os/exec"
 	"testing"
 )
 
@@ -2102,7 +2101,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/bubbles/v2/progress"
+	bprogress "charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
@@ -2138,7 +2137,7 @@ type Model struct {
 	components  []ComponentState
 	current     int
 	spinner     spinner.Model
-	progressBar progress.Model
+	progressBar bprogress.Model
 	done        bool
 	startTime   time.Time
 	width       int
@@ -2149,9 +2148,9 @@ func New(names []string) Model {
 		spinner.WithSpinner(spinner.Dot),
 		spinner.WithStyle(lipgloss.NewStyle().Foreground(styles.Orange)),
 	)
-	p := progress.New(
-		progress.WithDefaultBlend(),
-		progress.WithWidth(40),
+	p := bprogress.New(
+		bprogress.WithDefaultBlend(),
+		bprogress.WithWidth(40),
 	)
 
 	states := make([]ComponentState, len(names))
@@ -2230,7 +2229,7 @@ func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		inst.spinner, cmd = inst.spinner.Update(msg)
 		return inst, cmd
-	case progress.FrameMsg:
+	case bprogress.FrameMsg:
 		m, cmd := inst.progressBar.Update(msg)
 		inst.progressBar = m
 		return inst, cmd
