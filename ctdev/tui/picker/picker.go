@@ -270,7 +270,9 @@ func (inst Model) View() tea.View {
 	)
 	b.WriteString(styles.StatusBar.Render(status))
 
-	return tea.NewView(b.String())
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }
 
 func (inst Model) countInCategory(cat component.Category) int {
