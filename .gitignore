@@ -22,3 +22,10 @@
 
 # Local overrides (user-specific, not tracked)
 shell/exports.local.zsh
+
+# Go CLI build artifacts
+ctdev/ctdev
+ctdev/dist/
+
+# Superpowers
+.superpowers/
