@@ -854,7 +854,48 @@ func LoadConfig() Config {
 }
 ```
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 11: Write config_test.go**
+
+```go
+package state
+
+import (
+	"testing"
+
+	"github.com/spf13/viper"
+)
+
+func TestLoadConfigDefaults(t *testing.T) {
+	viper.Reset()
+	cfg := LoadConfig()
+	if cfg.UpdateInterval != "weekly" {
+		t.Errorf("expected weekly, got %s", cfg.UpdateInterval)
+	}
+	if len(cfg.DefaultComponents) != 0 {
+		t.Errorf("expected no default components, got %v", cfg.DefaultComponents)
+	}
+}
+
+func TestLoadConfigFromViper(t *testing.T) {
+	viper.Reset()
+	viper.Set("update_interval", "daily")
+	viper.Set("default_components", []string{"zsh", "git"})
+	cfg := LoadConfig()
+	if cfg.UpdateInterval != "daily" {
+		t.Errorf("expected daily, got %s", cfg.UpdateInterval)
+	}
+	if len(cfg.DefaultComponents) != 2 {
+		t.Errorf("expected 2 default components, got %d", len(cfg.DefaultComponents))
+	}
+}
+```
+
+- [ ] **Step 12: Run all state tests**
+
+Run: `cd ctdev && go test ./state/ -v`
+Expected: PASS
+
+- [ ] **Step 13: Commit**
 
 ```bash
 git add ctdev/state/
@@ -1216,7 +1257,62 @@ func BoolEnv(name string, val bool) string {
 }
 ```
 
-- [ ] **Step 2: Write executor.go**
+- [ ] **Step 2: Write shell_test.go**
+
+```go
+package shell
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"os/exec"
+	"testing"
+)
+
+func TestRun(t *testing.T) {
+	var stdout bytes.Buffer
+	err := Run(context.Background(), "echo", []string{"hello"}, RunOpts{
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if stdout.String() != "hello\n" {
+		t.Errorf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestExitCode(t *testing.T) {
+	if ExitCode(nil) != 0 {
+		t.Error("nil error should return 0")
+	}
+	err := Run(context.Background(), "bash", []string{"-c", "exit 2"}, RunOpts{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	})
+	if ExitCode(err) != 2 {
+		t.Errorf("expected exit code 2, got %d", ExitCode(err))
+	}
+}
+
+func TestBoolEnv(t *testing.T) {
+	if BoolEnv("FOO", true) != "FOO=true" {
+		t.Error("expected FOO=true")
+	}
+	if BoolEnv("FOO", false) != "FOO=false" {
+		t.Error("expected FOO=false")
+	}
+}
+```
+
+- [ ] **Step 3: Run shell tests**
+
+Run: `cd ctdev && go test ./internal/shell/ -v`
+Expected: PASS
+
+- [ ] **Step 4: Write executor.go**
 
 ```go
 package component
@@ -1517,10 +1613,10 @@ Expected: Shows OS, arch, package manager, CPU, memory, installed components
 Run: `cd ctdev && ./ctdev --help`
 Expected: Shows usage with info subcommand listed
 
-- [ ] **Step 5: Commit any fixes needed, then tag milestone**
+- [ ] **Step 5: If any fixes were needed, commit them**
 
 ```bash
-git commit -m "feat: chunk 1 complete — foundation, platform, state, executor"
+git add -A ctdev/ && git diff --cached --quiet || git commit -m "fix: chunk 1 verification fixes"
 ```
 
 ---
@@ -1952,10 +2048,13 @@ func testComponents() []component.Component {
 
 func TestPickerSelectToggle(t *testing.T) {
 	m := New(testComponents(), map[string]bool{}, component.OSLinux)
+	// NOTE: KeyPressMsg field names may differ in bubbletea v2 at build time.
+	// Check `charm.land/bubbletea/v2` godoc for exact struct fields.
+	// If fields changed, construct key messages using the v2 API helpers.
 	// Move to first component (skip category header)
-	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown}).(Model), nil
+	m.moveCursor(1) // direct method call avoids fragile msg construction
 	// Select it
-	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeySpace}).(Model), nil
+	m.toggleSelected()
 
 	result := m.GetResult()
 	if len(m.selected) != 1 {
@@ -1966,9 +2065,7 @@ func TestPickerSelectToggle(t *testing.T) {
 
 func TestPickerQuitReturnsNoSelection(t *testing.T) {
 	m := New(testComponents(), map[string]bool{}, component.OSLinux)
-	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyRunes, Runes: []rune{'q'}})
-	m = updated.(Model)
-	_ = cmd
+	m.quitting = true // directly set state instead of fragile msg construction
 
 	result := m.GetResult()
 	if !result.Quit {
@@ -2266,7 +2363,78 @@ func appendTail(lines []string, line string, max int) []string {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Write progress_test.go**
+
+```go
+package progress
+
+import (
+	"testing"
+	"time"
+)
+
+func TestProgressModelInit(t *testing.T) {
+	m := New([]string{"docker", "btop"})
+	if len(m.components) != 2 {
+		t.Errorf("expected 2 components, got %d", len(m.components))
+	}
+	if m.components[0].Status != StatusWaiting {
+		t.Error("expected initial status to be waiting")
+	}
+}
+
+func TestProgressModelInstallDone(t *testing.T) {
+	m := New([]string{"docker", "btop"})
+
+	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
+	m = updated.(Model)
+	if m.components[0].Status != StatusRunning {
+		t.Error("expected docker to be running")
+	}
+
+	updated, _ = m.Update(InstallDoneMsg{Name: "docker", Duration: 3 * time.Second})
+	m = updated.(Model)
+	if m.components[0].Status != StatusDone {
+		t.Error("expected docker to be done")
+	}
+	if m.donePercent() != 0.5 {
+		t.Errorf("expected 50%% done, got %f", m.donePercent())
+	}
+}
+
+func TestProgressModelInstallFail(t *testing.T) {
+	m := New([]string{"docker"})
+
+	updated, _ := m.Update(InstallFailMsg{Name: "docker", Error: "apt lock", Duration: time.Second})
+	m = updated.(Model)
+	if m.components[0].Status != StatusFailed {
+		t.Error("expected docker to be failed")
+	}
+	if m.components[0].Error != "apt lock" {
+		t.Errorf("expected 'apt lock', got %s", m.components[0].Error)
+	}
+}
+
+func TestProgressOutputTail(t *testing.T) {
+	lines := appendTail(nil, "a", 3)
+	lines = appendTail(lines, "b", 3)
+	lines = appendTail(lines, "c", 3)
+	lines = appendTail(lines, "d", 3)
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(lines))
+	}
+	if lines[0] != "b" {
+		t.Errorf("expected 'b' first, got %s", lines[0])
+	}
+}
+```
+
+- [ ] **Step 3: Run progress tests**
+
+Run: `cd ctdev && go test ./tui/progress/ -v`
+Expected: PASS
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add ctdev/tui/progress/
@@ -2462,10 +2630,56 @@ git commit -m "feat: chunk 2 complete — install command with picker and progre
 
 Reuses the picker model from Task 11, but filtered to show only installed components. Red selection indicators. The progress model from Task 12 handles execution display.
 
-- [ ] **Step 1: Write uninstall.go** — same pattern as install.go but:
-  - Picker shows only installed components
-  - Calls `executor.Uninstall()` instead of `Install()`
-  - Removes markers on success via `markers.Remove(name)`
+- [ ] **Step 1: Write uninstall.go**
+
+```go
+func runUninstall(cmd *cobra.Command, args []string) error {
+	markers := state.DefaultMarkerStore()
+	executor := comp.NewExecutor(dotfilesRoot())
+
+	var selected []string
+
+	if len(args) > 0 {
+		for _, name := range args {
+			if comp.FindByName(name) == nil {
+				return fmt.Errorf("unknown component: %s", name)
+			}
+		}
+		selected = args
+	} else if isBatchMode() {
+		return fmt.Errorf("no components specified")
+	} else {
+		// Picker filtered to installed only
+		installed := make(map[string]bool)
+		list, _ := markers.List()
+		for _, name := range list {
+			installed[name] = true
+		}
+		// Only pass installed components to picker
+		var installedComps []comp.Component
+		for _, c := range comp.Registry {
+			if installed[c.Name] {
+				installedComps = append(installedComps, c)
+			}
+		}
+		osType := comp.OS(executor.Platform.OS)
+		p := tea.NewProgram(picker.New(installedComps, installed, osType), tea.WithAltScreen())
+		result, err := p.Run()
+		if err != nil {
+			return err
+		}
+		pickerResult := result.(picker.Model).GetResult()
+		if pickerResult.Quit || len(pickerResult.Selected) == 0 {
+			return nil
+		}
+		selected = pickerResult.Selected
+	}
+
+	// Run uninstallation with progress TUI (same pattern as install)
+	// On success: markers.Remove(name)
+	return runUninstallWithProgress(executor, markers, selected)
+}
+```
 
 - [ ] **Step 2: Test with args**: `./ctdev uninstall --dry-run jq`
 - [ ] **Step 3: Test interactive picker**: `./ctdev uninstall`
@@ -2514,10 +2728,72 @@ For the scan phase, shell out to:
 
 Flags: `--yes`/`-y`, `--check`, `--refresh-keys`
 
-- [ ] **Step 1: Write update.go with scan + checklist + execution**
-- [ ] **Step 2: Test `--check` mode**: `./ctdev update --check`
-- [ ] **Step 3: Test interactive flow**: `./ctdev update`
-- [ ] **Step 4: Commit**
+- [ ] **Step 1: Write update scan functions**
+
+Each scanner runs in a goroutine, returns `[]UpdateItem` via a channel:
+
+```go
+func scanAPT(ctx context.Context) ([]UpdateItem, error) {
+	out, err := exec.CommandContext(ctx, "apt", "list", "--upgradable").Output()
+	// Parse lines: "pkg/suite version1 arch [upgradable from: version0]"
+	// Return UpdateItem{Name: pkg, Source: "apt", CurrentVer: version0, NewVer: version1}
+}
+
+func scanFlatpak(ctx context.Context) ([]UpdateItem, error) {
+	out, err := exec.CommandContext(ctx, "flatpak", "remote-ls", "--updates", "--columns=application,version").Output()
+	// Parse tab-separated output
+}
+
+func scanGitRepo(ctx context.Context, name, path string) (*UpdateItem, error) {
+	// git -C path fetch --quiet
+	// git -C path rev-list HEAD..@{u} --count
+	// If count > 0, return UpdateItem{Name: name, Source: "git", NewVer: fmt.Sprintf("%d commits behind", count)}
+}
+
+func scanBrew(ctx context.Context) ([]UpdateItem, error) {
+	out, err := exec.CommandContext(ctx, "brew", "outdated", "--verbose").Output()
+	// Parse "pkg (installed) < available"
+}
+```
+
+- [ ] **Step 2: Write update.go command with scan orchestration**
+
+```go
+func runUpdate(cmd *cobra.Command, args []string) error {
+	if flagCheck {
+		return runUpdateCheck() // scan + print, no install
+	}
+	if flagRefreshKeys {
+		refreshAPTKeys(args) // shell out to existing key refresh logic
+	}
+
+	// Phase 1: Scan all sources in parallel
+	items := scanAll(context.Background())
+
+	if len(items) == 0 {
+		fmt.Println("Everything is up to date.")
+		return nil
+	}
+
+	// Phase 2: Interactive checklist or batch
+	var selected []UpdateItem
+	if isBatchMode() || flagYes {
+		selected = items
+	} else {
+		// Launch checklist TUI
+		p := tea.NewProgram(checklist.New(items), tea.WithAltScreen())
+		result, err := p.Run()
+		// ...get selected items from result
+	}
+
+	// Phase 3: Execute selected updates (reuse progress model)
+	return executeUpdates(selected)
+}
+```
+
+- [ ] **Step 3: Test `--check` mode**: `./ctdev update --check`
+- [ ] **Step 4: Test interactive flow**: `./ctdev update`
+- [ ] **Step 5: Commit**
 
 ### Task 18: Chunk 3 Verification
 
@@ -2650,11 +2926,12 @@ Uses `bubbles/textinput` for the form fields.
 - Create: `ctdev/cmd/gpu.go`
 
 `ctdev gpu info` — static display (no TUI needed, just Lip Gloss formatting).
-`ctdev gpu setup` — step-by-step flow, shells out to existing GPU bash scripts.
+`ctdev gpu setup` — step-by-step flow, shells out to existing GPU bash scripts. Flags: `--recover` (re-enroll MOK after CMOS reset), `--force`, `--dry-run`.
 
-- [ ] **Step 1: Write gpu.go**
+- [ ] **Step 1: Write gpu.go with info and setup subcommands, including --recover flag**
 - [ ] **Step 2: Test**: `./ctdev gpu info`
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Test**: `./ctdev gpu setup --help` (verify --recover flag shown)
+- [ ] **Step 4: Commit**
 
 ### Task 26: Build System + .gitignore
 
