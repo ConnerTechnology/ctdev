@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -39,6 +41,20 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&flagDryRun, "dry-run", "n", false, "preview changes without applying")
 	rootCmd.PersistentFlags().BoolVarP(&flagForce, "force", "f", false, "force re-run install scripts")
 	rootCmd.PersistentFlags().BoolVar(&flagBatch, "batch", false, "non-interactive mode")
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Migrate old markers on first run
+		ms := state.DefaultMarkerStore()
+		oldDir := state.ConfigDir()
+		migrated, err := state.MigrateOldMarkers(oldDir, ms)
+		if err != nil {
+			return nil // don't fail on migration errors
+		}
+		if migrated > 0 && flagVerbose {
+			fmt.Printf("Migrated %d old install markers\n", migrated)
+		}
+		return nil
+	}
 }
 
 func initConfig() {
