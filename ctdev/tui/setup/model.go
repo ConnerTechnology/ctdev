@@ -71,9 +71,8 @@ func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (inst *Model) updateModal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// Delegate to modal; for now just close on any key since modal is a stub
-	switch msg.String() {
-	case "esc", "q", "i", "enter":
+	inst.modal.Update(msg)
+	if inst.modal.Closed() {
 		inst.view = viewList
 		inst.modal = nil
 	}
@@ -81,15 +80,14 @@ func (inst *Model) updateModal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (inst *Model) updateConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc", "q":
-		inst.confirm.cancelled = true
-		inst.view = viewList
-		inst.confirm = nil
-	case "enter", "y":
-		inst.confirm.confirmed = true
+	inst.confirm.Update(msg)
+	if inst.confirm.Confirmed() {
 		inst.applied = true
 		return inst, tea.Quit
+	}
+	if inst.confirm.Cancelled() {
+		inst.view = viewList
+		inst.confirm = nil
 	}
 	return inst, nil
 }
@@ -136,11 +134,10 @@ func (inst *Model) View() tea.View {
 	mainContent := inst.buildList()
 
 	if inst.view == viewModal && inst.modal != nil {
-		// Dim the main list and overlay modal centered
 		dimmed := styles.Dimmed.Render(mainContent)
 		b.WriteString(dimmed)
-		b.WriteString("\n\n")
-		b.WriteString(fmt.Sprintf("  [Info: %s] (press esc to close)\n", inst.modal.state.Setting.Name))
+		b.WriteString("\n")
+		b.WriteString(inst.modal.View(inst.width, inst.height))
 	} else {
 		b.WriteString(mainContent)
 	}
@@ -149,25 +146,7 @@ func (inst *Model) View() tea.View {
 }
 
 func (inst *Model) viewConfirm() tea.View {
-	var b strings.Builder
-	b.WriteString(styles.Title.Render("Confirm Changes"))
-	b.WriteString("\n\n")
-
-	if inst.confirm != nil && len(inst.confirm.changes) > 0 {
-		for _, c := range inst.confirm.changes {
-			b.WriteString(fmt.Sprintf("  %s: %s -> %s\n",
-				lipgloss.NewStyle().Foreground(styles.Bright).Render(c.name),
-				styles.Warning.Render(c.from),
-				styles.Success.Render(c.to),
-			))
-		}
-	} else {
-		b.WriteString("  No changes to apply.\n")
-	}
-
-	b.WriteString("\n")
-	b.WriteString(styles.Help.Render("Enter/y apply  esc/q cancel"))
-	return tea.NewView(b.String())
+	return tea.NewView(inst.confirm.View(inst.width, inst.height))
 }
 
 func (inst *Model) buildList() string {
