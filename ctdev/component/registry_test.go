@@ -2,9 +2,9 @@ package component
 
 import "testing"
 
-func TestRegistryHas36Components(t *testing.T) {
-	if len(Registry) != 36 {
-		t.Errorf("expected 36 components, got %d", len(Registry))
+func TestRegistryHas35Components(t *testing.T) {
+	if len(Registry) != 35 {
+		t.Errorf("expected 35 components, got %d", len(Registry))
 	}
 }
 
@@ -18,13 +18,12 @@ func TestRegistryNoDuplicates(t *testing.T) {
 	}
 }
 
-func TestRegistryAllHaveBashScripts(t *testing.T) {
+func TestRegistryAllHaveInstallMethod(t *testing.T) {
 	for _, c := range Registry {
-		if c.BashInstall == "" {
-			t.Errorf("component %s missing BashInstall", c.Name)
-		}
-		if c.BashUninstall == "" {
-			t.Errorf("component %s missing BashUninstall", c.Name)
+		hasGo := c.GoInstall != nil && c.GoUninstall != nil
+		hasBash := c.BashInstall != "" && c.BashUninstall != ""
+		if !hasGo && !hasBash {
+			t.Errorf("component %s has neither Go nor Bash install/uninstall", c.Name)
 		}
 	}
 }
