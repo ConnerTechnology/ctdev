@@ -2,8 +2,15 @@ package component
 
 import (
 	"context"
+	"errors"
 	"io"
+	"os"
+	"os/exec"
 )
+
+// ErrUnsupportedOS is returned by GoInstall/GoUninstall when a component
+// doesn't support the current OS. The executor maps this to Skipped.
+var ErrUnsupportedOS = errors.New("unsupported OS")
 
 type Category string
 
@@ -32,6 +39,12 @@ type Component struct {
 	Dependencies []string
 	Tags         []string
 
+	// DetectCmd is the command name to check if this component is installed.
+	// If empty, defaults to Name.
+	DetectCmd string
+	// DetectPath is an alternative filesystem path to check instead of a command.
+	DetectPath string
+
 	GoInstall   func(ctx context.Context, opts ExecOpts) error
 	GoUninstall func(ctx context.Context, opts ExecOpts) error
 
@@ -45,6 +58,20 @@ type ExecOpts struct {
 	Verbose bool
 	Stdout  io.Writer
 	Stderr  io.Writer
+}
+
+func (inst *Component) IsInstalled() bool {
+	if inst.DetectPath != "" {
+		expanded := os.ExpandEnv(inst.DetectPath)
+		_, err := os.Stat(expanded)
+		return err == nil
+	}
+	cmd := inst.DetectCmd
+	if cmd == "" {
+		cmd = inst.Name
+	}
+	_, err := exec.LookPath(cmd)
+	return err == nil
 }
 
 func (inst *Component) SupportsOS(os OS) bool {

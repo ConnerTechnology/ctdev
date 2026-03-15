@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -33,6 +34,10 @@ func (inst *Executor) Install(ctx context.Context, c *Component, opts ExecOpts) 
 
 	if c.GoInstall != nil {
 		result.Err = c.GoInstall(ctx, opts)
+		if errors.Is(result.Err, ErrUnsupportedOS) {
+			result.Skipped = true
+			result.Err = nil
+		}
 		return result
 	}
 
@@ -51,6 +56,10 @@ func (inst *Executor) Uninstall(ctx context.Context, c *Component, opts ExecOpts
 
 	if c.GoUninstall != nil {
 		result.Err = c.GoUninstall(ctx, opts)
+		if errors.Is(result.Err, ErrUnsupportedOS) {
+			result.Skipped = true
+			result.Err = nil
+		}
 		return result
 	}
 
