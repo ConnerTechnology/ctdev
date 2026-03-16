@@ -3,12 +3,16 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -34,15 +38,15 @@ func init() {
 
 func runUpdate(cmd *cobra.Command, args []string) error {
 	if flagRefreshKeys {
-		fmt.Println("Refreshing APT GPG keys...")
+		fmt.Println(styles.Dimmed.Render("Refreshing APT GPG keys..."))
 		refreshAPTKeys(args)
 	}
 
-	fmt.Println("Scanning for updates...")
+	fmt.Println(styles.Dimmed.Render("Scanning for updates..."))
 	items := scanAll(context.Background())
 
 	if len(items) == 0 {
-		fmt.Println("Everything is up to date.")
+		fmt.Println(styles.Success.Render("Everything is up to date."))
 		return nil
 	}
 
@@ -55,12 +59,13 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	if isBatchMode() || flagYes {
 		selected = items
 	} else {
-		p := tea.NewProgram(checklist.New(items))
+		m := checklist.New(items)
+		p := tea.NewProgram(&m)
 		result, err := p.Run()
 		if err != nil {
 			return err
 		}
-		checkResult := result.(checklist.Model).GetResult()
+		checkResult := result.(*checklist.Model).GetResult()
 		if checkResult.Quit || len(checkResult.Selected) == 0 {
 			return nil
 		}
@@ -74,45 +79,54 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	var mu sync.Mutex
 	var allItems []checklist.UpdateItem
 
+	type scanner func(context.Context) ([]checklist.UpdateItem, error)
+	scanners := []scanner{
+		scanAPT,
+		scanFlatpak,
+		scanBrew,
+		scanOhMyZsh,
+		scanBun,
+		scanNodeEnv,
+		scanNPMGlobals,
+		scanCtdev,
+		scanGo,
+		scanRuby,
+		scanHelm,
+		scanKubectl,
+		scanTerraform,
+	}
+
 	var wg sync.WaitGroup
-
-	// Scan APT
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		items, err := scanAPT(ctx)
-		if err == nil && len(items) > 0 {
-			mu.Lock()
-			allItems = append(allItems, items...)
-			mu.Unlock()
-		}
-	}()
-
-	// Scan Flatpak
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		items, err := scanFlatpak(ctx)
-		if err == nil && len(items) > 0 {
-			mu.Lock()
-			allItems = append(allItems, items...)
-			mu.Unlock()
-		}
-	}()
-
-	// Scan Brew
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		items, err := scanBrew(ctx)
-		if err == nil && len(items) > 0 {
-			mu.Lock()
-			allItems = append(allItems, items...)
-			mu.Unlock()
-		}
-	}()
+	for _, fn := range scanners {
+		fn := fn
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			items, err := fn(ctx)
+			if err == nil && len(items) > 0 {
+				mu.Lock()
+				allItems = append(allItems, items...)
+				mu.Unlock()
+			}
+		}()
+	}
 
 	wg.Wait()
+
+	// Sort by source for grouped display
+	sourceOrder := map[string]int{
+		"apt": 0, "brew": 1, "flatpak": 2,
+		"git": 3, "runtime": 4, "npm": 5,
+		"cli": 6, "ctdev": 7,
+	}
+	sort.Slice(allItems, func(i, j int) bool {
+		oi, oj := sourceOrder[allItems[i].Source], sourceOrder[allItems[j].Source]
+		if oi != oj {
+			return oi < oj
+		}
+		return allItems[i].Name < allItems[j].Name
+	})
+
 	return allItems
 }
 
@@ -221,92 +235,871 @@ func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
 	return items, nil
 }
 
+func scanOhMyZsh(ctx context.Context) ([]checklist.UpdateItem, error) {
+	omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
+	if _, err := os.Stat(omzDir + "/.git"); err != nil {
+		return nil, nil
+	}
+	// Fetch latest from remote
+	fetch := exec.CommandContext(ctx, "git", "-C", omzDir, "fetch", "--quiet")
+	if err := fetch.Run(); err != nil {
+		return nil, nil
+	}
+	// Check if behind
+	out, err := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-list", "--count", "HEAD..@{u}").Output()
+	if err != nil {
+		return nil, nil
+	}
+	behind := strings.TrimSpace(string(out))
+	if behind == "" || behind == "0" {
+		return nil, nil
+	}
+	// Get current and remote short SHAs
+	currentSHA, _ := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-parse", "--short", "HEAD").Output()
+	remoteSHA, _ := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-parse", "--short", "@{u}").Output()
+	return []checklist.UpdateItem{{
+		Name:       "oh-my-zsh",
+		Source:     "git",
+		CurrentVer: strings.TrimSpace(string(currentSHA)),
+		NewVer:     strings.TrimSpace(string(remoteSHA)) + " (" + behind + " commits)",
+	}}, nil
+}
+
+func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
+	bunPath, err := exec.LookPath("bun")
+	if err != nil {
+		return nil, nil
+	}
+	_ = bunPath
+	currentOut, err := exec.CommandContext(ctx, "bun", "--version").Output()
+	if err != nil {
+		return nil, nil
+	}
+	current := strings.TrimSpace(string(currentOut))
+
+	// Check latest via bun's upgrade --dry-run (not supported), use GitHub API
+	latest := fetchLatestGitHubTag(ctx, "oven-sh/bun")
+	if latest == "" || latest == current || latest == "v"+current {
+		return nil, nil
+	}
+	latest = strings.TrimPrefix(latest, "bun-v")
+	latest = strings.TrimPrefix(latest, "v")
+	if latest == current {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "bun",
+		Source:     "runtime",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("nodenv"); err != nil {
+		return nil, nil
+	}
+	// Get current version
+	currentOut, err := exec.CommandContext(ctx, "nodenv", "version").Output()
+	if err != nil {
+		return nil, nil
+	}
+	current := strings.Fields(strings.TrimSpace(string(currentOut)))[0]
+
+	// Get latest available LTS
+	latest := fetchLatestNodeLTS(ctx)
+	if latest == "" || latest == current {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "node (nodenv)",
+		Source:     "runtime",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+func scanNPMGlobals(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("npm"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "npm", "outdated", "-g", "--json").Output()
+	if err != nil && len(out) == 0 {
+		return nil, nil
+	}
+	// npm outdated -g --json returns {} if nothing outdated, or {"pkg": {"current": "x", "wanted": "y", "latest": "z"}}
+	// Parse manually to avoid encoding/json import overhead for simple case
+	content := strings.TrimSpace(string(out))
+	if content == "" || content == "{}" {
+		return nil, nil
+	}
+	return parseNPMOutdated(content)
+}
+
+func parseNPMOutdated(content string) ([]checklist.UpdateItem, error) {
+	var items []checklist.UpdateItem
+	// Simple line-by-line parse of npm outdated JSON
+	lines := strings.Split(content, "\n")
+	var currentPkg string
+	var currentVer, latestVer string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, `"`) && strings.HasSuffix(line, "{") {
+			currentPkg = strings.Trim(strings.TrimSuffix(line, ": {"), `"`)
+			currentVer = ""
+			latestVer = ""
+		}
+		if strings.Contains(line, `"current"`) {
+			currentVer = extractJSONValue(line)
+		}
+		if strings.Contains(line, `"latest"`) {
+			latestVer = extractJSONValue(line)
+		}
+		if strings.TrimSpace(line) == "}," || strings.TrimSpace(line) == "}" {
+			if currentPkg != "" && currentVer != "" && latestVer != "" && currentVer != latestVer {
+				items = append(items, checklist.UpdateItem{
+					Name:       currentPkg,
+					Source:     "npm",
+					CurrentVer: currentVer,
+					NewVer:     latestVer,
+				})
+			}
+			currentPkg = ""
+		}
+	}
+	return items, nil
+}
+
+func extractJSONValue(line string) string {
+	// Extract value from `"key": "value"` or `"key": "value",`
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) < 2 {
+		return ""
+	}
+	val := strings.TrimSpace(parts[1])
+	val = strings.TrimSuffix(val, ",")
+	val = strings.Trim(val, `"`)
+	return val
+}
+
+func scanCtdev(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if version == "" {
+		return nil, nil
+	}
+	latest := fetchLatestGitHubTag(ctx, "ConnerTechnology/dotfiles")
+	if latest == "" {
+		return nil, nil
+	}
+	latest = strings.TrimPrefix(latest, "v")
+	current := strings.TrimPrefix(version, "v")
+	if latest == current {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "ctdev",
+		Source:     "ctdev",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		return nil, nil
+	}
+	// Skip if Go is managed by apt (will be updated through apt scanner)
+	if dpkgOut, err := exec.CommandContext(ctx, "dpkg", "-S", goPath).Output(); err == nil {
+		if strings.Contains(string(dpkgOut), "golang") {
+			return nil, nil
+		}
+	}
+
+	out, err := exec.CommandContext(ctx, "go", "version").Output()
+	if err != nil {
+		return nil, nil
+	}
+	// "go version go1.26.1 linux/amd64"
+	fields := strings.Fields(string(out))
+	if len(fields) < 3 {
+		return nil, nil
+	}
+	current := strings.TrimPrefix(fields[2], "go")
+
+	latest := fetchLatestGoVersion(ctx)
+	if latest == "" || latest == current {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "go",
+		Source:     "runtime",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+func scanRuby(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("ruby"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "ruby", "--version").Output()
+	if err != nil {
+		return nil, nil
+	}
+	// "ruby 3.4.1 (2024-12-25 revision 48d4efcb85) +PRISM [x86_64-linux]"
+	fields := strings.Fields(string(out))
+	if len(fields) < 2 {
+		return nil, nil
+	}
+	current := fields[1]
+
+	latest := fetchLatestRubyVersion(ctx)
+	if latest == "" || latest == current {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "ruby",
+		Source:     "runtime",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("helm"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "helm", "version", "--short").Output()
+	if err != nil {
+		return nil, nil
+	}
+	// "v3.16.1+g5a5011d"
+	current := strings.TrimSpace(string(out))
+	if idx := strings.Index(current, "+"); idx > 0 {
+		current = current[:idx]
+	}
+	current = strings.TrimPrefix(current, "v")
+
+	currentMajor := majorVersion(current)
+	tags := fetchGitHubReleaseTags(ctx, "helm/helm")
+
+	var items []checklist.UpdateItem
+	latestSameMajor := ""
+	latestNewMajor := ""
+
+	for _, tag := range tags {
+		ver := strings.TrimPrefix(tag, "v")
+		maj := majorVersion(ver)
+		if maj == currentMajor {
+			if latestSameMajor == "" {
+				latestSameMajor = ver
+			}
+		} else if maj > currentMajor {
+			if latestNewMajor == "" {
+				latestNewMajor = ver
+			}
+		}
+		if latestSameMajor != "" && latestNewMajor != "" {
+			break
+		}
+	}
+
+	if latestSameMajor != "" && latestSameMajor != current {
+		items = append(items, checklist.UpdateItem{
+			Name:       "helm",
+			Source:     "cli",
+			CurrentVer: current,
+			NewVer:     latestSameMajor,
+		})
+	}
+	if latestNewMajor != "" {
+		items = append(items, checklist.UpdateItem{
+			Name:       "helm",
+			Source:     "cli",
+			CurrentVer: current,
+			NewVer:     latestNewMajor,
+			IsMajor:    true,
+		})
+	}
+
+	return items, nil
+}
+
+func scanKubectl(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "kubectl", "version", "--client", "--output=json").Output()
+	if err != nil {
+		return nil, nil
+	}
+	// Extract gitVersion from JSON
+	content := string(out)
+	current := ""
+	for _, line := range strings.Split(content, "\n") {
+		if strings.Contains(line, `"gitVersion"`) {
+			current = extractJSONValue(line)
+			break
+		}
+	}
+	if current == "" {
+		return nil, nil
+	}
+	current = strings.TrimPrefix(current, "v")
+
+	// Fetch latest stable kubectl version
+	latest := fetchLatestKubectlVersion(ctx)
+	if latest == "" || latest == current {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "kubectl",
+		Source:     "cli",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("terraform"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "terraform", "version", "-json").Output()
+	if err != nil {
+		return nil, nil
+	}
+	// Extract terraform_version from JSON
+	content := string(out)
+	current := ""
+	for _, line := range strings.Split(content, "\n") {
+		if strings.Contains(line, `"terraform_version"`) {
+			current = extractJSONValue(line)
+			break
+		}
+	}
+	if current == "" {
+		return nil, nil
+	}
+
+	latest := fetchLatestGitHubTag(ctx, "hashicorp/terraform")
+	if latest == "" {
+		return nil, nil
+	}
+	latest = strings.TrimPrefix(latest, "v")
+	if latest == current {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "terraform",
+		Source:     "cli",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+// fetchLatestGitHubTag gets the latest release tag from a GitHub repo
+func fetchLatestGitHubTag(ctx context.Context, repo string) string {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "-H", "Accept: application/vnd.github.v3+json", url).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, `"tag_name"`) {
+			return extractJSONValue(line)
+		}
+	}
+	return ""
+}
+
+// fetchGitHubReleaseTags returns release tags from newest to oldest (excludes pre-releases).
+func fetchGitHubReleaseTags(ctx context.Context, repo string) []string {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=50", repo)
+	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "-H", "Accept: application/vnd.github.v3+json", url).Output()
+	if err != nil {
+		return nil
+	}
+	var tags []string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, `"tag_name"`) {
+			tag := extractJSONValue(line)
+			if tag != "" {
+				tags = append(tags, tag)
+			}
+		}
+	}
+	return tags
+}
+
+func majorVersion(ver string) int {
+	parts := strings.SplitN(ver, ".", 2)
+	if len(parts) == 0 {
+		return 0
+	}
+	var major int
+	fmt.Sscanf(parts[0], "%d", &major)
+	return major
+}
+
+func fetchLatestNodeLTS(ctx context.Context) string {
+	// Use a simpler endpoint that returns just the LTS schedule
+	// The full index.json is huge, so we use nodenv's definitions if available
+	if _, err := exec.LookPath("nodenv"); err == nil {
+		out, err := exec.CommandContext(ctx, "nodenv", "install", "--list").Output()
+		if err == nil {
+			// Find latest even-numbered major version (LTS)
+			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+			for i := len(lines) - 1; i >= 0; i-- {
+				v := strings.TrimSpace(lines[i])
+				if v == "" || strings.Contains(v, "-") {
+					continue
+				}
+				parts := strings.SplitN(v, ".", 2)
+				if len(parts) < 2 {
+					continue
+				}
+				major := 0
+				fmt.Sscanf(parts[0], "%d", &major)
+				if major > 0 && major%2 == 0 {
+					return v
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func fetchLatestGoVersion(ctx context.Context) string {
+	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "https://go.dev/dl/?mode=json").Output()
+	if err != nil {
+		return ""
+	}
+	// First "version" field is the latest stable
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, `"version"`) {
+			ver := extractJSONValue(line)
+			return strings.TrimPrefix(ver, "go")
+		}
+	}
+	return ""
+}
+
+func fetchLatestRubyVersion(ctx context.Context) string {
+	// Use ruby-build's definitions if available (from rbenv)
+	if _, err := exec.LookPath("ruby-build"); err == nil {
+		out, err := exec.CommandContext(ctx, "ruby-build", "--definitions").Output()
+		if err == nil {
+			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+			// Walk backwards to find latest stable (numeric only, no -dev/-preview/-rc)
+			for i := len(lines) - 1; i >= 0; i-- {
+				v := strings.TrimSpace(lines[i])
+				if v == "" {
+					continue
+				}
+				// Skip non-release versions
+				if strings.ContainsAny(v, "-") {
+					continue
+				}
+				// Must start with a digit
+				if v[0] >= '0' && v[0] <= '9' {
+					return v
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func fetchLatestKubectlVersion(ctx context.Context) string {
+	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "https://dl.k8s.io/release/stable.txt").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
+}
+
 func printUpdateList(items []checklist.UpdateItem) {
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
+	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(30)
+	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+
 	currentSource := ""
 	for _, item := range items {
 		if item.Source != currentSource {
 			currentSource = item.Source
-			fmt.Printf("\n%s:\n", strings.ToUpper(currentSource))
+			fmt.Printf("\n%s\n", headerStyle.Render(strings.ToUpper(currentSource)+":"))
 		}
-		fmt.Printf("  %-30s %s → %s", item.Name, item.CurrentVer, item.NewVer)
+		line := fmt.Sprintf("  %s %s", labelStyle.Render(item.Name), valueStyle.Render(item.CurrentVer+" → "+item.NewVer))
 		if item.IsMajor {
-			fmt.Print(" [MAJOR]")
+			line += " " + styles.Warning.Render("[MAJOR]")
 		}
 		if item.IsKernel {
-			fmt.Print(" [KERNEL]")
+			line += " " + styles.Warning.Render("[KERNEL]")
 		}
-		fmt.Println()
+		fmt.Println(line)
 	}
-	fmt.Printf("\n%d updates available\n", len(items))
+	fmt.Printf("\n%s\n", styles.Success.Render(fmt.Sprintf("%d updates available", len(items))))
 }
 
 func executeUpdates(items []checklist.UpdateItem) error {
-	// Group by source and execute
-	aptPkgs := []string{}
+	// Group items by source
+	bySource := make(map[string][]checklist.UpdateItem)
 	for _, item := range items {
-		switch item.Source {
-		case "apt":
-			aptPkgs = append(aptPkgs, item.Name)
-		}
+		bySource[item.Source] = append(bySource[item.Source], item)
 	}
 
-	if len(aptPkgs) > 0 {
-		fmt.Printf("Updating %d apt packages...\n", len(aptPkgs))
-		args := append([]string{"apt", "upgrade", "-y"}, aptPkgs...)
-		cmd := exec.Command("sudo", args...)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
+	// APT
+	if pkgs := bySource["apt"]; len(pkgs) > 0 {
+		names := itemNames(pkgs)
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d apt packages...", len(names))))
 		if flagDryRun {
-			fmt.Printf("  [dry-run] sudo apt upgrade -y %s\n", strings.Join(aptPkgs, " "))
+			fmt.Printf("  [dry-run] sudo apt install --only-upgrade -y %s\n", strings.Join(names, " "))
 		} else {
+			args := append([]string{"apt", "install", "--only-upgrade", "-y"}, names...)
+			cmd := exec.Command("sudo", args...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
 				return fmt.Errorf("apt upgrade failed: %w", err)
 			}
 		}
 	}
 
-	// Flatpak updates
-	hasFlatpak := false
-	for _, item := range items {
-		if item.Source == "flatpak" {
-			hasFlatpak = true
-			break
-		}
-	}
-	if hasFlatpak {
-		fmt.Println("Updating flatpak packages...")
+	// Flatpak
+	for _, item := range bySource["flatpak"] {
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating flatpak: %s...", item.Name)))
 		if flagDryRun {
-			fmt.Println("  [dry-run] flatpak update -y")
+			fmt.Printf("  [dry-run] flatpak update -y %s\n", item.Name)
 		} else {
-			cmd := exec.Command("flatpak", "update", "-y")
+			cmd := exec.Command("flatpak", "update", "-y", item.Name)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
-				fmt.Printf("  flatpak update warning: %v\n", err)
+				fmt.Printf("  flatpak update warning (%s): %v\n", item.Name, err)
 			}
 		}
 	}
 
-	// Brew updates
-	hasBrew := false
-	for _, item := range items {
-		if item.Source == "brew" {
-			hasBrew = true
-			break
-		}
-	}
-	if hasBrew {
-		fmt.Println("Updating brew packages...")
+	// Brew
+	if pkgs := bySource["brew"]; len(pkgs) > 0 {
+		names := itemNames(pkgs)
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d brew packages...", len(names))))
 		if flagDryRun {
-			fmt.Println("  [dry-run] brew upgrade")
+			fmt.Printf("  [dry-run] brew upgrade %s\n", strings.Join(names, " "))
 		} else {
-			cmd := exec.Command("brew", "upgrade")
+			args := append([]string{"upgrade"}, names...)
+			cmd := exec.Command("brew", args...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
 				fmt.Printf("  brew upgrade warning: %v\n", err)
 			}
 		}
 	}
 
-	fmt.Println("Updates complete.")
+	// Oh My Zsh
+	for range bySource["git"] {
+		fmt.Println(styles.Dimmed.Render("Updating Oh My Zsh..."))
+		omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
+		if flagDryRun {
+			fmt.Printf("  [dry-run] git -C %s pull --rebase\n", omzDir)
+		} else {
+			cmd := exec.Command("git", "-C", omzDir, "pull", "--rebase", "--quiet")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				fmt.Printf("  oh-my-zsh update warning: %v\n", err)
+			}
+		}
+		break // only one oh-my-zsh
+	}
+
+	// Bun
+	for _, item := range bySource["runtime"] {
+		switch item.Name {
+		case "bun":
+			fmt.Println(styles.Dimmed.Render("Updating bun..."))
+			if flagDryRun {
+				fmt.Println("  [dry-run] bun upgrade")
+			} else {
+				cmd := exec.Command("bun", "upgrade")
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					fmt.Printf("  bun upgrade warning: %v\n", err)
+				}
+			}
+		case "node (nodenv)":
+			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating node to %s via nodenv...", item.NewVer)))
+			if flagDryRun {
+				fmt.Printf("  [dry-run] nodenv install %s && nodenv global %s\n", item.NewVer, item.NewVer)
+			} else {
+				cmd := exec.Command("nodenv", "install", item.NewVer)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					fmt.Printf("  nodenv install warning: %v\n", err)
+				} else {
+					cmd = exec.Command("nodenv", "global", item.NewVer)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					if err := cmd.Run(); err != nil {
+						fmt.Printf("  nodenv global warning: %v\n", err)
+					}
+				}
+			}
+		case "go":
+			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating Go %s → %s...", item.CurrentVer, item.NewVer)))
+			if flagDryRun {
+				fmt.Printf("  [dry-run] download and install go%s\n", item.NewVer)
+			} else {
+				if err := updateGo(item.NewVer); err != nil {
+					fmt.Printf("  go update warning: %v\n", err)
+				}
+			}
+		case "ruby":
+			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Ruby %s available (current: %s)", item.NewVer, item.CurrentVer)))
+			if _, err := exec.LookPath("rbenv"); err == nil {
+				if flagDryRun {
+					fmt.Printf("  [dry-run] rbenv install %s && rbenv global %s\n", item.NewVer, item.NewVer)
+				} else {
+					cmd := exec.Command("rbenv", "install", item.NewVer)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					if err := cmd.Run(); err != nil {
+						fmt.Printf("  rbenv install warning: %v\n", err)
+					} else {
+						cmd = exec.Command("rbenv", "global", item.NewVer)
+						cmd.Stdout = os.Stdout
+						cmd.Stderr = os.Stderr
+						if err := cmd.Run(); err != nil {
+							fmt.Printf("  rbenv global warning: %v\n", err)
+						}
+					}
+				}
+			} else {
+				fmt.Println(styles.Help.Render("  Install manually or via rbenv"))
+			}
+		}
+	}
+
+	// NPM globals
+	if pkgs := bySource["npm"]; len(pkgs) > 0 {
+		names := itemNames(pkgs)
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d npm global packages...", len(names))))
+		if flagDryRun {
+			fmt.Printf("  [dry-run] npm update -g %s\n", strings.Join(names, " "))
+		} else {
+			args := append([]string{"update", "-g"}, names...)
+			cmd := exec.Command("npm", args...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				fmt.Printf("  npm update -g warning: %v\n", err)
+			}
+		}
+	}
+
+	// ctdev self-update
+	for _, item := range bySource["ctdev"] {
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating ctdev %s → %s...", item.CurrentVer, item.NewVer)))
+		if flagDryRun {
+			fmt.Println("  [dry-run] curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash")
+		} else {
+			cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				fmt.Printf("  ctdev update warning: %v\n", err)
+			}
+		}
+	}
+
+	// CLI tools (helm, kubectl, terraform)
+	for _, item := range bySource["cli"] {
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %s %s → %s...", item.Name, item.CurrentVer, item.NewVer)))
+		switch item.Name {
+		case "helm":
+			if flagDryRun {
+				fmt.Printf("  [dry-run] download helm v%s and install to /usr/local/bin\n", item.NewVer)
+			} else {
+				if err := updateHelm(item.NewVer); err != nil {
+					fmt.Printf("  helm update warning: %v\n", err)
+				}
+			}
+		case "kubectl":
+			if flagDryRun {
+				fmt.Printf("  [dry-run] download kubectl v%s and install to /usr/local/bin\n", item.NewVer)
+			} else {
+				if err := updateKubectl(item.NewVer); err != nil {
+					fmt.Printf("  kubectl update warning: %v\n", err)
+				}
+			}
+		case "terraform":
+			if flagDryRun {
+				fmt.Printf("  [dry-run] download terraform %s and install\n", item.NewVer)
+			} else {
+				if err := updateTerraform(item.NewVer); err != nil {
+					fmt.Printf("  terraform update warning: %v\n", err)
+				}
+			}
+		}
+	}
+
+	fmt.Println(styles.Success.Render("Updates complete."))
 	return nil
+}
+
+func updateHelm(ver string) error {
+	goos := detectUpdateOS()
+	goarch := detectUpdateArch()
+	archive := fmt.Sprintf("helm-v%s-%s-%s.tar.gz", ver, goos, goarch)
+	url := fmt.Sprintf("https://get.helm.sh/%s", archive)
+
+	tmpDir := "/tmp/helm-update"
+	tmpFile := tmpDir + "/" + archive
+	_ = exec.Command("rm", "-rf", tmpDir).Run()
+	_ = exec.Command("mkdir", "-p", tmpDir).Run()
+
+	dl := exec.Command("curl", "-fsSL", "-o", tmpFile, url)
+	dl.Stdout = os.Stdout
+	dl.Stderr = os.Stderr
+	if err := dl.Run(); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	tar := exec.Command("tar", "-xzf", tmpFile, "-C", tmpDir)
+	tar.Stdout = os.Stdout
+	tar.Stderr = os.Stderr
+	if err := tar.Run(); err != nil {
+		return fmt.Errorf("extract failed: %w", err)
+	}
+	installPath, _ := exec.Command("which", "helm").Output()
+	dest := strings.TrimSpace(string(installPath))
+	if dest == "" {
+		dest = "/usr/local/bin/helm"
+	}
+	mv := exec.Command("sudo", "mv", fmt.Sprintf("%s/%s-%s/helm", tmpDir, goos, goarch), dest)
+	mv.Stdout = os.Stdout
+	mv.Stderr = os.Stderr
+	err := mv.Run()
+	_ = exec.Command("rm", "-rf", tmpDir).Run()
+	return err
+}
+
+func updateKubectl(ver string) error {
+	goos := detectUpdateOS()
+	goarch := detectUpdateArch()
+	url := fmt.Sprintf("https://dl.k8s.io/release/v%s/bin/%s/%s/kubectl", ver, goos, goarch)
+
+	tmpFile := "/tmp/kubectl-update"
+	dl := exec.Command("curl", "-fsSL", "-o", tmpFile, url)
+	dl.Stdout = os.Stdout
+	dl.Stderr = os.Stderr
+	if err := dl.Run(); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	if err := exec.Command("chmod", "+x", tmpFile).Run(); err != nil {
+		return err
+	}
+	installPath, _ := exec.Command("which", "kubectl").Output()
+	dest := strings.TrimSpace(string(installPath))
+	if dest == "" {
+		dest = "/usr/local/bin/kubectl"
+	}
+	mv := exec.Command("sudo", "mv", tmpFile, dest)
+	mv.Stdout = os.Stdout
+	mv.Stderr = os.Stderr
+	return mv.Run()
+}
+
+func updateTerraform(ver string) error {
+	goos := detectUpdateOS()
+	goarch := detectUpdateArch()
+	url := fmt.Sprintf("https://releases.hashicorp.com/terraform/%s/terraform_%s_%s_%s.zip", ver, ver, goos, goarch)
+
+	tmpDir := "/tmp/terraform-update"
+	tmpZip := tmpDir + "/terraform.zip"
+	_ = exec.Command("mkdir", "-p", tmpDir).Run()
+
+	dl := exec.Command("curl", "-fsSL", "-o", tmpZip, url)
+	dl.Stdout = os.Stdout
+	dl.Stderr = os.Stderr
+	if err := dl.Run(); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	unzip := exec.Command("unzip", "-o", tmpZip, "-d", tmpDir)
+	unzip.Stdout = os.Stdout
+	unzip.Stderr = os.Stderr
+	if err := unzip.Run(); err != nil {
+		return fmt.Errorf("unzip failed: %w", err)
+	}
+	installPath, _ := exec.Command("which", "terraform").Output()
+	dest := strings.TrimSpace(string(installPath))
+	if dest == "" {
+		dest = "/usr/local/bin/terraform"
+	}
+	mv := exec.Command("sudo", "mv", tmpDir+"/terraform", dest)
+	mv.Stdout = os.Stdout
+	mv.Stderr = os.Stderr
+	err := mv.Run()
+	_ = exec.Command("rm", "-rf", tmpDir).Run()
+	return err
+}
+
+func updateGo(ver string) error {
+	goos := detectUpdateOS()
+	goarch := detectUpdateArch()
+	url := fmt.Sprintf("https://go.dev/dl/go%s.%s-%s.tar.gz", ver, goos, goarch)
+
+	tmpFile := "/tmp/go-update.tar.gz"
+	dl := exec.Command("curl", "-fsSL", "-o", tmpFile, url)
+	dl.Stdout = os.Stdout
+	dl.Stderr = os.Stderr
+	if err := dl.Run(); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	// Remove old and extract new
+	rm := exec.Command("sudo", "rm", "-rf", "/usr/local/go")
+	rm.Stdout = os.Stdout
+	rm.Stderr = os.Stderr
+	if err := rm.Run(); err != nil {
+		return fmt.Errorf("remove old go failed: %w", err)
+	}
+	tar := exec.Command("sudo", "tar", "-C", "/usr/local", "-xzf", tmpFile)
+	tar.Stdout = os.Stdout
+	tar.Stderr = os.Stderr
+	if err := tar.Run(); err != nil {
+		return fmt.Errorf("extract failed: %w", err)
+	}
+	_ = exec.Command("rm", "-f", tmpFile).Run()
+	return nil
+}
+
+func detectUpdateOS() string {
+	out, _ := exec.Command("uname", "-s").Output()
+	return strings.ToLower(strings.TrimSpace(string(out)))
+}
+
+func detectUpdateArch() string {
+	out, _ := exec.Command("uname", "-m").Output()
+	arch := strings.TrimSpace(string(out))
+	switch arch {
+	case "x86_64":
+		return "amd64"
+	case "aarch64", "arm64":
+		return "arm64"
+	default:
+		return arch
+	}
+}
+
+func itemNames(items []checklist.UpdateItem) []string {
+	names := make([]string, len(items))
+	for i, item := range items {
+		names[i] = item.Name
+	}
+	return names
 }
 
 func refreshAPTKeys(components []string) {
@@ -314,6 +1107,6 @@ func refreshAPTKeys(components []string) {
 		return
 	}
 	// Shell out to existing key refresh scripts
-	fmt.Println("Refreshing APT GPG keys...")
+	fmt.Println(styles.Dimmed.Render("Refreshing APT GPG keys..."))
 	// This will be wired to bash scripts that handle key refreshing
 }
