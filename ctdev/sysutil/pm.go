@@ -41,6 +41,16 @@ func RemovePackage(o Opts, names ...string) error {
 	}
 }
 
+// BrewCaskInstall installs a Homebrew cask (macOS GUI apps).
+func BrewCaskInstall(o Opts, name string) error {
+	return Run(o, "brew", "install", "--cask", name)
+}
+
+// BrewCaskRemove removes a Homebrew cask.
+func BrewCaskRemove(o Opts, name string) error {
+	return Run(o, "brew", "uninstall", "--cask", name)
+}
+
 // IsPackageInstalled checks if a package is installed via the system package manager.
 func IsPackageInstalled(name string) bool {
 	pm := platform.Detect().PackageManager
