@@ -2,10 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.0.5] - 2026-04-02
+## [9.0.6] - 2026-04-02
 
 ### Fixed
-- Use unix.Poll(2) to properly wait for and drain DECRPM terminal responses from stdin after TUI exit
+- Switch terminal to raw mode before draining DECRPM responses — cooked mode was buffering them in the line discipline, causing escape sequence leak at the shell prompt
 
 ## [9.0.3] - 2026-04-02
 
