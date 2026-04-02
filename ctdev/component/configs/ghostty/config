@@ -1,0 +1,9 @@
+# Ghostty configuration
+# https://ghostty.org/docs/config
+
+# Window size (in cells/characters)
+window-width = 180
+window-height = 80
+
+# Close surface with ctrl+shift+w
+keybind = ctrl+shift+w=close_surface

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=xbindkeys
+Comment=Key and mouse button bindings
+Exec=xbindkeys
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true

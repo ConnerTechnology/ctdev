@@ -1,0 +1,147 @@
+#compdef ctdev
+
+# Zsh completion for ctdev CLI
+# Symlinked to ~/.zfunc/_ctdev by components/zsh/install.sh
+
+_ctdev_components() {
+    local -a components
+    local dotfiles_root
+
+    # Find lib/components.sh relative to the ctdev binary
+    local ctdev_bin="${commands[ctdev]:-$(whence -p ctdev 2>/dev/null)}"
+    if [[ -n "$ctdev_bin" ]]; then
+        # Resolve symlinks to find the real dotfiles root
+        dotfiles_root="${ctdev_bin:A:h}"
+    fi
+
+    local components_file="${dotfiles_root}/lib/components.sh"
+
+    if [[ -f "$components_file" ]]; then
+        # Parse name:description from COMPONENTS array
+        while IFS=: read -r name desc _; do
+            components+=("${name}:${desc}")
+        done < <(awk -F'"' '/^[[:space:]]+"/{print $2}' "$components_file")
+    fi
+
+    _describe -t components 'component' components
+}
+
+_ctdev_configure_targets() {
+    local -a targets
+    targets=(
+        'git:Configure git user (name and email)'
+    )
+    _describe -t targets 'target' targets
+}
+
+_ctdev_configure_git_opts() {
+    _arguments -s \
+        '--name[Set git user.name]:name' \
+        '--email[Set git user.email]:email' \
+        '--local[Configure for current repo only]' \
+        '--show[Show current git configuration]' \
+        '(-h --help)'{-h,--help}'[Show help]'
+}
+
+_ctdev_gpu_subcommands() {
+    local -a subcommands
+    subcommands=(
+        'info:Show GPU hardware info and signing status'
+        'setup:Configure MOK signing for NVIDIA drivers'
+    )
+    _describe -t subcommands 'subcommand' subcommands
+}
+
+_ctdev() {
+    local -a global_flags
+    global_flags=(
+        '(-h --help)'{-h,--help}'[Show help]'
+        '(-v --verbose)'{-v,--verbose}'[Enable verbose output]'
+        '(-n --dry-run)'{-n,--dry-run}'[Preview changes without applying]'
+        '(-f --force)'{-f,--force}'[Force re-run install scripts]'
+        '--version[Show version information]'
+    )
+
+    local -a commands
+    commands=(
+        'install:Install specific components'
+        'uninstall:Remove specific components'
+        'update:Update system packages and components'
+        'info:Show system information'
+        'configure:Configure git settings'
+        'gpu:Manage GPU driver signing for Secure Boot'
+        'setup:Set up and configure your OS'
+        'cleanup:Clean up kernels and APT repos'
+    )
+
+    _arguments -s \
+        "${global_flags[@]}" \
+        '1:command:->command' \
+        '*::arg:->args'
+
+    case "$state" in
+        command)
+            _describe -t commands 'ctdev command' commands
+            ;;
+        args)
+            case "${words[1]}" in
+                install|uninstall)
+                    _arguments -s \
+                        "${global_flags[@]}" \
+                        '*:component:_ctdev_components'
+                    ;;
+                update)
+                    _arguments -s \
+                        "${global_flags[@]}" \
+                        '(-y --yes)'{-y,--yes}'[Skip confirmation prompt]' \
+                        '--check[List available updates without installing]' \
+                        '--refresh-keys[Refresh APT GPG keys before updating]'
+                    ;;
+                configure)
+                    local target="${words[2]}"
+                    case "$target" in
+                        git) _ctdev_configure_git_opts ;;
+                        *) _ctdev_configure_targets ;;
+                    esac
+                    ;;
+                gpu)
+                    local gpu_sub="${words[2]}"
+                    case "$gpu_sub" in
+                        info)
+                            _arguments -s \
+                                '(-h --help)'{-h,--help}'[Show help]' \
+                                '(-v --verbose)'{-v,--verbose}'[Enable verbose output]'
+                            ;;
+                        setup)
+                            _arguments -s \
+                                '(-h --help)'{-h,--help}'[Show help]' \
+                                '(-v --verbose)'{-v,--verbose}'[Enable verbose output]' \
+                                '(-n --dry-run)'{-n,--dry-run}'[Preview changes without applying]' \
+                                '(-f --force)'{-f,--force}'[Force re-run even if configured]' \
+                                '--recover[Re-enroll MOK key after CMOS reset]'
+                            ;;
+                        *)
+                            _ctdev_gpu_subcommands
+                            ;;
+                    esac
+                    ;;
+                setup)
+                    _arguments -s \
+                        "${global_flags[@]}" \
+                        '--show[Show current system configuration]' \
+                        '--reset[Reset system configuration to defaults]' \
+                        '--skip-gpu[Skip GPU setup step]' \
+                        '--skip-configure[Skip system configuration step]'
+                    ;;
+                cleanup)
+                    _arguments -s "${global_flags[@]}"
+                    ;;
+                info)
+                    _arguments -s "${global_flags[@]}"
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_ctdev "$@"
