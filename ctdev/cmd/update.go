@@ -134,16 +134,9 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	return allItems
 }
 
-func scanAPT(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("apt"); err != nil {
-		return nil, nil
-	}
-	out, err := exec.CommandContext(ctx, "apt", "list", "--upgradable").Output()
-	if err != nil {
-		return nil, err
-	}
+func parseAPTUpgradable(output string) []checklist.UpdateItem {
 	var items []checklist.UpdateItem
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(output, "\n") {
 		if !strings.Contains(line, "[upgradable") {
 			continue
 		}
@@ -152,7 +145,6 @@ func scanAPT(ctx context.Context) ([]checklist.UpdateItem, error) {
 			continue
 		}
 		name := parts[0]
-		// Parse version info
 		rest := parts[1]
 		fields := strings.Fields(rest)
 		newVer := ""
@@ -164,32 +156,32 @@ func scanAPT(ctx context.Context) ([]checklist.UpdateItem, error) {
 		if fromIdx >= 0 {
 			currentVer = strings.TrimRight(rest[fromIdx+6:], "]")
 		}
-
 		item := checklist.UpdateItem{
-			Name:       name,
-			Source:     "apt",
-			CurrentVer: currentVer,
-			NewVer:     newVer,
+			Name: name, Source: "apt",
+			CurrentVer: currentVer, NewVer: newVer,
 		}
-		// Detect kernel updates
 		if strings.HasPrefix(name, "linux-") {
 			item.IsKernel = true
 		}
 		items = append(items, item)
 	}
-	return items, nil
+	return items
 }
 
-func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("flatpak"); err != nil {
+func scanAPT(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("apt"); err != nil {
 		return nil, nil
 	}
-	out, err := exec.CommandContext(ctx, "flatpak", "remote-ls", "--updates", "--columns=application,version").Output()
+	out, err := exec.CommandContext(ctx, "apt", "list", "--upgradable").Output()
 	if err != nil {
 		return nil, err
 	}
+	return parseAPTUpgradable(string(out)), nil
+}
+
+func parseFlatpakUpdates(output string) []checklist.UpdateItem {
 	var items []checklist.UpdateItem
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
 			continue
 		}
@@ -200,12 +192,41 @@ func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
 			newVer = fields[1]
 		}
 		items = append(items, checklist.UpdateItem{
-			Name:   name,
-			Source: "flatpak",
-			NewVer: newVer,
+			Name: name, Source: "flatpak", NewVer: newVer,
 		})
 	}
-	return items, nil
+	return items
+}
+
+func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("flatpak"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "flatpak", "remote-ls", "--updates", "--columns=application,version").Output()
+	if err != nil {
+		return nil, err
+	}
+	return parseFlatpakUpdates(string(out)), nil
+}
+
+func parseBrewOutdated(output string) []checklist.UpdateItem {
+	var items []checklist.UpdateItem
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 4 {
+			continue
+		}
+		items = append(items, checklist.UpdateItem{
+			Name:       parts[0],
+			Source:     "brew",
+			CurrentVer: strings.Trim(parts[1], "()"),
+			NewVer:     parts[3],
+		})
+	}
+	return items
 }
 
 func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
@@ -216,27 +237,7 @@ func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	var items []checklist.UpdateItem
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line == "" {
-			continue
-		}
-		// Format: "pkg (installed) < available"
-		parts := strings.Fields(line)
-		if len(parts) < 4 {
-			continue
-		}
-		name := parts[0]
-		currentVer := strings.Trim(parts[1], "()")
-		newVer := parts[3]
-		items = append(items, checklist.UpdateItem{
-			Name:       name,
-			Source:     "brew",
-			CurrentVer: currentVer,
-			NewVer:     newVer,
-		})
-	}
-	return items, nil
+	return parseBrewOutdated(string(out)), nil
 }
 
 func scanOhMyZsh(ctx context.Context) ([]checklist.UpdateItem, error) {
