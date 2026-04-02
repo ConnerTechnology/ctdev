@@ -3,7 +3,7 @@ package component
 var Registry = []Component{
 	{Name: "1password", Description: "1Password password manager", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, GoInstall: onePasswordInstall, GoUninstall: onePasswordUninstall, Tags: []string{"password", "security"}},
 	{Name: "age", Description: "age file encryption tool", Category: CategorySecurity, SupportedOS: []OS{OSAny}, GoInstall: ageInstall, GoUninstall: ageUninstall, Tags: []string{"encryption", "crypto"}},
-	{Name: "btop", Description: "Resource monitor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: btopInstall, GoUninstall: btopUninstall, Tags: []string{"monitor", "htop"}},
+	{Name: "btop", Description: "Resource monitor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("btop"), GoUninstall: SimplePackageUninstaller("btop"), Tags: []string{"monitor", "htop"}},
 	{Name: "bun", Description: "JavaScript runtime and package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, BashInstall: "components/bun/install.sh", BashUninstall: "components/bun/uninstall.sh", Tags: []string{"javascript", "node"}},
 	{Name: "chatgpt", Description: "ChatGPT desktop application", Category: CategoryDesktop, SupportedOS: []OS{OSMacOS}, GoInstall: chatgptInstall, GoUninstall: chatgptUninstall, Tags: []string{"ai", "openai"}},
 	{Name: "chrome", Description: "Google Chrome browser", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, DetectCmd: "google-chrome", BashInstall: "components/chrome/install.sh", BashUninstall: "components/chrome/uninstall.sh", Tags: []string{"browser", "web"}},
@@ -21,21 +21,31 @@ var Registry = []Component{
 	{Name: "git", Description: "Git configuration and aliases", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, BashInstall: "components/git/install.sh", BashUninstall: "components/git/uninstall.sh", Tags: []string{"vcs", "version"}},
 	{Name: "git-spice", Description: "Git Spice stacked branches tool", Category: CategoryCLI, SupportedOS: []OS{OSAny}, DetectCmd: "gs", GoInstall: gitSpiceInstall, GoUninstall: gitSpiceUninstall, Tags: []string{"git", "stacked"}},
 	{Name: "helm", Description: "Kubernetes package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Dependencies: []string{"kubectl"}, GoInstall: helmInstall, GoUninstall: helmUninstall, Tags: []string{"kubernetes", "k8s"}},
-	{Name: "jq", Description: "JSON processor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: jqInstall, GoUninstall: jqUninstall, Tags: []string{"json", "parser"}},
+	{Name: "jq", Description: "JSON processor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("jq"), GoUninstall: SimplePackageUninstaller("jq"), Tags: []string{"json", "parser"}},
 	{Name: "kubectl", Description: "Kubernetes CLI", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: kubectlInstall, GoUninstall: kubectlUninstall, Tags: []string{"kubernetes", "k8s"}},
 	{Name: "linear", Description: "Linear issue tracker", Category: CategoryDesktop, SupportedOS: []OS{OSMacOS}, GoInstall: linearInstall, GoUninstall: linearUninstall, Tags: []string{"issues", "project"}},
 	{Name: "logi-options", Description: "Logitech Options+", Category: CategoryDesktop, SupportedOS: []OS{OSMacOS}, GoInstall: logiOptionsInstall, GoUninstall: logiOptionsUninstall, Tags: []string{"logitech", "mouse"}},
 	{Name: "node", Description: "Node.js via nodenv", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, BashInstall: "components/node/install.sh", BashUninstall: "components/node/uninstall.sh", Tags: []string{"javascript", "nodejs"}},
 	{Name: "ruby", Description: "Ruby via rbenv", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, BashInstall: "components/ruby/install.sh", BashUninstall: "components/ruby/uninstall.sh", Tags: []string{"rbenv", "rails"}},
-	{Name: "shellcheck", Description: "Shell script linter", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: shellcheckInstall, GoUninstall: shellcheckUninstall, Tags: []string{"lint", "bash"}},
+	{Name: "shellcheck", Description: "Shell script linter", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("shellcheck"), GoUninstall: SimplePackageUninstaller("shellcheck"), Tags: []string{"lint", "bash"}},
 	{Name: "slack", Description: "Slack messaging", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, GoInstall: slackInstall, GoUninstall: slackUninstall, Tags: []string{"messaging", "chat"}},
 	{Name: "solaar", Description: "Logitech Unifying/Bolt receiver manager", Category: CategorySystem, SupportedOS: []OS{OSLinux}, GoInstall: solaarInstall, GoUninstall: solaarUninstall, Tags: []string{"logitech", "bluetooth"}},
 	{Name: "sops", Description: "Mozilla SOPS secrets manager", Category: CategorySecurity, SupportedOS: []OS{OSAny}, GoInstall: sopsInstall, GoUninstall: sopsUninstall, Tags: []string{"secrets", "encrypt"}},
 	{Name: "tailscale", Description: "Tailscale VPN", Category: CategorySecurity, SupportedOS: []OS{OSAny}, BashInstall: "components/tailscale/install.sh", BashUninstall: "components/tailscale/uninstall.sh", Tags: []string{"vpn", "network"}},
 	{Name: "terraform", Description: "Terraform infrastructure tool", Category: CategoryInfra, SupportedOS: []OS{OSAny}, GoInstall: terraformInstall, GoUninstall: terraformUninstall, Tags: []string{"iac", "cloud"}},
-	{Name: "tmux", Description: "Terminal multiplexer", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: tmuxInstall, GoUninstall: tmuxUninstall, Tags: []string{"terminal", "session"}},
+	{Name: "tmux", Description: "Terminal multiplexer", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("tmux"), GoUninstall: SimplePackageUninstaller("tmux"), Tags: []string{"terminal", "session"}},
 	{Name: "vscode", Description: "Visual Studio Code", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, DetectCmd: "code", GoInstall: vscodeInstall, GoUninstall: vscodeUninstall, Tags: []string{"editor", "ide"}},
 	{Name: "zsh", Description: "Zsh, Oh My Zsh, Pure prompt, plugins", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, DetectPath: "$HOME/.oh-my-zsh", BashInstall: "components/zsh/install.sh", BashUninstall: "components/zsh/uninstall.sh", Tags: []string{"shell", "ohmyzsh"}},
+}
+
+func InstalledSet() map[string]bool {
+	installed := make(map[string]bool)
+	for i := range Registry {
+		if Registry[i].IsInstalled() {
+			installed[Registry[i].Name] = true
+		}
+	}
+	return installed
 }
 
 func FindByName(name string) *Component {
