@@ -28,7 +28,7 @@ func gitInstall(ctx context.Context, opts ExecOpts) error {
 
 	if !opts.Force {
 		if _, err := os.Stat(dst); err == nil {
-			fmt.Fprintln(opts.Stdout, ".gitconfig already exists (use --force to overwrite)")
+			fmt.Fprintln(opts.Stdout, "git configuration already exists")
 			return nil
 		}
 	}
