@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/sys/unix"
 )
 
 var (
@@ -87,41 +86,7 @@ func resetTerminal() {
 	drainStdin()
 }
 
-// drainStdin waits for and discards any bytes pending on stdin (e.g. terminal
-// DECRPM responses). After Bubble Tea exits, the terminal is back in cooked
-// mode where the line discipline buffers input until a newline — but DECRPM
-// responses have no newline, so poll() never sees them. We must briefly switch
-// to raw mode so the bytes flow through, then drain them.
-func drainStdin() {
-	fd := int(os.Stdin.Fd())
-
-	// Save current terminal state and switch to raw mode
-	old, err := unix.IoctlGetTermios(fd, unix.TCGETS)
-	if err != nil {
-		return
-	}
-	raw := *old
-	raw.Lflag &^= unix.ICANON | unix.ECHO
-	raw.Cc[unix.VMIN] = 0
-	raw.Cc[unix.VTIME] = 0
-	if err := unix.IoctlSetTermios(fd, unix.TCSETS, &raw); err != nil {
-		return
-	}
-
-	// Poll and drain any pending responses
-	buf := make([]byte, 256)
-	for {
-		fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
-		n, _ := unix.Poll(fds, 200)
-		if n <= 0 {
-			break
-		}
-		unix.Read(fd, buf)
-	}
-
-	// Restore original terminal state
-	_ = unix.IoctlSetTermios(fd, unix.TCSETS, old)
-}
+// drainStdin is implemented per-platform in drain_linux.go and drain_darwin.go.
 
 func isBatchMode() bool {
 	if flagBatch {
