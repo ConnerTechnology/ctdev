@@ -1,28 +1,21 @@
 #compdef ctdev
 
-# Zsh completion for ctdev CLI
-# Symlinked to ~/.zfunc/_ctdev by components/zsh/install.sh
-
 _ctdev_components() {
     local -a components
-    local dotfiles_root
-
-    # Find lib/components.sh relative to the ctdev binary
-    local ctdev_bin="${commands[ctdev]:-$(whence -p ctdev 2>/dev/null)}"
-    if [[ -n "$ctdev_bin" ]]; then
-        # Resolve symlinks to find the real dotfiles root
-        dotfiles_root="${ctdev_bin:A:h}"
+    # Get component names from ctdev itself
+    if command -v ctdev &>/dev/null; then
+        components=(${(f)"$(ctdev install --help 2>/dev/null | sed -n '/Available components:/,/^$/p' | grep -v 'Available components:' | tr -s ' ' | sed 's/^ *//')"})
+        # Fallback: hardcoded list if help parsing fails
+        if [[ ${#components[@]} -eq 0 ]]; then
+            components=(
+                1password age btop bun chatgpt chrome cleanmymac
+                claude-code claude-desktop codex dbeaver docker doctl
+                earlyoom fonts gh ghostty git git-spice helm jq kubectl
+                linear logi-options node ruby shellcheck slack solaar
+                sops tailscale terraform tmux vscode zsh
+            )
+        fi
     fi
-
-    local components_file="${dotfiles_root}/lib/components.sh"
-
-    if [[ -f "$components_file" ]]; then
-        # Parse name:description from COMPONENTS array
-        while IFS=: read -r name desc _; do
-            components+=("${name}:${desc}")
-        done < <(awk -F'"' '/^[[:space:]]+"/{print $2}' "$components_file")
-    fi
-
     _describe -t components 'component' components
 }
 
@@ -129,9 +122,7 @@ _ctdev() {
                     _arguments -s \
                         "${global_flags[@]}" \
                         '--show[Show current system configuration]' \
-                        '--reset[Reset system configuration to defaults]' \
-                        '--skip-gpu[Skip GPU setup step]' \
-                        '--skip-configure[Skip system configuration step]'
+                        '--reset[Reset system configuration to defaults]'
                     ;;
                 cleanup)
                     _arguments -s "${global_flags[@]}"

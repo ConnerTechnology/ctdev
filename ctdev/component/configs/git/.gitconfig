@@ -12,7 +12,3 @@
   defaultBranch = main
 [pull]
   ff = only
-[user]
-	name = Thomas Conner
-	email = thomas.conner@connertechnology.io
-	signingKey = ~/.ssh/id_ed25519.pub

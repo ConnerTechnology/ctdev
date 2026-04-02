@@ -33,7 +33,7 @@ var Registry = []Component{
 	{Name: "sops", Description: "Mozilla SOPS secrets manager", Category: CategorySecurity, SupportedOS: []OS{OSAny}, GoInstall: sopsInstall, GoUninstall: sopsUninstall, Tags: []string{"secrets", "encrypt"}},
 	{Name: "tailscale", Description: "Tailscale VPN", Category: CategorySecurity, SupportedOS: []OS{OSAny}, GoInstall: tailscaleInstall, GoUninstall: tailscaleUninstall, Tags: []string{"vpn", "network"}},
 	{Name: "terraform", Description: "Terraform infrastructure tool", Category: CategoryInfra, SupportedOS: []OS{OSAny}, GoInstall: terraformInstall, GoUninstall: terraformUninstall, Tags: []string{"iac", "cloud"}},
-	{Name: "tmux", Description: "Terminal multiplexer", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("tmux"), GoUninstall: SimplePackageUninstaller("tmux"), Tags: []string{"terminal", "session"}},
+	{Name: "tmux", Description: "Terminal multiplexer", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: tmuxInstall, GoUninstall: tmuxUninstall, Tags: []string{"terminal", "session"}},
 	{Name: "vscode", Description: "Visual Studio Code", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, DetectCmd: "code", GoInstall: vscodeInstall, GoUninstall: vscodeUninstall, Tags: []string{"editor", "ide"}},
 	{Name: "zsh", Description: "Zsh, Oh My Zsh, Pure prompt, plugins", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, DetectPath: "$HOME/.oh-my-zsh", GoInstall: zshInstall, GoUninstall: zshUninstall, Tags: []string{"shell", "ohmyzsh"}},
 }
