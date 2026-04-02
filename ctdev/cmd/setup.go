@@ -9,6 +9,7 @@ import (
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
 	tuisetup "github.com/ConnerTechnology/dotfiles/ctdev/tui/setup"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -156,6 +157,8 @@ func runSetupReset() error {
 
 // runMacOSSetup preserves the existing macOS bash-based setup path.
 func runMacOSSetup() error {
+	fmt.Println(styles.Dimmed.Render("macOS setup uses the system configuration script."))
+	fmt.Println()
 	root := dotfilesRoot()
 	script := fmt.Sprintf(
 		"export DOTFILES_ROOT=%q && source %q/lib/utils.sh && source %q/cmds/setup.sh && macos_apply",
