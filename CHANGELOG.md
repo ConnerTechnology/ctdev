@@ -2,10 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.0.8] - 2026-04-02
+## [9.0.9] - 2026-04-02
 
 ### Fixed
-- Remove dangling symlinks from old bash-based install before deploying config files — `DeployFile` was silently failing because `os.WriteFile` followed the broken symlink to a deleted target
+- Use `all:configs` in go:embed to include dot-files — `.zshrc`, `.gitconfig`, `.tmux.conf`, and `.xbindkeysrc` were silently excluded by Go's default embed behavior which skips files starting with `.`
+- Remove dangling symlinks from old bash-based install before deploying config files
 
 ## [9.0.7] - 2026-04-02
 
