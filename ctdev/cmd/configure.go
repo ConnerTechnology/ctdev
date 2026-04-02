@@ -1,20 +1,27 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagGitName  string
-	flagGitEmail string
-	flagGitLocal bool
-	flagGitShow  bool
+	flagGitName       string
+	flagGitEmail      string
+	flagGitLocal      bool
+	flagGitShow       bool
+	flagGitSigningKey string
+	flagGitGlobal     bool
 )
 
 var configureCmd = &cobra.Command{
@@ -33,9 +40,34 @@ func init() {
 	configureGitCmd.Flags().StringVar(&flagGitName, "name", "", "git user name")
 	configureGitCmd.Flags().StringVar(&flagGitEmail, "email", "", "git user email")
 	configureGitCmd.Flags().BoolVar(&flagGitLocal, "local", false, "apply to current repo only")
+	configureGitCmd.Flags().BoolVar(&flagGitGlobal, "global", false, "force global scope")
 	configureGitCmd.Flags().BoolVar(&flagGitShow, "show", false, "show current git config")
+	configureGitCmd.Flags().StringVar(&flagGitSigningKey, "signing-key", "", "SSH signing key path")
 	configureCmd.AddCommand(configureGitCmd)
 	rootCmd.AddCommand(configureCmd)
+}
+
+// promptLine reads a single line of input, returning empty string on EOF.
+func promptLine() string {
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		return strings.TrimSpace(scanner.Text())
+	}
+	return ""
+}
+
+// promptChoice shows a numbered prompt and returns the 1-based selection.
+// Returns defaultVal if input is empty.
+func promptChoice(defaultVal int) int {
+	input := promptLine()
+	if input == "" {
+		return defaultVal
+	}
+	n, err := strconv.Atoi(input)
+	if err != nil {
+		return defaultVal
+	}
+	return n
 }
 
 func runConfigureGit(cmd *cobra.Command, args []string) error {
@@ -43,9 +75,16 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 		return showGitConfig()
 	}
 
-	// If flags provided, set directly
+	// If flags provided, set directly (non-interactive)
 	if flagGitName != "" || flagGitEmail != "" {
-		return setGitConfig(flagGitName, flagGitEmail, flagGitLocal)
+		local := flagGitLocal
+		if err := setGitConfig(flagGitName, flagGitEmail, local); err != nil {
+			return err
+		}
+		if flagGitSigningKey != "" {
+			return setGitSigningKey(flagGitSigningKey, local)
+		}
+		return nil
 	}
 
 	// Interactive mode
@@ -53,38 +92,228 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--name and --email required in batch mode")
 	}
 
-	// Get current values
-	currentName := getGitConfig("user.name", flagGitLocal)
-	currentEmail := getGitConfig("user.email", flagGitLocal)
+	fmt.Println(styles.Title.Render("Git Configuration"))
+	fmt.Println()
+
+	// Step 1: Scope detection
+	local := flagGitLocal
+	if flagGitGlobal {
+		local = false
+	} else if !flagGitLocal {
+		if _, err := os.Stat(".git"); err == nil {
+			fmt.Println("  Git repository detected.")
+			fmt.Println("    1) Global (all repos)")
+			fmt.Println("    2) This repo only")
+			fmt.Printf("  Select [1]: ")
+			choice := promptChoice(1)
+			if choice == 2 {
+				local = true
+			}
+			fmt.Println()
+		}
+	}
 
 	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(20)
 	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
 
-	fmt.Println(styles.Title.Render("Git Configuration"))
-	fmt.Println()
-
 	scope := "global"
-	if flagGitLocal {
+	if local {
 		scope = "local"
 	}
 	fmt.Printf("  %s %s\n\n", labelStyle.Render("Scope:"), valueStyle.Render(scope))
 
-	// Simple prompt-based input
+	// Step 2: Name prompt
+	currentName := getGitConfig("user.name", local)
 	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Name [%s]:", currentName)))
-	var name string
-	fmt.Scanln(&name)
+	name := promptLine()
 	if name == "" {
 		name = currentName
 	}
 
+	// Step 3: Email prompt
+	currentEmail := getGitConfig("user.email", local)
 	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Email [%s]:", currentEmail)))
-	var email string
-	fmt.Scanln(&email)
+	email := promptLine()
 	if email == "" {
 		email = currentEmail
 	}
 
-	return setGitConfig(name, email, flagGitLocal)
+	fmt.Println()
+
+	// Step 4: SSH signing key picker
+	keyPath, err := promptSSHSigningKey(email)
+	if err != nil {
+		return err
+	}
+
+	// Step 5: GitHub upload (if key selected)
+	if keyPath != "" {
+		promptGitHubKeyUpload(keyPath)
+	}
+
+	// Step 6: Apply settings
+	if err := setGitConfig(name, email, local); err != nil {
+		return err
+	}
+	if keyPath != "" {
+		if err := setGitSigningKey(keyPath, local); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func promptSSHSigningKey(email string) (string, error) {
+	keys := sysutil.FindSSHPublicKeys()
+
+	fmt.Println("  SSH Signing Key:")
+
+	optionNum := 1
+	for _, k := range keys {
+		home, _ := os.UserHomeDir()
+		displayPath := k.Path
+		if home != "" {
+			displayPath = strings.Replace(k.Path, home, "~", 1)
+		}
+		fmt.Printf("    %d) %s (%s)\n", optionNum, displayPath, k.KeyType)
+		optionNum++
+	}
+
+	generateIdx := optionNum
+	fmt.Printf("    %d) Generate new ed25519 key\n", optionNum)
+	optionNum++
+
+	customIdx := optionNum
+	fmt.Printf("    %d) Enter custom path\n", optionNum)
+	optionNum++
+
+	fmt.Printf("    %d) Skip (no signing)\n", optionNum)
+
+	defaultChoice := 1
+	if len(keys) == 0 {
+		defaultChoice = generateIdx
+	}
+	fmt.Printf("  Select [%d]: ", defaultChoice)
+	choice := promptChoice(defaultChoice)
+
+	fmt.Println()
+
+	// Existing key selected
+	if choice >= 1 && choice <= len(keys) {
+		selected := keys[choice-1]
+		fmt.Println(styles.Success.Render(fmt.Sprintf("  Using key: %s", selected.Path)))
+		// Display the public key
+		if data, err := os.ReadFile(selected.Path); err == nil {
+			fmt.Printf("  %s\n", styles.Dimmed.Render(strings.TrimSpace(string(data))))
+		}
+		fmt.Println()
+		return selected.Path, nil
+	}
+
+	// Generate new key
+	if choice == generateIdx {
+		return generateSSHKey(email)
+	}
+
+	// Custom path
+	if choice == customIdx {
+		fmt.Printf("  Key path: ")
+		path := promptLine()
+		if path == "" {
+			return "", nil
+		}
+		// Expand ~ to home dir
+		if strings.HasPrefix(path, "~/") {
+			home, _ := os.UserHomeDir()
+			path = filepath.Join(home, path[2:])
+		}
+		if _, err := os.Stat(path); err != nil {
+			return "", fmt.Errorf("key file not found: %s", path)
+		}
+		fmt.Println()
+		return path, nil
+	}
+
+	// Skip
+	return "", nil
+}
+
+func generateSSHKey(email string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	keyPath := filepath.Join(home, ".ssh", "id_ed25519")
+
+	fmt.Println("  Generating new ed25519 key...")
+	fmt.Println()
+
+	genCmd := exec.Command("ssh-keygen", "-t", "ed25519", "-C", email)
+	genCmd.Stdin = os.Stdin
+	genCmd.Stdout = os.Stdout
+	genCmd.Stderr = os.Stderr
+	if err := genCmd.Run(); err != nil {
+		return "", fmt.Errorf("ssh-keygen failed: %w", err)
+	}
+
+	pubKeyPath := keyPath + ".pub"
+	if _, err := os.Stat(pubKeyPath); err != nil {
+		// Try to find any newly created .pub key
+		newKeys := sysutil.FindSSHPublicKeys()
+		if len(newKeys) > 0 {
+			pubKeyPath = newKeys[len(newKeys)-1].Path
+		} else {
+			return "", fmt.Errorf("could not find generated public key")
+		}
+	}
+
+	fmt.Println()
+	if data, err := os.ReadFile(pubKeyPath); err == nil {
+		fmt.Printf("  %s\n", styles.Dimmed.Render(strings.TrimSpace(string(data))))
+	}
+	fmt.Println()
+
+	return pubKeyPath, nil
+}
+
+func promptGitHubKeyUpload(keyPath string) {
+	// Check if gh is available and authenticated
+	if err := exec.Command("gh", "auth", "status").Run(); err != nil {
+		printManualGitHubInstructions(keyPath)
+		return
+	}
+
+	fmt.Printf("  Add this key to GitHub? [Y/n]: ")
+	input := promptLine()
+	fmt.Println()
+
+	if input != "" && strings.ToLower(input) != "y" && strings.ToLower(input) != "yes" {
+		return
+	}
+
+	hostname, _ := os.Hostname()
+	title := "ctdev-" + hostname
+
+	ghCmd := exec.Command("gh", "ssh-key", "add", keyPath, "--title", title)
+	if output, err := ghCmd.CombinedOutput(); err != nil {
+		fmt.Println(styles.Warning.Render(fmt.Sprintf("  Failed to add key to GitHub: %s", strings.TrimSpace(string(output)))))
+		printManualGitHubInstructions(keyPath)
+	} else {
+		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added SSH key to GitHub as %q", title)))
+	}
+	fmt.Println()
+}
+
+func printManualGitHubInstructions(keyPath string) {
+	hostname, _ := os.Hostname()
+	fmt.Println()
+	fmt.Println("  Add this key to GitHub:")
+	fmt.Println("    1. Go to https://github.com/settings/ssh/new")
+	fmt.Printf("    2. Title: ctdev-%s\n", hostname)
+	fmt.Println("    3. Key type: Authentication and Signing")
+	fmt.Println("    4. Paste your public key (shown above)")
+	fmt.Println()
 }
 
 func showGitConfig() error {
@@ -94,8 +323,12 @@ func showGitConfig() error {
 
 	name := getGitConfig("user.name", false)
 	email := getGitConfig("user.email", false)
+	signingKey := getGitConfig("user.signingKey", false)
+	gpgSign := getGitConfig("commit.gpgsign", false)
 	localName := getGitConfig("user.name", true)
 	localEmail := getGitConfig("user.email", true)
+	localSigningKey := getGitConfig("user.signingKey", true)
+	localGpgSign := getGitConfig("commit.gpgsign", true)
 
 	fmt.Println(styles.Title.Render("Git Configuration"))
 	fmt.Println()
@@ -103,8 +336,18 @@ func showGitConfig() error {
 	fmt.Println(headerStyle.Render("Global"))
 	fmt.Printf("  %s %s\n", labelStyle.Render("Name"), valueStyle.Render(name))
 	fmt.Printf("  %s %s\n", labelStyle.Render("Email"), valueStyle.Render(email))
+	signingKeyDisplay := signingKey
+	if signingKeyDisplay == "" {
+		signingKeyDisplay = styles.Dimmed.Render("(not set)")
+	}
+	fmt.Printf("  %s %s\n", labelStyle.Render("Signing Key"), valueStyle.Render(signingKeyDisplay))
+	gpgSignDisplay := gpgSign
+	if gpgSignDisplay == "" {
+		gpgSignDisplay = styles.Dimmed.Render("(not set)")
+	}
+	fmt.Printf("  %s %s\n", labelStyle.Render("GPG Sign"), valueStyle.Render(gpgSignDisplay))
 
-	hasLocal := localName != "" || localEmail != ""
+	hasLocal := localName != "" || localEmail != "" || localSigningKey != "" || localGpgSign != ""
 	if hasLocal {
 		fmt.Println()
 		fmt.Println(headerStyle.Render("Local (this repo)"))
@@ -116,8 +359,18 @@ func showGitConfig() error {
 		if localEmailDisplay == "" {
 			localEmailDisplay = styles.Dimmed.Render("(not set)")
 		}
+		localSigningKeyDisplay := localSigningKey
+		if localSigningKeyDisplay == "" {
+			localSigningKeyDisplay = styles.Dimmed.Render("(not set)")
+		}
+		localGpgSignDisplay := localGpgSign
+		if localGpgSignDisplay == "" {
+			localGpgSignDisplay = styles.Dimmed.Render("(not set)")
+		}
 		fmt.Printf("  %s %s\n", labelStyle.Render("Name"), valueStyle.Render(localNameDisplay))
 		fmt.Printf("  %s %s\n", labelStyle.Render("Email"), valueStyle.Render(localEmailDisplay))
+		fmt.Printf("  %s %s\n", labelStyle.Render("Signing Key"), valueStyle.Render(localSigningKeyDisplay))
+		fmt.Printf("  %s %s\n", labelStyle.Render("GPG Sign"), valueStyle.Render(localGpgSignDisplay))
 	}
 
 	return nil
@@ -165,6 +418,37 @@ func setGitConfig(name, email string, local bool) error {
 			fmt.Println(styles.Success.Render(fmt.Sprintf("  Set user.email = %s", email)))
 		}
 	}
+
+	return nil
+}
+
+func setGitSigningKey(keyPath string, local bool) error {
+	scope := "--global"
+	if local {
+		scope = "--local"
+	}
+
+	if flagDryRun {
+		fmt.Printf("  [dry-run] git config %s gpg.format ssh\n", scope)
+		fmt.Printf("  [dry-run] git config %s user.signingKey %q\n", scope, keyPath)
+		fmt.Printf("  [dry-run] git config %s commit.gpgsign true\n", scope)
+		return nil
+	}
+
+	if err := exec.Command("git", "config", scope, "gpg.format", "ssh").Run(); err != nil {
+		return fmt.Errorf("failed to set gpg.format: %w", err)
+	}
+	fmt.Println(styles.Success.Render("  Set gpg.format = ssh"))
+
+	if err := exec.Command("git", "config", scope, "user.signingKey", keyPath).Run(); err != nil {
+		return fmt.Errorf("failed to set user.signingKey: %w", err)
+	}
+	fmt.Println(styles.Success.Render(fmt.Sprintf("  Set user.signingKey = %s", keyPath)))
+
+	if err := exec.Command("git", "config", scope, "commit.gpgsign", "true").Run(); err != nil {
+		return fmt.Errorf("failed to set commit.gpgsign: %w", err)
+	}
+	fmt.Println(styles.Success.Render("  Set commit.gpgsign = true"))
 
 	return nil
 }
