@@ -1,12 +1,13 @@
 package progress
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestProgressModelInit(t *testing.T) {
-	m := New([]string{"docker", "btop"})
+	m := New([]string{"docker", "btop"}, ModeInstall)
 	if len(m.components) != 2 {
 		t.Errorf("expected 2 components, got %d", len(m.components))
 	}
@@ -16,16 +17,17 @@ func TestProgressModelInit(t *testing.T) {
 }
 
 func TestProgressModelInstallDone(t *testing.T) {
-	m := New([]string{"docker", "btop"})
+	val := New([]string{"docker", "btop"}, ModeInstall)
+	m := &val
 
 	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
-	m = updated.(Model)
+	m = updated.(*Model)
 	if m.components[0].Status != StatusRunning {
 		t.Error("expected docker to be running")
 	}
 
 	updated, _ = m.Update(InstallDoneMsg{Name: "docker", Duration: 3 * time.Second})
-	m = updated.(Model)
+	m = updated.(*Model)
 	if m.components[0].Status != StatusDone {
 		t.Error("expected docker to be done")
 	}
@@ -35,10 +37,11 @@ func TestProgressModelInstallDone(t *testing.T) {
 }
 
 func TestProgressModelInstallFail(t *testing.T) {
-	m := New([]string{"docker"})
+	val := New([]string{"docker"}, ModeInstall)
+	m := &val
 
 	updated, _ := m.Update(InstallFailMsg{Name: "docker", Error: "apt lock", Duration: time.Second})
-	m = updated.(Model)
+	m = updated.(*Model)
 	if m.components[0].Status != StatusFailed {
 		t.Error("expected docker to be failed")
 	}
@@ -57,5 +60,25 @@ func TestProgressOutputTail(t *testing.T) {
 	}
 	if lines[0] != "b" {
 		t.Errorf("expected 'b' first, got %s", lines[0])
+	}
+}
+
+func TestProgressModelUninstallMode(t *testing.T) {
+	val := New([]string{"docker"}, ModeUninstall)
+	m := &val
+
+	view := m.viewProgress()
+	if !strings.Contains(view, "Uninstalling") {
+		t.Errorf("expected 'Uninstalling' in view, got: %s", view)
+	}
+
+	updated, _ := m.Update(InstallDoneMsg{Name: "docker", Duration: time.Second})
+	m = updated.(*Model)
+	updated, _ = m.Update(AllDoneMsg{})
+	m = updated.(*Model)
+
+	summary := m.viewSummary()
+	if !strings.Contains(summary, "Uninstall complete") {
+		t.Errorf("expected 'Uninstall complete' in summary, got: %s", summary)
 	}
 }
