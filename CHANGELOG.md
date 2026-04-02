@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.0] - 2026-04-02
+
+### Changed
+- Complete rewrite from bash to Go — ctdev is now a single compiled binary
+- All 35 component installers ported to native Go with proper error handling
+- Bubble Tea TUI for interactive component picker, setup wizard, and update checklist
+- Embedded config files via go:embed (no more symlinks)
+- Install via GitHub Releases binary download instead of cloning the repo
+- Self-update via `ctdev update` checks GitHub Releases for new versions
+
+### Added
+- `ctdev configure git` — interactive SSH key picker, signing key setup, GitHub upload
+- `ctdev configure aws` — AWS profile picker from ~/.aws/config
+- `ctdev gpu info` — GPU hardware info with NVIDIA signing status
+- `ctdev gpu setup` — MOK enrollment and DKMS signing for Secure Boot
+- Batch/CI mode — all commands work non-interactively when stdin is not a TTY
+- Zsh completions for all commands including configure and gpu subcommands
+- Progress TUI shows elapsed time and per-component output during install/uninstall
+
+### Fixed
+- APT keyring and source operations now use sudo correctly
+- Component detection uses app bundles on macOS instead of CLI commands
+- Setup key repeat rate correctly converts cps to milliseconds for gsettings
+- Setup reset now undoes the same dconf paths that apply uses
+- Kernel cleanup scoped to versioned packages only (won't remove meta-packages)
+- GRUB backed up before any sed modifications
+- Update functions use safe temp directories instead of predictable /tmp paths
+- Pre-release versions filtered from GitHub release tag scanning
+
 ## [8.4.0] - 2026-03-08
 
 ### Changed
