@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.1] - 2026-04-02
+
+### Fixed
+- Skip sudo prompt during --dry-run (was blocking in CI and non-interactive contexts)
+- Add batch/non-TTY progress mode for install/uninstall (was crashing in CI without /dev/tty)
+
 ## [9.0.0] - 2026-04-02
 
 ### Changed
