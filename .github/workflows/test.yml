@@ -87,7 +87,13 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y git sudo curl golang-go
+          apt-get install -y git sudo curl
+
+      - name: Install Go
+        run: |
+          curl -fsSL "https://go.dev/dl/go1.24.2.linux-amd64.tar.gz" -o /tmp/go.tar.gz
+          tar -C /usr/local -xzf /tmp/go.tar.gz
+          rm /tmp/go.tar.gz
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -98,6 +104,7 @@ jobs:
       - name: Build ctdev
         working-directory: ctdev
         run: |
+          export PATH="/usr/local/go/bin:$PATH"
           VERSION=$(cat ../VERSION)
           go build -ldflags "-X main.version=$VERSION" -o ctdev .
 
