@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.10] - 2026-04-02
+
+### Fixed
+- All config-deploying components (tmux, ghostty, claude-code, zsh, git) now always deploy configs even when the binary is already installed — re-running `ctdev install <component>` keeps dotfiles in sync and replaces any dangling symlinks from the old bash install
+
 ## [9.0.9] - 2026-04-02
 
 ### Fixed
