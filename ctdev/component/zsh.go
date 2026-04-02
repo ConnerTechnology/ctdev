@@ -73,20 +73,17 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("clone zsh-completions: %w", err)
 	}
 
-	// Symlink configs from dotfiles
-	dotfiles := findDotfilesRoot()
-	zshDir := filepath.Join(dotfiles, "components", "zsh")
-
-	symlinks := map[string]string{
-		filepath.Join(zshDir, "aliases.zsh"):  filepath.Join(omzDir, "custom", "aliases.zsh"),
-		filepath.Join(zshDir, "exports.zsh"):  filepath.Join(omzDir, "custom", "exports.zsh"),
-		filepath.Join(zshDir, "path.zsh"):     filepath.Join(home, ".zsh", "path.zsh"),
-		filepath.Join(zshDir, ".zshrc"):        filepath.Join(home, ".zshrc"),
+	// Deploy configs from embedded FS
+	deploys := map[string]string{
+		"configs/zsh/aliases.zsh":  filepath.Join(omzDir, "custom", "aliases.zsh"),
+		"configs/zsh/exports.zsh":  filepath.Join(omzDir, "custom", "exports.zsh"),
+		"configs/zsh/path.zsh":     filepath.Join(home, ".zsh", "path.zsh"),
+		"configs/zsh/.zshrc":       filepath.Join(home, ".zshrc"),
 	}
 
-	for src, dst := range symlinks {
-		if err := symlinkOrDryRun(o, src, dst); err != nil {
-			fmt.Fprintf(opts.Stdout, "warning: could not symlink %s: %v\n", filepath.Base(src), err)
+	for src, dst := range deploys {
+		if err := deployOrDryRun(o, src, dst); err != nil {
+			fmt.Fprintf(opts.Stdout, "warning: could not deploy %s: %v\n", filepath.Base(src), err)
 		}
 	}
 
@@ -95,26 +92,20 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 	if !o.DryRun {
 		os.MkdirAll(zfuncDir, 0755)
 	}
-	completionsSrc := filepath.Join(zshDir, "completions", "_ctdev")
-	if _, err := os.Stat(completionsSrc); err == nil {
-		if err := symlinkOrDryRun(o, completionsSrc, filepath.Join(zfuncDir, "_ctdev")); err != nil {
-			fmt.Fprintf(opts.Stdout, "warning: could not symlink completions: %v\n", err)
-		}
+	if err := deployOrDryRun(o, "configs/zsh/completions/_ctdev", filepath.Join(zfuncDir, "_ctdev")); err != nil {
+		fmt.Fprintf(opts.Stdout, "warning: could not deploy completions: %v\n", err)
 	}
 
-	// Copy exports.local.zsh only if it doesn't exist
+	// Deploy exports.local.zsh only if dest doesn't exist
 	localExports := filepath.Join(omzDir, "custom", "exports.local.zsh")
 	if !o.DryRun {
 		if _, err := os.Stat(localExports); os.IsNotExist(err) {
-			src := filepath.Join(zshDir, "exports.local.zsh")
-			if data, err := os.ReadFile(src); err == nil {
-				if err := os.WriteFile(localExports, data, 0644); err == nil {
-					fmt.Fprintln(opts.Stdout, "Created exports.local.zsh - customize it!")
-				}
+			if err := sysutil.DeployFileFromFS(Configs, "configs/zsh/exports.local.zsh", localExports); err == nil {
+				fmt.Fprintln(opts.Stdout, "Created exports.local.zsh - customize it!")
 			}
 		}
 	} else {
-		fmt.Fprintf(o.Stdout, "[dry-run] copy exports.local.zsh if not exists\n")
+		fmt.Fprintf(o.Stdout, "[dry-run] deploy exports.local.zsh if not exists\n")
 	}
 
 	fmt.Fprintln(opts.Stdout, "Zsh installation complete")
@@ -174,4 +165,12 @@ func symlinkOrDryRun(o sysutil.Opts, src, dst string) error {
 		return nil
 	}
 	return sysutil.SafeSymlink(src, dst)
+}
+
+func deployOrDryRun(o sysutil.Opts, srcEmbed, dst string) error {
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "[dry-run] deploy %s → %s\n", filepath.Base(srcEmbed), dst)
+		return nil
+	}
+	return sysutil.DeployFileFromFS(Configs, srcEmbed, dst)
 }

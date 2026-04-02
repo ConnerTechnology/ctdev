@@ -40,25 +40,15 @@ func ghosttyInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("ghostty install not supported for package manager: %s", p.PackageManager)
 	}
 
-	// Symlink config from dotfiles components directory
-	if err := symlinkGhosttyConfig(o); err != nil {
-		fmt.Fprintf(opts.Stdout, "warning: could not symlink ghostty config: %v\n", err)
+	// Deploy config from embedded configs
+	if err := deployGhosttyConfig(o); err != nil {
+		fmt.Fprintf(opts.Stdout, "warning: could not deploy ghostty config: %v\n", err)
 	}
 
 	return nil
 }
 
-func symlinkGhosttyConfig(o sysutil.Opts) error {
-	dotfiles := findDotfilesRoot()
-	if dotfiles == "" {
-		return fmt.Errorf("could not determine dotfiles root")
-	}
-
-	src := filepath.Join(dotfiles, "components", "ghostty", "config")
-	if _, err := os.Stat(src); err != nil {
-		return fmt.Errorf("config source not found: %s", src)
-	}
-
+func deployGhosttyConfig(o sysutil.Opts) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -66,10 +56,10 @@ func symlinkGhosttyConfig(o sysutil.Opts) error {
 	dst := filepath.Join(home, ".config", "ghostty", "config")
 
 	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] symlink %s → %s\n", src, dst)
+		fmt.Fprintf(o.Stdout, "[dry-run] deploy ghostty config → %s\n", dst)
 		return nil
 	}
-	return sysutil.SafeSymlink(src, dst)
+	return sysutil.DeployFileFromFS(Configs, "configs/ghostty/config", dst)
 }
 
 func ghosttyUninstall(ctx context.Context, opts ExecOpts) error {

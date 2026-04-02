@@ -223,13 +223,15 @@ func applyXbindkeys() error {
 		return fmt.Errorf("install xbindkeys/xdotool: %w", err)
 	}
 
-	configSrc := filepath.Join(DotfilesRoot, "config", "linux", "xbindkeys", ".xbindkeysrc")
 	configDst := filepath.Join(os.Getenv("HOME"), ".xbindkeysrc")
 
-	// Remove existing file/symlink before creating new symlink.
+	content, err := Configs.ReadFile("configs/xbindkeys/.xbindkeysrc")
+	if err != nil {
+		return fmt.Errorf("read embedded .xbindkeysrc: %w", err)
+	}
 	os.Remove(configDst)
-	if err := os.Symlink(configSrc, configDst); err != nil {
-		return fmt.Errorf("symlink .xbindkeysrc: %w", err)
+	if err := os.WriteFile(configDst, content, 0644); err != nil {
+		return fmt.Errorf("write .xbindkeysrc: %w", err)
 	}
 
 	autostartDir := filepath.Join(os.Getenv("HOME"), ".config", "autostart")
@@ -237,11 +239,10 @@ func applyXbindkeys() error {
 		return fmt.Errorf("mkdir autostart: %w", err)
 	}
 
-	desktopSrc := filepath.Join(DotfilesRoot, "config", "linux", "xbindkeys", "xbindkeys.desktop")
 	desktopDst := filepath.Join(autostartDir, "xbindkeys.desktop")
-	desktopContent, err := os.ReadFile(desktopSrc)
+	desktopContent, err := Configs.ReadFile("configs/xbindkeys/xbindkeys.desktop")
 	if err != nil {
-		return fmt.Errorf("read xbindkeys.desktop: %w", err)
+		return fmt.Errorf("read embedded xbindkeys.desktop: %w", err)
 	}
 	if err := os.WriteFile(desktopDst, desktopContent, 0o644); err != nil {
 		return fmt.Errorf("write xbindkeys.desktop: %w", err)
@@ -258,12 +259,26 @@ func applyXbindkeys() error {
 func applyWireplumberLDAC() error {
 	confDir := "/etc/wireplumber/wireplumber.conf.d"
 	confDst := filepath.Join(confDir, "51-ldac-hq.conf")
-	confSrc := filepath.Join(DotfilesRoot, "config", "linux", "wireplumber", "51-ldac-hq.conf")
 
 	if err := sudoRun("mkdir", "-p", confDir); err != nil {
 		return fmt.Errorf("mkdir wireplumber conf dir: %w", err)
 	}
-	if err := sudoRun("cp", confSrc, confDst); err != nil {
+
+	content, err := Configs.ReadFile("configs/wireplumber/51-ldac-hq.conf")
+	if err != nil {
+		return fmt.Errorf("read embedded wireplumber config: %w", err)
+	}
+	tmpFile, err := os.CreateTemp("", "wireplumber-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(content); err != nil {
+		tmpFile.Close()
+		return err
+	}
+	tmpFile.Close()
+	if err := sudoRun("cp", tmpFile.Name(), confDst); err != nil {
 		return fmt.Errorf("copy wireplumber config: %w", err)
 	}
 

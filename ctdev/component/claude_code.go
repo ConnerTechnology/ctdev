@@ -23,46 +23,34 @@ func claudeCodeInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("claude code installer: %w", err)
 	}
 
-	// Symlink config files from dotfiles components directory
-	if err := symlinkClaudeCodeConfigs(o); err != nil {
-		fmt.Fprintf(opts.Stdout, "warning: could not symlink claude-code configs: %v\n", err)
+	// Deploy config files from embedded configs
+	if err := deployClaudeCodeConfigs(o); err != nil {
+		fmt.Fprintf(opts.Stdout, "warning: could not deploy claude-code configs: %v\n", err)
 	}
 
 	return nil
 }
 
-func symlinkClaudeCodeConfigs(o sysutil.Opts) error {
-	dotfiles := findDotfilesRoot()
-	if dotfiles == "" {
-		return fmt.Errorf("could not determine dotfiles root")
-	}
-
+func deployClaudeCodeConfigs(o sysutil.Opts) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-
 	configDir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return err
+
+	files := []struct{ src, dst string }{
+		{"configs/claude-code/CLAUDE.md", filepath.Join(configDir, "CLAUDE.md")},
+		{"configs/claude-code/settings.json", filepath.Join(configDir, "settings.json")},
+		{"configs/claude-code/settings.local.json", filepath.Join(configDir, "settings.local.json")},
 	}
 
-	links := []struct{ src, dst string }{
-		{filepath.Join(dotfiles, "components", "claude-code", "CLAUDE.md"), filepath.Join(configDir, "CLAUDE.md")},
-		{filepath.Join(dotfiles, "components", "claude-code", "settings.json"), filepath.Join(configDir, "settings.json")},
-		{filepath.Join(dotfiles, "components", "claude-code", "settings.local.json"), filepath.Join(configDir, "settings.local.json")},
-	}
-
-	for _, l := range links {
-		if _, err := os.Stat(l.src); err != nil {
-			continue // skip if source doesn't exist
-		}
+	for _, f := range files {
 		if o.DryRun {
-			fmt.Fprintf(o.Stdout, "[dry-run] symlink %s → %s\n", l.src, l.dst)
+			fmt.Fprintf(o.Stdout, "[dry-run] deploy %s → %s\n", filepath.Base(f.src), f.dst)
 			continue
 		}
-		if err := sysutil.SafeSymlink(l.src, l.dst); err != nil {
-			return fmt.Errorf("symlink %s: %w", filepath.Base(l.src), err)
+		if err := sysutil.DeployFileFromFS(Configs, f.src, f.dst); err != nil {
+			return fmt.Errorf("deploy %s: %w", filepath.Base(f.src), err)
 		}
 	}
 	return nil

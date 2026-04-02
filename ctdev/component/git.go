@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -23,8 +22,6 @@ func gitInstall(ctx context.Context, opts ExecOpts) error {
 
 	fmt.Fprintln(opts.Stdout, "Installing git configuration...")
 
-	dotfiles := findDotfilesRoot()
-	src := filepath.Join(dotfiles, "components", "git", ".gitconfig")
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -32,25 +29,11 @@ func gitInstall(ctx context.Context, opts ExecOpts) error {
 	dst := filepath.Join(home, ".gitconfig")
 
 	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] cp %s %s\n", src, dst)
+		fmt.Fprintf(o.Stdout, "[dry-run] deploy .gitconfig → %s\n", dst)
 		return nil
 	}
-
-	// Copy (not symlink) so user changes persist
-	in, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("open source gitconfig: %w", err)
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("create dest gitconfig: %w", err)
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return fmt.Errorf("copy gitconfig: %w", err)
+	if err := sysutil.DeployFileFromFS(Configs, "configs/git/.gitconfig", dst); err != nil {
+		return err
 	}
 
 	fmt.Fprintln(opts.Stdout, "Git configuration installed")
