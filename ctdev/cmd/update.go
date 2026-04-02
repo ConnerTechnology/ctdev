@@ -75,8 +75,10 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		selected = checkResult.Selected
 	}
 
-	if err := ensureSudo(); err != nil {
-		return fmt.Errorf("sudo required for updates: %w", err)
+	if !flagDryRun {
+		if err := ensureSudo(); err != nil {
+			return fmt.Errorf("sudo required for updates: %w", err)
+		}
 	}
 
 	return executeUpdates(selected)

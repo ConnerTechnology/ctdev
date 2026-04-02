@@ -58,8 +58,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	selected = comp.ResolveDependencies(comp.Registry, selected)
-	if err := ensureSudo(); err != nil {
-		return fmt.Errorf("sudo required for install: %w", err)
+	if !flagDryRun {
+		if err := ensureSudo(); err != nil {
+			return fmt.Errorf("sudo required for install: %w", err)
+		}
 	}
 	return runWithProgress(progressOperation{
 		mode:     progress.ModeInstall,
