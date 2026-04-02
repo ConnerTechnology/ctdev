@@ -2,10 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.0.6] - 2026-04-02
+## [9.0.7] - 2026-04-02
 
 ### Fixed
 - Switch terminal to raw mode before draining DECRPM responses — cooked mode was buffering them in the line discipline, causing escape sequence leak at the shell prompt
+- Platform-specific terminal ioctls (Linux TCGETS/TCSETS vs macOS TIOCGETA/TIOCSETA)
 
 ## [9.0.3] - 2026-04-02
 
