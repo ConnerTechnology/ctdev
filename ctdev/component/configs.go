@@ -2,5 +2,5 @@ package component
 
 import "embed"
 
-//go:embed configs
+//go:embed all:configs
 var Configs embed.FS
