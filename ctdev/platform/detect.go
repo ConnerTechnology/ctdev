@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 type OS string
@@ -24,7 +25,19 @@ type Info struct {
 	IsContainer    bool
 }
 
+var (
+	cachedInfo Info
+	detectOnce sync.Once
+)
+
 func Detect() Info {
+	detectOnce.Do(func() {
+		cachedInfo = detect()
+	})
+	return cachedInfo
+}
+
+func detect() Info {
 	info := Info{
 		OS:   detectOS(),
 		Arch: detectArch(),
