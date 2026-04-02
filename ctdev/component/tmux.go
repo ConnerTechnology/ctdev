@@ -14,6 +14,7 @@ func tmuxInstall(ctx context.Context, opts ExecOpts) error {
 
 	if !opts.Force && sysutil.CommandExists("tmux") {
 		fmt.Fprintln(opts.Stdout, "tmux already installed")
+		return nil
 	} else {
 		fmt.Fprintln(opts.Stdout, "Installing tmux...")
 		if err := sysutil.InstallPackage(o, "tmux"); err != nil {
@@ -42,5 +43,16 @@ func tmuxInstall(ctx context.Context, opts ExecOpts) error {
 func tmuxUninstall(ctx context.Context, opts ExecOpts) error {
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 	fmt.Fprintln(opts.Stdout, "Removing tmux...")
+
+	// Remove deployed config
+	if home, err := os.UserHomeDir(); err == nil {
+		configPath := filepath.Join(home, ".tmux.conf")
+		if o.DryRun {
+			fmt.Fprintf(o.Stdout, "[dry-run] rm %s\n", configPath)
+		} else {
+			_ = os.Remove(configPath)
+		}
+	}
+
 	return sysutil.RemovePackage(o, "tmux")
 }

@@ -58,13 +58,19 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		pickerResult := result.(*picker.Model).GetResult()
-		if pickerResult.Quit || len(pickerResult.Selected) == 0 {
+		if pickerResult.Quit {
+			return nil
+		}
+		if len(pickerResult.Selected) == 0 {
+			fmt.Println("No components selected.")
 			return nil
 		}
 		selected = pickerResult.Selected
 	}
 
-	ensureSudo()
+	if err := ensureSudo(); err != nil {
+		return fmt.Errorf("sudo required for uninstall: %w", err)
+	}
 	return runWithProgress(progressOperation{
 		mode:     progress.ModeUninstall,
 		executor: executor,

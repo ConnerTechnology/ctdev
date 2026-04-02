@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
 func codexInstall(ctx context.Context, opts ExecOpts) error {
-	p := platform.Detect()
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 
 	if !opts.Force && sysutil.CommandExists("codex") {
@@ -19,11 +17,7 @@ func codexInstall(ctx context.Context, opts ExecOpts) error {
 
 	fmt.Fprintln(opts.Stdout, "Installing Codex...")
 
-	if p.OS == platform.MacOS {
-		return sysutil.BrewCaskInstall(o, "codex")
-	}
-
-	// Linux: install via npm
+	// Codex CLI is an npm package on all platforms
 	if !sysutil.CommandExists("node") {
 		return fmt.Errorf("node.js is required to install codex; run: ctdev install node")
 	}
@@ -32,13 +26,8 @@ func codexInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func codexUninstall(ctx context.Context, opts ExecOpts) error {
-	p := platform.Detect()
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 	fmt.Fprintln(opts.Stdout, "Removing Codex...")
-
-	if p.OS == platform.MacOS {
-		return sysutil.BrewCaskRemove(o, "codex")
-	}
 
 	if sysutil.CommandExists("npm") {
 		return sysutil.Run(o, "npm", "uninstall", "-g", "@openai/codex")

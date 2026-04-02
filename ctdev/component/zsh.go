@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -32,8 +33,12 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
-	// Change default shell to zsh
-	if err := sysutil.Run(o, "chsh", "-s", "/usr/bin/zsh"); err != nil {
+	// Change default shell to zsh (path varies by OS)
+	zshPath := "/usr/bin/zsh"
+	if which, err := exec.LookPath("zsh"); err == nil {
+		zshPath = which
+	}
+	if err := sysutil.Run(o, "chsh", "-s", zshPath); err != nil {
 		// Non-fatal: may need interactive auth
 		fmt.Fprintf(opts.Stdout, "warning: could not change shell: %v\n", err)
 	}
@@ -130,10 +135,14 @@ func zshUninstall(ctx context.Context, opts ExecOpts) error {
 		filepath.Join(omzCustom, "exports.local.zsh"),
 		filepath.Join(home, ".zshrc"),
 		filepath.Join(home, ".zfunc", "_ctdev"),
+		filepath.Join(home, ".zsh", "path.zsh"),
+		filepath.Join(home, ".zsh", "functions", "prompt_pure_setup"),
+		filepath.Join(home, ".zsh", "functions", "async"),
 	}
 
 	toDirRemove := []string{
 		filepath.Join(home, ".zsh", "pure"),
+		filepath.Join(home, ".zsh", "functions"),
 		filepath.Join(omzCustom, "plugins", "zsh-autosuggestions"),
 		filepath.Join(omzCustom, "plugins", "zsh-completions"),
 	}

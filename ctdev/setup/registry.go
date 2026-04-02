@@ -231,7 +231,7 @@ var Registry = []Setting{
 		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: 0.05, Unit: ""},
 		DetectFunc:  detectMouseSpeed,
 		ApplyFunc: func(v string) error {
-			return applyDconfString("/org/gnome/desktop/peripherals/mouse/speed", v)
+			return applyDconfDouble("/org/gnome/desktop/peripherals/mouse/speed", v)
 		},
 	},
 	{

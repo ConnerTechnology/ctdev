@@ -15,9 +15,12 @@ func logiOptionsInstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 	if !opts.Force {
-		if _, err := os.Stat("/Applications/logioptionsplus.app"); err == nil {
-			fmt.Fprintln(opts.Stdout, "Logi Options+ already installed")
-			return nil
+		// Check common app bundle names (case varies by version)
+		for _, name := range []string{"Logi Options+.app", "Logi Options.app", "logioptionsplus.app"} {
+			if _, err := os.Stat("/Applications/" + name); err == nil {
+				fmt.Fprintln(opts.Stdout, "Logi Options+ already installed")
+				return nil
+			}
 		}
 	}
 	fmt.Fprintln(opts.Stdout, "Installing Logi Options+...")

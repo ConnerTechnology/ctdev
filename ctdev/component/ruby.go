@@ -98,7 +98,7 @@ func rubyInstall(ctx context.Context, opts ExecOpts) error {
 	}
 	if err := sysutil.Run(o, gemBin, "install", "colorls"); err != nil {
 		fmt.Fprintf(opts.Stdout, "warning: could not install colorls: %v\n", err)
-	} else if isInteractive() {
+	} else if !opts.DryRun && isInteractive() {
 		aliasLine := "alias lc='colorls -lA --sd'"
 		fmt.Print("  Add alias 'lc' for colorls to your shell? [Y/n] ")
 		var answer string

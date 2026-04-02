@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -73,6 +73,10 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		selected = checkResult.Selected
+	}
+
+	if err := ensureSudo(); err != nil {
+		return fmt.Errorf("sudo required for updates: %w", err)
 	}
 
 	return executeUpdates(selected)
@@ -586,20 +590,23 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 // fetchGitHubReleaseTags returns release tags from newest to oldest (excludes pre-releases).
 func fetchGitHubReleaseTags(repo string) []string {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=50", repo)
-	resp, err := http.Get(url)
+	resp, err := sysutil.HTTPClient().Get(url)
 	if err != nil {
 		return nil
 	}
 	defer resp.Body.Close()
 	var releases []struct {
-		TagName string `json:"tag_name"`
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
 		return nil
 	}
-	tags := make([]string, len(releases))
-	for i, r := range releases {
-		tags[i] = r.TagName
+	var tags []string
+	for _, r := range releases {
+		if !r.Prerelease {
+			tags = append(tags, r.TagName)
+		}
 	}
 	return tags
 }
@@ -643,14 +650,15 @@ func fetchLatestNodeLTS(ctx context.Context) string {
 }
 
 func fetchLatestGoVersion(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "https://go.dev/dl/?mode=json").Output()
+	resp, err := sysutil.HTTPClient().Get("https://go.dev/dl/?mode=json")
 	if err != nil {
 		return ""
 	}
+	defer resp.Body.Close()
 	var releases []struct {
 		Version string `json:"version"`
 	}
-	if err := json.Unmarshal(out, &releases); err != nil || len(releases) == 0 {
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil || len(releases) == 0 {
 		return ""
 	}
 	return strings.TrimPrefix(releases[0].Version, "go")
@@ -683,11 +691,16 @@ func fetchLatestRubyVersion(ctx context.Context) string {
 }
 
 func fetchLatestKubectlVersion(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "https://dl.k8s.io/release/stable.txt").Output()
+	resp, err := sysutil.HTTPClient().Get("https://dl.k8s.io/release/stable.txt")
 	if err != nil {
 		return ""
 	}
-	return strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.TrimSpace(string(body)), "v")
 }
 
 func printUpdateList(items []checklist.UpdateItem) {
@@ -928,10 +941,12 @@ func updateHelm(ver string) error {
 	archive := fmt.Sprintf("helm-v%s-%s-%s.tar.gz", ver, goos, goarch)
 	url := fmt.Sprintf("https://get.helm.sh/%s", archive)
 
-	tmpDir := "/tmp/helm-update"
+	tmpDir, err := os.MkdirTemp("", "ctdev-helm-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
 	tmpFile := tmpDir + "/" + archive
-	_ = exec.Command("rm", "-rf", tmpDir).Run()
-	_ = exec.Command("mkdir", "-p", tmpDir).Run()
 
 	dl := exec.Command("curl", "-fsSL", "-o", tmpFile, url)
 	dl.Stdout = os.Stdout
@@ -953,9 +968,7 @@ func updateHelm(ver string) error {
 	mv := exec.Command("sudo", "mv", fmt.Sprintf("%s/%s-%s/helm", tmpDir, goos, goarch), dest)
 	mv.Stdout = os.Stdout
 	mv.Stderr = os.Stderr
-	err := mv.Run()
-	_ = exec.Command("rm", "-rf", tmpDir).Run()
-	return err
+	return mv.Run()
 }
 
 func updateKubectl(ver string) error {
@@ -963,14 +976,20 @@ func updateKubectl(ver string) error {
 	goarch := detectUpdateArch()
 	url := fmt.Sprintf("https://dl.k8s.io/release/v%s/bin/%s/%s/kubectl", ver, goos, goarch)
 
-	tmpFile := "/tmp/kubectl-update"
-	dl := exec.Command("curl", "-fsSL", "-o", tmpFile, url)
+	tmpFile, err := os.CreateTemp("", "ctdev-kubectl-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpPath)
+	dl := exec.Command("curl", "-fsSL", "-o", tmpPath, url)
 	dl.Stdout = os.Stdout
 	dl.Stderr = os.Stderr
 	if err := dl.Run(); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	if err := exec.Command("chmod", "+x", tmpFile).Run(); err != nil {
+	if err := exec.Command("chmod", "+x", tmpPath).Run(); err != nil {
 		return err
 	}
 	installPath, _ := exec.Command("which", "kubectl").Output()
@@ -978,7 +997,7 @@ func updateKubectl(ver string) error {
 	if dest == "" {
 		dest = "/usr/local/bin/kubectl"
 	}
-	mv := exec.Command("sudo", "mv", tmpFile, dest)
+	mv := exec.Command("sudo", "mv", tmpPath, dest)
 	mv.Stdout = os.Stdout
 	mv.Stderr = os.Stderr
 	return mv.Run()
@@ -989,9 +1008,12 @@ func updateTerraform(ver string) error {
 	goarch := detectUpdateArch()
 	url := fmt.Sprintf("https://releases.hashicorp.com/terraform/%s/terraform_%s_%s_%s.zip", ver, ver, goos, goarch)
 
-	tmpDir := "/tmp/terraform-update"
+	tmpDir, err := os.MkdirTemp("", "ctdev-terraform-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
 	tmpZip := tmpDir + "/terraform.zip"
-	_ = exec.Command("mkdir", "-p", tmpDir).Run()
 
 	dl := exec.Command("curl", "-fsSL", "-o", tmpZip, url)
 	dl.Stdout = os.Stdout
@@ -1013,9 +1035,7 @@ func updateTerraform(ver string) error {
 	mv := exec.Command("sudo", "mv", tmpDir+"/terraform", dest)
 	mv.Stdout = os.Stdout
 	mv.Stderr = os.Stderr
-	err := mv.Run()
-	_ = exec.Command("rm", "-rf", tmpDir).Run()
-	return err
+	return mv.Run()
 }
 
 func updateGo(ver string) error {
@@ -1023,8 +1043,14 @@ func updateGo(ver string) error {
 	goarch := detectUpdateArch()
 	url := fmt.Sprintf("https://go.dev/dl/go%s.%s-%s.tar.gz", ver, goos, goarch)
 
-	tmpFile := "/tmp/go-update.tar.gz"
-	dl := exec.Command("curl", "-fsSL", "-o", tmpFile, url)
+	tmpFile, err := os.CreateTemp("", "ctdev-go-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpPath)
+	dl := exec.Command("curl", "-fsSL", "-o", tmpPath, url)
 	dl.Stdout = os.Stdout
 	dl.Stderr = os.Stderr
 	if err := dl.Run(); err != nil {
@@ -1037,13 +1063,12 @@ func updateGo(ver string) error {
 	if err := rm.Run(); err != nil {
 		return fmt.Errorf("remove old go failed: %w", err)
 	}
-	tar := exec.Command("sudo", "tar", "-C", "/usr/local", "-xzf", tmpFile)
+	tar := exec.Command("sudo", "tar", "-C", "/usr/local", "-xzf", tmpPath)
 	tar.Stdout = os.Stdout
 	tar.Stderr = os.Stderr
 	if err := tar.Run(); err != nil {
 		return fmt.Errorf("extract failed: %w", err)
 	}
-	_ = exec.Command("rm", "-f", tmpFile).Run()
 	return nil
 }
 

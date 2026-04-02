@@ -87,9 +87,9 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	// Mouse settings
 	fmt.Fprintf(w, "Resetting Mouse settings...\n")
 	for _, key := range []string{
-		"/org/cinnamon/desktop/peripherals/mouse/accel-profile",
-		"/org/cinnamon/desktop/peripherals/mouse/speed",
-		"/org/cinnamon/desktop/peripherals/mouse/natural-scroll",
+		"/org/gnome/desktop/peripherals/mouse/accel-profile",
+		"/org/gnome/desktop/peripherals/mouse/speed",
+		"/org/gnome/desktop/peripherals/mouse/natural-scroll",
 	} {
 		if err := run("dconf", "reset", key); err != nil {
 			return fmt.Errorf("dconf reset %s: %w", key, err)

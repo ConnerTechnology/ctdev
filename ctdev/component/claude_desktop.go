@@ -13,7 +13,7 @@ func claudeDesktopInstall(ctx context.Context, opts ExecOpts) error {
 		return ErrUnsupportedOS
 	}
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
-	if !opts.Force && sysutil.CommandExists("claude") {
+	if !opts.Force && dirExists("/Applications/Claude.app") {
 		fmt.Fprintln(opts.Stdout, "Claude Desktop already installed")
 		return nil
 	}

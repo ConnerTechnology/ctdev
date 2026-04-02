@@ -44,11 +44,19 @@ if [[ -d "$STATE_DIR" ]]; then
 fi
 
 # Remove config directory
-CONFIG_DIR="$HOME/.config/ctdev"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ctdev"
 if [[ -d "$CONFIG_DIR" ]]; then
     info "Removing config directory..."
     rm -rf "$CONFIG_DIR"
     success "Removed $CONFIG_DIR"
+fi
+
+# Remove cache directory
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ctdev"
+if [[ -d "$CACHE_DIR" ]]; then
+    info "Removing cache directory..."
+    rm -rf "$CACHE_DIR"
+    success "Removed $CACHE_DIR"
 fi
 
 if [[ "$removed" == true ]]; then

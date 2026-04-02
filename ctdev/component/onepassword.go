@@ -47,12 +47,25 @@ func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 	// Debsig policies
 	if !o.DryRun {
 		policyDir := "/etc/debsig/policies/AC2D62742012EA22"
-		os.MkdirAll(policyDir, 0755)
-		if err := sysutil.DownloadFile("https://downloads.1password.com/linux/debian/debsig/1password.pol", policyDir+"/1password.pol"); err != nil {
+		if err := sysutil.SudoRun(o, "mkdir", "-p", policyDir); err != nil {
+			return fmt.Errorf("create debsig policy dir: %w", err)
+		}
+		polTmp, err := os.CreateTemp("", "1password-pol-*")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(polTmp.Name())
+		polTmp.Close()
+		if err := sysutil.DownloadFile("https://downloads.1password.com/linux/debian/debsig/1password.pol", polTmp.Name()); err != nil {
 			return fmt.Errorf("download debsig policy: %w", err)
 		}
+		if err := sysutil.SudoRun(o, "cp", polTmp.Name(), policyDir+"/1password.pol"); err != nil {
+			return fmt.Errorf("install debsig policy: %w", err)
+		}
 		debsigKeyDir := "/usr/share/debsig/keyrings/AC2D62742012EA22"
-		os.MkdirAll(debsigKeyDir, 0755)
+		if err := sysutil.SudoRun(o, "mkdir", "-p", debsigKeyDir); err != nil {
+			return fmt.Errorf("create debsig keyring dir: %w", err)
+		}
 		if err := sysutil.AddAPTKeyring(o, keyURL, debsigKeyDir+"/debsig.gpg"); err != nil {
 			return fmt.Errorf("add debsig keyring: %w", err)
 		}

@@ -74,12 +74,17 @@ func New(components []component.Component, installed map[string]bool, os compone
 		}
 	}
 
-	return Model{
+	m := Model{
 		items:    items,
 		selected: make(map[string]bool),
 		platform: os,
 		mode:     mode,
 	}
+	// Advance cursor past initial category header to first selectable item
+	if len(items) > 0 && items[0].isCategory {
+		m.moveCursor(1)
+	}
+	return m
 }
 
 func (inst *Model) Init() tea.Cmd {

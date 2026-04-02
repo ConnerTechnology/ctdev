@@ -32,8 +32,16 @@ func init() {
 func runSetup(cmd *cobra.Command, args []string) error {
 	info := platform.Detect()
 
-	// macOS uses the existing bash-based setup path
+	// macOS setup
 	if info.OS == platform.MacOS {
+		if flagSetupShow {
+			fmt.Println("macOS setup --show is not yet supported. Run 'ctdev setup' to apply defaults.")
+			return nil
+		}
+		if flagSetupReset {
+			fmt.Println("macOS setup --reset is not yet supported.")
+			return nil
+		}
 		return runMacOSSetup()
 	}
 
@@ -72,7 +80,9 @@ func runSetup(cmd *cobra.Command, args []string) error {
 
 func applySettings(states []setup.SettingState, force, dryRun, verbose bool) error {
 	if !dryRun {
-		ensureSudo()
+		if err := ensureSudo(); err != nil {
+			return fmt.Errorf("sudo required for setup: %w", err)
+		}
 	}
 
 	appliedGroups := make(map[string]bool)

@@ -61,20 +61,20 @@ func initConfig() {
 // ensureSudo caches sudo credentials before starting a TUI.
 // Scripts using maybe_sudo/sudo will hang if stdin isn't connected,
 // which happens once Bubble Tea takes over the terminal.
-func ensureSudo() {
+func ensureSudo() error {
 	if runtime.GOOS != "linux" {
-		return
+		return nil
 	}
 	// Check if we already have cached credentials
 	if err := exec.Command("sudo", "-n", "true").Run(); err == nil {
-		return
+		return nil
 	}
 	fmt.Println("Some components require sudo. Please enter your password:")
 	cmd := exec.Command("sudo", "-v")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	_ = cmd.Run()
+	return cmd.Run()
 }
 
 // resetTerminal cleans up escape sequences that Bubble Tea v2 may leak on exit

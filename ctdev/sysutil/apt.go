@@ -23,8 +23,15 @@ func AddAPTKeyring(o Opts, url, keyringPath string) error {
 		return fmt.Errorf("download GPG key: %w", err)
 	}
 
-	// Dearmor into the keyring path
-	dearmor := exec.Command("gpg", "--dearmor", "--yes", "-o", keyringPath)
+	// Dearmor into a temp file, then sudo-copy to the keyring path
+	dearmorTmp, err := os.CreateTemp("", "gpg-dearmor-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(dearmorTmp.Name())
+	dearmorTmp.Close()
+
+	dearmor := exec.Command("gpg", "--dearmor", "--yes", "-o", dearmorTmp.Name())
 	in, err := os.Open(tmp.Name())
 	if err != nil {
 		return err
@@ -33,7 +40,10 @@ func AddAPTKeyring(o Opts, url, keyringPath string) error {
 	dearmor.Stdin = in
 	dearmor.Stdout = o.Stdout
 	dearmor.Stderr = o.Stdout
-	return dearmor.Run()
+	if err := dearmor.Run(); err != nil {
+		return err
+	}
+	return SudoRun(o, "cp", dearmorTmp.Name(), keyringPath)
 }
 
 // AddAPTSource writes an APT sources list entry.
@@ -43,7 +53,17 @@ func AddAPTSource(o Opts, line, filename string) error {
 		fmt.Fprintf(o.Stdout, "[dry-run] write %s\n", path)
 		return nil
 	}
-	return os.WriteFile(path, []byte(line+"\n"), 0644)
+	tmp, err := os.CreateTemp("", "apt-source-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString(line + "\n"); err != nil {
+		tmp.Close()
+		return err
+	}
+	tmp.Close()
+	return SudoRun(o, "cp", tmp.Name(), path)
 }
 
 // APTUpdate runs apt-get update.

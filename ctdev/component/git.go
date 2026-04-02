@@ -20,13 +20,20 @@ func gitInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
-	fmt.Fprintln(opts.Stdout, "Installing git configuration...")
-
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 	dst := filepath.Join(home, ".gitconfig")
+
+	if !opts.Force {
+		if _, err := os.Stat(dst); err == nil {
+			fmt.Fprintln(opts.Stdout, ".gitconfig already exists (use --force to overwrite)")
+			return nil
+		}
+	}
+
+	fmt.Fprintln(opts.Stdout, "Installing git configuration...")
 
 	if o.DryRun {
 		fmt.Fprintf(o.Stdout, "[dry-run] deploy .gitconfig → %s\n", dst)

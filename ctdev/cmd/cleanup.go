@@ -83,7 +83,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		{
 			name: "Remove old kernels",
 			check: func() string {
-				out, err := exec.Command("bash", "-c", "dpkg --list | grep linux-image | grep -v $(uname -r) | wc -l").Output()
+				out, err := exec.Command("bash", "-c", `dpkg --list 'linux-image-[0-9]*' 2>/dev/null | grep '^ii' | grep -v "$(uname -r)" | wc -l`).Output()
 				if err != nil {
 					return "unable to check"
 				}
@@ -92,7 +92,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 			},
 			execute: func() error {
 				return exec.Command("bash", "-c",
-					"dpkg --list | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs sudo apt remove -y").Run()
+					`dpkg --list 'linux-image-[0-9]*' 2>/dev/null | grep '^ii' | grep -v "$(uname -r)" | awk '{print $2}' | xargs sudo apt remove -y`).Run()
 			},
 		},
 		{

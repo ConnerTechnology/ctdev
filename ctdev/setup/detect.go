@@ -57,7 +57,12 @@ func detectNvidiaLoaded() bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(out), "nvidia")
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "nvidia ") {
+			return true
+		}
+	}
+	return false
 }
 
 func detectMT7925E() bool {

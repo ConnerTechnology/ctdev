@@ -123,7 +123,32 @@ func (inst *ModalModel) updatePicker(msg tea.KeyPressMsg) {
 
 func (inst *ModalModel) updateToggle(msg tea.KeyPressMsg) {
 	if msg.String() == "space" {
-		inst.state.Enabled = !inst.state.Enabled
+		// Toggle the desired value between common toggle pairs
+		switch inst.state.DesiredValue {
+		case "true":
+			inst.state.DesiredValue = "false"
+		case "false":
+			inst.state.DesiredValue = "true"
+		case "enabled":
+			inst.state.DesiredValue = "disabled"
+		case "disabled":
+			inst.state.DesiredValue = "enabled"
+		case "signed":
+			inst.state.DesiredValue = "unsigned"
+		case "unsigned":
+			inst.state.DesiredValue = "signed"
+		case "installed":
+			inst.state.DesiredValue = "not installed"
+		case "not installed":
+			inst.state.DesiredValue = "installed"
+		case "active":
+			inst.state.DesiredValue = "inactive"
+		case "inactive":
+			inst.state.DesiredValue = "active"
+		default:
+			// Fall back to toggling the enabled flag
+			inst.state.Enabled = !inst.state.Enabled
+		}
 	}
 }
 
@@ -172,11 +197,7 @@ func (inst *ModalModel) View(width, height int) string {
 		case s.ControlPicker:
 			b.WriteString(inst.renderPickerControl())
 		case s.ControlToggle:
-			enabled := "disabled"
-			if inst.state.Enabled {
-				enabled = "enabled"
-			}
-			b.WriteString(fmt.Sprintf("Status: %s\n", enabled))
+			b.WriteString(fmt.Sprintf("Value: %s\n", inst.state.DesiredValue))
 			b.WriteString(styles.Help.Render("Space to toggle"))
 			b.WriteString("\n")
 		}

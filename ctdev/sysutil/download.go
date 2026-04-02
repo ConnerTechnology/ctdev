@@ -16,6 +16,9 @@ import (
 
 var httpClient = &http.Client{Timeout: 60 * time.Second}
 
+// HTTPClient returns the shared HTTP client with a 60-second timeout.
+func HTTPClient() *http.Client { return httpClient }
+
 // DownloadFile downloads a URL to a local file path.
 func DownloadFile(url, dest string) error {
 	resp, err := httpClient.Get(url)
@@ -32,10 +35,12 @@ func DownloadFile(url, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
-	_, err = io.Copy(f, resp.Body)
-	return err
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // GitHubLatestVersion fetches the latest release version from a GitHub repo.

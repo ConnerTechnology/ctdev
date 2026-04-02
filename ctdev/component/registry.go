@@ -28,7 +28,7 @@ var Registry = []Component{
 	{Name: "node", Description: "Node.js via nodenv", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, DetectPath: "$HOME/.nodenv", GoInstall: nodeInstall, GoUninstall: nodeUninstall, Tags: []string{"javascript", "nodejs"}},
 	{Name: "ruby", Description: "Ruby via rbenv", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, DetectPath: "$HOME/.rbenv", GoInstall: rubyInstall, GoUninstall: rubyUninstall, Tags: []string{"rbenv", "rails"}},
 	{Name: "shellcheck", Description: "Shell script linter", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("shellcheck"), GoUninstall: SimplePackageUninstaller("shellcheck"), Tags: []string{"lint", "bash"}},
-	{Name: "slack", Description: "Slack messaging", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, GoInstall: slackInstall, GoUninstall: slackUninstall, Tags: []string{"messaging", "chat"}},
+	{Name: "slack", Description: "Slack messaging", Category: CategoryDesktop, SupportedOS: []OS{OSMacOS, OSLinux}, GoInstall: slackInstall, GoUninstall: slackUninstall, Tags: []string{"messaging", "chat"}},
 	{Name: "solaar", Description: "Logitech Unifying/Bolt receiver manager", Category: CategorySystem, SupportedOS: []OS{OSLinux}, GoInstall: solaarInstall, GoUninstall: solaarUninstall, Tags: []string{"logitech", "bluetooth"}},
 	{Name: "sops", Description: "Mozilla SOPS secrets manager", Category: CategorySecurity, SupportedOS: []OS{OSAny}, GoInstall: sopsInstall, GoUninstall: sopsUninstall, Tags: []string{"secrets", "encrypt"}},
 	{Name: "tailscale", Description: "Tailscale VPN", Category: CategorySecurity, SupportedOS: []OS{OSAny}, GoInstall: tailscaleInstall, GoUninstall: tailscaleUninstall, Tags: []string{"vpn", "network"}},

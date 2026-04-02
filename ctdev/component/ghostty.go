@@ -67,6 +67,16 @@ func ghosttyUninstall(ctx context.Context, opts ExecOpts) error {
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 	fmt.Fprintln(opts.Stdout, "Removing Ghostty...")
 
+	// Remove deployed config
+	if home, err := os.UserHomeDir(); err == nil {
+		configPath := filepath.Join(home, ".config", "ghostty", "config")
+		if o.DryRun {
+			fmt.Fprintf(o.Stdout, "[dry-run] rm %s\n", configPath)
+		} else {
+			_ = os.Remove(configPath)
+		}
+	}
+
 	switch p.PackageManager {
 	case "brew":
 		return sysutil.BrewCaskRemove(o, "ghostty")

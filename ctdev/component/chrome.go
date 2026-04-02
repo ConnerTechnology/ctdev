@@ -42,7 +42,9 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 			return fmt.Errorf("download chrome: %w", err)
 		}
 		if err := sysutil.SudoRun(o, "dpkg", "-i", tmp.Name()); err != nil {
-			_ = sysutil.SudoRun(o, "apt-get", "install", "-f", "-y")
+			if fixErr := sysutil.SudoRun(o, "apt-get", "install", "-f", "-y"); fixErr != nil {
+				return fmt.Errorf("dpkg failed and apt-get fix failed: %w", fixErr)
+			}
 		}
 		return nil
 	case "dnf":

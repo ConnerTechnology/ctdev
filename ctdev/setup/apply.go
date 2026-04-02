@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
 )
@@ -57,6 +58,11 @@ func applyGrubVar(varName, value string) error {
 	content, err := os.ReadFile("/etc/default/grub")
 	if err != nil {
 		return fmt.Errorf("read /etc/default/grub: %w", err)
+	}
+
+	// Backup before modification (-n = no clobber, preserves original across multiple calls)
+	if err := sudoRun("cp", "-n", "/etc/default/grub", "/etc/default/grub.ctdev-backup"); err != nil {
+		return fmt.Errorf("backup /etc/default/grub: %w", err)
 	}
 
 	// Check if variable already exists — if so, replace it; otherwise append.
@@ -119,6 +125,12 @@ func applyDconfBool(path, value string) error {
 	return run(args[0], args[1:]...)
 }
 
+// applyDconfDouble writes a numeric double value to a dconf path (no quoting).
+func applyDconfDouble(path, value string) error {
+	args := dconfWriteArgs(path, value)
+	return run(args[0], args[1:]...)
+}
+
 // applyDconfString writes a string value to a dconf path, wrapping it in single quotes.
 func applyDconfString(path, value string) error {
 	quoted := fmt.Sprintf("'%s'", value)
@@ -145,7 +157,13 @@ func applyKeyRepeat(delay, rate string) error {
 	if err := applyGsettings("org.cinnamon.desktop.peripherals.keyboard", "delay", delay); err != nil {
 		return fmt.Errorf("gsettings delay: %w", err)
 	}
-	if err := applyGsettings("org.cinnamon.desktop.peripherals.keyboard", "repeat-interval", rate); err != nil {
+	// gsettings repeat-interval is in milliseconds between repeats, not cps.
+	// Convert: interval_ms = 1000 / rate_cps
+	interval := rate
+	if rateCps, err := strconv.Atoi(rate); err == nil && rateCps > 0 {
+		interval = strconv.Itoa(1000 / rateCps)
+	}
+	if err := applyGsettings("org.cinnamon.desktop.peripherals.keyboard", "repeat-interval", interval); err != nil {
 		return fmt.Errorf("gsettings repeat-interval: %w", err)
 	}
 	return nil

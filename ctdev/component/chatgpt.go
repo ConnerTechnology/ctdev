@@ -13,7 +13,7 @@ func chatgptInstall(ctx context.Context, opts ExecOpts) error {
 		return ErrUnsupportedOS
 	}
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
-	if !opts.Force && sysutil.CommandExists("chatgpt") {
+	if !opts.Force && dirExists("/Applications/ChatGPT.app") {
 		fmt.Fprintln(opts.Stdout, "ChatGPT already installed")
 		return nil
 	}

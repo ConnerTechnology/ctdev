@@ -28,7 +28,7 @@ var (
 
 var configureCmd = &cobra.Command{
 	Use:   "configure",
-	Short: "Configure system settings",
+	Short: "Configure git, AWS, and other tool settings",
 }
 
 var configureAWSCmd = &cobra.Command{
@@ -306,12 +306,21 @@ func promptGitHubKeyUpload(keyPath string) {
 	hostname, _ := os.Hostname()
 	title := "ctdev-" + hostname
 
+	// Add as authentication key
 	ghCmd := exec.Command("gh", "ssh-key", "add", keyPath, "--title", title)
 	if output, err := ghCmd.CombinedOutput(); err != nil {
 		fmt.Println(styles.Warning.Render(fmt.Sprintf("  Failed to add key to GitHub: %s", strings.TrimSpace(string(output)))))
 		printManualGitHubInstructions(keyPath)
 	} else {
-		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added SSH key to GitHub as %q", title)))
+		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added SSH auth key to GitHub as %q", title)))
+	}
+
+	// Also add as signing key for commit verification
+	ghSignCmd := exec.Command("gh", "ssh-key", "add", keyPath, "--title", title+"-signing", "--type", "signing")
+	if output, err := ghSignCmd.CombinedOutput(); err != nil {
+		fmt.Println(styles.Warning.Render(fmt.Sprintf("  Failed to add signing key to GitHub: %s", strings.TrimSpace(string(output)))))
+	} else {
+		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added SSH signing key to GitHub as %q", title+"-signing")))
 	}
 	fmt.Println()
 }
@@ -454,6 +463,11 @@ func runConfigureAWS(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("invalid selection: %d", choice)
 		}
 		selected = profiles[choice-1]
+	}
+
+	if flagDryRun {
+		fmt.Printf("[dry-run] would set AWS_PROFILE=%s in %s\n", selected, sysutil.ExportsLocalPath())
+		return nil
 	}
 
 	if err := sysutil.SetLineInFile(sysutil.ExportsLocalPath(), "AWS_PROFILE", "export AWS_PROFILE="+selected); err != nil {

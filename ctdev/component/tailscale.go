@@ -27,14 +27,27 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 		if codename == "" {
 			codename = "noble"
 		}
+		distro := p.Distro
+		if distro == "" {
+			distro = "ubuntu"
+		}
+		// Tailscale only publishes repos for ubuntu and debian
+		switch distro {
+		case "ubuntu", "linuxmint", "pop":
+			distro = "ubuntu"
+		case "debian":
+			distro = "debian"
+		default:
+			distro = "ubuntu"
+		}
 
 		keyring := "/usr/share/keyrings/tailscale-archive-keyring.gpg"
-		keyURL := fmt.Sprintf("https://pkgs.tailscale.com/stable/ubuntu/%s.noarmor.gpg", codename)
+		keyURL := fmt.Sprintf("https://pkgs.tailscale.com/stable/%s/%s.noarmor.gpg", distro, codename)
 		if err := sysutil.AddAPTKeyring(o, keyURL, keyring); err != nil {
 			return fmt.Errorf("add tailscale GPG key: %w", err)
 		}
 
-		repoLine := fmt.Sprintf("deb [signed-by=%s] https://pkgs.tailscale.com/stable/ubuntu %s main", keyring, codename)
+		repoLine := fmt.Sprintf("deb [signed-by=%s] https://pkgs.tailscale.com/stable/%s %s main", keyring, distro, codename)
 		if err := sysutil.AddAPTSource(o, repoLine, "tailscale.list"); err != nil {
 			return fmt.Errorf("add tailscale repo: %w", err)
 		}

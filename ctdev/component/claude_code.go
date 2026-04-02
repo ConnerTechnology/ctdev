@@ -73,12 +73,12 @@ func claudeCodeUninstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
-	// Remove config symlinks (preserve ~/.claude directory)
+	// Remove deployed config files (preserve ~/.claude directory)
 	configDir := filepath.Join(home, ".claude")
 	for _, name := range []string{"CLAUDE.md", "settings.json", "settings.local.json"} {
-		link := filepath.Join(configDir, name)
-		if fi, err := os.Lstat(link); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-			if err := sysutil.Run(o, "rm", "-f", link); err != nil {
+		f := filepath.Join(configDir, name)
+		if _, err := os.Stat(f); err == nil {
+			if err := sysutil.Run(o, "rm", "-f", f); err != nil {
 				return err
 			}
 		}

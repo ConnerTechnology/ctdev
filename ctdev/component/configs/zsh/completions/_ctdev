@@ -23,6 +23,7 @@ _ctdev_configure_targets() {
     local -a targets
     targets=(
         'git:Configure git user (name and email)'
+        'aws:Configure AWS profile'
     )
     _describe -t targets 'target' targets
 }
@@ -32,7 +33,15 @@ _ctdev_configure_git_opts() {
         '--name[Set git user.name]:name' \
         '--email[Set git user.email]:email' \
         '--local[Configure for current repo only]' \
+        '--global[Force global scope]' \
         '--show[Show current git configuration]' \
+        '--signing-key[SSH signing key path]:key path:_files' \
+        '(-h --help)'{-h,--help}'[Show help]'
+}
+
+_ctdev_configure_aws_opts() {
+    _arguments -s \
+        '--profile[AWS profile name]:profile' \
         '(-h --help)'{-h,--help}'[Show help]'
 }
 
@@ -61,7 +70,7 @@ _ctdev() {
         'uninstall:Remove specific components'
         'update:Update system packages and components'
         'info:Show system information'
-        'configure:Configure git settings'
+        'configure:Configure git, AWS, and other tool settings'
         'gpu:Manage GPU driver signing for Secure Boot'
         'setup:Set up and configure your OS'
         'cleanup:Clean up kernels and APT repos'
@@ -94,6 +103,7 @@ _ctdev() {
                     local target="${words[2]}"
                     case "$target" in
                         git) _ctdev_configure_git_opts ;;
+                        aws) _ctdev_configure_aws_opts ;;
                         *) _ctdev_configure_targets ;;
                     esac
                     ;;
