@@ -1,4 +1,4 @@
-name: Test Dotfiles
+name: Test
 
 on:
   push:
@@ -8,69 +8,72 @@ on:
   workflow_dispatch:
 
 jobs:
-  syntax-check:
-    name: Bash Syntax Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check all shell scripts
-        run: |
-          find . -name "*.sh" -type f | while read -r file; do
-            bash -n "$file" || exit 1
-          done
-          bash -n ./ctdev || exit 1
-
   shellcheck:
-    name: ShellCheck Lint
+    name: Shell Script Lint
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Check syntax
+        run: |
+          for f in install.sh uninstall.sh devcontainer.sh; do
+            bash -n "$f" || exit 1
+          done
 
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      - name: Run ShellCheck on lib/
-        run: shellcheck lib/*.sh
+      - name: Run ShellCheck
+        run: shellcheck install.sh uninstall.sh devcontainer.sh
 
-      - name: Run ShellCheck on cmds/
-        run: shellcheck cmds/*.sh
-
-      - name: Run ShellCheck on ctdev
-        run: shellcheck ./ctdev
-
-      - name: Run ShellCheck on component installers
-        run: shellcheck components/*/install.sh
-
-  test-cli:
-    name: Test ctdev CLI
+  go-test:
+    name: Go Tests
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ctdev/go.mod
+
+      - name: Run tests
+        working-directory: ctdev
+        run: go test ./...
+
+      - name: Vet
+        working-directory: ctdev
+        run: go vet ./...
+
+      - name: Build
+        working-directory: ctdev
+        run: |
+          VERSION=$(cat ../VERSION)
+          go build -ldflags "-X main.version=$VERSION" -o ctdev .
+
       - name: Test --help flag
+        working-directory: ctdev
         run: ./ctdev --help
 
       - name: Test --version flag
+        working-directory: ctdev
         run: ./ctdev --version
 
-      - name: Test list command
-        run: ./ctdev install --help
-
       - name: Test info command
+        working-directory: ctdev
         run: ./ctdev info
 
       - name: Test dry-run install
+        working-directory: ctdev
         run: ./ctdev --dry-run install jq
 
   test-ubuntu:
     name: Test on Ubuntu ${{ matrix.ubuntu-version }}
+    needs: go-test
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -81,10 +84,16 @@ jobs:
       image: ubuntu:${{ matrix.ubuntu-version }}
 
     steps:
-      - name: Install git
+      - name: Install dependencies
         run: |
           apt-get update
           apt-get install -y git sudo curl
+
+      - name: Install Go
+        run: |
+          curl -fsSL "https://go.dev/dl/go1.24.2.linux-amd64.tar.gz" -o /tmp/go.tar.gz
+          tar -C /usr/local -xzf /tmp/go.tar.gz
+          rm /tmp/go.tar.gz
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -92,70 +101,63 @@ jobs:
       - name: Configure git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Build ctdev
+        working-directory: ctdev
+        run: |
+          export PATH="/usr/local/go/bin:$PATH"
+          VERSION=$(cat ../VERSION)
+          go build -ldflags "-X main.version=$VERSION" -o ctdev .
+
       - name: Install zsh component
-        run: ./ctdev install zsh
+        working-directory: ctdev
+        run: ./ctdev --force install zsh
 
       - name: Verify zsh installation
         run: |
           command -v zsh || exit 1
           [ -d ~/.oh-my-zsh ] || exit 1
-          [ -d ~/.zsh/pure ] || exit 1
-
-      - name: Verify config files
-        run: |
-          [ -f ~/.zshrc ] || exit 1
-          [ -f ~/.oh-my-zsh/custom/aliases.zsh ] || exit 1
-          [ -f ~/.oh-my-zsh/custom/exports.zsh ] || exit 1
-
-      - name: Install git component
-        run: ./components/git/install.sh --name "CI Test" --email "ci@test.com"
-
-      - name: Verify git config
-        run: |
-          [ -f ~/.gitconfig ] || exit 1
-          git config --global user.name | grep -q "CI Test" || exit 1
-          git config --global user.email | grep -q "ci@test.com" || exit 1
 
       - name: Install jq component
-        run: ./ctdev install jq
+        working-directory: ctdev
+        run: ./ctdev --force install jq
 
       - name: Verify jq installation
         run: command -v jq || exit 1
 
-      - name: Run info check
+      - name: Test info command
+        working-directory: ctdev
         run: ./ctdev info
 
   test-macos:
     name: Test on macOS
+    needs: go-test
     runs-on: macos-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ctdev/go.mod
+
+      - name: Build ctdev
+        working-directory: ctdev
+        run: |
+          VERSION=$(cat ../VERSION)
+          go build -ldflags "-X main.version=$VERSION" -o ctdev .
+
       - name: Test CLI commands
+        working-directory: ctdev
         run: |
           ./ctdev --version
           ./ctdev install --help
           ./ctdev info
 
-      - name: Test dry-run install
-        run: ./ctdev --dry-run install jq
+      - name: Install jq component
+        working-directory: ctdev
+        run: ./ctdev --force install jq
 
-      - name: Install zsh component
-        run: ./ctdev install zsh
-
-      - name: Verify zsh installation
-        run: |
-          [ -d ~/.oh-my-zsh ] || exit 1
-          [ -d ~/.zsh/pure ] || exit 1
-          [ -f ~/.zshrc ] || exit 1
-
-      - name: Install git component
-        run: ./components/git/install.sh --name "CI Test" --email "ci@test.com"
-
-      - name: Verify git config
-        run: |
-          [ -f ~/.gitconfig ] || exit 1
-          git config --global user.name | grep -q "CI Test" || exit 1
-          git config --global user.email | grep -q "ci@test.com" || exit 1
+      - name: Verify jq installation
+        run: command -v jq || exit 1

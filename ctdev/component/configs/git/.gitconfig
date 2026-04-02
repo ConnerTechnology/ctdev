@@ -1,0 +1,14 @@
+[alias]
+  ignored = !git ls-files -v | grep "^[[:lower:]]"
+[color]
+  ui = true
+[diff]
+  noprefix = true
+[fetch]
+  prune = true
+[gpg]
+  format = ssh
+[init]
+  defaultBranch = main
+[pull]
+  ff = only

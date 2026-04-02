@@ -8,13 +8,6 @@ Modular dotfiles for macOS and Linux. Managed via the `ctdev` CLI.
 curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
 ```
 
-Or manually:
-
-```bash
-git clone https://github.com/ConnerTechnology/dotfiles.git ~/dotfiles
-~/dotfiles/install.sh
-```
-
 ## Getting Started
 
 After installing, run the full system setup:
@@ -68,8 +61,8 @@ Add to your VS Code `settings.json`:
 ## Uninstall
 
 ```bash
-ctdev uninstall <component...>   # Remove specific components first
-~/dotfiles/uninstall.sh          # Remove ctdev CLI
+ctdev uninstall <component...>   # Remove specific components
+rm ~/.local/bin/ctdev            # Remove the ctdev binary
 ```
 
 ## License
