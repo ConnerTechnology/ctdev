@@ -12,16 +12,14 @@ import (
 func tmuxInstall(ctx context.Context, opts ExecOpts) error {
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 
-	if !opts.Force && sysutil.CommandExists("tmux") {
-		fmt.Fprintln(opts.Stdout, "tmux already installed")
-		return nil
-	} else {
+	if opts.Force || !sysutil.CommandExists("tmux") {
 		fmt.Fprintln(opts.Stdout, "Installing tmux...")
 		if err := sysutil.InstallPackage(o, "tmux"); err != nil {
 			return err
 		}
 	}
 
+	// Always deploy config (keeps dotfiles in sync)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -36,7 +34,7 @@ func tmuxInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("deploy tmux config: %w", err)
 	}
 
-	fmt.Fprintln(opts.Stdout, "tmux configuration installed")
+	fmt.Fprintln(opts.Stdout, "tmux configuration deployed")
 	return nil
 }
 

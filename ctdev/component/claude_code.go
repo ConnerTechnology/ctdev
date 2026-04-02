@@ -12,18 +12,14 @@ import (
 func claudeCodeInstall(ctx context.Context, opts ExecOpts) error {
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 
-	if !opts.Force && sysutil.CommandExists("claude") {
-		fmt.Fprintln(opts.Stdout, "Claude Code already installed")
-		return nil
+	if opts.Force || !sysutil.CommandExists("claude") {
+		fmt.Fprintln(opts.Stdout, "Installing Claude Code...")
+		if err := sysutil.Run(o, "bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"); err != nil {
+			return fmt.Errorf("claude code installer: %w", err)
+		}
 	}
 
-	fmt.Fprintln(opts.Stdout, "Installing Claude Code...")
-
-	if err := sysutil.Run(o, "bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"); err != nil {
-		return fmt.Errorf("claude code installer: %w", err)
-	}
-
-	// Deploy config files from embedded configs
+	// Always deploy config files (keeps dotfiles in sync)
 	if err := deployClaudeCodeConfigs(o); err != nil {
 		fmt.Fprintf(opts.Stdout, "warning: could not deploy claude-code configs: %v\n", err)
 	}
