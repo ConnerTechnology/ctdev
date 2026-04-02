@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.4] - 2026-04-02
+
+### Fixed
+- Poll stdin drain over 150ms to reliably catch late-arriving DECRPM terminal responses on fast operations
+
 ## [9.0.3] - 2026-04-02
 
 ### Fixed
