@@ -5,11 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-)
 
-// DotfilesRoot is the absolute path to the dotfiles repository root.
-// Set this before calling any apply functions that reference config files.
-var DotfilesRoot string
+	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
+)
 
 const wifiSleepHookScript = `#!/bin/bash
 case "$1" in
@@ -170,10 +168,12 @@ func applyPackages(packages []string) error {
 	return sudoRun(args...)
 }
 
-// applyNvidiaSigning runs the GPU setup script from the dotfiles repo.
+// applyNvidiaSigning runs the GPU signing setup via the gpu package.
 func applyNvidiaSigning() error {
-	script := filepath.Join(DotfilesRoot, "cmds", "gpu.sh")
-	return sudoRun("bash", script)
+	return gpu.RunSetup(gpu.Opts{
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	})
 }
 
 // applyNvidiaSuspendServices enables NVIDIA suspend-related systemd services.
