@@ -5,11 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -88,22 +87,18 @@ func resetTerminal() {
 	drainStdin()
 }
 
-// drainStdin consumes any bytes pending on stdin (e.g. terminal DECRPM
-// responses). Polls non-blocking reads over a short window so late-arriving
-// responses are caught before the shell inherits stdin.
+// drainStdin waits for and discards any bytes pending on stdin (e.g. terminal
+// DECRPM responses). Uses poll(2) to wait for data, then flushes the input queue.
 func drainStdin() {
 	fd := int(os.Stdin.Fd())
-	_ = syscall.SetNonblock(fd, true)
-	defer func() { _ = syscall.SetNonblock(fd, false) }()
-
 	buf := make([]byte, 256)
-	deadline := time.Now().Add(150 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		n, _ := syscall.Read(fd, buf)
+	for {
+		fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+		n, _ := unix.Poll(fds, 200) // wait up to 200ms for data
 		if n <= 0 {
-			time.Sleep(10 * time.Millisecond)
-			continue
+			break // timeout — no more data coming
 		}
+		unix.Read(fd, buf)
 	}
 }
 
