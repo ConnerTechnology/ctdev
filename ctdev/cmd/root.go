@@ -85,30 +85,26 @@ func ensureSudo() error {
 // into the shell prompt after ctdev exits.
 func resetTerminal() {
 	fmt.Print("\033[?2026l\033[?2027l")
-
-	// Brief pause to let terminal responses arrive, then drain them.
-	// Without this, DECRPM replies print as garbage after ctdev exits.
-	time.Sleep(50 * time.Millisecond)
 	drainStdin()
 }
 
-// drainStdin reads and discards any bytes pending on stdin (e.g. terminal
-// DECRPM responses) by temporarily switching to non-blocking mode.
+// drainStdin consumes any bytes pending on stdin (e.g. terminal DECRPM
+// responses). Polls non-blocking reads over a short window so late-arriving
+// responses are caught before the shell inherits stdin.
 func drainStdin() {
 	fd := int(os.Stdin.Fd())
-	// Set non-blocking
-	if err := syscall.SetNonblock(fd, true); err != nil {
-		return
-	}
+	_ = syscall.SetNonblock(fd, true)
+	defer func() { _ = syscall.SetNonblock(fd, false) }()
+
 	buf := make([]byte, 256)
-	for {
-		n, _ := os.Stdin.Read(buf)
-		if n == 0 {
-			break
+	deadline := time.Now().Add(150 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		n, _ := syscall.Read(fd, buf)
+		if n <= 0 {
+			time.Sleep(10 * time.Millisecond)
+			continue
 		}
 	}
-	// Restore blocking
-	_ = syscall.SetNonblock(fd, false)
 }
 
 func isBatchMode() bool {
