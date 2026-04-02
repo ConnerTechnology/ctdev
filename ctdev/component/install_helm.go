@@ -3,8 +3,6 @@ package component
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -24,43 +22,28 @@ func helmInstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.InstallPackage(o, "helm")
 	}
 
-	ver, err := sysutil.GitHubLatestVersion("helm/helm")
+	fmt.Fprintln(opts.Stdout, "Installing helm...")
+	ver, err := sysutil.DownloadGitHubBinary(o, sysutil.GitHubBinarySpec{
+		Repo: "helm/helm",
+		ArchiveURL: func(ver, goos, goarch string) string {
+			return fmt.Sprintf("https://get.helm.sh/helm-v%s-%s-%s.tar.gz", ver, goos, goarch)
+		},
+		ChecksumURL: func(ver, goos, goarch string) string {
+			return fmt.Sprintf("https://get.helm.sh/helm-v%s-%s-%s.tar.gz.sha256sum", ver, goos, goarch)
+		},
+		BinaryPath: func(goos, goarch string) string {
+			return fmt.Sprintf("%s-%s/helm", goos, goarch)
+		},
+		InstallDest: "/usr/local/bin/helm",
+		ArchFormat:  "tar.gz",
+	})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(opts.Stdout, "Installing helm %s...\n", ver)
-
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] download helm v%s and install to /usr/local/bin\n", ver)
-		return nil
+	if !o.DryRun {
+		fmt.Fprintf(opts.Stdout, "helm %s installed\n", ver)
 	}
-
-	tmpDir, err := os.MkdirTemp("", "helm-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpDir)
-
-	archive := fmt.Sprintf("helm-v%s-linux-%s.tar.gz", ver, p.Arch)
-	archivePath := filepath.Join(tmpDir, archive)
-	checksumPath := filepath.Join(tmpDir, archive+".sha256sum")
-
-	dlURL := fmt.Sprintf("https://get.helm.sh/%s", archive)
-	csURL := fmt.Sprintf("https://get.helm.sh/%s.sha256sum", archive)
-
-	if err := sysutil.DownloadFile(dlURL, archivePath); err != nil {
-		return err
-	}
-	if err := sysutil.DownloadFile(csURL, checksumPath); err != nil {
-		return err
-	}
-	if err := sysutil.VerifyChecksumFile(archivePath, checksumPath); err != nil {
-		return err
-	}
-	if err := sysutil.Run(o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
-		return err
-	}
-	return sysutil.InstallBinary(o, filepath.Join(tmpDir, fmt.Sprintf("linux-%s", p.Arch), "helm"), "/usr/local/bin/helm")
+	return nil
 }
 
 func helmUninstall(ctx context.Context, opts ExecOpts) error {

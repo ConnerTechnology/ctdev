@@ -26,52 +26,33 @@ func gitSpiceInstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.InstallPackage(o, "git-spice")
 	}
 
-	ver, err := sysutil.GitHubLatestVersion("abhinav/git-spice")
+	fmt.Fprintln(opts.Stdout, "Installing git-spice...")
+	ver, err := sysutil.DownloadGitHubBinary(o, sysutil.GitHubBinarySpec{
+		Repo: "abhinav/git-spice",
+		ArchiveURL: func(ver, goos, goarch string) string {
+			arch := goarch
+			switch goarch {
+			case "amd64":
+				arch = "x86_64"
+			case "arm64":
+				arch = "aarch64"
+			}
+			return fmt.Sprintf("https://github.com/abhinav/git-spice/releases/download/v%s/git-spice_%s.%s_%s.tar.gz", ver, ver, goos, arch)
+		},
+		ChecksumURL: func(ver, goos, goarch string) string {
+			return fmt.Sprintf("https://github.com/abhinav/git-spice/releases/download/v%s/checksums.txt", ver)
+		},
+		BinaryPath:  func(goos, goarch string) string { return "gs" },
+		InstallDest: "/usr/local/bin/gs",
+		ArchFormat:  "tar.gz",
+	})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(opts.Stdout, "Installing git-spice %s...\n", ver)
-
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] download git-spice v%s and install to /usr/local/bin\n", ver)
-		return nil
+	if !o.DryRun {
+		fmt.Fprintf(opts.Stdout, "git-spice %s installed\n", ver)
 	}
-
-	// Map architecture to git-spice naming
-	gsArch := p.Arch
-	switch p.Arch {
-	case "amd64":
-		gsArch = "x86_64"
-	case "arm64":
-		gsArch = "aarch64"
-	}
-
-	tmpDir, err := os.MkdirTemp("", "git-spice-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpDir)
-
-	archive := fmt.Sprintf("git-spice.Linux-%s.tar.gz", gsArch)
-	archivePath := filepath.Join(tmpDir, archive)
-	checksumPath := filepath.Join(tmpDir, "checksums.txt")
-
-	dlURL := fmt.Sprintf("https://github.com/abhinav/git-spice/releases/download/v%s/%s", ver, archive)
-	csURL := fmt.Sprintf("https://github.com/abhinav/git-spice/releases/download/v%s/checksums.txt", ver)
-
-	if err := sysutil.DownloadFile(dlURL, archivePath); err != nil {
-		return err
-	}
-	if err := sysutil.DownloadFile(csURL, checksumPath); err != nil {
-		return err
-	}
-	if err := sysutil.VerifyChecksumFile(archivePath, checksumPath); err != nil {
-		return err
-	}
-	if err := sysutil.Run(o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
-		return err
-	}
-	return sysutil.InstallBinary(o, filepath.Join(tmpDir, "gs"), "/usr/local/bin/gs")
+	return nil
 }
 
 // isGitSpiceInstalled checks if gs is git-spice (not Ghostscript).

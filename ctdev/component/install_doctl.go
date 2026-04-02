@@ -3,8 +3,6 @@ package component
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -24,43 +22,26 @@ func doctlInstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.InstallPackage(o, "doctl")
 	}
 
-	ver, err := sysutil.GitHubLatestVersion("digitalocean/doctl")
+	fmt.Fprintln(opts.Stdout, "Installing doctl...")
+	ver, err := sysutil.DownloadGitHubBinary(o, sysutil.GitHubBinarySpec{
+		Repo: "digitalocean/doctl",
+		ArchiveURL: func(ver, goos, goarch string) string {
+			return fmt.Sprintf("https://github.com/digitalocean/doctl/releases/download/v%s/doctl-%s-%s-%s.tar.gz", ver, ver, goos, goarch)
+		},
+		ChecksumURL: func(ver, goos, goarch string) string {
+			return fmt.Sprintf("https://github.com/digitalocean/doctl/releases/download/v%s/doctl-%s-checksums.sha256", ver, ver)
+		},
+		BinaryPath:  func(goos, goarch string) string { return "doctl" },
+		InstallDest: "/usr/local/bin/doctl",
+		ArchFormat:  "tar.gz",
+	})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(opts.Stdout, "Installing doctl %s...\n", ver)
-
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] download doctl v%s and install to /usr/local/bin\n", ver)
-		return nil
+	if !o.DryRun {
+		fmt.Fprintf(opts.Stdout, "doctl %s installed\n", ver)
 	}
-
-	tmpDir, err := os.MkdirTemp("", "doctl-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpDir)
-
-	archive := fmt.Sprintf("doctl-%s-linux-%s.tar.gz", ver, p.Arch)
-	archivePath := filepath.Join(tmpDir, archive)
-	checksumPath := filepath.Join(tmpDir, "checksums.txt")
-
-	dlURL := fmt.Sprintf("https://github.com/digitalocean/doctl/releases/download/v%s/%s", ver, archive)
-	csURL := fmt.Sprintf("https://github.com/digitalocean/doctl/releases/download/v%s/doctl-%s-checksums.sha256", ver, ver)
-
-	if err := sysutil.DownloadFile(dlURL, archivePath); err != nil {
-		return err
-	}
-	if err := sysutil.DownloadFile(csURL, checksumPath); err != nil {
-		return err
-	}
-	if err := sysutil.VerifyChecksumFile(archivePath, checksumPath); err != nil {
-		return err
-	}
-	if err := sysutil.Run(o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
-		return err
-	}
-	return sysutil.InstallBinary(o, filepath.Join(tmpDir, "doctl"), "/usr/local/bin/doctl")
+	return nil
 }
 
 func doctlUninstall(ctx context.Context, opts ExecOpts) error {
