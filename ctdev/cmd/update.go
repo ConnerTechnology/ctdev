@@ -1049,11 +1049,35 @@ func itemNames(items []checklist.UpdateItem) []string {
 	return names
 }
 
+var aptKeyRefreshers = map[string]struct {
+	KeyURL      string
+	KeyringPath string
+}{
+	"gh":        {KeyURL: "https://cli.github.com/packages/githubcli-archive-keyring.gpg", KeyringPath: "/usr/share/keyrings/githubcli-archive-keyring.gpg"},
+	"vscode":    {KeyURL: "https://packages.microsoft.com/keys/microsoft.asc", KeyringPath: "/usr/share/keyrings/packages.microsoft.gpg"},
+	"1password": {KeyURL: "https://downloads.1password.com/linux/keys/1password.asc", KeyringPath: "/usr/share/keyrings/1password-archive-keyring.gpg"},
+	"terraform": {KeyURL: "https://apt.releases.hashicorp.com/gpg", KeyringPath: "/usr/share/keyrings/hashicorp-archive-keyring.gpg"},
+	"tailscale": {KeyURL: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg", KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg"},
+}
+
 func refreshAPTKeys(components []string) {
 	if _, err := exec.LookPath("apt"); err != nil {
 		return
 	}
-	// Shell out to existing key refresh scripts
-	fmt.Println(styles.Dimmed.Render("Refreshing APT GPG keys..."))
-	// This will be wired to bash scripts that handle key refreshing
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	targets := aptKeyRefreshers
+	if len(components) > 0 {
+		targets = make(map[string]struct{ KeyURL, KeyringPath string })
+		for _, name := range components {
+			if r, ok := aptKeyRefreshers[name]; ok {
+				targets[name] = r
+			}
+		}
+	}
+	for name, r := range targets {
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("  Refreshing %s key...", name)))
+		if err := sysutil.AddAPTKeyring(o, r.KeyURL, r.KeyringPath); err != nil {
+			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("Warning: %s key refresh failed: %v", name, err)))
+		}
+	}
 }
