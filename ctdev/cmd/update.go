@@ -2,15 +2,19 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
@@ -278,11 +282,11 @@ func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current := strings.TrimSpace(string(currentOut))
 
 	// Check latest via bun's upgrade --dry-run (not supported), use GitHub API
-	latest := fetchLatestGitHubTag(ctx, "oven-sh/bun")
-	if latest == "" || latest == current || latest == "v"+current {
+	tag, err := sysutil.GitHubLatestVersion("oven-sh/bun")
+	if err != nil {
 		return nil, nil
 	}
-	latest = strings.TrimPrefix(latest, "bun-v")
+	latest := strings.TrimPrefix(tag, "bun-v")
 	latest = strings.TrimPrefix(latest, "v")
 	if latest == current {
 		return nil, nil
@@ -333,64 +337,39 @@ func scanNPMGlobals(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if content == "" || content == "{}" {
 		return nil, nil
 	}
-	return parseNPMOutdated(content)
+	return parseNPMOutdatedJSON(content)
 }
 
-func parseNPMOutdated(content string) ([]checklist.UpdateItem, error) {
+func parseNPMOutdatedJSON(content string) ([]checklist.UpdateItem, error) {
+	var packages map[string]struct {
+		Current string `json:"current"`
+		Latest  string `json:"latest"`
+	}
+	if err := json.Unmarshal([]byte(content), &packages); err != nil {
+		return nil, err
+	}
 	var items []checklist.UpdateItem
-	// Simple line-by-line parse of npm outdated JSON
-	lines := strings.Split(content, "\n")
-	var currentPkg string
-	var currentVer, latestVer string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, `"`) && strings.HasSuffix(line, "{") {
-			currentPkg = strings.Trim(strings.TrimSuffix(line, ": {"), `"`)
-			currentVer = ""
-			latestVer = ""
-		}
-		if strings.Contains(line, `"current"`) {
-			currentVer = extractJSONValue(line)
-		}
-		if strings.Contains(line, `"latest"`) {
-			latestVer = extractJSONValue(line)
-		}
-		if strings.TrimSpace(line) == "}," || strings.TrimSpace(line) == "}" {
-			if currentPkg != "" && currentVer != "" && latestVer != "" && currentVer != latestVer {
-				items = append(items, checklist.UpdateItem{
-					Name:       currentPkg,
-					Source:     "npm",
-					CurrentVer: currentVer,
-					NewVer:     latestVer,
-				})
-			}
-			currentPkg = ""
+	for name, pkg := range packages {
+		if pkg.Current != pkg.Latest {
+			items = append(items, checklist.UpdateItem{
+				Name:       name,
+				Source:     "npm",
+				CurrentVer: pkg.Current,
+				NewVer:     pkg.Latest,
+			})
 		}
 	}
 	return items, nil
-}
-
-func extractJSONValue(line string) string {
-	// Extract value from `"key": "value"` or `"key": "value",`
-	parts := strings.SplitN(line, ":", 2)
-	if len(parts) < 2 {
-		return ""
-	}
-	val := strings.TrimSpace(parts[1])
-	val = strings.TrimSuffix(val, ",")
-	val = strings.Trim(val, `"`)
-	return val
 }
 
 func scanCtdev(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if version == "" {
 		return nil, nil
 	}
-	latest := fetchLatestGitHubTag(ctx, "ConnerTechnology/dotfiles")
-	if latest == "" {
+	latest, err := sysutil.GitHubLatestVersion("ConnerTechnology/dotfiles")
+	if err != nil || latest == "" {
 		return nil, nil
 	}
-	latest = strings.TrimPrefix(latest, "v")
 	current := strings.TrimPrefix(version, "v")
 	if latest == current {
 		return nil, nil
@@ -481,7 +460,7 @@ func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current = strings.TrimPrefix(current, "v")
 
 	currentMajor := majorVersion(current)
-	tags := fetchGitHubReleaseTags(ctx, "helm/helm")
+	tags := fetchGitHubReleaseTags("helm/helm")
 
 	var items []checklist.UpdateItem
 	latestSameMajor := ""
@@ -533,19 +512,15 @@ func scanKubectl(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if err != nil {
 		return nil, nil
 	}
-	// Extract gitVersion from JSON
-	content := string(out)
-	current := ""
-	for _, line := range strings.Split(content, "\n") {
-		if strings.Contains(line, `"gitVersion"`) {
-			current = extractJSONValue(line)
-			break
-		}
+	var kubectlVer struct {
+		ClientVersion struct {
+			GitVersion string `json:"gitVersion"`
+		} `json:"clientVersion"`
 	}
-	if current == "" {
+	if err := json.Unmarshal(out, &kubectlVer); err != nil {
 		return nil, nil
 	}
-	current = strings.TrimPrefix(current, "v")
+	current := strings.TrimPrefix(kubectlVer.ClientVersion.GitVersion, "v")
 
 	// Fetch latest stable kubectl version
 	latest := fetchLatestKubectlVersion(ctx)
@@ -568,24 +543,21 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if err != nil {
 		return nil, nil
 	}
-	// Extract terraform_version from JSON
-	content := string(out)
-	current := ""
-	for _, line := range strings.Split(content, "\n") {
-		if strings.Contains(line, `"terraform_version"`) {
-			current = extractJSONValue(line)
-			break
-		}
+	var tfVer struct {
+		TerraformVersion string `json:"terraform_version"`
 	}
+	if err := json.Unmarshal(out, &tfVer); err != nil {
+		return nil, nil
+	}
+	current := tfVer.TerraformVersion
 	if current == "" {
 		return nil, nil
 	}
 
-	latest := fetchLatestGitHubTag(ctx, "hashicorp/terraform")
-	if latest == "" {
+	latest, err := sysutil.GitHubLatestVersion("hashicorp/terraform")
+	if err != nil || latest == "" {
 		return nil, nil
 	}
-	latest = strings.TrimPrefix(latest, "v")
 	if latest == current {
 		return nil, nil
 	}
@@ -597,37 +569,23 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}}, nil
 }
 
-// fetchLatestGitHubTag gets the latest release tag from a GitHub repo
-func fetchLatestGitHubTag(ctx context.Context, repo string) string {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "-H", "Accept: application/vnd.github.v3+json", url).Output()
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(line, `"tag_name"`) {
-			return extractJSONValue(line)
-		}
-	}
-	return ""
-}
-
 // fetchGitHubReleaseTags returns release tags from newest to oldest (excludes pre-releases).
-func fetchGitHubReleaseTags(ctx context.Context, repo string) []string {
+func fetchGitHubReleaseTags(repo string) []string {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=50", repo)
-	out, err := exec.CommandContext(ctx, "curl", "-fsSL", "-H", "Accept: application/vnd.github.v3+json", url).Output()
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil
 	}
-	var tags []string
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.Contains(line, `"tag_name"`) {
-			tag := extractJSONValue(line)
-			if tag != "" {
-				tags = append(tags, tag)
-			}
-		}
+	defer resp.Body.Close()
+	var releases []struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil
+	}
+	tags := make([]string, len(releases))
+	for i, r := range releases {
+		tags[i] = r.TagName
 	}
 	return tags
 }
@@ -675,14 +633,13 @@ func fetchLatestGoVersion(ctx context.Context) string {
 	if err != nil {
 		return ""
 	}
-	// First "version" field is the latest stable
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(line, `"version"`) {
-			ver := extractJSONValue(line)
-			return strings.TrimPrefix(ver, "go")
-		}
+	var releases []struct {
+		Version string `json:"version"`
 	}
-	return ""
+	if err := json.Unmarshal(out, &releases); err != nil || len(releases) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(releases[0].Version, "go")
 }
 
 func fetchLatestRubyVersion(ctx context.Context) string {
@@ -1077,21 +1034,11 @@ func updateGo(ver string) error {
 }
 
 func detectUpdateOS() string {
-	out, _ := exec.Command("uname", "-s").Output()
-	return strings.ToLower(strings.TrimSpace(string(out)))
+	return runtime.GOOS
 }
 
 func detectUpdateArch() string {
-	out, _ := exec.Command("uname", "-m").Output()
-	arch := strings.TrimSpace(string(out))
-	switch arch {
-	case "x86_64":
-		return "amd64"
-	case "aarch64", "arm64":
-		return "arm64"
-	default:
-		return arch
-	}
+	return runtime.GOARCH
 }
 
 func itemNames(items []checklist.UpdateItem) []string {
