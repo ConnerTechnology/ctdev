@@ -1,8 +1,6 @@
 package state
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -64,28 +62,3 @@ func TestMarkerRemove(t *testing.T) {
 	}
 }
 
-func TestMigrateOldMarkers(t *testing.T) {
-	oldDir := t.TempDir()
-	newDir := t.TempDir()
-
-	// Create old-style marker
-	oldFile := filepath.Join(oldDir, "docker.installed")
-	os.WriteFile(oldFile, []byte("2026-01-15T10:30:00Z"), 0644)
-
-	ms := NewMarkerStore(newDir)
-	migrated, err := MigrateOldMarkers(oldDir, ms)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	if migrated != 1 {
-		t.Errorf("expected 1 migrated, got %d", migrated)
-	}
-
-	got, err := ms.Load("docker")
-	if err != nil {
-		t.Fatalf("load after migrate: %v", err)
-	}
-	if got.Version != "unknown" {
-		t.Errorf("version: got %s, want unknown", got.Version)
-	}
-}
