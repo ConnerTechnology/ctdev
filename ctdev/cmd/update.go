@@ -46,7 +46,6 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		refreshAPTKeys(args)
 	}
 
-	fmt.Println(styles.Dimmed.Render("Scanning for updates..."))
 	items := scanAll(context.Background())
 
 	if len(items) == 0 {
@@ -100,12 +99,25 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		scanTerraform,
 	}
 
+	total := len(scanners)
+	done := make(chan struct{}, total)
+
+	go func() {
+		count := 0
+		for range done {
+			count++
+			fmt.Printf("\r  %s", styles.Dimmed.Render(fmt.Sprintf("Scanning for updates... (%d/%d sources checked)", count, total)))
+		}
+		fmt.Println()
+	}()
+
 	var wg sync.WaitGroup
 	for _, fn := range scanners {
 		fn := fn
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { done <- struct{}{} }()
 			items, err := fn(ctx)
 			if err == nil && len(items) > 0 {
 				mu.Lock()
@@ -116,6 +128,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	}
 
 	wg.Wait()
+	close(done)
 
 	// Sort by source for grouped display
 	sourceOrder := map[string]int{
