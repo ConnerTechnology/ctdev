@@ -86,7 +86,8 @@ if [[ -L "$INSTALL_DIR/ctdev" ]]; then
     fi
 fi
 if [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; then
-    warn "Found ctdev in /usr/local/bin — you may want to remove it: sudo rm /usr/local/bin/ctdev"
+    info "Removing old ctdev from /usr/local/bin..."
+    sudo rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev — run: sudo rm /usr/local/bin/ctdev"
 fi
 
 # Create install directory

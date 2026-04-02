@@ -14,7 +14,8 @@ build-all:
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY)-darwin-arm64 .
 
 install: build
-	sudo cp $(BINARY) /usr/local/bin/$(BINARY)
+	mkdir -p $(HOME)/.local/bin
+	cp $(BINARY) $(HOME)/.local/bin/$(BINARY)
 
 clean:
 	rm -f $(BINARY)

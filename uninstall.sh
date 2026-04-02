@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Uninstall script for ctdev dotfiles
+# Uninstall ctdev
 # Usage: ./uninstall.sh
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -14,11 +13,6 @@ NC='\033[0m'
 info() { echo -e "${BLUE}==>${NC} $1"; }
 success() { echo -e "${GREEN}[✓]${NC} $1"; }
 warn() { echo -e "${YELLOW}[!]${NC} $1"; }
-error() { echo -e "${RED}[✗]${NC} $1"; }
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CTDEV_SYMLINK="$HOME/.local/bin/ctdev"
-CTDEV_CONFIG_DIR="$HOME/.config/ctdev"
 
 echo
 echo "  ┌─────────────────────────────────────┐"
@@ -26,47 +20,41 @@ echo "  │  ctdev uninstaller                  │"
 echo "  └─────────────────────────────────────┘"
 echo
 
-# Check if ctdev is installed
-if [[ ! -L "$CTDEV_SYMLINK" ]] && [[ ! -d "$CTDEV_CONFIG_DIR" ]]; then
-    info "ctdev does not appear to be installed"
-    exit 0
-fi
+removed=false
 
-# Ask about uninstalling components first
-if [[ -t 0 ]]; then
-    printf "Uninstall all components first? [y/N] "
-    if read -r answer && [[ "$answer" =~ ^[Yy]$ ]]; then
-        if [[ -x "$SCRIPT_DIR/ctdev" ]]; then
-            "$SCRIPT_DIR/ctdev" components uninstall
+# Check both known install locations
+for loc in "$HOME/.local/bin/ctdev" "/usr/local/bin/ctdev"; do
+    if [[ -f "$loc" ]] || [[ -L "$loc" ]]; then
+        info "Removing $loc..."
+        if [[ "$loc" == /usr/local/* ]]; then
+            sudo rm -f "$loc" 2>/dev/null || warn "Could not remove $loc — run: sudo rm $loc"
         else
-            warn "Could not run ctdev uninstall (ctdev not executable)"
+            rm -f "$loc"
         fi
+        removed=true
     fi
+done
+
+# Remove state directory
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ctdev"
+if [[ -d "$STATE_DIR" ]]; then
+    info "Removing state directory..."
+    rm -rf "$STATE_DIR"
+    success "Removed $STATE_DIR"
 fi
 
-echo
+# Remove config directory
+CONFIG_DIR="$HOME/.config/ctdev"
+if [[ -d "$CONFIG_DIR" ]]; then
+    info "Removing config directory..."
+    rm -rf "$CONFIG_DIR"
+    success "Removed $CONFIG_DIR"
+fi
 
-# Remove ctdev symlink
-if [[ -L "$CTDEV_SYMLINK" ]]; then
-    info "Removing ctdev symlink..."
-    rm -f "$CTDEV_SYMLINK"
-    success "Removed $CTDEV_SYMLINK"
+if [[ "$removed" == true ]]; then
+    echo
+    success "ctdev has been uninstalled"
 else
-    info "No ctdev symlink found at $CTDEV_SYMLINK"
+    info "ctdev was not found in any known location"
 fi
-
-# Remove config directory (installation markers)
-if [[ -d "$CTDEV_CONFIG_DIR" ]]; then
-    info "Removing ctdev config directory..."
-    rm -rf "$CTDEV_CONFIG_DIR"
-    success "Removed $CTDEV_CONFIG_DIR"
-else
-    info "No ctdev config directory found"
-fi
-
-echo
-success "ctdev has been uninstalled"
-echo
-echo "  The dotfiles repo still exists at: $SCRIPT_DIR"
-echo "  To remove it completely: rm -rf $SCRIPT_DIR"
 echo
