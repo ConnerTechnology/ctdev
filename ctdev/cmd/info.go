@@ -39,7 +39,7 @@ func dotfilesRoot() string {
 		// Try relative to executable (works when running from repo: ./ctdev)
 		exe, _ := os.Executable()
 		candidate := filepath.Dir(filepath.Dir(exe))
-		if _, err := os.Stat(filepath.Join(candidate, "lib", "utils.sh")); err == nil {
+		if _, err := os.Stat(filepath.Join(candidate, "CLAUDE.md")); err == nil {
 			cachedDotfilesRoot = candidate
 			return
 		}

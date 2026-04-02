@@ -47,9 +47,6 @@ type Component struct {
 
 	GoInstall   func(ctx context.Context, opts ExecOpts) error
 	GoUninstall func(ctx context.Context, opts ExecOpts) error
-
-	BashInstall   string
-	BashUninstall string
 }
 
 type ExecOpts struct {

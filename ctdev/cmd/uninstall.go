@@ -25,7 +25,7 @@ func init() {
 
 func runUninstall(cmd *cobra.Command, args []string) error {
 	markers := state.DefaultMarkerStore()
-	executor := comp.NewExecutor(dotfilesRoot())
+	executor := comp.NewExecutor()
 
 	var selected []string
 

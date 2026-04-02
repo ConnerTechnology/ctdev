@@ -30,7 +30,6 @@ func nvidiaLoaded() bool {
 }
 
 // ResetLinuxDefaults resets Linux Mint system settings back to their defaults.
-// It mirrors the linux_mint_reset() function from cmds/setup.sh.
 func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	hasNvidia := nvidiaLoaded()
 

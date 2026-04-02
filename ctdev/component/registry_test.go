@@ -20,10 +20,8 @@ func TestRegistryNoDuplicates(t *testing.T) {
 
 func TestRegistryAllHaveInstallMethod(t *testing.T) {
 	for _, c := range Registry {
-		hasGo := c.GoInstall != nil && c.GoUninstall != nil
-		hasBash := c.BashInstall != "" && c.BashUninstall != ""
-		if !hasGo && !hasBash {
-			t.Errorf("component %s has neither Go nor Bash install/uninstall", c.Name)
+		if c.GoInstall == nil || c.GoUninstall == nil {
+			t.Errorf("component %s missing GoInstall or GoUninstall", c.Name)
 		}
 	}
 }

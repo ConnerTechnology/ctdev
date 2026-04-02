@@ -13,7 +13,7 @@ var Registry = []Setting{
 		Name:        "NVIDIA driver signing",
 		Category:    "GPU & Boot",
 		Description: "Signs the NVIDIA kernel module with a Machine Owner Key so Secure Boot accepts it. Without this, the driver won't load on Secure-Boot-enabled systems.",
-		TechDetail:  "Runs cmds/gpu.sh which enrolls a MOK and signs the nvidia module.",
+		TechDetail:  "Enrolls a Machine Owner Key and signs the nvidia kernel module.",
 		Control:     ControlToggle,
 		Default:     "signed",
 		DetectFunc:  detectModuleSigned,

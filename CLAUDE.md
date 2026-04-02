@@ -35,15 +35,14 @@ ctdev/                 Go module root
   cmd/                 Cobra command handlers
   component/           Component registry, installers, and embedded config files
     configs/           Config files deployed by installers (go:embed)
+  gpu/                 GPU/NVIDIA signing management
   platform/            OS/arch detection
-  setup/               Linux system settings (dconf, GRUB, systemd)
+  setup/               System settings (Linux dconf/GRUB, macOS defaults)
     configs/           Setup config files (go:embed)
   state/               Install markers and XDG state
   sysutil/             System utilities (packages, downloads, deploy, exec)
   tui/                 Bubble Tea UI models
   internal/shell/      Shell execution wrapper
-cmds/                  Remaining bash (setup.sh, gpu.sh — pending Go port)
-lib/                   Bash utilities used by cmds/ (utils.sh, gpu.sh)
 ```
 
 ## Conventions
