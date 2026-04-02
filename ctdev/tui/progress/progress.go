@@ -23,11 +23,20 @@ const (
 )
 
 type ComponentState struct {
-	Name     string
-	Status   ComponentStatus
-	Output   []string
-	Error    string
-	Duration time.Duration
+	Name      string
+	Status    ComponentStatus
+	Output    []string
+	Error     string
+	Duration  time.Duration
+	StartedAt time.Time
+}
+
+type tickMsg time.Time
+
+func tickEvery() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 // Messages
@@ -44,6 +53,13 @@ type InstallFailMsg struct {
 type InstallSkipMsg struct{ Name string }
 type AllDoneMsg struct{}
 
+type Mode int
+
+const (
+	ModeInstall   Mode = iota
+	ModeUninstall
+)
+
 type Model struct {
 	components  []ComponentState
 	current     int
@@ -52,9 +68,10 @@ type Model struct {
 	done        bool
 	startTime   time.Time
 	width       int
+	mode        Mode
 }
 
-func New(names []string) Model {
+func New(names []string, mode Mode) Model {
 	s := spinner.New(
 		spinner.WithSpinner(spinner.Dot),
 		spinner.WithStyle(lipgloss.NewStyle().Foreground(styles.Orange)),
@@ -74,14 +91,15 @@ func New(names []string) Model {
 		spinner:     s,
 		progressBar: p,
 		startTime:   time.Now(),
+		mode:        mode,
 	}
 }
 
-func (inst Model) Init() tea.Cmd {
-	return inst.spinner.Tick
+func (inst *Model) Init() tea.Cmd {
+	return tea.Batch(inst.spinner.Tick, tickEvery())
 }
 
-func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		inst.width = msg.Width
@@ -94,6 +112,7 @@ func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i := range inst.components {
 			if inst.components[i].Name == msg.Name {
 				inst.components[i].Status = StatusRunning
+				inst.components[i].StartedAt = time.Now()
 				inst.current = i
 				break
 			}
@@ -133,6 +152,10 @@ func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+	case tickMsg:
+		if !inst.done {
+			return inst, tickEvery()
+		}
 	case AllDoneMsg:
 		inst.done = true
 		return inst, tea.Quit
@@ -148,7 +171,7 @@ func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return inst, nil
 }
 
-func (inst Model) View() tea.View {
+func (inst *Model) View() tea.View {
 	var b strings.Builder
 
 	if inst.done {
@@ -160,12 +183,16 @@ func (inst Model) View() tea.View {
 	return tea.NewView(b.String())
 }
 
-func (inst Model) viewProgress() string {
+func (inst *Model) viewProgress() string {
 	var b strings.Builder
 
 	doneCount := inst.countDone()
 	total := len(inst.components)
-	b.WriteString(fmt.Sprintf("Installing %d components\n\n", total))
+	action := "Installing"
+	if inst.mode == ModeUninstall {
+		action = "Uninstalling"
+	}
+	b.WriteString(fmt.Sprintf("%s %d components\n\n", action, total))
 	b.WriteString(fmt.Sprintf("  %s  %d of %d\n\n", inst.progressBar.View(), doneCount, total))
 
 	for _, c := range inst.components {
@@ -177,9 +204,11 @@ func (inst Model) viewProgress() string {
 				styles.Dimmed.Render(fmt.Sprintf("%.1fs", c.Duration.Seconds())),
 			))
 		case StatusRunning:
-			b.WriteString(fmt.Sprintf("  %s %s\n",
+			elapsed := time.Since(c.StartedAt).Truncate(time.Second)
+			b.WriteString(fmt.Sprintf("  %s %s %s\n",
 				inst.spinner.View(),
 				lipgloss.NewStyle().Bold(true).Foreground(styles.Bright).Render(c.Name),
+				styles.Dimmed.Render(fmt.Sprintf("(%s)", elapsed)),
 			))
 			for _, line := range c.Output {
 				b.WriteString(fmt.Sprintf("    %s\n", styles.Dimmed.Render(line)))
@@ -203,12 +232,16 @@ func (inst Model) viewProgress() string {
 	return b.String()
 }
 
-func (inst Model) viewSummary() string {
+func (inst *Model) viewSummary() string {
 	var b strings.Builder
 	succeeded, failed := 0, 0
 	var failedNames []string
 
-	b.WriteString(styles.Success.Render("✓ Installation complete") + "\n\n")
+	completeMsg := "✓ Installation complete"
+	if inst.mode == ModeUninstall {
+		completeMsg = "✓ Uninstall complete"
+	}
+	b.WriteString(styles.Success.Render(completeMsg) + "\n\n")
 
 	for _, c := range inst.components {
 		switch c.Status {
@@ -239,13 +272,17 @@ func (inst Model) viewSummary() string {
 	))
 
 	if len(failedNames) > 0 {
-		b.WriteString(fmt.Sprintf("\n  Retry: ctdev install %s\n", strings.Join(failedNames, " ")))
+		retryCmd := "install"
+		if inst.mode == ModeUninstall {
+			retryCmd = "uninstall"
+		}
+		b.WriteString(fmt.Sprintf("\n  Retry: ctdev %s %s\n", retryCmd, strings.Join(failedNames, " ")))
 	}
 
 	return b.String()
 }
 
-func (inst Model) donePercent() float64 {
+func (inst *Model) donePercent() float64 {
 	done := inst.countDone()
 	if len(inst.components) == 0 {
 		return 1.0
@@ -253,7 +290,7 @@ func (inst Model) donePercent() float64 {
 	return float64(done) / float64(len(inst.components))
 }
 
-func (inst Model) countDone() int {
+func (inst *Model) countDone() int {
 	count := 0
 	for _, c := range inst.components {
 		if c.Status == StatusDone || c.Status == StatusFailed || c.Status == StatusSkipped {
