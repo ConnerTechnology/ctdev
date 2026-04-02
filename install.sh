@@ -1,81 +1,128 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bootstrap script for ctdev dotfiles
+# Install ctdev - development environment manager
 # Usage: curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
 
-DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
-REPO_URL="https://github.com/ConnerTechnology/dotfiles.git"
-CTDEV_SYMLINK="$HOME/.local/bin/ctdev"
+REPO="ConnerTechnology/dotfiles"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 info() { echo -e "${BLUE}==>${NC} $1"; }
 success() { echo -e "${GREEN}[✓]${NC} $1"; }
 warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
-# Check for git
-if ! command -v git >/dev/null 2>&1; then
-    error "Git is required. Please install git first."
-fi
+detect_platform() {
+    local os arch
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
+
+    case "$os" in
+        linux)  os="linux" ;;
+        darwin) os="darwin" ;;
+        *)      error "Unsupported OS: $os" ;;
+    esac
+
+    case "$arch" in
+        x86_64|amd64)  arch="amd64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        *)             error "Unsupported architecture: $arch" ;;
+    esac
+
+    echo "${os}-${arch}"
+}
+
+get_latest_version() {
+    local url="https://api.github.com/repos/${REPO}/releases/latest"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//'
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$url" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//'
+    else
+        error "curl or wget is required"
+    fi
+}
+
+download() {
+    local url="$1" dest="$2"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o "$dest" "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$dest" "$url"
+    fi
+}
 
 echo
 echo "  ┌─────────────────────────────────────┐"
-echo "  │  ctdev dotfiles installer           │"
+echo "  │  ctdev installer                    │"
 echo "  └─────────────────────────────────────┘"
 echo
 
-# Clone or update repo
-if [[ -d "$DOTFILES_DIR" ]]; then
-    info "Dotfiles directory exists at $DOTFILES_DIR"
-    if [[ -d "$DOTFILES_DIR/.git" ]]; then
-        info "Updating existing installation..."
-        cd "$DOTFILES_DIR"
-        git pull --rebase || warn "Could not update, continuing with existing version"
-    else
-        error "$DOTFILES_DIR exists but is not a git repo. Please remove it or set DOTFILES_DIR."
+# Detect platform
+PLATFORM=$(detect_platform)
+info "Detected platform: $PLATFORM"
+
+# Get latest version
+info "Checking latest release..."
+VERSION=$(get_latest_version)
+if [[ -z "$VERSION" ]]; then
+    error "Could not determine latest version. Check https://github.com/${REPO}/releases"
+fi
+info "Latest version: $VERSION"
+
+# Clean up old bash-based install
+if [[ -L "$INSTALL_DIR/ctdev" ]]; then
+    old_target=$(readlink "$INSTALL_DIR/ctdev" 2>/dev/null || true)
+    if [[ "$old_target" == */dotfiles/ctdev ]] || [[ "$old_target" == */dotfiles/ctdev.sh ]]; then
+        info "Removing old bash ctdev symlink..."
+        rm -f "$INSTALL_DIR/ctdev"
     fi
-else
-    info "Cloning dotfiles to $DOTFILES_DIR..."
-    git clone "$REPO_URL" "$DOTFILES_DIR"
+fi
+if [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; then
+    warn "Found ctdev in /usr/local/bin — you may want to remove it: sudo rm /usr/local/bin/ctdev"
 fi
 
-# Create ~/.local/bin if it doesn't exist
-if [[ ! -d "$HOME/.local/bin" ]]; then
-    info "Creating ~/.local/bin..."
-    mkdir -p "$HOME/.local/bin"
+# Create install directory
+mkdir -p "$INSTALL_DIR"
+
+# Download binary
+BINARY_URL="https://github.com/${REPO}/releases/download/${VERSION}/ctdev-${PLATFORM}"
+info "Downloading ctdev-${PLATFORM}..."
+
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
+
+if ! download "$BINARY_URL" "$TMP"; then
+    error "Download failed. Check that a release exists for $PLATFORM at:\n  https://github.com/${REPO}/releases/tag/${VERSION}"
 fi
 
-# Create symlink to ctdev
-if [[ -L "$CTDEV_SYMLINK" ]]; then
-    info "Updating ctdev symlink..."
-    rm -f "$CTDEV_SYMLINK"
-fi
+# Install
+chmod +x "$TMP"
+mv "$TMP" "$INSTALL_DIR/ctdev"
+trap - EXIT
 
-ln -sf "$DOTFILES_DIR/ctdev" "$CTDEV_SYMLINK"
-success "ctdev symlinked to $CTDEV_SYMLINK"
+success "ctdev ${VERSION} installed to $INSTALL_DIR/ctdev"
 
-# Check if ~/.local/bin is in PATH
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    warn "~/.local/bin is not in your PATH"
+# Check PATH
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    warn "$INSTALL_DIR is not in your PATH"
     echo
     echo "  Add this to your shell profile (~/.bashrc or ~/.zshrc):"
     echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
     echo
 fi
 
-success "ctdev is now installed!"
-echo
-echo "  Next steps:"
-echo "    1. Restart your terminal (or add ~/.local/bin to PATH)"
-echo "    2. Run: ctdev install zsh git  # Install shell config"
-echo "    3. Run: ctdev install --help              # See all components"
-echo
-echo "  Run 'ctdev --help' for more options."
+# Verify
+if command -v ctdev >/dev/null 2>&1; then
+    success "Ready! Run 'ctdev --help' to get started."
+else
+    success "Installed! Restart your terminal, then run 'ctdev --help'."
+fi
 echo

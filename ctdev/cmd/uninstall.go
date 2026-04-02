@@ -1,17 +1,14 @@
 package cmd
 
 import (
-	"bufio"
-	"context"
 	"fmt"
-	"os"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/picker"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -42,82 +39,36 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	} else if isBatchMode() {
 		return fmt.Errorf("no components specified (batch mode requires arguments)")
 	} else {
-		installed := make(map[string]bool)
-		list, _ := markers.List()
-		for _, name := range list {
-			installed[name] = true
-		}
+		installed := comp.InstalledSet()
 		var installedComps []comp.Component
-		for _, c := range comp.Registry {
-			if installed[c.Name] {
-				installedComps = append(installedComps, c)
+		for i := range comp.Registry {
+			if installed[comp.Registry[i].Name] {
+				installedComps = append(installedComps, comp.Registry[i])
 			}
 		}
 		if len(installedComps) == 0 {
-			fmt.Println("No components installed.")
+			fmt.Println(styles.Dimmed.Render("No components installed."))
 			return nil
 		}
 		osType := comp.OS(executor.Platform.OS)
-		p := tea.NewProgram(picker.New(installedComps, installed, osType))
+		m := picker.New(installedComps, installed, osType, picker.ModeUninstall)
+		p := tea.NewProgram(&m)
 		result, err := p.Run()
 		if err != nil {
 			return err
 		}
-		pickerResult := result.(picker.Model).GetResult()
+		pickerResult := result.(*picker.Model).GetResult()
 		if pickerResult.Quit || len(pickerResult.Selected) == 0 {
 			return nil
 		}
 		selected = pickerResult.Selected
 	}
 
-	return runUninstallWithProgress(executor, markers, selected)
-}
-
-func runUninstallWithProgress(executor *comp.Executor, markers *state.MarkerStore, names []string) error {
-	progressModel := progress.New(names)
-	p := tea.NewProgram(progressModel)
-
-	go func() {
-		for _, name := range names {
-			c := comp.FindByName(name)
-			if c == nil {
-				continue
-			}
-
-			p.Send(progress.InstallStartMsg{Name: name})
-			start := time.Now()
-
-			pr, pw, _ := os.Pipe()
-			go func(name string) {
-				scanner := bufio.NewScanner(pr)
-				for scanner.Scan() {
-					p.Send(progress.InstallOutputMsg{Name: name, Line: scanner.Text()})
-				}
-			}(name)
-
-			result := executor.Uninstall(context.Background(), c, comp.ExecOpts{
-				Force:   flagForce,
-				DryRun:  flagDryRun,
-				Verbose: flagVerbose,
-				Stdout:  pw,
-				Stderr:  pw,
-			})
-			pw.Close()
-
-			duration := time.Since(start)
-
-			if result.Skipped {
-				p.Send(progress.InstallSkipMsg{Name: name})
-			} else if result.Err != nil {
-				p.Send(progress.InstallFailMsg{Name: name, Error: result.Err.Error(), Duration: duration})
-			} else {
-				markers.Remove(name)
-				p.Send(progress.InstallDoneMsg{Name: name, Duration: duration})
-			}
-		}
-		p.Send(progress.AllDoneMsg{})
-	}()
-
-	_, err := p.Run()
-	return err
+	ensureSudo()
+	return runWithProgress(progressOperation{
+		mode:     progress.ModeUninstall,
+		executor: executor,
+		markers:  markers,
+		names:    selected,
+	})
 }

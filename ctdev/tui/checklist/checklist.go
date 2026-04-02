@@ -43,11 +43,11 @@ func New(items []UpdateItem) Model {
 	}
 }
 
-func (inst Model) Init() tea.Cmd {
+func (inst *Model) Init() tea.Cmd {
 	return nil
 }
 
-func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		inst.width = msg.Width
@@ -69,7 +69,7 @@ func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if inst.cursor < len(inst.items)-1 {
 				inst.cursor++
 			}
-		case " ":
+		case "space":
 			if inst.selected[inst.cursor] {
 				delete(inst.selected, inst.cursor)
 			} else {
@@ -86,7 +86,7 @@ func (inst Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return inst, nil
 }
 
-func (inst Model) View() tea.View {
+func (inst *Model) View() tea.View {
 	var b strings.Builder
 
 	b.WriteString(styles.Title.Render("Available Updates"))
@@ -127,10 +127,12 @@ func (inst Model) View() tea.View {
 	status := fmt.Sprintf("%d of %d selected", selectedCount, len(inst.items))
 	b.WriteString(styles.StatusBar.Render(status))
 
-	return tea.NewView(b.String())
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }
 
-func (inst Model) GetResult() Result {
+func (inst *Model) GetResult() Result {
 	if inst.quitting && !inst.confirmed {
 		return Result{Quit: true}
 	}
@@ -152,9 +154,15 @@ func sourceLabel(source string) string {
 	case "flatpak":
 		return "Flatpak"
 	case "git":
-		return "Component Updates"
+		return "Git Repositories"
 	case "runtime":
-		return "Runtime Updates"
+		return "Runtimes"
+	case "npm":
+		return "NPM Global Packages"
+	case "ctdev":
+		return "ctdev"
+	case "cli":
+		return "CLI Tools"
 	default:
 		return source
 	}

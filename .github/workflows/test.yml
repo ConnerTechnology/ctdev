@@ -21,7 +21,6 @@ jobs:
           find . -name "*.sh" -type f | while read -r file; do
             bash -n "$file" || exit 1
           done
-          bash -n ./ctdev || exit 1
 
   shellcheck:
     name: ShellCheck Lint
@@ -40,37 +39,51 @@ jobs:
       - name: Run ShellCheck on cmds/
         run: shellcheck cmds/*.sh
 
-      - name: Run ShellCheck on ctdev
-        run: shellcheck ./ctdev
-
       - name: Run ShellCheck on component installers
         run: shellcheck components/*/install.sh
 
-  test-cli:
-    name: Test ctdev CLI
+  go-test:
+    name: Go Tests
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ctdev/go.mod
+
+      - name: Run tests
+        working-directory: ctdev
+        run: go test ./...
+
+      - name: Build
+        working-directory: ctdev
+        run: |
+          VERSION=$(cat ../VERSION)
+          go build -ldflags "-X main.version=$VERSION" -o ctdev .
+
       - name: Test --help flag
+        working-directory: ctdev
         run: ./ctdev --help
 
       - name: Test --version flag
+        working-directory: ctdev
         run: ./ctdev --version
 
-      - name: Test list command
-        run: ./ctdev install --help
-
       - name: Test info command
+        working-directory: ctdev
         run: ./ctdev info
 
       - name: Test dry-run install
+        working-directory: ctdev
         run: ./ctdev --dry-run install jq
 
   test-ubuntu:
     name: Test on Ubuntu ${{ matrix.ubuntu-version }}
+    needs: go-test
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -81,7 +94,7 @@ jobs:
       image: ubuntu:${{ matrix.ubuntu-version }}
 
     steps:
-      - name: Install git
+      - name: Install dependencies
         run: |
           apt-get update
           apt-get install -y git sudo curl
@@ -93,7 +106,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Install zsh component
-        run: ./ctdev install zsh
+        run: bash components/zsh/install.sh
 
       - name: Verify zsh installation
         run: |
@@ -108,7 +121,7 @@ jobs:
           [ -f ~/.oh-my-zsh/custom/exports.zsh ] || exit 1
 
       - name: Install git component
-        run: ./components/git/install.sh --name "CI Test" --email "ci@test.com"
+        run: bash components/git/install.sh --name "CI Test" --email "ci@test.com"
 
       - name: Verify git config
         run: |
@@ -117,33 +130,40 @@ jobs:
           git config --global user.email | grep -q "ci@test.com" || exit 1
 
       - name: Install jq component
-        run: ./ctdev install jq
+        run: bash components/jq/install.sh
 
       - name: Verify jq installation
         run: command -v jq || exit 1
 
-      - name: Run info check
-        run: ./ctdev info
-
   test-macos:
     name: Test on macOS
+    needs: go-test
     runs-on: macos-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ctdev/go.mod
+
+      - name: Build ctdev
+        working-directory: ctdev
+        run: |
+          VERSION=$(cat ../VERSION)
+          go build -ldflags "-X main.version=$VERSION" -o ctdev .
+
       - name: Test CLI commands
+        working-directory: ctdev
         run: |
           ./ctdev --version
           ./ctdev install --help
           ./ctdev info
 
-      - name: Test dry-run install
-        run: ./ctdev --dry-run install jq
-
       - name: Install zsh component
-        run: ./ctdev install zsh
+        run: bash components/zsh/install.sh
 
       - name: Verify zsh installation
         run: |
@@ -152,7 +172,7 @@ jobs:
           [ -f ~/.zshrc ] || exit 1
 
       - name: Install git component
-        run: ./components/git/install.sh --name "CI Test" --email "ci@test.com"
+        run: bash components/git/install.sh --name "CI Test" --email "ci@test.com"
 
       - name: Verify git config
         run: |

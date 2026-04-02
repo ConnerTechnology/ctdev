@@ -3,14 +3,16 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	version string
+	version      string
+	dotfilesPath string // set via SetDotfilesPath at startup
 
 	flagVerbose bool
 	flagDryRun  bool
@@ -20,6 +22,10 @@ var (
 
 func SetVersion(v string) {
 	version = v
+}
+
+func SetDotfilesPath(p string) {
+	dotfilesPath = p
 }
 
 var rootCmd = &cobra.Command{
@@ -42,19 +48,6 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&flagForce, "force", "f", false, "force re-run install scripts")
 	rootCmd.PersistentFlags().BoolVar(&flagBatch, "batch", false, "non-interactive mode")
 
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// Migrate old markers on first run
-		ms := state.DefaultMarkerStore()
-		oldDir := state.ConfigDir()
-		migrated, err := state.MigrateOldMarkers(oldDir, ms)
-		if err != nil {
-			return nil // don't fail on migration errors
-		}
-		if migrated > 0 && flagVerbose {
-			fmt.Printf("Migrated %d old install markers\n", migrated)
-		}
-		return nil
-	}
 }
 
 func initConfig() {
@@ -63,6 +56,31 @@ func initConfig() {
 	viper.AddConfigPath("$HOME/.config/ctdev")
 	viper.AutomaticEnv()
 	_ = viper.ReadInConfig()
+}
+
+// ensureSudo caches sudo credentials before starting a TUI.
+// Scripts using maybe_sudo/sudo will hang if stdin isn't connected,
+// which happens once Bubble Tea takes over the terminal.
+func ensureSudo() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	// Check if we already have cached credentials
+	if err := exec.Command("sudo", "-n", "true").Run(); err == nil {
+		return
+	}
+	fmt.Println("Some components require sudo. Please enter your password:")
+	cmd := exec.Command("sudo", "-v")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	_ = cmd.Run()
+}
+
+// resetTerminal cleans up escape sequences that Bubble Tea v2 may leak on exit
+// (kitty keyboard protocol and synchronized output queries).
+func resetTerminal() {
+	fmt.Print("\033[?2026l\033[?2027l")
 }
 
 func isBatchMode() bool {

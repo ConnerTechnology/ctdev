@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -49,6 +50,7 @@ func runGPUInfo(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(styles.Title.Render("GPU Status"))
 	fmt.Println()
+	fmt.Println(headerStyle.Render("Hardware"))
 
 	// GPU Model
 	gpuModel := detectGPUModel()
@@ -70,7 +72,6 @@ func runGPUInfo(cmd *cobra.Command, args []string) error {
 	secureBoot := detectSecureBootStatus()
 	fmt.Printf("  %s %s\n", labelStyle.Render("Secure Boot:"), formatStatus(secureBoot))
 
-	_ = headerStyle
 	return nil
 }
 
@@ -81,29 +82,35 @@ func runGPUSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagGPURecover {
-		fmt.Println("Re-enrolling MOK after CMOS reset...")
+		fmt.Println(styles.Dimmed.Render("Re-enrolling MOK after CMOS reset..."))
 		if flagDryRun {
-			fmt.Println("  [dry-run] bash cmds/gpu-setup.sh --recover")
+			fmt.Println("  [dry-run] bash cmds/gpu.sh --recover")
 			return nil
 		}
-		script := fmt.Sprintf("%s/cmds/gpu-setup.sh", dotfilesRoot())
+		script := fmt.Sprintf("%s/cmds/gpu.sh", dotfilesRoot())
 		return exec.Command("bash", script, "--recover").Run()
 	}
 
-	fmt.Println("Setting up NVIDIA GPU drivers...")
+	fmt.Println(styles.Dimmed.Render("Setting up NVIDIA GPU drivers..."))
 	if flagDryRun {
-		fmt.Println("  [dry-run] bash cmds/gpu-setup.sh")
+		fmt.Println("  [dry-run] bash cmds/gpu.sh")
 		return nil
 	}
-	script := fmt.Sprintf("%s/cmds/gpu-setup.sh", dotfilesRoot())
+	script := fmt.Sprintf("%s/cmds/gpu.sh", dotfilesRoot())
 	c := exec.Command("bash", script)
-	c.Stdout = nil
-	c.Stderr = nil
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
 	return c.Run()
 }
 
 func detectGPUModel() string {
-	out, err := exec.Command("lspci").Output()
+	// nvidia-smi gives clean names even for new devices where lspci only shows a device ID
+	out, err := exec.Command("nvidia-smi", "--query-gpu=name", "--format=csv,noheader").Output()
+	if err == nil && strings.TrimSpace(string(out)) != "" {
+		return strings.TrimSpace(string(out))
+	}
+	// Fallback to lspci
+	out, err = exec.Command("lspci").Output()
 	if err != nil {
 		return "unknown"
 	}

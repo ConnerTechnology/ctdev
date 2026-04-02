@@ -1,6 +1,5 @@
 package setup
 
-import "fmt"
 
 func init() {
 	PostApplyHooks["grub"] = applyUpdateGrub
@@ -302,7 +301,7 @@ var Registry = []Setting{
 		Name:        "WirePlumber LDAC config",
 		Category:    "Audio & Bluetooth",
 		Description: "Copies a WirePlumber config that prioritizes LDAC codec for high-quality Bluetooth audio, then restarts the PipeWire stack.",
-		TechDetail:  fmt.Sprintf("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf"),
+		TechDetail:  "/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf",
 		Control:     ControlToggle,
 		Default:     "installed",
 		DetectFunc:  func() string { return detectFileExists("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf") },

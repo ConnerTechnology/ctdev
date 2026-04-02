@@ -571,6 +571,9 @@ linux_mint_apply() {
             log_info "[DRY-RUN] Would configure NVIDIA suspend (GRUB parameters, systemd services)"
         fi
         log_info "[DRY-RUN] Would install and configure xbindkeys (mouse button bindings)"
+        if lspci -d 14c3:0717 2>/dev/null | grep -q . || lsmod | grep -q "^mt7925e "; then
+            log_info "[DRY-RUN] Would install WiFi suspend fix for MT7925E (systemd sleep hook)"
+        fi
         log_info "[DRY-RUN] Would enable fstrim.timer for SSD TRIM"
         log_info "[DRY-RUN] Would enable bluetooth.service"
         log_info "[DRY-RUN] Would deploy WirePlumber LDAC Bluetooth config"
@@ -654,6 +657,27 @@ linux_mint_apply() {
             fi
         done
         log_success "NVIDIA suspend stability configured"
+    fi
+
+    # WiFi suspend fix for MediaTek MT7925E
+    # The mt7925e PCI power management resume path is buggy (returns ETIMEDOUT / -110),
+    # so we unload the module before suspend and reload after resume for a clean firmware reload.
+    if lspci -d 14c3:0717 2>/dev/null | grep -q . || lsmod | grep -q "^mt7925e "; then
+        log_info "Installing WiFi suspend fix for MT7925E..."
+        local sleep_hook="/usr/lib/systemd/system-sleep/wifi-mt7925"
+        maybe_sudo tee "$sleep_hook" > /dev/null << 'HOOK'
+#!/bin/bash
+case "$1" in
+    pre)
+        modprobe -r mt7925e 2>/dev/null || true
+        ;;
+    post)
+        modprobe mt7925e 2>/dev/null || true
+        ;;
+esac
+HOOK
+        maybe_sudo chmod 755 "$sleep_hook"
+        log_success "WiFi suspend fix installed at $sleep_hook"
     fi
 
     # Enable SSD TRIM timer
@@ -805,6 +829,14 @@ linux_mint_reset() {
         for svc in nvidia-suspend nvidia-resume nvidia-hibernate nvidia-persistenced; do
             maybe_sudo systemctl disable "${svc}.service" 2>/dev/null || true
         done
+    fi
+
+    # Remove WiFi suspend fix
+    local sleep_hook="/usr/lib/systemd/system-sleep/wifi-mt7925"
+    if [[ -f "$sleep_hook" ]]; then
+        log_info "Removing WiFi suspend fix..."
+        maybe_sudo rm -f "$sleep_hook"
+        log_success "WiFi suspend fix removed"
     fi
 
     log_info "Resetting fstrim..."

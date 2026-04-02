@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -55,24 +57,27 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 	currentName := getGitConfig("user.name", flagGitLocal)
 	currentEmail := getGitConfig("user.email", flagGitLocal)
 
-	fmt.Println("Git Configuration")
+	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(20)
+	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+
+	fmt.Println(styles.Title.Render("Git Configuration"))
 	fmt.Println()
 
 	scope := "global"
 	if flagGitLocal {
 		scope = "local"
 	}
-	fmt.Printf("  Scope: %s\n\n", scope)
+	fmt.Printf("  %s %s\n\n", labelStyle.Render("Scope:"), valueStyle.Render(scope))
 
 	// Simple prompt-based input
-	fmt.Printf("  Name [%s]: ", currentName)
+	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Name [%s]:", currentName)))
 	var name string
 	fmt.Scanln(&name)
 	if name == "" {
 		name = currentName
 	}
 
-	fmt.Printf("  Email [%s]: ", currentEmail)
+	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Email [%s]:", currentEmail)))
 	var email string
 	fmt.Scanln(&email)
 	if email == "" {
@@ -83,21 +88,38 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 }
 
 func showGitConfig() error {
+	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(20)
+	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
+
 	name := getGitConfig("user.name", false)
 	email := getGitConfig("user.email", false)
 	localName := getGitConfig("user.name", true)
 	localEmail := getGitConfig("user.email", true)
 
-	fmt.Println("Git Configuration")
+	fmt.Println(styles.Title.Render("Git Configuration"))
 	fmt.Println()
-	fmt.Printf("  %-15s %s\n", "Global Name:", name)
-	fmt.Printf("  %-15s %s\n", "Global Email:", email)
-	if localName != "" && localName != name {
-		fmt.Printf("  %-15s %s\n", "Local Name:", localName)
+
+	fmt.Println(headerStyle.Render("Global"))
+	fmt.Printf("  %s %s\n", labelStyle.Render("Name"), valueStyle.Render(name))
+	fmt.Printf("  %s %s\n", labelStyle.Render("Email"), valueStyle.Render(email))
+
+	hasLocal := localName != "" || localEmail != ""
+	if hasLocal {
+		fmt.Println()
+		fmt.Println(headerStyle.Render("Local (this repo)"))
+		localNameDisplay := localName
+		if localNameDisplay == "" {
+			localNameDisplay = styles.Dimmed.Render("(not set)")
+		}
+		localEmailDisplay := localEmail
+		if localEmailDisplay == "" {
+			localEmailDisplay = styles.Dimmed.Render("(not set)")
+		}
+		fmt.Printf("  %s %s\n", labelStyle.Render("Name"), valueStyle.Render(localNameDisplay))
+		fmt.Printf("  %s %s\n", labelStyle.Render("Email"), valueStyle.Render(localEmailDisplay))
 	}
-	if localEmail != "" && localEmail != email {
-		fmt.Printf("  %-15s %s\n", "Local Email:", localEmail)
-	}
+
 	return nil
 }
 
@@ -129,7 +151,7 @@ func setGitConfig(name, email string, local bool) error {
 			if err := exec.Command("git", "config", scope, "user.name", name).Run(); err != nil {
 				return fmt.Errorf("failed to set user.name: %w", err)
 			}
-			fmt.Printf("  Set user.name = %s\n", name)
+			fmt.Println(styles.Success.Render(fmt.Sprintf("  Set user.name = %s", name)))
 		}
 	}
 
@@ -140,7 +162,7 @@ func setGitConfig(name, email string, local bool) error {
 			if err := exec.Command("git", "config", scope, "user.email", email).Run(); err != nil {
 				return fmt.Errorf("failed to set user.email: %w", err)
 			}
-			fmt.Printf("  Set user.email = %s\n", email)
+			fmt.Println(styles.Success.Render(fmt.Sprintf("  Set user.email = %s", email)))
 		}
 	}
 

@@ -24,9 +24,9 @@ ctdev cleanup                   # Run all cleanup tasks (with prompts)
 
 ## Components
 
-36 components:
+35 components:
 
-1password, age, bleachbit, btop, bun, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, helm, jq, kubectl, linear, logi-options, node, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, btop, bun, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, helm, jq, kubectl, linear, logi-options, node, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
 
 ## Directory structure
 

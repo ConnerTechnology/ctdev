@@ -30,5 +30,5 @@ func logiOptionsUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 	fmt.Fprintln(opts.Stdout, "Removing Logi Options+...")
-	return sysutil.BrewCaskRemove(o, "logi-options-plus")
+	return sysutil.BrewCaskRemove(o, "logi-options+")
 }

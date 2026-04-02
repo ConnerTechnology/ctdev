@@ -15,7 +15,7 @@ func testComponents() []component.Component {
 }
 
 func TestPickerSelectToggle(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux)
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
 	m.moveCursor(1) // skip category header to first component
 	m.toggleSelected()
 
@@ -25,7 +25,7 @@ func TestPickerSelectToggle(t *testing.T) {
 }
 
 func TestPickerQuitReturnsNoSelection(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux)
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
 	m.quitting = true
 
 	result := m.GetResult()
