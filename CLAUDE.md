@@ -31,80 +31,88 @@ ctdev cleanup                   # Run all cleanup tasks (with prompts)
 ## Directory structure
 
 ```
-lib/           Shared utilities (logging, platform detection, packages)
-cmds/          CLI command implementations
-components/    Installable components (one dir per component with install.sh and uninstall.sh)
+ctdev/                 Go module root
+  cmd/                 Cobra command handlers
+  component/           Component registry, installers, and embedded config files
+    configs/           Config files deployed by installers (go:embed)
+  platform/            OS/arch detection
+  setup/               Linux system settings (dconf, GRUB, systemd)
+    configs/           Setup config files (go:embed)
+  state/               Install markers and XDG state
+  sysutil/             System utilities (packages, downloads, deploy, exec)
+  tui/                 Bubble Tea UI models
+  internal/shell/      Shell execution wrapper
+cmds/                  Remaining bash (setup.sh, gpu.sh — pending Go port)
+lib/                   Bash utilities used by cmds/ (utils.sh, gpu.sh)
 ```
-
-## Key utilities
-
-- `log_info`, `log_success`, `log_warning`, `log_error`, `log_step`
-- `detect_os`, `detect_arch`, `get_package_manager`, `maybe_sudo`
-- `safe_symlink`, `run_cmd` (respects DRY_RUN)
-- `install_package`, `ensure_git_repo`
 
 ## Conventions
 
-- All scripts use `set -euo pipefail`
-- Scripts are idempotent
-- Use `maybe_sudo` instead of `sudo` for Docker compatibility
-- Use `run_cmd` to respect DRY_RUN
-- Symlink configs instead of copying
+- Use `inst` as the Go receiver name (not single letters)
+- Use `sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}` for all sysutil calls
+- Config files are embedded via `go:embed` and deployed with `sysutil.DeployFileFromFS`
+- Check `!opts.Force && sysutil.CommandExists(name)` before installing
+- Return `ErrUnsupportedOS` for unsupported platforms
+- All installers accept `ctx context.Context` as first parameter
 
 ## Adding a new component
 
-Create `components/<name>/install.sh`:
+Create `ctdev/component/<name>.go`:
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
+```go
+package component
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$DOTFILES_ROOT/lib/utils.sh"
+import (
+    "context"
+    "fmt"
 
-log_info "Installing <name>"
+    "github.com/ConnerTechnology/dotfiles/ctdev/platform"
+    "github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+)
 
-if [[ "${FORCE:-false}" != "true" ]] && command -v <name> >/dev/null 2>&1; then
-    log_info "<name> already installed"
-    exit 0
-fi
+func nameInstall(ctx context.Context, opts ExecOpts) error {
+    p := platform.Detect()
+    o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
 
-OS=$(detect_os)
-if [[ "$OS" == "macos" ]]; then
-    brew install <name>
-else
-    install_package <name>
-fi
+    if !opts.Force && sysutil.CommandExists("name") {
+        fmt.Fprintln(opts.Stdout, "name already installed")
+        return nil
+    }
+
+    fmt.Fprintln(opts.Stdout, "Installing name...")
+
+    switch p.PackageManager {
+    case "brew":
+        return sysutil.InstallPackage(o, "name")
+    case "apt":
+        return sysutil.InstallPackage(o, "name")
+    default:
+        return fmt.Errorf("name not supported for: %s", p.PackageManager)
+    }
+}
+
+func nameUninstall(ctx context.Context, opts ExecOpts) error {
+    o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+    fmt.Fprintln(opts.Stdout, "Removing name...")
+    return sysutil.RemovePackage(o, "name")
+}
 ```
 
-Create `components/<name>/uninstall.sh`:
+Then add to `ctdev/component/registry.go`:
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$DOTFILES_ROOT/lib/utils.sh"
-
-OS=$(detect_os)
-PM=$(get_package_manager)
-
-log_info "Uninstalling <name>..."
-
-if [[ "$OS" == "macos" ]]; then
-    run_cmd brew uninstall <name> || true
-elif [[ "$PM" == "apt" ]]; then
-    run_cmd maybe_sudo apt remove -y <name> || true
-fi
+```go
+{Name: "name", Description: "Description", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: nameInstall, GoUninstall: nameUninstall, Tags: []string{"tag1"}},
 ```
 
-Exit codes for uninstall scripts:
-- `0`: success
-- `2`: unsupported on this OS (component will be skipped)
+For simple package-manager installs, use the helper:
+```go
+GoInstall: SimplePackageInstaller("name"), GoUninstall: SimplePackageUninstaller("name")
+```
 
-Then add to `lib/components.sh` COMPONENTS array.
+If the component has config files, place them in `ctdev/component/configs/<name>/` and deploy with:
+```go
+sysutil.DeployFileFromFS(Configs, "configs/<name>/file", dest)
+```
 
 ## Git commits
 
