@@ -2,12 +2,61 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
+
+type duplicateSource struct {
+	Line  string
+	Files []string
+}
+
+func findDuplicateSourceLines(fileContents map[string]string) []duplicateSource {
+	seen := make(map[string][]string)
+	for filename, content := range fileContents {
+		for _, line := range strings.Split(content, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			seen[line] = append(seen[line], filename)
+		}
+	}
+	var dups []duplicateSource
+	for line, files := range seen {
+		if len(files) > 1 {
+			dups = append(dups, duplicateSource{Line: line, Files: files})
+		}
+	}
+	return dups
+}
+
+func readAPTSourceFiles() map[string]string {
+	dir := "/etc/apt/sources.list.d"
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	files := make(map[string]string)
+	for _, e := range entries {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".list") && !strings.HasSuffix(e.Name(), ".sources")) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		files[e.Name()] = string(data)
+	}
+	return files
+}
 
 var cleanupCmd = &cobra.Command{
 	Use:   "cleanup",
@@ -56,7 +105,15 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 				return fmt.Sprintf("%s repository files", strings.TrimSpace(string(out)))
 			},
 			execute: func() error {
-				fmt.Println("  Checking for duplicate repositories...")
+				files := readAPTSourceFiles()
+				dups := findDuplicateSourceLines(files)
+				if len(dups) == 0 {
+					fmt.Println("  No duplicate repositories found.")
+					return nil
+				}
+				for _, d := range dups {
+					fmt.Printf("  Duplicate: %s\n    In: %s\n", d.Line, strings.Join(d.Files, ", "))
+				}
 				return nil
 			},
 		},
@@ -79,13 +136,16 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		},
 	}
 
+	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(30)
+	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+
 	for _, task := range tasks {
 		info := task.check()
-		fmt.Printf("  %-30s %s\n", task.name, info)
+		fmt.Printf("  %s %s\n", labelStyle.Render(task.name), valueStyle.Render(info))
 	}
 
 	if flagDryRun {
-		fmt.Println("\n  [dry-run] No changes made.")
+		fmt.Println(styles.Dimmed.Render("\n  [dry-run] No changes made."))
 		return nil
 	}
 
@@ -99,12 +159,12 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, task := range tasks {
-		fmt.Printf("Running: %s...\n", task.name)
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Running: %s...", task.name)))
 		if err := task.execute(); err != nil {
-			fmt.Printf("  Warning: %v\n", err)
+			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("Warning: %v", err)))
 		}
 	}
 
-	fmt.Println("Cleanup complete.")
+	fmt.Println(styles.Success.Render("Cleanup complete."))
 	return nil
 }
