@@ -17,6 +17,12 @@ func DeployFile(content []byte, dest string) error {
 		return fmt.Errorf("create parent dirs for %s: %w", dest, err)
 	}
 
+	// If dest is a symlink (possibly dangling from old bash-based install),
+	// remove it so we can write a regular file.
+	if fi, err := os.Lstat(dest); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		os.Remove(dest)
+	}
+
 	existing, err := os.ReadFile(dest)
 	if err == nil {
 		if bytes.Equal(existing, content) {
