@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.3] - 2026-04-02
+
+### Fixed
+- `ctdev install zsh` now always deploys config files (.zshrc, aliases, exports, completions) even when oh-my-zsh is already installed, keeping dotfiles in sync
+
 ## [9.0.2] - 2026-04-02
 
 ### Fixed
