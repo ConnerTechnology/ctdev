@@ -22,11 +22,20 @@ var (
 	flagGitShow       bool
 	flagGitSigningKey string
 	flagGitGlobal     bool
+
+	flagAWSProfile string
 )
 
 var configureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure system settings",
+}
+
+var configureAWSCmd = &cobra.Command{
+	Use:   "aws",
+	Short: "Configure AWS profile",
+	Long:  "Set the default AWS_PROFILE in your shell environment.",
+	RunE:  runConfigureAWS,
 }
 
 var configureGitCmd = &cobra.Command{
@@ -44,6 +53,8 @@ func init() {
 	configureGitCmd.Flags().BoolVar(&flagGitShow, "show", false, "show current git config")
 	configureGitCmd.Flags().StringVar(&flagGitSigningKey, "signing-key", "", "SSH signing key path")
 	configureCmd.AddCommand(configureGitCmd)
+	configureAWSCmd.Flags().StringVar(&flagAWSProfile, "profile", "", "AWS profile name")
+	configureCmd.AddCommand(configureAWSCmd)
 	rootCmd.AddCommand(configureCmd)
 }
 
@@ -419,6 +430,38 @@ func setGitConfig(name, email string, local bool) error {
 		}
 	}
 
+	return nil
+}
+
+func runConfigureAWS(cmd *cobra.Command, args []string) error {
+	selected := flagAWSProfile
+
+	if selected == "" {
+		profiles, err := sysutil.ReadAWSProfiles()
+		if err != nil || len(profiles) == 0 {
+			fmt.Println("No AWS profiles found in ~/.aws/config. Set up AWS CLI first: aws configure sso")
+			return nil
+		}
+
+		fmt.Println("AWS Profiles:")
+		for i, p := range profiles {
+			fmt.Printf("  %d) %s\n", i+1, p)
+		}
+		fmt.Printf("Select: ")
+		choice := promptChoice(1)
+
+		if choice < 1 || choice > len(profiles) {
+			return fmt.Errorf("invalid selection: %d", choice)
+		}
+		selected = profiles[choice-1]
+	}
+
+	if err := sysutil.SetLineInFile(sysutil.ExportsLocalPath(), "AWS_PROFILE", "export AWS_PROFILE="+selected); err != nil {
+		return fmt.Errorf("failed to set AWS_PROFILE: %w", err)
+	}
+
+	fmt.Println(styles.Success.Render(fmt.Sprintf("AWS_PROFILE set to %s", selected)))
+	fmt.Println(styles.Dimmed.Render("Restart your shell or run: source " + sysutil.ExportsLocalPath()))
 	return nil
 }
 
