@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.8] - 2026-04-02
+
+### Fixed
+- Remove dangling symlinks from old bash-based install before deploying config files — `DeployFile` was silently failing because `os.WriteFile` followed the broken symlink to a deleted target
+
 ## [9.0.7] - 2026-04-02
 
 ### Fixed
