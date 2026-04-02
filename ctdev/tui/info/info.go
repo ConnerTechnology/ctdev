@@ -18,7 +18,13 @@ type DiskInfo struct {
 	Percent int
 }
 
-func Render(sysInfo platform.SystemInfo, version string, installedCount, totalCount int, installedNames []string) string {
+type ComponentInfo struct {
+	Name      string
+	Category  string
+	Installed bool
+}
+
+func Render(sysInfo platform.SystemInfo, version string, components []ComponentInfo, termWidth int) string {
 	var b strings.Builder
 
 	b.WriteString(styles.Title.Render("System Information"))
@@ -48,6 +54,30 @@ func Render(sysInfo platform.SystemInfo, version string, installedCount, totalCo
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("  %s %s (%d threads)\n", labelStyle.Render("CPU"), valueStyle.Render(sysInfo.CPUModel), sysInfo.CPUThreads))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Memory"), valueStyle.Render(fmt.Sprintf("%d GB", sysInfo.MemoryGB))))
+	for i, gpu := range sysInfo.GPUs {
+		label := "GPU"
+		if len(sysInfo.GPUs) > 1 {
+			label = fmt.Sprintf("GPU %d", i+1)
+		}
+		val := gpu.Name
+		if gpu.Driver != "" {
+			val += styles.Dimmed.Render(fmt.Sprintf(" (%s)", gpu.Driver))
+		}
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render(label), val))
+	}
+	for _, net := range sysInfo.Network {
+		label := "Network"
+		if net.Type == "wifi" {
+			label = "Wi-Fi"
+		} else if net.Type == "ethernet" {
+			label = "Ethernet"
+		}
+		val := net.Name
+		if net.Interface != "" {
+			val += styles.Dimmed.Render(fmt.Sprintf(" (%s)", net.Interface))
+		}
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render(label), val))
+	}
 
 	// Disk section
 	b.WriteString("\n")
@@ -61,25 +91,73 @@ func Render(sysInfo platform.SystemInfo, version string, installedCount, totalCo
 
 	// Components section
 	b.WriteString("\n")
-	b.WriteString(headerStyle.Render("Components"))
-	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  %d of %d installed\n", installedCount, totalCount))
-	if len(installedNames) > 0 {
-		pillStyle := lipgloss.NewStyle().
-			Foreground(styles.Blue).
-			Background(lipgloss.Color("#1f6feb33")).
-			Padding(0, 1)
-		b.WriteString("  ")
-		for i, name := range installedNames {
-			if i > 0 {
-				b.WriteString(" ")
-			}
-			b.WriteString(pillStyle.Render(name))
+	installedCount := 0
+	for _, c := range components {
+		if c.Installed {
+			installedCount++
 		}
-		b.WriteString("\n")
+	}
+	b.WriteString(headerStyle.Render(fmt.Sprintf("Components (%d/%d)", installedCount, len(components))))
+	b.WriteString("\n")
+
+	// Group by category, preserving order
+	type catGroup struct {
+		name  string
+		items []ComponentInfo
+	}
+	var groups []catGroup
+	seen := make(map[string]int)
+	for _, c := range components {
+		if idx, ok := seen[c.Category]; ok {
+			groups[idx].items = append(groups[idx].items, c)
+		} else {
+			seen[c.Category] = len(groups)
+			groups = append(groups, catGroup{name: c.Category, items: []ComponentInfo{c}})
+		}
+	}
+
+	colWidth := 20
+	cols := 2
+	if termWidth > 0 {
+		if termWidth < 60 {
+			cols = 1
+		} else if termWidth > 100 {
+			cols = 3
+		}
+	}
+
+	for _, g := range groups {
+		catInstalled := 0
+		for _, c := range g.items {
+			if c.Installed {
+				catInstalled++
+			}
+		}
+		b.WriteString(fmt.Sprintf("  %s %s\n",
+			styles.Dimmed.Render(g.name),
+			styles.Dimmed.Render(fmt.Sprintf("(%d/%d)", catInstalled, len(g.items))),
+		))
+		for i := 0; i < len(g.items); i += cols {
+			b.WriteString("    ")
+			for j := 0; j < cols && i+j < len(g.items); j++ {
+				b.WriteString(renderComponentEntry(g.items[i+j], colWidth))
+			}
+			b.WriteString("\n")
+		}
 	}
 
 	return b.String()
+}
+
+func renderComponentEntry(c ComponentInfo, width int) string {
+	if c.Installed {
+		icon := lipgloss.NewStyle().Foreground(styles.Green).Render("✓")
+		name := lipgloss.NewStyle().Foreground(styles.Green).Width(width - 2).Render(c.Name)
+		return icon + " " + name
+	}
+	icon := lipgloss.NewStyle().Foreground(styles.Subtle).Render("○")
+	name := lipgloss.NewStyle().Foreground(styles.Subtle).Width(width - 2).Render(c.Name)
+	return icon + " " + name
 }
 
 func getDiskInfo() []DiskInfo {
