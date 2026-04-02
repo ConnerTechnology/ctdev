@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -79,8 +81,34 @@ func ensureSudo() error {
 
 // resetTerminal cleans up escape sequences that Bubble Tea v2 may leak on exit
 // (kitty keyboard protocol and synchronized output queries).
+// It also drains any pending DECRPM responses from stdin so they don't leak
+// into the shell prompt after ctdev exits.
 func resetTerminal() {
 	fmt.Print("\033[?2026l\033[?2027l")
+
+	// Brief pause to let terminal responses arrive, then drain them.
+	// Without this, DECRPM replies print as garbage after ctdev exits.
+	time.Sleep(50 * time.Millisecond)
+	drainStdin()
+}
+
+// drainStdin reads and discards any bytes pending on stdin (e.g. terminal
+// DECRPM responses) by temporarily switching to non-blocking mode.
+func drainStdin() {
+	fd := int(os.Stdin.Fd())
+	// Set non-blocking
+	if err := syscall.SetNonblock(fd, true); err != nil {
+		return
+	}
+	buf := make([]byte, 256)
+	for {
+		n, _ := os.Stdin.Read(buf)
+		if n == 0 {
+			break
+		}
+	}
+	// Restore blocking
+	_ = syscall.SetNonblock(fd, false)
 }
 
 func isBatchMode() bool {
