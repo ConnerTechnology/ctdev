@@ -11,7 +11,8 @@ ctdev update [-y]               # Update system packages and components
 ctdev update --check                   # List available updates without installing
 ctdev update --refresh-keys            # Refresh APT GPG keys before updating
 ctdev info                             # Show system information
-ctdev configure git             # Configure git user
+ctdev configure git             # Configure git user and SSH signing key
+ctdev configure aws             # Configure AWS profile
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
 ctdev setup                     # Run full fresh-install setup
@@ -49,8 +50,9 @@ ctdev/                 Go module root
 
 - Use `inst` as the Go receiver name (not single letters)
 - Use `sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}` for all sysutil calls
-- Config files are embedded via `go:embed` and deployed with `sysutil.DeployFileFromFS`
-- Check `!opts.Force && sysutil.CommandExists(name)` before installing
+- Config files are embedded via `all:configs` in `go:embed` (the `all:` prefix is required to include dot-files like `.zshrc`)
+- Deploy configs with `sysutil.DeployFileFromFS` — it handles backup-on-diff and replaces dangling symlinks
+- Components with configs use Phase 1/Phase 2: Phase 1 installs the binary (skip if exists), Phase 2 always deploys configs
 - Return `ErrUnsupportedOS` for unsupported platforms
 - All installers accept `ctx context.Context` as first parameter
 
@@ -108,8 +110,14 @@ For simple package-manager installs, use the helper:
 GoInstall: SimplePackageInstaller("name"), GoUninstall: SimplePackageUninstaller("name")
 ```
 
-If the component has config files, place them in `ctdev/component/configs/<name>/` and deploy with:
+If the component has config files, place them in `ctdev/component/configs/<name>/` and use Phase 1/Phase 2:
 ```go
+// Phase 1: Install binary (skip if exists unless --force)
+if opts.Force || !sysutil.CommandExists("name") {
+    // ... install package ...
+}
+
+// Phase 2: Always deploy configs (keeps dotfiles in sync)
 sysutil.DeployFileFromFS(Configs, "configs/<name>/file", dest)
 ```
 
@@ -125,4 +133,4 @@ Single-line messages only. No footers.
 4. Commit: `docs: update for vX.Y.Z`
 5. Tag: `git tag vX.Y.Z`
 6. Push: `git push && git push --tags`
-7. Create release: `gh release create vX.Y.Z`
+7. CI builds and creates the GitHub Release automatically via `.github/workflows/release.yml`

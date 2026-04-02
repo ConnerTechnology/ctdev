@@ -5,35 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [9.0.10] - 2026-04-02
 
 ### Fixed
-- All config-deploying components (tmux, ghostty, claude-code, zsh, git) now always deploy configs even when the binary is already installed — re-running `ctdev install <component>` keeps dotfiles in sync and replaces any dangling symlinks from the old bash install
-
-## [9.0.9] - 2026-04-02
-
-### Fixed
-- Use `all:configs` in go:embed to include dot-files — `.zshrc`, `.gitconfig`, `.tmux.conf`, and `.xbindkeysrc` were silently excluded by Go's default embed behavior which skips files starting with `.`
+- Components with configs (tmux, ghostty, claude-code, zsh) now always deploy configs even when already installed — re-running `ctdev install <component>` keeps dotfiles in sync
+- Use `all:configs` in go:embed to include dot-files (`.zshrc`, `.gitconfig`, `.tmux.conf`, `.xbindkeysrc`)
 - Remove dangling symlinks from old bash-based install before deploying config files
-
-## [9.0.7] - 2026-04-02
-
-### Fixed
-- Switch terminal to raw mode before draining DECRPM responses — cooked mode was buffering them in the line discipline, causing escape sequence leak at the shell prompt
-- Platform-specific terminal ioctls (Linux TCGETS/TCSETS vs macOS TIOCGETA/TIOCSETA)
-
-## [9.0.3] - 2026-04-02
-
-### Fixed
-- `ctdev install zsh` now always deploys config files (.zshrc, aliases, exports, completions) even when oh-my-zsh is already installed, keeping dotfiles in sync
-
-## [9.0.2] - 2026-04-02
-
-### Fixed
-- Drain stdin after TUI exit to prevent DECRPM terminal responses from leaking into the shell prompt
-
-## [9.0.1] - 2026-04-02
-
-### Fixed
-- Skip sudo prompt during --dry-run (was blocking in CI and non-interactive contexts)
-- Add batch/non-TTY progress mode for install/uninstall (was crashing in CI without /dev/tty)
+- Fix DECRPM terminal response leak after TUI exit (switch to raw mode before draining stdin)
+- Platform-specific terminal ioctls for macOS compatibility
+- Skip sudo prompt during --dry-run
+- Add batch/non-TTY progress mode for install/uninstall (CI compatibility)
 
 ## [9.0.0] - 2026-04-02
 

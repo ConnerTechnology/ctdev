@@ -3,30 +3,41 @@
 ## ctdev not found
 
 ```bash
-./install.sh                    # Re-run install script
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ## Permission denied
 
-ctdev uses `maybe_sudo` automatically. If you're in Docker without sudo, some installs will fail - check logs for alternatives.
+ctdev uses sudo automatically for operations that need root. If prompted for sudo fails, ensure your user is in the sudo group.
 
 ## Component shows as not installed
 
-ctdev uses markers in `~/.config/ctdev/`. If detection fails:
+ctdev detects installed components via command existence and path checks. To force a re-deploy of configs:
 
 ```bash
-ctdev install <component>  # Re-run to create marker
+ctdev install <component>         # Re-runs config deployment
+ctdev install <component> --force # Full reinstall including package
 ```
+
+## Upgrading from bash-based ctdev (pre-v9)
+
+The v9.0 Go rewrite replaces symlinks with embedded config files. If you see dangling symlinks after upgrading:
+
+```bash
+ctdev install zsh tmux ghostty claude-code git   # Re-deploys all configs
+```
+
+This replaces old symlinks (pointing to deleted `components/` directory) with regular files containing the embedded configs.
 
 ## Uninstalling
 
 ```bash
 ctdev uninstall <component...>   # Remove specific components
-~/dotfiles/uninstall.sh          # Remove ctdev itself
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/uninstall.sh | bash
 ```
 
-The uninstall script will prompt to remove all components first, then removes the ctdev symlink and config directory.
+Or manually: `rm ~/.local/bin/ctdev`
 
 ## macOS
 
@@ -42,77 +53,60 @@ eval "$(/usr/local/bin/brew shellenv)"     # Intel
 
 ## Linux
 
-**Expired APT GPG key (EXPKEYSIG):** Re-download signing keys for installed components:
+**Expired APT GPG key (EXPKEYSIG):** Re-download signing keys:
 ```bash
-ctdev update --refresh-keys              # Refresh all keys
-ctdev update --refresh-keys docker gh    # Refresh specific components
+ctdev update --refresh-keys
 ```
 
 **Fonts not showing:** Run `fc-cache -fv` and restart terminal.
 
-**Package manager not detected:** Run `ctdev info` to see what was detected, then install packages manually.
+**Package manager not detected:** Run `ctdev info` to see what was detected.
 
 ### Desktop Freezes (NVIDIA + Dual GPU)
 
-Repeated system freezes on Linux Mint with Ryzen 7000 series (Raphael iGPU + discrete NVIDIA). The `amdgpu` driver loads for the unused iGPU and fails on suspend/resume cycles with `Unsupported suspend state 1`, causing system hangs. Additionally, NVIDIA suspend was not configured to preserve video memory allocations.
+Repeated system freezes on Linux Mint with Ryzen 7000 series (Raphael iGPU + discrete NVIDIA). The `amdgpu` driver loads for the unused iGPU and fails on suspend/resume cycles.
 
 **1. Disable integrated GPU in BIOS** (recommended)
 
-Disable the Ryzen iGPU in BIOS/UEFI to prevent the `amdgpu` kernel module from loading. Verify with:
+Disable the Ryzen iGPU in BIOS/UEFI. Verify with:
 ```bash
 lsmod | grep amdgpu   # Should return nothing
 ```
 
-If BIOS toggle is unavailable, blacklist the module instead:
+If BIOS toggle is unavailable, blacklist the module:
 ```bash
 echo "blacklist amdgpu" | sudo tee /etc/modprobe.d/blacklist-amdgpu.conf
 sudo update-initramfs -u
 sudo reboot
 ```
 
-**2. NVIDIA suspend stability** (automated by `ctdev configure linux-mint`)
+**2. NVIDIA suspend stability** (automated by `ctdev setup`)
 
-`ctdev configure linux-mint` handles these automatically on NVIDIA systems:
-- Adds `nvidia.NVreg_PreserveVideoMemoryAllocations=1` to GRUB kernel parameters
-- Enables `nvidia-suspend`, `nvidia-resume`, and `nvidia-hibernate` systemd services
+`ctdev setup` handles these on NVIDIA systems:
+- NVIDIA suspend/resume/hibernate systemd services
+- GRUB kernel parameters for video memory preservation
 
-To apply manually instead:
+To check current status: `ctdev gpu info`
+
+To re-run GPU signing setup: `ctdev gpu setup`
+
+**Monitoring:**
 ```bash
-# Add to GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub:
-#   nvidia.NVreg_PreserveVideoMemoryAllocations=1
-sudo update-grub
-
-# Enable services
-sudo systemctl enable nvidia-suspend.service nvidia-resume.service nvidia-hibernate.service
-```
-
-**Pre-existing kernel parameters** (may also help, set these manually if needed):
-- `nvidia.NVreg_EnableS0ixPowerManagement=0` — disables S0ix power management
-- `pcie_aspm=off` — disables PCIe Active State Power Management
-
-**Monitoring for regression:**
-```bash
-sudo nvme smart-log /dev/nvme0n1 | grep unsafe   # Unsafe shutdown count
 sudo journalctl -b -1 -p err                      # Errors from previous boot
-sudo smartctl -a /dev/nvme0n1                      # NVMe health
+sudo nvme smart-log /dev/nvme0n1 | grep unsafe     # Unsafe shutdown count
 ```
 
 ## Zsh
 
-**Oh My Zsh not loading:** Check `ls -la ~/.zshrc` - should be a symlink. Re-run `ctdev install zsh`.
+**Oh My Zsh not loading:** Check `ls -la ~/.zshrc` — should be a regular file (not a symlink). Re-run `ctdev install zsh`.
 
 **Pure prompt missing:** Delete `~/.zsh/pure` and reinstall: `ctdev install zsh --force`.
 
+**Configs not updating:** `ctdev install zsh` always re-deploys .zshrc, aliases, exports, completions, and path configs even when oh-my-zsh is already installed.
+
 ## Node/Ruby
 
-**Version manager not found:** Add to shell profile:
-```bash
-export PATH="$HOME/.nodenv/bin:$PATH"
-eval "$(nodenv init -)"
-
-export PATH="$HOME/.rbenv/bin:$PATH"
-eval "$(rbenv init -)"
-```
+**Version manager not found:** These are configured in `~/.zsh/path.zsh` (deployed by `ctdev install zsh`). Restart your shell after installing.
 
 **Build failing:** Install dependencies first:
 ```bash
@@ -126,10 +120,9 @@ sudo apt install build-essential libssl-dev libyaml-dev zlib1g-dev libffi-dev
 ## Debugging
 
 ```bash
-ctdev --dry-run components install zsh   # Preview without changes
-ctdev --verbose components install zsh   # More output
-ctdev info                               # System diagnostics
-ctdev install --help                    # Show component status
+ctdev --dry-run install zsh      # Preview without changes
+ctdev --verbose install zsh      # More output
+ctdev info                       # System diagnostics
 ```
 
 ## Still stuck?
