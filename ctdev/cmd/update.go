@@ -93,6 +93,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		scanAPT,
 		scanFlatpak,
 		scanBrew,
+		scanBrewCask,
 		scanOhMyZsh,
 		scanBun,
 		scanNodeEnv,
@@ -138,9 +139,9 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 
 	// Sort by source for grouped display
 	sourceOrder := map[string]int{
-		"apt": 0, "brew": 1, "flatpak": 2,
-		"git": 3, "runtime": 4, "npm": 5,
-		"cli": 6, "ctdev": 7,
+		"apt": 0, "brew": 1, "brew-cask": 2, "flatpak": 3,
+		"git": 4, "runtime": 5, "npm": 6,
+		"cli": 7, "ctdev": 8,
 	}
 	sort.Slice(allItems, func(i, j int) bool {
 		oi, oj := sourceOrder[allItems[i].Source], sourceOrder[allItems[j].Source]
@@ -257,6 +258,38 @@ func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, err
 	}
 	return parseBrewOutdated(string(out)), nil
+}
+
+func scanBrewCask(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("brew"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "brew", "outdated", "--cask", "--greedy", "--verbose").Output()
+	if err != nil {
+		return nil, err
+	}
+	return parseBrewCaskOutdated(string(out)), nil
+}
+
+func parseBrewCaskOutdated(output string) []checklist.UpdateItem {
+	var items []checklist.UpdateItem
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		// Format: name (current_ver) != new_ver
+		parts := strings.Fields(line)
+		if len(parts) < 4 {
+			continue
+		}
+		items = append(items, checklist.UpdateItem{
+			Name:       parts[0],
+			Source:     "brew-cask",
+			CurrentVer: strings.Trim(parts[1], "()"),
+			NewVer:     parts[3],
+		})
+	}
+	return items
 }
 
 func scanOhMyZsh(ctx context.Context) ([]checklist.UpdateItem, error) {
@@ -780,6 +813,23 @@ func executeUpdates(items []checklist.UpdateItem) error {
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
 				fmt.Printf("  brew upgrade warning: %v\n", err)
+			}
+		}
+	}
+
+	// Brew Cask
+	if pkgs := bySource["brew-cask"]; len(pkgs) > 0 {
+		names := itemNames(pkgs)
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d brew cask apps...", len(names))))
+		if flagDryRun {
+			fmt.Printf("  [dry-run] brew upgrade --cask %s\n", strings.Join(names, " "))
+		} else {
+			args := append([]string{"upgrade", "--cask"}, names...)
+			cmd := exec.Command("brew", args...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				fmt.Printf("  brew cask upgrade warning: %v\n", err)
 			}
 		}
 	}

@@ -13,6 +13,10 @@ func linearInstall(ctx context.Context, opts ExecOpts) error {
 		return ErrUnsupportedOS
 	}
 	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	if !opts.Force && dirExists("/Applications/Linear.app") {
+		fmt.Fprintln(opts.Stdout, "Linear already installed")
+		return nil
+	}
 	fmt.Fprintln(opts.Stdout, "Installing Linear...")
 	return sysutil.BrewCaskInstall(o, "linear-linear")
 }

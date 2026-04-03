@@ -44,6 +44,9 @@ type Component struct {
 	DetectCmd string
 	// DetectPath is an alternative filesystem path to check instead of a command.
 	DetectPath string
+	// DetectApps lists macOS .app bundle paths to check (e.g. "/Applications/Foo.app").
+	// If any exists, the component is considered installed.
+	DetectApps []string
 
 	GoInstall   func(ctx context.Context, opts ExecOpts) error
 	GoUninstall func(ctx context.Context, opts ExecOpts) error
@@ -60,8 +63,18 @@ type ExecOpts struct {
 func (inst *Component) IsInstalled() bool {
 	if inst.DetectPath != "" {
 		expanded := os.ExpandEnv(inst.DetectPath)
-		_, err := os.Stat(expanded)
-		return err == nil
+		if _, err := os.Stat(expanded); err == nil {
+			return true
+		}
+	}
+	for _, app := range inst.DetectApps {
+		if _, err := os.Stat(os.ExpandEnv(app)); err == nil {
+			return true
+		}
+	}
+	if inst.DetectPath != "" {
+		// DetectPath was set but didn't match; don't fall through to command check
+		return false
 	}
 	cmd := inst.DetectCmd
 	if cmd == "" {

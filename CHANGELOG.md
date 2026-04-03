@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.12] - 2026-04-03
+
+### Fixed
+- macOS app detection: add DetectApps field so IsInstalled() checks /Applications .app bundles for 13 desktop components (1password, chrome, claude-desktop, ghostty, slack, etc.)
+- Fonts detection on macOS now checks ~/Library/Fonts in addition to Linux font path
+- Linear installer now skips if already installed
+- Network info on macOS filters inactive interfaces (Thunderbolt, virtual ethernet)
+
+### Added
+- Brew cask update support: `ctdev update` now scans and upgrades outdated brew cask apps (ghostty, chrome, slack, docker, etc.)
+
 ## [9.0.10] - 2026-04-02
 
 ### Fixed

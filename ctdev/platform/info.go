@@ -253,13 +253,21 @@ func parseMacNetworkSetup(output string) []NetworkAdapter {
 		}
 		if strings.HasPrefix(line, "Device:") && current.Name != "" {
 			current.Interface = strings.TrimPrefix(line, "Device: ")
-			if current.Type != "" {
+			if current.Type != "" && macIfaceActive(current.Interface) {
 				adapters = append(adapters, current)
 			}
 			current = NetworkAdapter{}
 		}
 	}
 	return adapters
+}
+
+func macIfaceActive(iface string) bool {
+	out, err := exec.Command("ifconfig", iface).Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "status: active")
 }
 
 func snapToStandardSize(gb int) int {
