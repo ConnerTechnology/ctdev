@@ -56,6 +56,8 @@ download() {
         curl -fsSL -o "$dest" "$url"
     elif command -v wget >/dev/null 2>&1; then
         wget -qO "$dest" "$url"
+    else
+        error "curl or wget is required"
     fi
 }
 

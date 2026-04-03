@@ -63,6 +63,46 @@ func TestProgressOutputTail(t *testing.T) {
 	}
 }
 
+func TestProgressModelInstallSkip(t *testing.T) {
+	val := New([]string{"docker"}, ModeInstall)
+	m := &val
+
+	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
+	m = updated.(*Model)
+	if m.components[0].Status != StatusRunning {
+		t.Error("expected docker to be running")
+	}
+
+	updated, _ = m.Update(InstallSkipMsg{Name: "docker"})
+	m = updated.(*Model)
+	if m.components[0].Status != StatusSkipped {
+		t.Error("expected docker to be skipped")
+	}
+}
+
+func TestProgressModelInstallOutput(t *testing.T) {
+	val := New([]string{"docker"}, ModeInstall)
+	m := &val
+
+	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
+	m = updated.(*Model)
+
+	updated, _ = m.Update(InstallOutputMsg{Name: "docker", Line: "Downloading..."})
+	m = updated.(*Model)
+	updated, _ = m.Update(InstallOutputMsg{Name: "docker", Line: "Installing..."})
+	m = updated.(*Model)
+
+	if len(m.components[0].Output) != 2 {
+		t.Errorf("expected 2 output lines, got %d", len(m.components[0].Output))
+	}
+	if m.components[0].Output[0] != "Downloading..." {
+		t.Errorf("expected 'Downloading...', got %q", m.components[0].Output[0])
+	}
+	if m.components[0].Output[1] != "Installing..." {
+		t.Errorf("expected 'Installing...', got %q", m.components[0].Output[1])
+	}
+}
+
 func TestProgressModelUninstallMode(t *testing.T) {
 	val := New([]string{"docker"}, ModeUninstall)
 	m := &val

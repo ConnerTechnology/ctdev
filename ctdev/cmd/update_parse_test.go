@@ -107,3 +107,71 @@ func TestParseNPMOutdatedJSONEmpty(t *testing.T) {
 		t.Errorf("expected 0 items, got %d", len(items))
 	}
 }
+
+func TestMajorVersion(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"3.16.1", 3},
+		{"", 0},
+		{"10.0.0", 10},
+		{"0.1.2", 0},
+		{"abc", 0},
+	}
+	for _, tt := range tests {
+		got := majorVersion(tt.input)
+		if got != tt.want {
+			t.Errorf("majorVersion(%q) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestParseBrewCaskOutdatedEmpty(t *testing.T) {
+	items := parseBrewCaskOutdated("")
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestParseBrewCaskOutdatedUnmanagedCask(t *testing.T) {
+	// A cask not in managedCasks should be filtered out
+	items := parseBrewCaskOutdated("some-unknown-cask (1.0.0) != 2.0.0\n")
+	if len(items) != 0 {
+		t.Errorf("expected 0 items for unmanaged cask, got %d", len(items))
+	}
+}
+
+func TestParseAPTUpgradableMalformedLine(t *testing.T) {
+	// Line with [upgradable but missing "from:" — currentVer should be empty
+	output := "pkg/noble 2.0 amd64 [upgradable]\n"
+	items := parseAPTUpgradable(output)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].CurrentVer != "" {
+		t.Errorf("expected empty currentVer, got %q", items[0].CurrentVer)
+	}
+}
+
+func TestParseAPTUpgradableNoUpgradableKeyword(t *testing.T) {
+	items := parseAPTUpgradable("some random line\nanother line\n")
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestParseBrewOutdatedFewerThan4Fields(t *testing.T) {
+	// Lines with fewer than 4 fields should be skipped
+	items := parseBrewOutdated("node (21.0.0)\nonly-two fields\n")
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestParseNPMOutdatedJSONInvalid(t *testing.T) {
+	_, err := parseNPMOutdatedJSON("not json")
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}

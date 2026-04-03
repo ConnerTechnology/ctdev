@@ -53,7 +53,7 @@ func init() {
 func initConfig() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("$HOME/.config/ctdev")
+	viper.AddConfigPath(os.ExpandEnv("$HOME/.config/ctdev"))
 	viper.AutomaticEnv()
 	_ = viper.ReadInConfig()
 }

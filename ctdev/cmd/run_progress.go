@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -49,7 +50,10 @@ func runWithProgress(op progressOperation) error {
 				p.Send(progress.InstallFailMsg{Name: name, Error: err.Error(), Duration: time.Since(start)})
 				continue
 			}
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func(name string) {
+				defer wg.Done()
 				scanner := bufio.NewScanner(pr)
 				for scanner.Scan() {
 					p.Send(progress.InstallOutputMsg{Name: name, Line: scanner.Text()})
@@ -71,6 +75,7 @@ func runWithProgress(op progressOperation) error {
 				result = op.executor.Install(ctx, c, opts)
 			}
 			pw.Close()
+			wg.Wait()
 			pr.Close()
 
 			duration := time.Since(start)

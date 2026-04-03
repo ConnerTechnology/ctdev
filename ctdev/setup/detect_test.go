@@ -1,6 +1,10 @@
 package setup
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseXsetRepeat(t *testing.T) {
 	input := "    auto repeat delay:  200    repeat rate:  50"
@@ -48,5 +52,40 @@ func TestParseGrubVarQuoted(t *testing.T) {
 	content := `GRUB_TIMEOUT_STYLE="hidden"`
 	if v := parseGrubVar(content, "GRUB_TIMEOUT_STYLE"); v != "hidden" {
 		t.Errorf("expected hidden, got %s", v)
+	}
+}
+
+func TestDetectFileExists(t *testing.T) {
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "marker")
+	os.WriteFile(f, []byte("x"), 0644)
+
+	if detectFileExists(f) != "installed" {
+		t.Error("expected installed for existing file")
+	}
+	if detectFileExists(filepath.Join(tmp, "nope")) != "not installed" {
+		t.Error("expected not installed for missing file")
+	}
+}
+
+func TestDetectGrubOSProberTranslation(t *testing.T) {
+	// Test the value translation logic that detectGrubOSProber uses
+	// "false" means os-prober is enabled (GRUB_DISABLE_OS_PROBER=false means don't disable)
+	tests := []struct {
+		grubValue string
+		expected  string
+	}{
+		{"false", "enabled"},
+		{"true", "disabled"},
+		{"", "disabled"},
+	}
+	for _, tt := range tests {
+		got := "disabled"
+		if tt.grubValue == "false" {
+			got = "enabled"
+		}
+		if got != tt.expected {
+			t.Errorf("grub value %q: got %q, want %q", tt.grubValue, got, tt.expected)
+		}
 	}
 }

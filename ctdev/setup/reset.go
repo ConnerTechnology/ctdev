@@ -123,7 +123,7 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	// xbindkeys
 	fmt.Fprintf(w, "Resetting xbindkeys...\n")
 	_ = exec.Command("killall", "xbindkeys").Run()
-	home := os.Getenv("HOME")
+	home, _ := os.UserHomeDir()
 	_ = os.Remove(home + "/.config/autostart/xbindkeys.desktop")
 	info, err := os.Lstat(home + "/.xbindkeysrc")
 	if err == nil && info.Mode()&os.ModeSymlink != 0 {

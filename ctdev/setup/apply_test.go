@@ -15,3 +15,52 @@ func TestDconfWriteArgs(t *testing.T) {
 		t.Errorf("expected dconf, got %s", args[0])
 	}
 }
+
+func TestContainsGrubVar(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		varName  string
+		expected bool
+	}{
+		{"present uncommented", "GRUB_TIMEOUT=10\n", "GRUB_TIMEOUT", true},
+		{"commented out", "# GRUB_TIMEOUT=10\n", "GRUB_TIMEOUT", false},
+		{"absent", "GRUB_DEFAULT=0\n", "GRUB_TIMEOUT", false},
+		{"target in middle", "GRUB_DEFAULT=0\nGRUB_TIMEOUT=5\nGRUB_CMDLINE=\"quiet\"\n", "GRUB_TIMEOUT", true},
+		{"hash-commented line", "#GRUB_TIMEOUT=10\n", "GRUB_TIMEOUT", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := containsGrubVar(tt.content, tt.varName); got != tt.expected {
+				t.Errorf("containsGrubVar(%q, %q) = %v, want %v", tt.content, tt.varName, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSplitLines(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{"empty string", "", nil},
+		{"single line no newline", "hello", []string{"hello"}},
+		{"trailing newline", "hello\n", []string{"hello"}},
+		{"multiple lines", "a\nb\nc", []string{"a", "b", "c"}},
+		{"multiple lines trailing newline", "a\nb\n", []string{"a", "b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitLines(tt.input)
+			if len(got) != len(tt.expected) {
+				t.Fatalf("splitLines(%q) = %v (len %d), want %v (len %d)", tt.input, got, len(got), tt.expected, len(tt.expected))
+			}
+			for i := range got {
+				if got[i] != tt.expected[i] {
+					t.Errorf("index %d: got %q, want %q", i, got[i], tt.expected[i])
+				}
+			}
+		})
+	}
+}

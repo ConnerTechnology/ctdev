@@ -49,7 +49,7 @@ jobs:
 
       - name: Run tests
         working-directory: ctdev
-        run: go test ./...
+        run: go test -race ./...
 
       - name: Vet
         working-directory: ctdev

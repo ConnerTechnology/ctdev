@@ -20,7 +20,9 @@ func DeployFile(content []byte, dest string) error {
 	// If dest is a symlink (possibly dangling from old bash-based install),
 	// remove it so we can write a regular file.
 	if fi, err := os.Lstat(dest); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		os.Remove(dest)
+		if err := os.Remove(dest); err != nil {
+			return fmt.Errorf("remove symlink %s: %w", dest, err)
+		}
 	}
 
 	existing, err := os.ReadFile(dest)

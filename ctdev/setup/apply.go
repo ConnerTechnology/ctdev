@@ -241,7 +241,11 @@ func applyXbindkeys() error {
 		return fmt.Errorf("install xbindkeys/xdotool: %w", err)
 	}
 
-	configDst := filepath.Join(os.Getenv("HOME"), ".xbindkeysrc")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home dir: %w", err)
+	}
+	configDst := filepath.Join(home, ".xbindkeysrc")
 
 	content, err := Configs.ReadFile("configs/xbindkeys/.xbindkeysrc")
 	if err != nil {
@@ -252,7 +256,7 @@ func applyXbindkeys() error {
 		return fmt.Errorf("write .xbindkeysrc: %w", err)
 	}
 
-	autostartDir := filepath.Join(os.Getenv("HOME"), ".config", "autostart")
+	autostartDir := filepath.Join(home, ".config", "autostart")
 	if err := os.MkdirAll(autostartDir, 0o755); err != nil {
 		return fmt.Errorf("mkdir autostart: %w", err)
 	}

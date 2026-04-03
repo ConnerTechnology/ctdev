@@ -3,6 +3,7 @@ package shell
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -34,10 +35,40 @@ func TestExitCode(t *testing.T) {
 }
 
 func TestBoolEnv(t *testing.T) {
-	if BoolEnv("FOO", true) != "FOO=true" {
-		t.Error("expected FOO=true")
+	tests := []struct {
+		key  string
+		val  bool
+		want string
+	}{
+		{"FOO", true, "FOO=true"},
+		{"FOO", false, "FOO=false"},
+		{"BAR", true, "BAR=true"},
+		{"", true, "=true"},
 	}
-	if BoolEnv("FOO", false) != "FOO=false" {
-		t.Error("expected FOO=false")
+	for _, tt := range tests {
+		got := BoolEnv(tt.key, tt.val)
+		if got != tt.want {
+			t.Errorf("BoolEnv(%q, %v) = %q, want %q", tt.key, tt.val, got, tt.want)
+		}
+	}
+}
+
+func TestExitCodeGenericError(t *testing.T) {
+	err := errors.New("some error")
+	if ExitCode(err) != 1 {
+		t.Errorf("expected exit code 1 for generic error, got %d", ExitCode(err))
+	}
+}
+
+func TestRunCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := Run(ctx, "echo", []string{"hello"}, RunOpts{
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Error("expected error for cancelled context")
 	}
 }

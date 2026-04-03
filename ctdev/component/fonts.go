@@ -72,9 +72,10 @@ func fontsInstall(ctx context.Context, opts ExecOpts) error {
 			fmt.Fprintf(opts.Stdout, "warning: failed to download %s: %v\n", font, err)
 			continue
 		}
-		defer os.Remove(zipPath)
 
-		if err := sysutil.Run(o, "unzip", "-oq", zipPath, "-d", fontDir); err != nil {
+		err := sysutil.Run(o, "unzip", "-oq", zipPath, "-d", fontDir)
+		os.Remove(zipPath)
+		if err != nil {
 			fmt.Fprintf(opts.Stdout, "warning: failed to extract %s: %v\n", font, err)
 		}
 	}

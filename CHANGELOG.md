@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.14] - 2026-04-03
+
+### Fixed
+- Viper config path not expanding `$HOME` — config file was never loaded
+- Goroutine race in TUI progress — scanner could read from closed pipe, losing final output lines
+- Symlink removal error silently swallowed in `DeployFile`
+- `defer os.Remove` inside loop in fonts installer — zip files not cleaned up on early return
+- `install.sh` `download()` missing error when neither curl nor wget available
+- `os.Getenv("HOME")` replaced with `os.UserHomeDir()` in setup apply/reset
+
+### Added
+- Comprehensive test coverage: ~100 new test cases across all packages
+- Tests for setup settings (NeedsApply, FilterByHardware, InitStates, Categories)
+- Tests for component detection (IsInstalled, GroupByCategory, SupportsOS)
+- Tests for TUI components (checklist keyboard nav, picker filtering/selection, disk bar rendering)
+- Tests for platform parsing (snapToStandardSize, parseIPLink, parseMacNetworkSetup)
+- Tests for sysutil (exec dry-run, APT dry-run, deploy symlink handling)
+- Tests for GPU info helpers (mibToGB, orDefault)
+- Dry-run path tests for macOS defaults and Linux reset
+- Race detector (`-race`) enabled in CI test step
+
 ## [9.0.13] - 2026-04-03
 
 ### Changed
