@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
@@ -260,6 +261,26 @@ func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
 	return parseBrewOutdated(string(out)), nil
 }
 
+// managedCasks maps brew cask names to ctdev component names.
+// Only installed components are shown in update output.
+var managedCasks = map[string]string{
+	"1password":                      "1password",
+	"chatgpt":                        "chatgpt",
+	"cleanmymac":                     "cleanmymac",
+	"claude":                         "claude-desktop",
+	"dbeaver-community":              "dbeaver",
+	"docker":                         "docker",
+	"ghostty":                        "ghostty",
+	"google-chrome":                  "chrome",
+	"linear-linear":                  "linear",
+	"logi-options+":                  "logi-options",
+	"slack":                          "slack",
+	"tailscale":                      "tailscale",
+	"visual-studio-code":             "vscode",
+	"font-fira-code-nerd-font":      "fonts",
+	"font-jetbrains-mono-nerd-font": "fonts",
+}
+
 func scanBrewCask(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("brew"); err != nil {
 		return nil, nil
@@ -282,8 +303,17 @@ func parseBrewCaskOutdated(output string) []checklist.UpdateItem {
 		if len(parts) < 4 {
 			continue
 		}
+		name := parts[0]
+		compName, managed := managedCasks[name]
+		if !managed {
+			continue
+		}
+		comp := component.FindByName(compName)
+		if comp == nil || !comp.IsInstalled() {
+			continue
+		}
 		items = append(items, checklist.UpdateItem{
-			Name:       parts[0],
+			Name:       name,
 			Source:     "brew-cask",
 			CurrentVer: strings.Trim(parts[1], "()"),
 			NewVer:     parts[3],
