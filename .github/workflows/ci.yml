@@ -164,7 +164,7 @@ jobs:
 
       - name: Install jq component
         working-directory: ctdev
-        run: ./ctdev --force install jq
+        run: ./ctdev install jq
 
       - name: Verify jq installation
         run: command -v jq || exit 1
