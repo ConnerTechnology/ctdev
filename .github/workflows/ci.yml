@@ -1,11 +1,16 @@
-name: Test
+name: CI
 
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   shellcheck:
@@ -14,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check syntax
         run: |
@@ -34,12 +39,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: ctdev/go.mod
+          cache-dependency-path: ctdev/go.sum
 
       - name: Run tests
         working-directory: ctdev
@@ -96,7 +102,7 @@ jobs:
           rm /tmp/go.tar.gz
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -135,12 +141,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: ctdev/go.mod
+          cache-dependency-path: ctdev/go.sum
 
       - name: Build ctdev
         working-directory: ctdev
@@ -161,3 +168,76 @@ jobs:
 
       - name: Verify jq installation
         run: command -v jq || exit 1
+
+  build-release:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [shellcheck, go-test, test-ubuntu, test-macos]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: ctdev/go.mod
+          cache-dependency-path: ctdev/go.sum
+
+      - name: Build binary
+        working-directory: ctdev
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+        run: |
+          VERSION=$(cat ../VERSION)
+          go build -ldflags "-X main.version=$VERSION" -o ctdev-${{ matrix.os }}-${{ matrix.arch }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ctdev-${{ matrix.os }}-${{ matrix.arch }}
+          path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}
+
+  release:
+    name: Create Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG_NAME" > /dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists, replacing with new build"
+            gh release delete "$TAG_NAME" --yes
+          fi
+          chmod +x dist/ctdev-*
+          gh release create "$TAG_NAME" dist/ctdev-* \
+            --title "$TAG_NAME" \
+            --generate-notes

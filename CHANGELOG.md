@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.13] - 2026-04-03
+
+### Changed
+- Combined Test and Release workflows into single CI workflow — releases now require all tests to pass first
+- Updated GitHub Actions to latest versions (checkout v6, setup-go v6, upload-artifact v7, download-artifact v8) — fixes Node.js 20 deprecation warnings
+- Fixed go.sum cache path for setup-go action
+- Release workflow handles existing releases by replacing them with fresh builds
+
 ## [9.0.12] - 2026-04-03
 
 ### Fixed
