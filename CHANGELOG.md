@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.15] - 2026-04-04
+
+### Added
+- Logitech KVM mouse fix — udev rule + systemd user service to restart Solaar when Logi Bolt receiver reconnects after KVM switch, fixing middle-click
+- Hide drives — udev rule to hide Windows/secondary NVMe partitions from the file manager
+- New "Peripherals & KVM" category in `ctdev setup`
+- `mintupdate-cli` scanner in `ctdev update` — detects kernel and security updates managed by Linux Mint's Update Manager
+- Reset support for new udev rules and systemd service
+- Tests for new registry entries, embedded configs, and mintupdate parser
+
 ## [9.0.14] - 2026-04-03
 
 ### Fixed
