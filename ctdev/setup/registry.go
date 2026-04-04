@@ -339,6 +339,30 @@ var Registry = []Setting{
 		},
 	},
 
+	// ── Peripherals & KVM ──────────────────────────────────────────────
+
+	{
+		Name:        "Logitech KVM mouse fix",
+		Category:    "Peripherals & KVM",
+		Description: "Installs a udev rule and systemd user service that restarts Solaar when the Logi Bolt receiver reconnects after a KVM switch. Fixes middle-click not working.",
+		TechDetail:  "/etc/udev/rules.d/99-logitech-kvm-fix.rules + ~/.config/systemd/user/solaar-restart.service",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func() string { return detectFileExists("/etc/udev/rules.d/99-logitech-kvm-fix.rules") },
+		ApplyFunc:   func(_ string) error { return applyLogitechKVMFix() },
+		HardwareFn:  detectLogitechBolt,
+	},
+	{
+		Name:        "Hide drives",
+		Category:    "Peripherals & KVM",
+		Description: "Hides Windows/secondary NVMe partitions from the file manager so they don't clutter the sidebar.",
+		TechDetail:  "/etc/udev/rules.d/99-hide-drives.rules (UDISKS_IGNORE)",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func() string { return detectFileExists("/etc/udev/rules.d/99-hide-drives.rules") },
+		ApplyFunc:   func(_ string) error { return applyHideDrives() },
+	},
+
 	// ── Network & System ───────────────────────────────────────────────
 
 	{

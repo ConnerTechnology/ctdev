@@ -311,6 +311,78 @@ func applyWireplumberLDAC() error {
 	return nil
 }
 
+// applyLogitechKVMFix installs a udev rule and systemd user service to restart Solaar
+// when the Logi Bolt receiver reconnects after a KVM switch.
+func applyLogitechKVMFix() error {
+	// Deploy udev rule
+	udevContent, err := Configs.ReadFile("configs/udev/99-logitech-kvm-fix.rules")
+	if err != nil {
+		return fmt.Errorf("read embedded udev rule: %w", err)
+	}
+	tmpFile, err := os.CreateTemp("", "udev-logitech-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(udevContent); err != nil {
+		tmpFile.Close()
+		return err
+	}
+	tmpFile.Close()
+	if err := sudoRun("cp", tmpFile.Name(), "/etc/udev/rules.d/99-logitech-kvm-fix.rules"); err != nil {
+		return fmt.Errorf("copy udev rule: %w", err)
+	}
+
+	// Deploy systemd user service
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home dir: %w", err)
+	}
+	serviceDir := filepath.Join(home, ".config", "systemd", "user")
+	if err := os.MkdirAll(serviceDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir systemd user dir: %w", err)
+	}
+	serviceContent, err := Configs.ReadFile("configs/udev/solaar-restart.service")
+	if err != nil {
+		return fmt.Errorf("read embedded service file: %w", err)
+	}
+	serviceDst := filepath.Join(serviceDir, "solaar-restart.service")
+	if err := os.WriteFile(serviceDst, serviceContent, 0o644); err != nil {
+		return fmt.Errorf("write service file: %w", err)
+	}
+
+	// Enable the user service and reload udev
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "--user", "enable", "solaar-restart.service").Run()
+	if err := sudoRun("udevadm", "control", "--reload-rules"); err != nil {
+		return fmt.Errorf("reload udev rules: %w", err)
+	}
+
+	return nil
+}
+
+// applyHideDrives installs a udev rule to hide Windows/secondary partitions from the file manager.
+func applyHideDrives() error {
+	content, err := Configs.ReadFile("configs/udev/99-hide-drives.rules")
+	if err != nil {
+		return fmt.Errorf("read embedded hide-drives rule: %w", err)
+	}
+	tmpFile, err := os.CreateTemp("", "udev-hide-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(content); err != nil {
+		tmpFile.Close()
+		return err
+	}
+	tmpFile.Close()
+	if err := sudoRun("cp", tmpFile.Name(), "/etc/udev/rules.d/99-hide-drives.rules"); err != nil {
+		return fmt.Errorf("copy udev rule: %w", err)
+	}
+	return sudoRun("udevadm", "control", "--reload-rules")
+}
+
 // applySSDTrim enables the fstrim.timer systemd unit for periodic SSD TRIM.
 func applySSDTrim() error {
 	if err := sudoRun("systemctl", "enable", "fstrim.timer"); err != nil {

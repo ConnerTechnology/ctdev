@@ -1,0 +1,10 @@
+[Unit]
+Description=Restart Solaar after Logitech receiver reconnect (KVM switch fix)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'killall solaar 2>/dev/null; sleep 1; solaar &'
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=default.target

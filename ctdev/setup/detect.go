@@ -240,6 +240,14 @@ func detectFileExists(path string) string {
 	return "not installed"
 }
 
+func detectLogitechBolt() bool {
+	out, err := exec.Command("lsusb").Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "046d:c548")
+}
+
 func detectMouseSpeed() string {
 	return detectDconfString("/org/gnome/desktop/peripherals/mouse/speed")
 }

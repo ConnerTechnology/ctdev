@@ -40,6 +40,8 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 			fmt.Fprintln(w, "[DRY-RUN] Would reset NVIDIA suspend settings (GRUB parameters, systemd services)")
 		}
 		fmt.Fprintln(w, "[DRY-RUN] Would disable fstrim.timer")
+		fmt.Fprintln(w, "[DRY-RUN] Would remove Logitech KVM mouse fix (udev rule + systemd service)")
+		fmt.Fprintln(w, "[DRY-RUN] Would remove hide-drives udev rule")
 		fmt.Fprintln(w, "[DRY-RUN] Would reset xbindkeys (stop, remove autostart and config symlink)")
 		fmt.Fprintln(w, "[DRY-RUN] Would remove WirePlumber LDAC config")
 		return nil
@@ -176,6 +178,33 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 			_ = exec.Command("sudo", "systemctl", "disable", svc).Run()
 		}
 	}
+
+	// Logitech KVM fix
+	kvmRule := "/etc/udev/rules.d/99-logitech-kvm-fix.rules"
+	if _, err := os.Stat(kvmRule); err == nil {
+		fmt.Fprintf(w, "Removing Logitech KVM mouse fix...\n")
+		if err := sudoRun("rm", "-f", kvmRule); err != nil {
+			return fmt.Errorf("remove logitech kvm udev rule: %w", err)
+		}
+	}
+	kvmService := home + "/.config/systemd/user/solaar-restart.service"
+	if _, err := os.Stat(kvmService); err == nil {
+		_ = exec.Command("systemctl", "--user", "disable", "solaar-restart.service").Run()
+		_ = os.Remove(kvmService)
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	}
+
+	// Hide drives udev rule
+	hideDrives := "/etc/udev/rules.d/99-hide-drives.rules"
+	if _, err := os.Stat(hideDrives); err == nil {
+		fmt.Fprintf(w, "Removing hide-drives udev rule...\n")
+		if err := sudoRun("rm", "-f", hideDrives); err != nil {
+			return fmt.Errorf("remove hide-drives udev rule: %w", err)
+		}
+	}
+
+	// Reload udev after removing rules
+	_ = exec.Command("sudo", "udevadm", "control", "--reload-rules").Run()
 
 	// WiFi suspend hook
 	sleepHook := "/usr/lib/systemd/system-sleep/wifi-mt7925"

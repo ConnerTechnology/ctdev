@@ -106,6 +106,69 @@ func TestInitStates(t *testing.T) {
 	})
 }
 
+func TestRegistryHasPeripheralsCategory(t *testing.T) {
+	var found []string
+	for _, s := range Registry {
+		if s.Category == "Peripherals & KVM" {
+			found = append(found, s.Name)
+		}
+	}
+	if len(found) == 0 {
+		t.Fatal("expected at least one setting in 'Peripherals & KVM' category")
+	}
+
+	expected := map[string]bool{
+		"Logitech KVM mouse fix": false,
+		"Hide drives":            false,
+	}
+	for _, name := range found {
+		if _, ok := expected[name]; ok {
+			expected[name] = true
+		}
+	}
+	for name, seen := range expected {
+		if !seen {
+			t.Errorf("expected %q in Peripherals & KVM category", name)
+		}
+	}
+}
+
+func TestLogitechKVMFixHasHardwareFn(t *testing.T) {
+	for _, s := range Registry {
+		if s.Name == "Logitech KVM mouse fix" {
+			if s.HardwareFn == nil {
+				t.Error("Logitech KVM mouse fix should have HardwareFn set")
+			}
+			if s.DetectFunc == nil {
+				t.Error("Logitech KVM mouse fix should have DetectFunc set")
+			}
+			if s.ApplyFunc == nil {
+				t.Error("Logitech KVM mouse fix should have ApplyFunc set")
+			}
+			return
+		}
+	}
+	t.Fatal("Logitech KVM mouse fix not found in Registry")
+}
+
+func TestHideDrivesHasNoHardwareFn(t *testing.T) {
+	for _, s := range Registry {
+		if s.Name == "Hide drives" {
+			if s.HardwareFn != nil {
+				t.Error("Hide drives should not have HardwareFn (always visible)")
+			}
+			if s.DetectFunc == nil {
+				t.Error("Hide drives should have DetectFunc set")
+			}
+			if s.ApplyFunc == nil {
+				t.Error("Hide drives should have ApplyFunc set")
+			}
+			return
+		}
+	}
+	t.Fatal("Hide drives not found in Registry")
+}
+
 func TestCategories(t *testing.T) {
 	t.Run("deduplication", func(t *testing.T) {
 		settings := []Setting{

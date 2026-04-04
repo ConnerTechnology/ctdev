@@ -1,0 +1,4 @@
+# Fix Logitech mouse middle button after KVM switch
+# When the Logi Bolt receiver reconnects, restart Solaar to re-initialize the device.
+# This resolves middle-click not working after switching KVM inputs.
+ACTION=="add", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c548", TAG+="systemd", ENV{SYSTEMD_USER_WANTS}="solaar-restart.service"

@@ -1,6 +1,9 @@
 package setup
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestGrubVarCommand(t *testing.T) {
 	args := grubVarArgs("GRUB_TIMEOUT", "10")
@@ -33,6 +36,31 @@ func TestContainsGrubVar(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := containsGrubVar(tt.content, tt.varName); got != tt.expected {
 				t.Errorf("containsGrubVar(%q, %q) = %v, want %v", tt.content, tt.varName, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEmbeddedUdevConfigs(t *testing.T) {
+	files := []struct {
+		path     string
+		contains string
+	}{
+		{"configs/udev/99-logitech-kvm-fix.rules", "046d"},
+		{"configs/udev/99-hide-drives.rules", "UDISKS_IGNORE"},
+		{"configs/udev/solaar-restart.service", "solaar"},
+	}
+	for _, f := range files {
+		t.Run(f.path, func(t *testing.T) {
+			content, err := Configs.ReadFile(f.path)
+			if err != nil {
+				t.Fatalf("failed to read embedded file %s: %v", f.path, err)
+			}
+			if len(content) == 0 {
+				t.Errorf("embedded file %s is empty", f.path)
+			}
+			if !strings.Contains(string(content), f.contains) {
+				t.Errorf("embedded file %s missing expected content %q", f.path, f.contains)
 			}
 		})
 	}

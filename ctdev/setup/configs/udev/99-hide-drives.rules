@@ -1,0 +1,5 @@
+# Hide Windows/secondary partitions from the file manager
+ENV{ID_FS_UUID}=="4E0EB4310EB413C5", ENV{UDISKS_IGNORE}="1"
+ENV{DEVNAME}=="/dev/nvme1n1p1", ENV{UDISKS_IGNORE}="1"
+ENV{DEVNAME}=="/dev/nvme1n1p2", ENV{UDISKS_IGNORE}="1"
+ENV{DEVNAME}=="/dev/nvme1n1p4", ENV{UDISKS_IGNORE}="1"
