@@ -92,6 +92,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	type scanner func(context.Context) ([]checklist.UpdateItem, error)
 	scanners := []scanner{
 		scanAPT,
+		scanMintUpdate,
 		scanFlatpak,
 		scanBrew,
 		scanBrewCask,
@@ -140,9 +141,9 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 
 	// Sort by source for grouped display
 	sourceOrder := map[string]int{
-		"apt": 0, "brew": 1, "brew-cask": 2, "flatpak": 3,
-		"git": 4, "runtime": 5, "npm": 6,
-		"cli": 7, "ctdev": 8,
+		"apt": 0, "mintupdate": 1, "brew": 2, "brew-cask": 3, "flatpak": 4,
+		"git": 5, "runtime": 6, "npm": 7,
+		"cli": 8, "ctdev": 9,
 	}
 	sort.Slice(allItems, func(i, j int) bool {
 		oi, oj := sourceOrder[allItems[i].Source], sourceOrder[allItems[j].Source]
@@ -198,6 +199,43 @@ func scanAPT(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, err
 	}
 	return parseAPTUpgradable(string(out)), nil
+}
+
+func scanMintUpdate(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("mintupdate-cli"); err != nil {
+		return nil, nil
+	}
+	out, err := exec.CommandContext(ctx, "mintupdate-cli", "list").Output()
+	if err != nil {
+		return nil, err
+	}
+	return parseMintUpdateList(string(out)), nil
+}
+
+func parseMintUpdateList(output string) []checklist.UpdateItem {
+	var items []checklist.UpdateItem
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		updateType := fields[0]
+		name := fields[1]
+		newVer := fields[2]
+		item := checklist.UpdateItem{
+			Name:   name,
+			Source: "mintupdate",
+			NewVer: newVer,
+		}
+		if updateType == "kernel" {
+			item.IsKernel = true
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 func parseFlatpakUpdates(output string) []checklist.UpdateItem {
@@ -811,6 +849,21 @@ func executeUpdates(items []checklist.UpdateItem) error {
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
 				return fmt.Errorf("apt upgrade failed: %w", err)
+			}
+		}
+	}
+
+	// Mint Update Manager (kernel and other mintupdate-managed packages)
+	if pkgs := bySource["mintupdate"]; len(pkgs) > 0 {
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d mintupdate packages...", len(pkgs))))
+		if flagDryRun {
+			fmt.Println("  [dry-run] mintupdate-cli upgrade -r -y")
+		} else {
+			cmd := exec.Command("sudo", "mintupdate-cli", "upgrade", "-r", "-y")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				fmt.Printf("  mintupdate upgrade warning: %v\n", err)
 			}
 		}
 	}

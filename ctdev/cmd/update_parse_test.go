@@ -29,6 +29,52 @@ func TestParseAPTUpgradableEmpty(t *testing.T) {
 	}
 }
 
+func TestParseMintUpdateList(t *testing.T) {
+	output := "kernel          linux-6.14.0-37.37~24.04.1                    6.14.0-37.37~24.04.1\n"
+
+	items := parseMintUpdateList(output)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Name != "linux-6.14.0-37.37~24.04.1" {
+		t.Errorf("expected linux-6.14.0-37.37~24.04.1, got %s", items[0].Name)
+	}
+	if items[0].Source != "mintupdate" {
+		t.Errorf("expected source mintupdate, got %s", items[0].Source)
+	}
+	if !items[0].IsKernel {
+		t.Error("expected kernel flag to be set")
+	}
+	if items[0].NewVer != "6.14.0-37.37~24.04.1" {
+		t.Errorf("expected version 6.14.0-37.37~24.04.1, got %s", items[0].NewVer)
+	}
+}
+
+func TestParseMintUpdateListEmpty(t *testing.T) {
+	items := parseMintUpdateList("")
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestParseMintUpdateListMultiple(t *testing.T) {
+	output := "kernel          linux-6.14.0-37.37~24.04.1                    6.14.0-37.37~24.04.1\nsecurity        libssl3t64                                    3.0.13-0ubuntu3.5\n"
+
+	items := parseMintUpdateList(output)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if !items[0].IsKernel {
+		t.Error("expected first item to be kernel")
+	}
+	if items[1].IsKernel {
+		t.Error("expected second item to not be kernel")
+	}
+	if items[1].Name != "libssl3t64" {
+		t.Errorf("expected libssl3t64, got %s", items[1].Name)
+	}
+}
+
 func TestParseBrewOutdated(t *testing.T) {
 	output := "node (21.0.0) < 22.0.0\npython (3.12.0) < 3.13.0\n"
 
