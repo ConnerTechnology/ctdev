@@ -86,13 +86,25 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
-	// ctdev completions
+	// ctdev completions — generate via cobra so they stay in sync automatically
 	zfuncDir := filepath.Join(home, ".zfunc")
 	if !o.DryRun {
 		os.MkdirAll(zfuncDir, 0755)
-	}
-	if err := deployOrDryRun(o, "configs/zsh/completions/_ctdev", filepath.Join(zfuncDir, "_ctdev")); err != nil {
-		fmt.Fprintf(opts.Stdout, "warning: could not deploy completions: %v\n", err)
+		compFile := filepath.Join(zfuncDir, "_ctdev")
+		if ctdevPath, err := exec.LookPath("ctdev"); err == nil {
+			out, err := exec.Command(ctdevPath, "completion", "zsh").Output()
+			if err == nil && len(out) > 0 {
+				if err := os.WriteFile(compFile, out, 0644); err != nil {
+					fmt.Fprintf(opts.Stdout, "warning: could not write completions: %v\n", err)
+				}
+			} else {
+				fmt.Fprintf(opts.Stdout, "warning: could not generate completions: %v\n", err)
+			}
+		} else {
+			fmt.Fprintf(opts.Stdout, "warning: ctdev not in PATH, skipping completions\n")
+		}
+	} else {
+		fmt.Fprintf(o.Stdout, "[dry-run] generate ctdev zsh completions → %s/_ctdev\n", zfuncDir)
 	}
 
 	// Deploy exports.local.zsh only if dest doesn't exist

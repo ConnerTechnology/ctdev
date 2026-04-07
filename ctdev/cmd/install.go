@@ -12,10 +12,11 @@ import (
 )
 
 var installCmd = &cobra.Command{
-	Use:   "install [component...]",
-	Short: "Install components",
-	Long:  "Install one or more components. Run without arguments for interactive picker.",
-	RunE:  runInstall,
+	Use:               "install [component...]",
+	Short:             "Install components",
+	Long:              "Install one or more components. Run without arguments for interactive picker.",
+	RunE:              runInstall,
+	ValidArgsFunction: completeComponentNames,
 }
 
 func init() {

@@ -13,10 +13,11 @@ import (
 )
 
 var uninstallCmd = &cobra.Command{
-	Use:   "uninstall [component...]",
-	Short: "Uninstall components",
-	Long:  "Uninstall one or more components. Run without arguments for interactive picker.",
-	RunE:  runUninstall,
+	Use:               "uninstall [component...]",
+	Short:             "Uninstall components",
+	Long:              "Uninstall one or more components. Run without arguments for interactive picker.",
+	RunE:              runUninstall,
+	ValidArgsFunction: completeComponentNames,
 }
 
 func init() {
