@@ -2,7 +2,6 @@ package shell
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -36,9 +35,3 @@ func ExitCode(err error) int {
 	return 1
 }
 
-func BoolEnv(name string, val bool) string {
-	if val {
-		return fmt.Sprintf("%s=true", name)
-	}
-	return fmt.Sprintf("%s=false", name)
-}

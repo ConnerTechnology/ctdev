@@ -146,16 +146,6 @@ func detectDconfString(path string) string {
 	return v
 }
 
-func detectGsettingsString(schema, key string) string {
-	out, err := exec.Command("gsettings", "get", schema, key).Output()
-	if err != nil {
-		return ""
-	}
-	v := strings.TrimSpace(string(out))
-	v = strings.Trim(v, "'")
-	return v
-}
-
 func detectKeyRepeatDelay() string {
 	out, err := exec.Command("xset", "q").Output()
 	if err != nil {

@@ -3,13 +3,14 @@ package sysutil
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // Run executes a command, routing output to opts.Stdout.
 // If opts.DryRun, prints the command without executing.
 func Run(o Opts, name string, args ...string) error {
 	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] %s %s\n", name, joinArgs(args))
+		fmt.Fprintf(o.Stdout, "[dry-run] %s %s\n", name, strings.Join(args, " "))
 		return nil
 	}
 	cmd := exec.Command(name, args...)
@@ -24,13 +25,3 @@ func SudoRun(o Opts, name string, args ...string) error {
 	return Run(o, "sudo", sudoArgs...)
 }
 
-func joinArgs(args []string) string {
-	result := ""
-	for i, a := range args {
-		if i > 0 {
-			result += " "
-		}
-		result += a
-	}
-	return result
-}

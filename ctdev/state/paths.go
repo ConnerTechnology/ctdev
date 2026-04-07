@@ -29,10 +29,3 @@ func StateDir() string {
 	}
 	return filepath.Join(homeDir(), ".local", "state", "ctdev")
 }
-
-func CacheDir() string {
-	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" {
-		return filepath.Join(dir, "ctdev")
-	}
-	return filepath.Join(homeDir(), ".cache", "ctdev")
-}

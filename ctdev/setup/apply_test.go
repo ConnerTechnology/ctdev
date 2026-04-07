@@ -66,6 +66,50 @@ func TestEmbeddedUdevConfigs(t *testing.T) {
 	}
 }
 
+func TestCpsToIntervalMs(t *testing.T) {
+	tests := []struct {
+		rate string
+		want string
+	}{
+		{"25", "40"},    // 1000/25 = 40ms
+		{"30", "33"},    // 1000/30 = 33ms (integer division)
+		{"1", "1000"},   // 1000/1 = 1000ms
+		{"50", "20"},    // 1000/50 = 20ms
+		{"0", "0"},      // zero rate — return as-is
+		{"-5", "-5"},    // negative — return as-is
+		{"abc", "abc"},  // non-numeric — return as-is
+		{"1000", "1"},   // 1000/1000 = 1ms
+		{"2000", "0"},   // 1000/2000 = 0ms (integer division)
+	}
+	for _, tt := range tests {
+		t.Run(tt.rate, func(t *testing.T) {
+			got := cpsToIntervalMs(tt.rate)
+			if got != tt.want {
+				t.Errorf("cpsToIntervalMs(%q) = %q, want %q", tt.rate, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGrubVarArgsSedPattern(t *testing.T) {
+	// Verify the sed pattern structure for known safe values
+	args := grubVarArgs("GRUB_TIMEOUT", "10")
+	if len(args) != 4 {
+		t.Fatalf("expected 4 args, got %d", len(args))
+	}
+	if args[0] != "sed" {
+		t.Errorf("expected sed, got %s", args[0])
+	}
+	if args[3] != "/etc/default/grub" {
+		t.Errorf("expected /etc/default/grub, got %s", args[3])
+	}
+	// Pattern should be: s/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=10/
+	expected := "s/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=10/"
+	if args[2] != expected {
+		t.Errorf("got pattern %q, want %q", args[2], expected)
+	}
+}
+
 func TestSplitLines(t *testing.T) {
 	tests := []struct {
 		name     string

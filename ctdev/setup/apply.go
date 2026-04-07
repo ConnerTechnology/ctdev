@@ -159,15 +159,21 @@ func applyKeyRepeat(delay, rate string) error {
 		return fmt.Errorf("gsettings delay: %w", err)
 	}
 	// gsettings repeat-interval is in milliseconds between repeats, not cps.
-	// Convert: interval_ms = 1000 / rate_cps
-	interval := rate
-	if rateCps, err := strconv.Atoi(rate); err == nil && rateCps > 0 {
-		interval = strconv.Itoa(1000 / rateCps)
-	}
+	interval := cpsToIntervalMs(rate)
 	if err := applyGsettings("org.cinnamon.desktop.peripherals.keyboard", "repeat-interval", interval); err != nil {
 		return fmt.Errorf("gsettings repeat-interval: %w", err)
 	}
 	return nil
+}
+
+// cpsToIntervalMs converts a characters-per-second rate string to a
+// milliseconds-between-repeats interval string for gsettings.
+func cpsToIntervalMs(rate string) string {
+	rateCps, err := strconv.Atoi(rate)
+	if err != nil || rateCps <= 0 {
+		return rate
+	}
+	return strconv.Itoa(1000 / rateCps)
 }
 
 // applySystemdEnable enables and starts a systemd service.

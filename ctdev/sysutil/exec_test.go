@@ -20,18 +20,3 @@ func TestRun_DryRun(t *testing.T) {
 	}
 }
 
-func TestJoinArgs(t *testing.T) {
-	tests := []struct {
-		args []string
-		want string
-	}{
-		{nil, ""},
-		{[]string{"arg"}, "arg"},
-		{[]string{"a", "b", "c"}, "a b c"},
-	}
-	for _, tt := range tests {
-		if got := joinArgs(tt.args); got != tt.want {
-			t.Errorf("joinArgs(%v) = %q, want %q", tt.args, got, tt.want)
-		}
-	}
-}

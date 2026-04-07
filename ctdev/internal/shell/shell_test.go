@@ -34,25 +34,6 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
-func TestBoolEnv(t *testing.T) {
-	tests := []struct {
-		key  string
-		val  bool
-		want string
-	}{
-		{"FOO", true, "FOO=true"},
-		{"FOO", false, "FOO=false"},
-		{"BAR", true, "BAR=true"},
-		{"", true, "=true"},
-	}
-	for _, tt := range tests {
-		got := BoolEnv(tt.key, tt.val)
-		if got != tt.want {
-			t.Errorf("BoolEnv(%q, %v) = %q, want %q", tt.key, tt.val, got, tt.want)
-		}
-	}
-}
-
 func TestExitCodeGenericError(t *testing.T) {
 	err := errors.New("some error")
 	if ExitCode(err) != 1 {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -110,8 +111,10 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 
 	total := len(scanners)
 	done := make(chan struct{}, total)
+	printerDone := make(chan struct{})
 
 	go func() {
+		defer close(printerDone)
 		count := 0
 		for range done {
 			count++
@@ -138,6 +141,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 
 	wg.Wait()
 	close(done)
+	<-printerDone
 
 	// Sort by source for grouped display
 	sourceOrder := map[string]int{
@@ -1209,18 +1213,35 @@ func updateGo(ver string) error {
 	if err := dl.Run(); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	// Remove old and extract new
+	// Extract to a temp directory first so we don't destroy the existing install
+	// if the archive is corrupted or extraction fails.
+	tmpDir, err := os.MkdirTemp("", "ctdev-go-extract-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	tar := exec.Command("tar", "-C", tmpDir, "-xzf", tmpPath)
+	tar.Stdout = os.Stdout
+	tar.Stderr = os.Stderr
+	if err := tar.Run(); err != nil {
+		return fmt.Errorf("extract failed: %w", err)
+	}
+	// Verify the extraction produced a go directory with a binary
+	if _, err := os.Stat(filepath.Join(tmpDir, "go", "bin", "go")); err != nil {
+		return fmt.Errorf("extracted archive missing go binary: %w", err)
+	}
+	// Safe to replace now
 	rm := exec.Command("sudo", "rm", "-rf", "/usr/local/go")
 	rm.Stdout = os.Stdout
 	rm.Stderr = os.Stderr
 	if err := rm.Run(); err != nil {
 		return fmt.Errorf("remove old go failed: %w", err)
 	}
-	tar := exec.Command("sudo", "tar", "-C", "/usr/local", "-xzf", tmpPath)
-	tar.Stdout = os.Stdout
-	tar.Stderr = os.Stderr
-	if err := tar.Run(); err != nil {
-		return fmt.Errorf("extract failed: %w", err)
+	mv := exec.Command("sudo", "mv", filepath.Join(tmpDir, "go"), "/usr/local/go")
+	mv.Stdout = os.Stdout
+	mv.Stderr = os.Stderr
+	if err := mv.Run(); err != nil {
+		return fmt.Errorf("install new go failed: %w", err)
 	}
 	return nil
 }
