@@ -82,7 +82,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return executeUpdates(selected)
+	return executeUpdates(items, selected)
 }
 
 func scanAll(ctx context.Context) []checklist.UpdateItem {
@@ -829,11 +829,15 @@ func printUpdateList(items []checklist.UpdateItem) {
 	fmt.Printf("\n%s\n", styles.Success.Render(fmt.Sprintf("%d updates available", len(items))))
 }
 
-func executeUpdates(items []checklist.UpdateItem) error {
+func executeUpdates(allItems, items []checklist.UpdateItem) error {
 	// Group items by source
 	bySource := make(map[string][]checklist.UpdateItem)
 	for _, item := range items {
 		bySource[item.Source] = append(bySource[item.Source], item)
+	}
+	allBySource := make(map[string][]checklist.UpdateItem)
+	for _, item := range allItems {
+		allBySource[item.Source] = append(allBySource[item.Source], item)
 	}
 
 	// APT
@@ -856,10 +860,24 @@ func executeUpdates(items []checklist.UpdateItem) error {
 	// Mint Update Manager (kernel and other mintupdate-managed packages)
 	if pkgs := bySource["mintupdate"]; len(pkgs) > 0 {
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d mintupdate packages...", len(pkgs))))
+		selectedNames := make(map[string]bool)
+		for _, p := range pkgs {
+			selectedNames[p.Name] = true
+		}
+		var ignoreNames []string
+		for _, p := range allBySource["mintupdate"] {
+			if !selectedNames[p.Name] {
+				ignoreNames = append(ignoreNames, p.Name)
+			}
+		}
+		args := []string{"mintupdate-cli", "upgrade", "-r", "-y"}
+		if len(ignoreNames) > 0 {
+			args = append(args, "-i", strings.Join(ignoreNames, ","))
+		}
 		if flagDryRun {
-			fmt.Println("  [dry-run] mintupdate-cli upgrade -r -y")
+			fmt.Printf("  [dry-run] sudo %s\n", strings.Join(args, " "))
 		} else {
-			cmd := exec.Command("sudo", "mintupdate-cli", "upgrade", "-r", "-y")
+			cmd := exec.Command("sudo", args...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
