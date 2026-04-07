@@ -249,8 +249,8 @@ var Registry = []Setting{
 	{
 		Name:        "Mouse bindings (xbindkeys)",
 		Category:    "Input Devices",
-		Description: "Installs xbindkeys and xdotool for custom mouse button mappings, and symlinks the config from dotfiles.",
-		TechDetail:  "xbindkeys + xdotool packages, ~/.xbindkeysrc symlink",
+		Description: "Installs xbindkeys and xdotool for custom mouse button mappings.",
+		TechDetail:  "xbindkeys + xdotool packages, ~/.xbindkeysrc",
 		Control:     ControlToggle,
 		Default:     "installed",
 		DetectFunc: func() string {

@@ -65,7 +65,7 @@
 #"rxvt"
 #  Control + b:2 + Release
 
-"xdotool key ctrl+alt+Down"
+"bash -c 'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus dbus-send --session --dest=org.Cinnamon --type=method_call /org/Cinnamon org.Cinnamon.ShowOverview'"
 b:2 + Release
 
 ##################################

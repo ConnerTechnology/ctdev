@@ -235,7 +235,7 @@ func applyWifiSuspendFix() error {
 	return sudoRun("chmod", "755", hookPath)
 }
 
-// applyXbindkeys installs xbindkeys and xdotool, symlinks the config, and sets up autostart.
+// applyXbindkeys installs xbindkeys and xdotool, deploys the config, and sets up autostart.
 func applyXbindkeys() error {
 	if err := applyPackages([]string{"xbindkeys", "xdotool"}); err != nil {
 		return fmt.Errorf("install xbindkeys/xdotool: %w", err)
