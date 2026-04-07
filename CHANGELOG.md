@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.17] - 2026-04-07
+
+### Fixed
+- NVIDIA suspend setup failing on static systemd units (nvidia-persistenced) — skip services without an [Install] section instead of erroring
+
 ## [9.0.16] - 2026-04-07
 
 ### Fixed
