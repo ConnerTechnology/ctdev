@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.18] - 2026-04-07
+
+### Fixed
+- `ctdev update` upgrading all mintupdate packages instead of only the ones selected in the checklist — now uses `-i` ignore flag for unselected packages
+
 ## [9.0.17] - 2026-04-07
 
 ### Fixed
