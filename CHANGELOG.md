@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.19] - 2026-04-07
+
+### Changed
+- Replaced static zsh completion file with Cobra-generated completions — commands, flags, and component names stay in sync automatically
+
+### Fixed
+- `ctdev update` upgrading all mintupdate packages instead of only the ones selected in the checklist — now uses `-i` ignore flag for unselected packages
+
 ## [9.0.18] - 2026-04-07
 
 ### Fixed
