@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
 )
@@ -200,11 +201,14 @@ func applyNvidiaSuspendServices() error {
 		"nvidia-suspend.service",
 		"nvidia-resume.service",
 		"nvidia-hibernate.service",
-		"nvidia-persistenced.service",
 	}
 	for _, svc := range services {
-		// Check if the unit file exists before trying to enable it.
-		if err := exec.Command("systemctl", "list-unit-files", svc).Run(); err != nil {
+		// Skip services that don't exist or are static (no [Install] section).
+		out, err := exec.Command("systemctl", "is-enabled", svc).Output()
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(string(out)) == "static" {
 			continue
 		}
 		if err := sudoRun("systemctl", "enable", svc); err != nil {
