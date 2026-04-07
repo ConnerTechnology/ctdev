@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.16] - 2026-04-07
+
+### Fixed
+- Middle mouse button window overview — use dbus ShowOverview instead of xdotool ctrl+alt+Down (which was mapped to workspace switch, not exposé)
+- xbindkeys dbus commands now set DBUS_SESSION_BUS_ADDRESS explicitly so they work from the xbindkeys daemon
+- Removed redundant symlinked xbindkeys config in favor of the embedded config deployed by `ctdev setup`
+
 ## [9.0.15] - 2026-04-04
 
 ### Added
