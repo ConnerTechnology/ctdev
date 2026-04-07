@@ -12,7 +12,7 @@ import (
 
 func ageInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("age") {
 		fmt.Fprintln(opts.Stdout, "age already installed")
@@ -59,7 +59,7 @@ func ageInstall(ctx context.Context, opts ExecOpts) error {
 
 func ageUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing age...")
 
 	if p.OS == platform.MacOS {

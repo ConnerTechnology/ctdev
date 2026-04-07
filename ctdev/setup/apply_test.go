@@ -103,10 +103,30 @@ func TestGrubVarArgsSedPattern(t *testing.T) {
 	if args[3] != "/etc/default/grub" {
 		t.Errorf("expected /etc/default/grub, got %s", args[3])
 	}
-	// Pattern should be: s/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=10/
-	expected := "s/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=10/"
+	// Pattern uses | as delimiter to avoid conflicts with / in values.
+	expected := "s|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=10|"
 	if args[2] != expected {
 		t.Errorf("got pattern %q, want %q", args[2], expected)
+	}
+}
+
+func TestSedEscape(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"GRUB_TIMEOUT", "GRUB_TIMEOUT"},
+		{"nvidia.NVreg_PreserveVideoMemoryAllocations=1", `nvidia\.NVreg_PreserveVideoMemoryAllocations=1`},
+		{"simple", "simple"},
+		{"a.b*c[d]", `a\.b\*c\[d\]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sedEscape(tt.input)
+			if got != tt.want {
+				t.Errorf("sedEscape(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 

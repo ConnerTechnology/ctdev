@@ -8,7 +8,7 @@ import (
 )
 
 func codexInstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("codex") {
 		fmt.Fprintln(opts.Stdout, "Codex already installed")
@@ -26,7 +26,7 @@ func codexInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func codexUninstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Codex...")
 
 	if sysutil.CommandExists("npm") {

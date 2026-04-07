@@ -12,7 +12,7 @@ import (
 
 func bunInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("bun") {
 		fmt.Fprintln(opts.Stdout, "Bun already installed")
@@ -31,7 +31,7 @@ func bunInstall(ctx context.Context, opts ExecOpts) error {
 
 func bunUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Bun...")
 
 	if p.OS == platform.MacOS {

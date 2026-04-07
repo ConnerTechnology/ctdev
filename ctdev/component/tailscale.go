@@ -10,7 +10,7 @@ import (
 
 func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("tailscale") {
 		fmt.Fprintln(opts.Stdout, "Tailscale already installed")
@@ -71,7 +71,7 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 
 func tailscaleUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Tailscale...")
 
 	switch p.PackageManager {

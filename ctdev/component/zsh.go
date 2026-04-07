@@ -11,7 +11,7 @@ import (
 )
 
 func zshInstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -124,7 +124,7 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func zshUninstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing zsh configuration...")
 
 	home, err := os.UserHomeDir()

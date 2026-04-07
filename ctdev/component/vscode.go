@@ -10,7 +10,7 @@ import (
 
 func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("code") {
 		fmt.Fprintln(opts.Stdout, "VS Code already installed")
@@ -52,7 +52,7 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 
 func vscodeUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing VS Code...")
 
 	if p.OS == platform.MacOS {

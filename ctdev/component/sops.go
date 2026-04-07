@@ -10,7 +10,7 @@ import (
 
 func sopsInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("sops") {
 		fmt.Fprintln(opts.Stdout, "sops already installed")
@@ -46,7 +46,7 @@ func sopsInstall(ctx context.Context, opts ExecOpts) error {
 
 func sopsUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing sops...")
 
 	if p.OS == platform.MacOS {

@@ -11,7 +11,7 @@ import (
 
 func chromeInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("google-chrome") {
 		fmt.Fprintln(opts.Stdout, "Chrome already installed")
@@ -62,7 +62,7 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 
 func chromeUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Chrome...")
 
 	switch p.PackageManager {

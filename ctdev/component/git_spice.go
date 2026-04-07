@@ -14,7 +14,7 @@ import (
 
 func gitSpiceInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && isGitSpiceInstalled() {
 		fmt.Fprintln(opts.Stdout, "git-spice already installed")
@@ -66,7 +66,7 @@ func isGitSpiceInstalled() bool {
 
 func gitSpiceUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing git-spice...")
 
 	if p.OS == platform.MacOS {

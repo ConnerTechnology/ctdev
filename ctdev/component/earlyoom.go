@@ -12,7 +12,7 @@ func earlyoomInstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS == platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	if !opts.Force && sysutil.CommandExists("earlyoom") {
 		fmt.Fprintln(opts.Stdout, "earlyoom already installed")
 		return nil
@@ -31,7 +31,7 @@ func earlyoomUninstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS == platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing earlyoom...")
 	_ = sysutil.ServiceDisable(o, "earlyoom")
 	return sysutil.RemovePackage(o, "earlyoom")

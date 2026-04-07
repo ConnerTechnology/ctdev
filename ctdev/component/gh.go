@@ -10,7 +10,7 @@ import (
 
 func ghInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("gh") {
 		fmt.Fprintln(opts.Stdout, "gh already installed")
@@ -46,7 +46,7 @@ func ghInstall(ctx context.Context, opts ExecOpts) error {
 
 func ghUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing gh...")
 
 	switch p.PackageManager {

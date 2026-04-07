@@ -11,7 +11,7 @@ import (
 
 func slackInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("slack") {
 		fmt.Fprintln(opts.Stdout, "Slack already installed")
@@ -55,7 +55,7 @@ func slackInstall(ctx context.Context, opts ExecOpts) error {
 
 func slackUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Slack...")
 
 	if p.OS == platform.MacOS {

@@ -12,7 +12,7 @@ func chatgptInstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS != platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	if !opts.Force && dirExists("/Applications/ChatGPT.app") {
 		fmt.Fprintln(opts.Stdout, "ChatGPT already installed")
 		return nil
@@ -25,7 +25,7 @@ func chatgptUninstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS != platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing ChatGPT...")
 	return sysutil.BrewCaskRemove(o, "chatgpt")
 }

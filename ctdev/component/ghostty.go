@@ -12,7 +12,7 @@ import (
 
 func ghosttyInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if opts.Force || !sysutil.CommandExists("ghostty") {
 		fmt.Fprintln(opts.Stdout, "Installing Ghostty...")
@@ -61,7 +61,7 @@ func deployGhosttyConfig(o sysutil.Opts) error {
 
 func ghosttyUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Ghostty...")
 
 	// Remove deployed config

@@ -61,21 +61,19 @@ type ExecOpts struct {
 }
 
 func (inst *Component) IsInstalled() bool {
+	// DetectPath is exclusive — if set, only check the filesystem path.
 	if inst.DetectPath != "" {
-		expanded := os.ExpandEnv(inst.DetectPath)
-		if _, err := os.Stat(expanded); err == nil {
-			return true
-		}
+		_, err := os.Stat(os.ExpandEnv(inst.DetectPath))
+		return err == nil
 	}
+	// Check macOS .app bundles or other filesystem paths.
 	for _, app := range inst.DetectApps {
 		if _, err := os.Stat(os.ExpandEnv(app)); err == nil {
 			return true
 		}
 	}
-	if inst.DetectPath != "" {
-		// DetectPath was set but didn't match; don't fall through to command check
-		return false
-	}
+	// Fall through to command check (covers Linux for apps like chrome/vscode
+	// that have DetectApps for macOS and DetectCmd for Linux).
 	cmd := inst.DetectCmd
 	if cmd == "" {
 		cmd = inst.Name

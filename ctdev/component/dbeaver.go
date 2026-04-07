@@ -11,7 +11,7 @@ import (
 
 func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && (sysutil.CommandExists("dbeaver") || sysutil.CommandExists("dbeaver-ce")) {
 		fmt.Fprintln(opts.Stdout, "DBeaver already installed")
@@ -71,7 +71,7 @@ func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 
 func dbeaverUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing DBeaver...")
 
 	switch p.PackageManager {

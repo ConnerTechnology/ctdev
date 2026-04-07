@@ -10,7 +10,7 @@ import (
 
 func doctlInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("doctl") {
 		fmt.Fprintln(opts.Stdout, "doctl already installed")
@@ -46,7 +46,7 @@ func doctlInstall(ctx context.Context, opts ExecOpts) error {
 
 func doctlUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing doctl...")
 
 	if p.OS == platform.MacOS {

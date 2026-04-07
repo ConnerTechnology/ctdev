@@ -12,7 +12,7 @@ func solaarInstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS == platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	if !opts.Force && sysutil.CommandExists("solaar") {
 		fmt.Fprintln(opts.Stdout, "solaar already installed")
 		return nil
@@ -25,7 +25,7 @@ func solaarUninstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS == platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing solaar...")
 	return sysutil.RemovePackage(o, "solaar")
 }

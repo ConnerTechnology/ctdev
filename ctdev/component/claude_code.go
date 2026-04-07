@@ -10,7 +10,7 @@ import (
 )
 
 func claudeCodeInstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if opts.Force || !sysutil.CommandExists("claude") {
 		fmt.Fprintln(opts.Stdout, "Installing Claude Code...")
@@ -53,7 +53,7 @@ func deployClaudeCodeConfigs(o sysutil.Opts) error {
 }
 
 func claudeCodeUninstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Claude Code...")
 
 	home, err := os.UserHomeDir()

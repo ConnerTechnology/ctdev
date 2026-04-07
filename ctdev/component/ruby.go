@@ -15,7 +15,7 @@ const rubyVersion = "3.4.1"
 
 func rubyInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -127,7 +127,7 @@ func isInteractive() bool {
 }
 
 func rubyUninstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Ruby (rbenv)...")
 
 	home, err := os.UserHomeDir()

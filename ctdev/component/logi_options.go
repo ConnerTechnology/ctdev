@@ -13,7 +13,7 @@ func logiOptionsInstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS != platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	if !opts.Force {
 		// Check common app bundle names (case varies by version)
 		for _, name := range []string{"Logi Options+.app", "Logi Options.app", "logioptionsplus.app"} {
@@ -31,7 +31,7 @@ func logiOptionsUninstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS != platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Logi Options+...")
 	return sysutil.BrewCaskRemove(o, "logi-options+")
 }

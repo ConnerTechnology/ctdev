@@ -12,7 +12,7 @@ func claudeDesktopInstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS != platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	if !opts.Force && dirExists("/Applications/Claude.app") {
 		fmt.Fprintln(opts.Stdout, "Claude Desktop already installed")
 		return nil
@@ -25,7 +25,7 @@ func claudeDesktopUninstall(ctx context.Context, opts ExecOpts) error {
 	if platform.Detect().OS != platform.MacOS {
 		return ErrUnsupportedOS
 	}
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Claude Desktop...")
 	return sysutil.BrewCaskRemove(o, "claude")
 }

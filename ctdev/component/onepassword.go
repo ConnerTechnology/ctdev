@@ -11,7 +11,7 @@ import (
 
 func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if p.OS == platform.MacOS {
 		if !opts.Force && sysutil.CommandExists("1password") {
@@ -79,7 +79,7 @@ func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 
 func onePasswordUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing 1Password...")
 
 	if p.OS == platform.MacOS {

@@ -15,7 +15,7 @@ import (
 
 func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("kubectl") {
 		fmt.Fprintln(opts.Stdout, "kubectl already installed")
@@ -85,7 +85,7 @@ func fetchKubectlStableVersion() (string, error) {
 
 func kubectlUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing kubectl...")
 
 	if p.OS == platform.MacOS {

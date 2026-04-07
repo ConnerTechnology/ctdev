@@ -14,7 +14,7 @@ const nodeVersion = "24.0.0"
 
 func nodeInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -64,7 +64,7 @@ func nodeInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func nodeUninstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Node.js (nodenv)...")
 
 	home, err := os.UserHomeDir()

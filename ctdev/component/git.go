@@ -10,7 +10,7 @@ import (
 )
 
 func gitInstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	// Ensure git is installed
 	if !sysutil.CommandExists("git") {
@@ -48,7 +48,7 @@ func gitInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func gitUninstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing git configuration...")
 
 	home, err := os.UserHomeDir()

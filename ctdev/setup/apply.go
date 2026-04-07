@@ -40,12 +40,27 @@ func run(name string, args ...string) error {
 
 // grubVarArgs returns the sed command args to set a GRUB variable.
 // Uses sudo sed -i to replace or append the variable in /etc/default/grub.
+// Uses | as the sed delimiter to avoid conflicts with / in values.
 func grubVarArgs(varName, value string) []string {
 	return []string{
 		"sed", "-i",
-		fmt.Sprintf("s/^%s=.*/%s=%s/", varName, varName, value),
+		fmt.Sprintf("s|^%s=.*|%s=%s|", sedEscape(varName), varName, value),
 		"/etc/default/grub",
 	}
+}
+
+// sedEscape escapes regex metacharacters for use in sed patterns.
+func sedEscape(s string) string {
+	replacer := strings.NewReplacer(
+		`.`, `\.`,
+		`*`, `\*`,
+		`[`, `\[`,
+		`]`, `\]`,
+		`^`, `\^`,
+		`$`, `\$`,
+		`\`, `\\`,
+	)
+	return replacer.Replace(s)
 }
 
 // dconfWriteArgs returns the dconf write command args for a given path and value.

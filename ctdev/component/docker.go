@@ -16,7 +16,7 @@ var dockerPackages = []string{
 
 func dockerInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if !opts.Force && sysutil.CommandExists("docker") {
 		fmt.Fprintln(opts.Stdout, "Docker already installed")
@@ -112,7 +112,7 @@ func addUserToDockerGroup(o sysutil.Opts, w interface{ Write([]byte) (int, error
 
 func dockerUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Docker...")
 
 	switch p.PackageManager {

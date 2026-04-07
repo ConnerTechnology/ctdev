@@ -12,7 +12,7 @@ import (
 // removeGrubCmdlineParam removes a kernel cmdline parameter from /etc/default/grub
 // by stripping " <param>" from GRUB_CMDLINE_LINUX lines.
 func removeGrubCmdlineParam(param string) error {
-	return sudoRun("sed", "-i", fmt.Sprintf("s/ %s//", param), "/etc/default/grub")
+	return sudoRun("sed", "-i", fmt.Sprintf("s| %s||", sedEscape(param)), "/etc/default/grub")
 }
 
 // nvidiaLoaded returns true if the nvidia kernel module is currently loaded.

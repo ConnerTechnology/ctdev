@@ -10,7 +10,7 @@ import (
 )
 
 func tmuxInstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 
 	if opts.Force || !sysutil.CommandExists("tmux") {
 		fmt.Fprintln(opts.Stdout, "Installing tmux...")
@@ -39,7 +39,7 @@ func tmuxInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func tmuxUninstall(ctx context.Context, opts ExecOpts) error {
-	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing tmux...")
 
 	// Remove deployed config
