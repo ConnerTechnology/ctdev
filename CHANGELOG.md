@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.20] - 2026-04-08
+
+### Fixed
+- `scanAll` race condition — printer goroutine could write to stdout after caller returned
+- `updateGo` now extracts to a temp directory and verifies the binary before replacing `/usr/local/go`
+- `sed` metacharacters in GRUB edits — switched to `|` delimiter and escape regex metacharacters (e.g. `.` in `nvidia.NVreg_*` params)
+- `updateHelm`/`updateKubectl`/`updateTerraform` now verify SHA256 checksums before installing
+- VS Code DNF installer no longer uses `bash -c echo` shell string — uses temp file + `sudo cp` instead
+- `IsInstalled` detection logic simplified — `DetectPath` is now a clear early exclusive return
+
+### Changed
+- Added `execOpts()` helper — replaced 66 identical `sysutil.Opts{...}` lines across all 33 component files
+- Added `SudoWriteFile` to sysutil for safely writing root-owned files
+- Extracted `cpsToIntervalMs` and `sedEscape` as testable pure functions
+- Removed dead code: `detectGsettingsString`, `BoolEnv`, `joinArgs`, `CacheDir`, `UpdateInterval`
+- Simplified `detectArch()` no-op switch to `return runtime.GOARCH`
+
 ## [9.0.19] - 2026-04-07
 
 ### Changed
