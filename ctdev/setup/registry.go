@@ -11,7 +11,8 @@ var Registry = []Setting{
 
 	{
 		Name:        "NVIDIA driver signing",
-		Category:    "GPU & Boot",
+		Slug:        "gpu",
+		Category:    "GPU",
 		Description: "Signs the NVIDIA kernel module with a Machine Owner Key so Secure Boot accepts it. Without this, the driver won't load on Secure-Boot-enabled systems.",
 		TechDetail:  "Enrolls a Machine Owner Key and signs the nvidia kernel module.",
 		Control:     ControlToggle,
@@ -22,7 +23,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "NVIDIA suspend services",
-		Category:    "GPU & Boot",
+		Slug:        "gpu",
+		Category:    "GPU",
 		Description: "Enables systemd services that properly suspend and resume the NVIDIA GPU. Prevents black screens or freezes after waking from sleep.",
 		TechDetail:  "systemctl enable nvidia-suspend/resume/hibernate/persistenced",
 		Control:     ControlToggle,
@@ -33,7 +35,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "GRUB menu style",
-		Category:    "GPU & Boot",
+		Slug:        "boot",
+		Category:    "Boot",
 		Description: "Controls how the GRUB boot menu appears. 'menu' always shows it, 'hidden' skips it unless Shift is held, 'countdown' shows a timer.",
 		TechDetail:  "GRUB_TIMEOUT_STYLE in /etc/default/grub",
 		Control:     ControlPicker,
@@ -49,7 +52,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "GRUB timeout",
-		Category:    "GPU & Boot",
+		Slug:        "boot",
+		Category:    "Boot",
 		Description: "How many seconds the GRUB menu waits before booting the default entry.",
 		TechDetail:  "GRUB_TIMEOUT in /etc/default/grub",
 		Control:     ControlSlider,
@@ -61,7 +65,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "OS prober",
-		Category:    "GPU & Boot",
+		Slug:        "boot",
+		Category:    "Boot",
 		Description: "Lets GRUB detect other operating systems (e.g. Windows) and add them to the boot menu. Useful for dual-boot setups.",
 		TechDetail:  "GRUB_DISABLE_OS_PROBER in /etc/default/grub (\"false\" = enabled)",
 		Control:     ControlToggle,
@@ -77,11 +82,12 @@ var Registry = []Setting{
 		ApplyGroup: "grub",
 	},
 
-	// ── Power & Display ────────────────────────────────────────────────
+	// ── Power ──────────────────────────────────────────────────────────
 
 	{
 		Name:        "Power profile",
-		Category:    "Power & Display",
+		Slug:        "power",
+		Category:    "Power",
 		Description: "Sets the system-wide power profile. 'performance' maximizes speed, 'balanced' is the middle ground, 'power-saver' extends battery life.",
 		TechDetail:  "powerprofilesctl set <profile>",
 		Control:     ControlPicker,
@@ -96,7 +102,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Display sleep",
-		Category:    "Power & Display",
+		Slug:        "power",
+		Category:    "Power",
 		Description: "How long the system waits on AC power before turning off the display.",
 		TechDetail:  "dconf /org/cinnamon/settings-daemon/plugins/power/sleep-display-ac",
 		Control:     ControlSlider,
@@ -107,7 +114,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Inactive sleep",
-		Category:    "Power & Display",
+		Slug:        "power",
+		Category:    "Power",
 		Description: "How long the system waits on AC power with no user activity before suspending.",
 		TechDetail:  "dconf /org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout",
 		Control:     ControlSlider,
@@ -120,7 +128,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Lock on suspend",
-		Category:    "Power & Display",
+		Slug:        "power",
+		Category:    "Power",
 		Description: "Whether the screen locks automatically when the system suspends.",
 		TechDetail:  "dconf /org/cinnamon/settings-daemon/plugins/power/lock-on-suspend",
 		Control:     ControlToggle,
@@ -130,7 +139,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Screensaver lock",
-		Category:    "Power & Display",
+		Slug:        "power",
+		Category:    "Power",
 		Description: "Whether the screensaver locks the screen when it activates.",
 		TechDetail:  "dconf /org/cinnamon/desktop/screensaver/lock-enabled",
 		Control:     ControlToggle,
@@ -140,7 +150,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Idle delay",
-		Category:    "Power & Display",
+		Slug:        "power",
+		Category:    "Power",
 		Description: "How long the system waits with no input before activating the screensaver.",
 		TechDetail:  "dconf /org/cinnamon/desktop/session/idle-delay",
 		Control:     ControlSlider,
@@ -150,11 +161,12 @@ var Registry = []Setting{
 		ApplyFunc:   func(v string) error { return applyDconfInt("/org/cinnamon/desktop/session/idle-delay", v) },
 	},
 
-	// ── Input Devices ──────────────────────────────────────────────────
+	// ── Keyboard ───────────────────────────────────────────────────────
 
 	{
 		Name:        "Key repeat delay",
-		Category:    "Input Devices",
+		Slug:        "keyboard",
+		Category:    "Keyboard",
 		Description: "How long a key must be held before it starts repeating.",
 		TechDetail:  "xset r rate <delay> <rate> + gsettings org.cinnamon.desktop.peripherals.keyboard delay",
 		Control:     ControlSlider,
@@ -172,7 +184,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Key repeat rate",
-		Category:    "Input Devices",
+		Slug:        "keyboard",
+		Category:    "Keyboard",
 		Description: "How many characters per second are generated while a key is held down.",
 		TechDetail:  "xset r rate <delay> <rate> + gsettings org.cinnamon.desktop.peripherals.keyboard repeat-interval",
 		Control:     ControlSlider,
@@ -190,7 +203,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "NumLock on boot",
-		Category:    "Input Devices",
+		Slug:        "keyboard",
+		Category:    "Keyboard",
 		Description: "Ensures NumLock is turned on at login. Installs numlockx if needed.",
 		TechDetail:  "dpkg -s numlockx",
 		Control:     ControlToggle,
@@ -205,7 +219,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Mouse accel profile",
-		Category:    "Input Devices",
+		Slug:        "mouse",
+		Category:    "Mouse",
 		Description: "Controls pointer acceleration. 'flat' gives raw 1:1 input, 'adaptive' accelerates based on speed.",
 		TechDetail:  "dconf /org/gnome/desktop/peripherals/mouse/accel-profile",
 		Control:     ControlPicker,
@@ -223,7 +238,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Mouse speed",
-		Category:    "Input Devices",
+		Slug:        "mouse",
+		Category:    "Mouse",
 		Description: "Overall pointer speed multiplier.",
 		TechDetail:  "dconf /org/gnome/desktop/peripherals/mouse/speed",
 		Control:     ControlSlider,
@@ -236,7 +252,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Natural scroll",
-		Category:    "Input Devices",
+		Slug:        "mouse",
+		Category:    "Mouse",
 		Description: "Reverses scroll direction so content moves with your fingers, like a touchscreen.",
 		TechDetail:  "dconf /org/gnome/desktop/peripherals/mouse/natural-scroll",
 		Control:     ControlToggle,
@@ -248,7 +265,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Mouse bindings (xbindkeys)",
-		Category:    "Input Devices",
+		Slug:        "mouse",
+		Category:    "Mouse",
 		Description: "Installs xbindkeys and xdotool for custom mouse button mappings.",
 		TechDetail:  "xbindkeys + xdotool packages, ~/.xbindkeysrc",
 		Control:     ControlToggle,
@@ -262,11 +280,12 @@ var Registry = []Setting{
 		ApplyFunc: func(_ string) error { return applyXbindkeys() },
 	},
 
-	// ── Audio & Bluetooth ──────────────────────────────────────────────
+	// ── Audio ──────────────────────────────────────────────────────────
 
 	{
 		Name:        "Bluetooth/audio packages",
-		Category:    "Audio & Bluetooth",
+		Slug:        "audio",
+		Category:    "Audio",
 		Description: "Installs the core Bluetooth and audio stack: PipeWire, WirePlumber, Bluetooth codecs, and PulseAudio compatibility.",
 		TechDetail:  "apt install pipewire-audio bluez blueman libspa-0.2-bluetooth pulseaudio-utils",
 		Control:     ControlToggle,
@@ -289,7 +308,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Bluetooth service",
-		Category:    "Audio & Bluetooth",
+		Slug:        "bluetooth",
+		Category:    "Bluetooth",
 		Description: "Enables and starts the system Bluetooth daemon so devices can pair and connect.",
 		TechDetail:  "systemctl enable/start bluetooth.service",
 		Control:     ControlToggle,
@@ -299,7 +319,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "WirePlumber LDAC config",
-		Category:    "Audio & Bluetooth",
+		Slug:        "audio",
+		Category:    "Audio",
 		Description: "Copies a WirePlumber config that prioritizes LDAC codec for high-quality Bluetooth audio, then restarts the PipeWire stack.",
 		TechDetail:  "/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf",
 		Control:     ControlToggle,
@@ -309,7 +330,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Event sounds",
-		Category:    "Audio & Bluetooth",
+		Slug:        "audio",
+		Category:    "Audio",
 		Description: "Controls whether desktop event sounds (alerts, notifications) play.",
 		TechDetail:  "dconf /org/cinnamon/desktop/sound/event-sounds",
 		Control:     ControlToggle,
@@ -322,6 +344,7 @@ var Registry = []Setting{
 
 	{
 		Name:        "File manager view",
+		Slug:        "desktop",
 		Category:    "Desktop",
 		Description: "Sets the default view mode in the Nemo file manager.",
 		TechDetail:  "dconf /org/nemo/preferences/default-folder-viewer",
@@ -339,11 +362,12 @@ var Registry = []Setting{
 		},
 	},
 
-	// ── Peripherals & KVM ──────────────────────────────────────────────
+	// ── System ─────────────────────────────────────────────────────────
 
 	{
 		Name:        "Logitech KVM mouse fix",
-		Category:    "Peripherals & KVM",
+		Slug:        "system",
+		Category:    "System",
 		Description: "Installs a udev rule and systemd user service that restarts Solaar when the Logi Bolt receiver reconnects after a KVM switch. Fixes middle-click not working.",
 		TechDetail:  "/etc/udev/rules.d/99-logitech-kvm-fix.rules + ~/.config/systemd/user/solaar-restart.service",
 		Control:     ControlToggle,
@@ -354,7 +378,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "Hide drives",
-		Category:    "Peripherals & KVM",
+		Slug:        "desktop",
+		Category:    "Desktop",
 		Description: "Hides Windows/secondary NVMe partitions from the file manager so they don't clutter the sidebar.",
 		TechDetail:  "/etc/udev/rules.d/99-hide-drives.rules (UDISKS_IGNORE)",
 		Control:     ControlToggle,
@@ -363,12 +388,13 @@ var Registry = []Setting{
 		ApplyFunc:   func(_ string) error { return applyHideDrives() },
 	},
 
-	// ── Network & System ───────────────────────────────────────────────
+	// ── Network ────────────────────────────────────────────────────────
 
 	{
 		Name:        "WiFi suspend fix (MT7925E)",
-		Category:    "Network & System",
-		Description: "Installs a systemd sleep hook that unloads and reloads the MT7925E WiFi driver around suspend. Fixes WiFi not reconnecting after wake.",
+		Slug:        "network",
+		Category:    "Network",
+		Description: "Installs a systemd sleep hook that performs a PCIe-level reset of the MT7925E WiFi adapter around suspend. Fixes WiFi not reconnecting after wake.",
 		TechDetail:  "/usr/lib/systemd/system-sleep/wifi-mt7925 hook script",
 		Control:     ControlToggle,
 		Default:     "installed",
@@ -378,7 +404,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "SSD TRIM timer",
-		Category:    "Network & System",
+		Slug:        "system",
+		Category:    "System",
 		Description: "Enables periodic TRIM for SSDs, which helps maintain write performance and longevity.",
 		TechDetail:  "systemctl enable/start fstrim.timer",
 		Control:     ControlToggle,

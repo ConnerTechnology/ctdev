@@ -106,29 +106,19 @@ func TestInitStates(t *testing.T) {
 	})
 }
 
-func TestRegistryHasPeripheralsCategory(t *testing.T) {
-	var found []string
-	for _, s := range Registry {
-		if s.Category == "Peripherals & KVM" {
-			found = append(found, s.Name)
+func TestRegistryHasAllSlugs(t *testing.T) {
+	slugs := Slugs(Registry)
+	expected := []string{"gpu", "boot", "power", "keyboard", "mouse", "audio", "bluetooth", "desktop", "network", "system"}
+	for _, slug := range expected {
+		found := false
+		for _, s := range slugs {
+			if s == slug {
+				found = true
+				break
+			}
 		}
-	}
-	if len(found) == 0 {
-		t.Fatal("expected at least one setting in 'Peripherals & KVM' category")
-	}
-
-	expected := map[string]bool{
-		"Logitech KVM mouse fix": false,
-		"Hide drives":            false,
-	}
-	for _, name := range found {
-		if _, ok := expected[name]; ok {
-			expected[name] = true
-		}
-	}
-	for name, seen := range expected {
-		if !seen {
-			t.Errorf("expected %q in Peripherals & KVM category", name)
+		if !found {
+			t.Errorf("expected slug %q in registry", slug)
 		}
 	}
 }

@@ -22,9 +22,10 @@ type PickerChoice struct {
 
 type Setting struct {
 	Name        string
-	Category    string
-	Description string       // shown in info modal body
-	TechDetail  string       // underlying commands/paths, shown in modal footer
+	Slug        string       // configure subcommand category: "gpu", "boot", "power", etc.
+	Category    string       // human-readable category for display grouping
+	Description string       // shown in wizard prompt
+	TechDetail  string       // underlying commands/paths, shown as detail
 	Control     ControlType
 	Default     string       // our recommended value as string
 	Slider      *SliderRange
@@ -84,6 +85,30 @@ func InitStates(settings []Setting) []SettingState {
 		}
 	}
 	return states
+}
+
+// FilterBySlug returns only settings matching the given slug.
+func FilterBySlug(settings []Setting, slug string) []Setting {
+	var result []Setting
+	for i := range settings {
+		if settings[i].Slug == slug {
+			result = append(result, settings[i])
+		}
+	}
+	return result
+}
+
+// Slugs returns the ordered list of unique slugs from settings.
+func Slugs(settings []Setting) []string {
+	seen := make(map[string]bool)
+	var slugs []string
+	for _, s := range settings {
+		if s.Slug != "" && !seen[s.Slug] {
+			seen[s.Slug] = true
+			slugs = append(slugs, s.Slug)
+		}
+	}
+	return slugs
 }
 
 // Categories returns the ordered list of unique categories from settings.

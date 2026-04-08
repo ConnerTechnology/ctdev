@@ -8,16 +8,16 @@ Instructions for Claude Code when working with this repository.
 ctdev install <component...>    # Install specific components
 ctdev uninstall <component...>  # Remove specific components
 ctdev update [-y]               # Update system packages and components
-ctdev update --check                   # List available updates without installing
-ctdev update --refresh-keys            # Refresh APT GPG keys before updating
-ctdev info                             # Show system information
+ctdev update --check            # List available updates without installing
+ctdev update --refresh-keys     # Refresh APT GPG keys before updating
+ctdev info                      # Show system information
+ctdev configure                 # Walk through all system configuration
+ctdev configure <category>      # Configure a specific category
+ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
-ctdev setup                     # Run full fresh-install setup
-ctdev setup --show              # Show current system configuration
-ctdev setup --reset             # Reset system configuration to defaults
 ctdev cleanup                   # Run all cleanup tasks (with prompts)
 ```
 

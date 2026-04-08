@@ -19,16 +19,18 @@ var (
 	flagGitName       string
 	flagGitEmail      string
 	flagGitLocal      bool
-	flagGitShow       bool
 	flagGitSigningKey string
 	flagGitGlobal     bool
+	flagConfigShow    bool
 
 	flagAWSProfile string
 )
 
 var configureCmd = &cobra.Command{
 	Use:   "configure",
-	Short: "Configure git, AWS, and other tool settings",
+	Short: "Configure system, git, AWS, and other settings",
+	Long:  "Interactive system configuration wizard. Run without arguments to walk through all categories, or specify a category.",
+	RunE:  runConfigureAll,
 }
 
 var configureAWSCmd = &cobra.Command{
@@ -46,16 +48,52 @@ var configureGitCmd = &cobra.Command{
 }
 
 func init() {
+	configureCmd.PersistentFlags().BoolVar(&flagConfigShow, "show", false, "show current values without changing")
+
 	configureGitCmd.Flags().StringVar(&flagGitName, "name", "", "git user name")
 	configureGitCmd.Flags().StringVar(&flagGitEmail, "email", "", "git user email")
 	configureGitCmd.Flags().BoolVar(&flagGitLocal, "local", false, "apply to current repo only")
 	configureGitCmd.Flags().BoolVar(&flagGitGlobal, "global", false, "force global scope")
-	configureGitCmd.Flags().BoolVar(&flagGitShow, "show", false, "show current git config")
 	configureGitCmd.Flags().StringVar(&flagGitSigningKey, "signing-key", "", "SSH signing key path")
 	configureCmd.AddCommand(configureGitCmd)
 	configureAWSCmd.Flags().StringVar(&flagAWSProfile, "profile", "", "AWS profile name")
 	configureCmd.AddCommand(configureAWSCmd)
+
+	// Register system configuration category subcommands.
+	for _, slug := range slugOrder {
+		slug := slug // capture
+		desc := slugDescriptions[slug]
+		cmd := &cobra.Command{
+			Use:   slug,
+			Short: fmt.Sprintf("Configure %s settings", desc),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if !flagDryRun && !flagConfigShow {
+					if err := ensureSudo(); err != nil {
+						return fmt.Errorf("sudo required: %w", err)
+					}
+				}
+				return runCategoryWizard(slug, flagConfigShow)
+			},
+		}
+		configureCmd.AddCommand(cmd)
+	}
+
 	rootCmd.AddCommand(configureCmd)
+}
+
+func runConfigureAll(cmd *cobra.Command, args []string) error {
+	if !flagDryRun && !flagConfigShow {
+		if err := ensureSudo(); err != nil {
+			return fmt.Errorf("sudo required: %w", err)
+		}
+	}
+
+	for _, slug := range slugOrder {
+		if err := runCategoryWizard(slug, flagConfigShow); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // promptLine reads a single line of input, returning empty string on EOF.
@@ -82,7 +120,7 @@ func promptChoice(defaultVal int) int {
 }
 
 func runConfigureGit(cmd *cobra.Command, args []string) error {
-	if flagGitShow {
+	if flagConfigShow {
 		return showGitConfig()
 	}
 

@@ -12,12 +12,28 @@ import (
 )
 
 const wifiSleepHookScript = `#!/bin/bash
+# MT7925E WiFi suspend fix — PCIe-level reset for reliable reconnect after sleep.
+# The simple modprobe approach is unreliable; a full PCIe unbind/remove/rescan
+# forces the hardware to re-enumerate cleanly on wake.
+DRIVER_DIR="/sys/bus/pci/drivers/mt7925e"
+
 case "$1" in
     pre)
-        modprobe -r mt7925e 2>/dev/null || true
+        for dev in "$DRIVER_DIR"/0000:*; do
+            [ -e "$dev" ] || continue
+            addr=$(basename "$dev")
+            echo "$addr" > "$DRIVER_DIR/unbind" 2>/dev/null || true
+            echo 1 > "/sys/bus/pci/devices/$addr/remove" 2>/dev/null || true
+        done
         ;;
     post)
-        modprobe mt7925e 2>/dev/null || true
+        echo 1 > /sys/bus/pci/rescan
+        sleep 1
+        for dev in "$DRIVER_DIR"/0000:*; do
+            [ -e "$dev" ] || continue
+            addr=$(basename "$dev")
+            echo "$addr" > "$DRIVER_DIR/bind" 2>/dev/null || true
+        done
         ;;
 esac
 `
