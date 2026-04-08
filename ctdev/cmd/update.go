@@ -130,6 +130,12 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		go func() {
 			defer wg.Done()
 			defer func() { done <- struct{}{} }()
+			defer func() {
+				if r := recover(); r != nil {
+					// Swallow panic from individual scanners so one failure
+					// doesn't crash the entire update check.
+				}
+			}()
 			items, err := fn(ctx)
 			if err == nil && len(items) > 0 {
 				mu.Lock()
@@ -433,7 +439,11 @@ func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if err != nil {
 		return nil, nil
 	}
-	current := strings.Fields(strings.TrimSpace(string(currentOut)))[0]
+	fields := strings.Fields(strings.TrimSpace(string(currentOut)))
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	current := fields[0]
 
 	// Get latest available LTS
 	latest := fetchLatestNodeLTS(ctx)

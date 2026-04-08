@@ -145,20 +145,8 @@ func splitLines(s string) []string {
 	return lines
 }
 
-// applyDconfInt writes an integer value to a dconf path.
-func applyDconfInt(path, value string) error {
-	args := dconfWriteArgs(path, value)
-	return run(args[0], args[1:]...)
-}
-
-// applyDconfBool writes a boolean value to a dconf path.
-func applyDconfBool(path, value string) error {
-	args := dconfWriteArgs(path, value)
-	return run(args[0], args[1:]...)
-}
-
-// applyDconfDouble writes a numeric double value to a dconf path (no quoting).
-func applyDconfDouble(path, value string) error {
+// applyDconf writes a value to a dconf path (no quoting — suitable for int, bool, double).
+func applyDconf(path, value string) error {
 	args := dconfWriteArgs(path, value)
 	return run(args[0], args[1:]...)
 }

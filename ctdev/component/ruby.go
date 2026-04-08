@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -98,32 +97,17 @@ func rubyInstall(ctx context.Context, opts ExecOpts) error {
 	}
 	if err := sysutil.Run(o, gemBin, "install", "colorls"); err != nil {
 		fmt.Fprintf(opts.Stdout, "warning: could not install colorls: %v\n", err)
-	} else if !opts.DryRun && isInteractive() {
+	} else if !opts.DryRun {
 		aliasLine := "alias lc='colorls -lA --sd'"
-		fmt.Print("  Add alias 'lc' for colorls to your shell? [Y/n] ")
-		var answer string
-		fmt.Scanln(&answer)
-		if answer == "" || strings.HasPrefix(strings.ToLower(answer), "y") {
-			exportsPath := sysutil.ExportsLocalPath()
-			if added, err := sysutil.AppendLineIfMissing(exportsPath, aliasLine); err != nil {
-				fmt.Fprintf(opts.Stdout, "warning: could not add alias: %v\n", err)
-			} else if added {
-				fmt.Fprintln(opts.Stdout, "  Added alias lc to exports.local.zsh")
-			} else {
-				fmt.Fprintln(opts.Stdout, "  Alias already exists in exports.local.zsh")
-			}
+		exportsPath := sysutil.ExportsLocalPath()
+		if added, err := sysutil.AppendLineIfMissing(exportsPath, aliasLine); err != nil {
+			fmt.Fprintf(opts.Stdout, "warning: could not add alias: %v\n", err)
+		} else if added {
+			fmt.Fprintln(opts.Stdout, "  Added alias lc to exports.local.zsh")
 		}
 	}
 
 	return nil
-}
-
-func isInteractive() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func rubyUninstall(ctx context.Context, opts ExecOpts) error {

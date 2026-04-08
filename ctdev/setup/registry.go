@@ -103,7 +103,7 @@ var Registry = []Setting{
 		Default:     "3600",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
 		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac") },
-		ApplyFunc:   func(v string) error { return applyDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v) },
+		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v) },
 	},
 	{
 		Name:        "Inactive sleep",
@@ -115,7 +115,7 @@ var Registry = []Setting{
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
 		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout") },
 		ApplyFunc: func(v string) error {
-			return applyDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
+			return applyDconf("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
 		},
 	},
 	{
@@ -126,7 +126,7 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "true",
 		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend") },
-		ApplyFunc:   func(v string) error { return applyDconfBool("/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v) },
+		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v) },
 	},
 	{
 		Name:        "Screensaver lock",
@@ -136,7 +136,7 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/desktop/screensaver/lock-enabled") },
-		ApplyFunc:   func(v string) error { return applyDconfBool("/org/cinnamon/desktop/screensaver/lock-enabled", v) },
+		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/desktop/screensaver/lock-enabled", v) },
 	},
 	{
 		Name:        "Idle delay",
@@ -147,7 +147,7 @@ var Registry = []Setting{
 		Default:     "1800",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
 		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/desktop/session/idle-delay") },
-		ApplyFunc:   func(v string) error { return applyDconfInt("/org/cinnamon/desktop/session/idle-delay", v) },
+		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/desktop/session/idle-delay", v) },
 	},
 
 	// ── Keyboard ───────────────────────────────────────────────────────
@@ -231,7 +231,7 @@ var Registry = []Setting{
 		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: 0.05, Unit: ""},
 		DetectFunc:  detectMouseSpeed,
 		ApplyFunc: func(v string) error {
-			return applyDconfDouble("/org/gnome/desktop/peripherals/mouse/speed", v)
+			return applyDconf("/org/gnome/desktop/peripherals/mouse/speed", v)
 		},
 	},
 	{
@@ -243,7 +243,7 @@ var Registry = []Setting{
 		Default:     "true",
 		DetectFunc:  detectNaturalScroll,
 		ApplyFunc: func(v string) error {
-			return applyDconfBool("/org/gnome/desktop/peripherals/mouse/natural-scroll", v)
+			return applyDconf("/org/gnome/desktop/peripherals/mouse/natural-scroll", v)
 		},
 	},
 	{
@@ -315,7 +315,7 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/desktop/sound/event-sounds") },
-		ApplyFunc:   func(v string) error { return applyDconfBool("/org/cinnamon/desktop/sound/event-sounds", v) },
+		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/desktop/sound/event-sounds", v) },
 	},
 
 	// ── Desktop ────────────────────────────────────────────────────────

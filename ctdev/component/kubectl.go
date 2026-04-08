@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +70,7 @@ func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func fetchKubectlStableVersion() (string, error) {
-	resp, err := http.Get("https://dl.k8s.io/release/stable.txt")
+	resp, err := sysutil.HTTPClient().Get("https://dl.k8s.io/release/stable.txt")
 	if err != nil {
 		return "", fmt.Errorf("fetch kubectl stable version: %w", err)
 	}
