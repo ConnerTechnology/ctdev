@@ -1,6 +1,7 @@
 package sysutil
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +27,25 @@ func ServiceDisable(o Opts, name string) error {
 // ServiceStart starts a systemd service.
 func ServiceStart(o Opts, name string) error {
 	return SudoRun(o, "systemctl", "start", name+".service")
+}
+
+// SudoWriteFile writes content to a root-owned path via a temp file and sudo cp.
+func SudoWriteFile(o Opts, content, path string) error {
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "[dry-run] write %s\n", path)
+		return nil
+	}
+	tmp, err := os.CreateTemp("", "ctdev-write-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		return err
+	}
+	tmp.Close()
+	return SudoRun(o, "cp", tmp.Name(), path)
 }
 
 // SafeSymlink creates a symlink at dst pointing to src.

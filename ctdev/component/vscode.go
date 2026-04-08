@@ -40,8 +40,8 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.SudoRun(o, "rpm", "--import", "https://packages.microsoft.com/keys/microsoft.asc"); err != nil {
 			return fmt.Errorf("import microsoft GPG key: %w", err)
 		}
-		repoContent := "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc"
-		if err := sysutil.SudoRun(o, "bash", "-c", fmt.Sprintf("echo -e '%s' > /etc/yum.repos.d/vscode.repo", repoContent)); err != nil {
+		repoContent := "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc\n"
+		if err := sysutil.SudoWriteFile(o, repoContent, "/etc/yum.repos.d/vscode.repo"); err != nil {
 			return fmt.Errorf("add vscode repo: %w", err)
 		}
 		return sysutil.SudoRun(o, "dnf", "install", "-y", "code")
