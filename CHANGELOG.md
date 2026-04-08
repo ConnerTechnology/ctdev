@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.1.0] - 2026-04-08
+
+### Added
+- `ctdev configure` — interactive wizard that walks through all system configuration categories
+- `ctdev configure <category>` subcommands: gpu, boot, power, keyboard, mouse, audio, bluetooth, desktop, network, system
+- `ctdev configure --show` — show current system configuration (read-only)
+- WiFi suspend fix now uses PCIe-level reset with dynamic PCI address discovery
+
+### Fixed
+- `nodenv version` returning empty output would panic and crash `ctdev update`
+- Ruby installer interactive prompt deadlocked when running under the progress TUI
+- `kubectl` stable version fetch had no HTTP timeout — could hang indefinitely
+- Scanner goroutines in `ctdev update` now recover from panics instead of crashing the process
+- `promptLine` scanner leak — was creating a new `bufio.Scanner` per call, could drop buffered input
+
+### Changed
+- **Breaking:** Removed `ctdev setup` command — replaced by `ctdev configure`
+- Collapsed `applyDconfInt`/`applyDconfBool`/`applyDconfDouble` into single `applyDconf`
+- Removed dead code: `internal/shell` package, `state.LoadConfig`, `Setting.TechDetail`, duplicate `nvidiaLoaded()`
+- Settings registry now uses `Slug` field for category routing
+- Added tests for `formatSliderVal`, `FilterBySlug`, `Slugs`, `SudoWriteFile`, registry slug coverage
+
 ## [9.0.20] - 2026-04-08
 
 ### Fixed
