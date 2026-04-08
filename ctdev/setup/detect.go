@@ -195,16 +195,24 @@ func detectNvidiaSuspendServices() string {
 		"nvidia-resume.service",
 		"nvidia-hibernate.service",
 	}
-	var active []string
+	var ready []string
 	for _, svc := range services {
-		if detectSystemdService(svc) == "active" {
-			active = append(active, svc)
+		out, err := exec.Command("systemctl", "is-enabled", svc).Output()
+		if err != nil {
+			continue
+		}
+		status := strings.TrimSpace(string(out))
+		// "enabled" means explicitly enabled; "static" means the service has
+		// no [Install] section and is activated by dependency (sleep targets),
+		// which is the normal state for NVIDIA suspend services.
+		if status == "enabled" || status == "static" {
+			ready = append(ready, svc)
 		}
 	}
-	if len(active) == len(services) {
+	if len(ready) == len(services) {
 		return "enabled"
 	}
-	if len(active) == 0 {
+	if len(ready) == 0 {
 		return "disabled"
 	}
 	return "partial"

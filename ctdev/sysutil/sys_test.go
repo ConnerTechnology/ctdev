@@ -1,6 +1,7 @@
 package sysutil
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,6 +35,20 @@ func TestSafeSymlinkCreates(t *testing.T) {
 	}
 	if target != src {
 		t.Errorf("expected link to %s, got %s", src, target)
+	}
+}
+
+func TestSudoWriteFileDryRun(t *testing.T) {
+	var buf bytes.Buffer
+	o := Opts{Stdout: &buf, DryRun: true}
+	err := SudoWriteFile(o, "test content", "/some/path")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := buf.String()
+	want := "[dry-run] write /some/path\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 

@@ -123,6 +123,59 @@ func TestRegistryHasAllSlugs(t *testing.T) {
 	}
 }
 
+func TestFilterBySlug(t *testing.T) {
+	settings := []Setting{
+		{Name: "a", Slug: "gpu"},
+		{Name: "b", Slug: "boot"},
+		{Name: "c", Slug: "gpu"},
+		{Name: "d", Slug: ""},
+	}
+	t.Run("match", func(t *testing.T) {
+		got := FilterBySlug(settings, "gpu")
+		if len(got) != 2 {
+			t.Errorf("expected 2, got %d", len(got))
+		}
+	})
+	t.Run("no match", func(t *testing.T) {
+		got := FilterBySlug(settings, "network")
+		if len(got) != 0 {
+			t.Errorf("expected 0, got %d", len(got))
+		}
+	})
+	t.Run("empty slug", func(t *testing.T) {
+		got := FilterBySlug(settings, "")
+		if len(got) != 1 {
+			t.Errorf("expected 1 (slug=\"\"), got %d", len(got))
+		}
+	})
+}
+
+func TestSlugs(t *testing.T) {
+	settings := []Setting{
+		{Slug: "gpu"},
+		{Slug: "boot"},
+		{Slug: "gpu"},
+		{Slug: ""},
+	}
+	slugs := Slugs(settings)
+	if len(slugs) != 2 {
+		t.Errorf("expected 2 unique non-empty slugs, got %d: %v", len(slugs), slugs)
+	}
+	if slugs[0] != "gpu" || slugs[1] != "boot" {
+		t.Errorf("expected [gpu boot], got %v", slugs)
+	}
+}
+
+func TestRegistrySlugCounts(t *testing.T) {
+	// Ensure each slug has at least one setting — catches typos in slug assignment.
+	for _, slug := range Slugs(Registry) {
+		settings := FilterBySlug(Registry, slug)
+		if len(settings) == 0 {
+			t.Errorf("slug %q has no settings", slug)
+		}
+	}
+}
+
 func TestLogitechKVMFixHasHardwareFn(t *testing.T) {
 	for _, s := range Registry {
 		if s.Name == "Logitech KVM mouse fix" {

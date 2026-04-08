@@ -25,7 +25,6 @@ type Setting struct {
 	Slug        string       // configure subcommand category: "gpu", "boot", "power", etc.
 	Category    string       // human-readable category for display grouping
 	Description string       // shown in wizard prompt
-	TechDetail  string       // underlying commands/paths, shown as detail
 	Control     ControlType
 	Default     string       // our recommended value as string
 	Slider      *SliderRange

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 // removeGrubCmdlineParam removes a kernel cmdline parameter from /etc/default/grub
@@ -15,23 +14,9 @@ func removeGrubCmdlineParam(param string) error {
 	return sudoRun("sed", "-i", fmt.Sprintf("s| %s||", sedEscape(param)), "/etc/default/grub")
 }
 
-// nvidiaLoaded returns true if the nvidia kernel module is currently loaded.
-func nvidiaLoaded() bool {
-	out, err := exec.Command("lsmod").Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "nvidia ") {
-			return true
-		}
-	}
-	return false
-}
-
 // ResetLinuxDefaults resets Linux Mint system settings back to their defaults.
 func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
-	hasNvidia := nvidiaLoaded()
+	hasNvidia := detectNvidiaLoaded()
 
 	if dryRun {
 		fmt.Fprintln(w, "[DRY-RUN] Would reset Power, Screensaver, Keyboard, Mouse, Sound, Nemo settings")

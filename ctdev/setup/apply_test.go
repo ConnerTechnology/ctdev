@@ -119,6 +119,8 @@ func TestSedEscape(t *testing.T) {
 		{"nvidia.NVreg_PreserveVideoMemoryAllocations=1", `nvidia\.NVreg_PreserveVideoMemoryAllocations=1`},
 		{"simple", "simple"},
 		{"a.b*c[d]", `a\.b\*c\[d\]`},
+		{"^start$end", `\^start\$end`},
+		{`back\slash`, `back\\slash`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

@@ -96,11 +96,12 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var stdinScanner = bufio.NewScanner(os.Stdin)
+
 // promptLine reads a single line of input, returning empty string on EOF.
 func promptLine() string {
-	scanner := bufio.NewScanner(os.Stdin)
-	if scanner.Scan() {
-		return strings.TrimSpace(scanner.Text())
+	if stdinScanner.Scan() {
+		return strings.TrimSpace(stdinScanner.Text())
 	}
 	return ""
 }
