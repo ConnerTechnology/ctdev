@@ -43,17 +43,19 @@ ctdev/                 Go module root
   state/               Install markers and XDG state
   sysutil/             System utilities (packages, downloads, deploy, exec)
   tui/                 Bubble Tea UI models
-  internal/shell/      Shell execution wrapper
 ```
 
 ## Conventions
 
 - Use `inst` as the Go receiver name (not single letters)
-- Use `sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}` for all sysutil calls
+- Every `sysutil` shell-out takes `(ctx context.Context, o sysutil.Opts, ...)` — thread `ctx` from the caller so Ctrl-C cancels in-flight work
+- Build `sysutil.Opts` via `execOpts(opts)` — one-liner that copies Stdout and DryRun
+- Use `alreadyInstalled("<name>")` for install-time "already present?" checks (delegates to the registry's `IsInstalled()`) instead of re-checking paths/commands inline
+- For unsupported package-manager branches, return `unsupportedPMError("<component>", p.PackageManager)` so the executor's `errors.Is(err, ErrUnsupportedOS)` maps it to Skipped
 - Config files are embedded via `all:configs` in `go:embed` (the `all:` prefix is required to include dot-files like `.zshrc`)
 - Deploy configs with `sysutil.DeployFileFromFS` — it handles backup-on-diff and replaces dangling symlinks
 - Components with configs use Phase 1/Phase 2: Phase 1 installs the binary (skip if exists), Phase 2 always deploys configs
-- Return `ErrUnsupportedOS` for unsupported platforms
+- For `.deb` installs on apt, use `installDebWithDepFix(ctx, o, debPath, pkgName)` — runs dpkg, recovers with `apt-get -f`, and verifies via `IsPackageInstalled` so corrupt/wrong-arch `.deb`s don't silently report success
 - All installers accept `ctx context.Context` as first parameter
 
 ## Adding a new component
@@ -73,9 +75,9 @@ import (
 
 func nameInstall(ctx context.Context, opts ExecOpts) error {
     p := platform.Detect()
-    o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+    o := execOpts(opts)
 
-    if !opts.Force && sysutil.CommandExists("name") {
+    if !opts.Force && alreadyInstalled("name") {
         fmt.Fprintln(opts.Stdout, "name already installed")
         return nil
     }
@@ -83,19 +85,17 @@ func nameInstall(ctx context.Context, opts ExecOpts) error {
     fmt.Fprintln(opts.Stdout, "Installing name...")
 
     switch p.PackageManager {
-    case "brew":
-        return sysutil.InstallPackage(o, "name")
-    case "apt":
-        return sysutil.InstallPackage(o, "name")
+    case "brew", "apt":
+        return sysutil.InstallPackage(ctx, o, "name")
     default:
-        return fmt.Errorf("name not supported for: %s", p.PackageManager)
+        return unsupportedPMError("name", p.PackageManager)
     }
 }
 
 func nameUninstall(ctx context.Context, opts ExecOpts) error {
-    o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+    o := execOpts(opts)
     fmt.Fprintln(opts.Stdout, "Removing name...")
-    return sysutil.RemovePackage(o, "name")
+    return sysutil.RemovePackage(ctx, o, "name")
 }
 ```
 
@@ -119,6 +119,18 @@ if opts.Force || !sysutil.CommandExists("name") {
 
 // Phase 2: Always deploy configs (keeps dotfiles in sync)
 sysutil.DeployFileFromFS(Configs, "configs/<name>/file", dest)
+```
+
+If the package is installed via a downloaded `.deb`:
+```go
+tmp, err := os.CreateTemp("", "name-*.deb")
+if err != nil { return err }
+defer os.Remove(tmp.Name())
+tmp.Close()
+if err := sysutil.DownloadFile(ctx, debURL, tmp.Name()); err != nil {
+    return fmt.Errorf("download name: %w", err)
+}
+return installDebWithDepFix(ctx, o, tmp.Name(), "name-pkg")
 ```
 
 ## Git commits

@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.2.0] - 2026-04-23
+
+### Fixed
+- **Ctrl-C now actually cancels in-flight work.** `sysutil.Run`/`SudoRun` and every wrapper (`InstallPackage`, `BrewCask*`, `APTUpdate`, `AddAPTKeyring`, `AddAPTSource`, `Service*`, `InstallBinary`, `SudoWriteFile`, `DownloadGitHubBinary`) now take `ctx` and use `exec.CommandContext`. `sysutil.DownloadFile`, `sysutil.GitHubLatestVersion`, `fetchGoReleases`, `fetchGitHubReleaseTags`, `fetchLatestKubectlVersion`, and `isGitSpiceInstalled` all honor ctx too — previously any of these could ignore Ctrl-C for up to 60s.
+- `ctdev update --refresh-keys` was silently ineffective for VS Code — `aptKeyRefreshers["vscode"]` wrote the keyring to `/usr/share/keyrings/packages.microsoft.gpg` while APT's `signed-by=` points at `/etc/apt/trusted.gpg.d/packages.microsoft.gpg`. Paths now match, plus a test locks in the invariant across all refreshers.
+- `fonts` Linux install used a predictable `/tmp/<name>.zip` path with no cleanup on extract failure. Now uses `os.MkdirTemp` with a `defer RemoveAll`.
+- `fonts` component's `IsInstalled()` was always false on macOS because `DetectPath` is exclusive — Linux and macOS font paths both live in `DetectApps` now.
+- `nodenv install` / `rbenv install` under `--force` no longer fail when the target runtime version is already present (added `--skip-existing`).
+- Chrome and Slack `.deb` installs no longer silently treat an `apt-get -f`-fixed-but-still-broken install as success. Shared `installDebWithDepFix` helper verifies via `dpkg -s` after the fix.
+- `ghostty` (dnf) and `tailscale`/`chrome`/`docker`/`dbeaver`/`gh`/`vscode`/`ruby`/`terraform` unsupported-PM branches now return wrapped `ErrUnsupportedOS` via `unsupportedPMError`, so the executor reports them as Skipped instead of Failed.
+- `git-spice` uninstall no longer deletes `/usr/local/bin/gs` without confirming it's actually git-spice (vs Ghostscript).
+- `terraform` uninstall correctly handles pacman via explicit switch; `IsPackageInstalled` now supports pacman (`pacman -Qi`).
+- `sysutil.DownloadFile` removes the partial destination file on copy failure instead of leaving zero/partial bytes behind.
+- `state.MarkerStore.Save` writes atomically (temp file + rename), so a kill mid-write no longer corrupts the marker and breaks the next `Load`.
+- macOS `defaults write` failures propagate — previously every `run(...)` error was silently dropped; now each failure is logged and `ApplyMacOSDefaults` returns a joined error.
+- GRUB config append now guarantees a trailing newline on the preceding line, so the appended variable can't merge with the last existing line.
+- Progress TUI progress bar now reaches 100% when the final component is skipped (was stuck because `InstallSkipMsg` didn't call `SetPercent`).
+- `update --refresh-keys` no longer runs under `--check` (which is read-only).
+- `configure <category>` now prints a notice when hardware gating yields zero applicable settings (was a silent no-op).
+- `git uninstall` only prints `.gitconfig.local preserved` when that file actually exists.
+- `picker.GetResult()` returns selected components in display order (was random map iteration).
+- `Go` tarball download now verifies sha256 from `go.dev/dl/?mode=json` before replacing `/usr/local/go`.
+- `TestRun_CancelInterruptsChild` strengthened: previously could pass even when ctx-cancel didn't kill a running child.
+
+### Changed
+- **ApplyFunc / PostApplyHook signatures**: `setup.Setting.ApplyFunc` now `(ctx, sysutil.Opts, value) error` (was `(value) error`); `PostApplyHook` now `(ctx, sysutil.Opts) error`. Setup apply helpers go through `sysutil.Run`/`SudoRun` instead of a private package-level `run`/`sudoRun`.
+- `ctdev update` flow and `updateHelm`/`updateKubectl`/`updateTerraform`/`updateGo` helpers all route shell-out through `sysutil` — `--dry-run` is now honored for update paths that previously ignored it, and output routing is uniform.
+- `configure` wizard subcommands now derived from `setup.Slugs(setup.Registry)` at init time instead of a hand-kept `slugOrder` list — adding a new setting slug auto-registers the subcommand.
+- `cleanup` prompt reads stdin through the shared `promptLine` scanner instead of `fmt.Scanln`, matching every other prompt path.
+- `applyXbindkeys` deploys `.xbindkeysrc` + `.desktop` via `sysutil.DeployFileFromFS` so pre-existing user customizations get backed up on diff instead of silently overwritten.
+- `progress` TUI extracted `runOneComponent` + `msgSender` interface for testability; `runWithProgress` now waits on a `workerDone` channel so install goroutines can't outlive the function.
+- Shared `installDebWithDepFix`, `unsupportedPMError`, and `alreadyInstalled` helpers in `component` — consolidated duplicate patterns.
+
+### Added
+- `component.RegisterForTest`, `cmd.captureSender` (fake `tea.Program.Send`), PATH-stubbed fake-binary helper for component tests, and a `captureStdout` helper for wizard output.
+- Tests: ctx-cancel termination (sysutil), chrome/slack/terraform install paths, git-spice PATH-based detection, picker determinism, progress bar skip-percent, deploy-order stability for zsh, APT keyring path invariant.
+
 ## [9.1.0] - 2026-04-08
 
 ### Added

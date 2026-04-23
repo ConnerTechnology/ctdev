@@ -10,10 +10,8 @@ curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/inst
 
 ## Getting Started
 
-After installing, run the full system setup:
-
 ```bash
-ctdev setup                     # Configure OS defaults, drivers, services
+ctdev configure                 # Walk through all system configuration categories
 ctdev install zsh git gh        # Install components you need
 ctdev configure git             # Set your git name, email, and signing key
 ```
@@ -29,13 +27,13 @@ ctdev update [-y]               # Update system packages and components
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
 ctdev info                      # Show system information
+ctdev configure                 # Walk through all system configuration
+ctdev configure <category>      # Configure a single category (gpu, boot, power, ...)
+ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
-ctdev setup                     # Set up and configure your OS
-ctdev setup --show              # Show current system configuration
-ctdev setup --reset             # Reset system configuration to defaults
 ctdev cleanup                   # Run all cleanup tasks
 ```
 

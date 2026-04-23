@@ -80,11 +80,11 @@ sudo update-initramfs -u
 sudo reboot
 ```
 
-**2. NVIDIA suspend stability** (automated by `ctdev setup`)
+**2. NVIDIA suspend stability** (automated by `ctdev configure gpu` / `ctdev configure boot`)
 
-`ctdev setup` handles these on NVIDIA systems:
-- NVIDIA suspend/resume/hibernate systemd services
-- GRUB kernel parameters for video memory preservation
+`ctdev configure` handles these on NVIDIA systems:
+- NVIDIA suspend/resume/hibernate systemd services (`ctdev configure gpu`)
+- GRUB kernel parameters for video memory preservation (`ctdev configure boot`)
 
 To check current status: `ctdev gpu info`
 
@@ -103,6 +103,8 @@ sudo nvme smart-log /dev/nvme0n1 | grep unsafe     # Unsafe shutdown count
 **Pure prompt missing:** Delete `~/.zsh/pure` and reinstall: `ctdev install zsh --force`.
 
 **Configs not updating:** `ctdev install zsh` always re-deploys .zshrc, aliases, exports, completions, and path configs even when oh-my-zsh is already installed.
+
+**Cancel a hung install/update:** Ctrl-C terminates the currently running subprocess (apt-get, dkms, large downloads, etc.) thanks to ctx plumbing through the shell-out layer.
 
 ## Node/Ruby
 
