@@ -24,7 +24,7 @@ func logiOptionsInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 	fmt.Fprintln(opts.Stdout, "Installing Logi Options+...")
-	return sysutil.BrewCaskInstall(o, "logi-options+")
+	return sysutil.BrewCaskInstall(ctx, o, "logi-options+")
 }
 
 func logiOptionsUninstall(ctx context.Context, opts ExecOpts) error {
@@ -33,5 +33,5 @@ func logiOptionsUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Logi Options+...")
-	return sysutil.BrewCaskRemove(o, "logi-options+")
+	return sysutil.BrewCaskRemove(ctx, o, "logi-options+")
 }

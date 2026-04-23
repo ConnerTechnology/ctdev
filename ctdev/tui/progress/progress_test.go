@@ -73,10 +73,35 @@ func TestProgressModelInstallSkip(t *testing.T) {
 		t.Error("expected docker to be running")
 	}
 
-	updated, _ = m.Update(InstallSkipMsg{Name: "docker"})
+	updated, cmd := m.Update(InstallSkipMsg{Name: "docker"})
 	m = updated.(*Model)
 	if m.components[0].Status != StatusSkipped {
 		t.Error("expected docker to be skipped")
+	}
+	if cmd == nil {
+		t.Error("expected a progress-bar SetPercent command on skip")
+	}
+	if got := m.donePercent(); got != 1.0 {
+		t.Errorf("donePercent after sole skip = %f, want 1.0", got)
+	}
+}
+
+func TestProgressModelMixedDoneAndSkip(t *testing.T) {
+	val := New([]string{"a", "b", "c"}, ModeInstall)
+	m := &val
+
+	updated, _ := m.Update(InstallDoneMsg{Name: "a", Duration: time.Second})
+	m = updated.(*Model)
+	updated, _ = m.Update(InstallSkipMsg{Name: "b"})
+	m = updated.(*Model)
+	// 2 of 3 resolved (1 done, 1 skipped)
+	if got := m.donePercent(); got != 2.0/3.0 {
+		t.Errorf("donePercent = %f, want %f", got, 2.0/3.0)
+	}
+	updated, _ = m.Update(InstallSkipMsg{Name: "c"})
+	m = updated.(*Model)
+	if got := m.donePercent(); got != 1.0 {
+		t.Errorf("donePercent after all resolved = %f, want 1.0", got)
 	}
 }
 

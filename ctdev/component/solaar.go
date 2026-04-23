@@ -18,7 +18,7 @@ func solaarInstall(ctx context.Context, opts ExecOpts) error {
 		return nil
 	}
 	fmt.Fprintln(opts.Stdout, "Installing solaar...")
-	return sysutil.InstallPackage(o, "solaar")
+	return sysutil.InstallPackage(ctx, o, "solaar")
 }
 
 func solaarUninstall(ctx context.Context, opts ExecOpts) error {
@@ -27,5 +27,5 @@ func solaarUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing solaar...")
-	return sysutil.RemovePackage(o, "solaar")
+	return sysutil.RemovePackage(ctx, o, "solaar")
 }

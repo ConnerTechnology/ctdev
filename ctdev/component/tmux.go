@@ -14,7 +14,7 @@ func tmuxInstall(ctx context.Context, opts ExecOpts) error {
 
 	if opts.Force || !sysutil.CommandExists("tmux") {
 		fmt.Fprintln(opts.Stdout, "Installing tmux...")
-		if err := sysutil.InstallPackage(o, "tmux"); err != nil {
+		if err := sysutil.InstallPackage(ctx, o, "tmux"); err != nil {
 			return err
 		}
 	}
@@ -52,5 +52,5 @@ func tmuxUninstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
-	return sysutil.RemovePackage(o, "tmux")
+	return sysutil.RemovePackage(ctx, o, "tmux")
 }

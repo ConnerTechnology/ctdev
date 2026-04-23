@@ -79,6 +79,36 @@ func TestIsInstalled_DetectApps(t *testing.T) {
 			t.Error("expected installed via command fallback for 'go'")
 		}
 	})
+
+	t.Run("any of multiple paths matches", func(t *testing.T) {
+		tmp := t.TempDir()
+		present := tmp + "/present.ttf"
+		if err := os.WriteFile(present, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		c := Component{
+			Name:       "nonexistent_command_xyz",
+			DetectApps: []string{"/no/such/absent.ttf", present},
+		}
+		if !c.IsInstalled() {
+			t.Error("expected installed when any DetectApps path exists")
+		}
+	})
+}
+
+func TestFontsRegistry_NoExclusiveDetectPath(t *testing.T) {
+	// DetectPath is exclusive (see IsInstalled) so a cross-platform component
+	// like fonts must list all candidate paths in DetectApps, not DetectPath.
+	c := FindByName("fonts")
+	if c == nil {
+		t.Fatal("fonts component missing from registry")
+	}
+	if c.DetectPath != "" {
+		t.Errorf("fonts should not use DetectPath (exclusive); got %q", c.DetectPath)
+	}
+	if len(c.DetectApps) < 2 {
+		t.Errorf("fonts should list Linux and macOS font paths in DetectApps; got %v", c.DetectApps)
+	}
 }
 
 func TestIsInstalled_DetectCmd(t *testing.T) {

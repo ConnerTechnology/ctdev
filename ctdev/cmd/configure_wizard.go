@@ -1,17 +1,21 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 )
 
 // slugDescriptions maps slugs to human-readable descriptions for the wizard header.
+// New slugs don't need an entry — the raw slug is used as a fallback.
 var slugDescriptions = map[string]string{
 	"gpu":       "GPU & NVIDIA",
 	"boot":      "Boot (GRUB)",
@@ -25,10 +29,18 @@ var slugDescriptions = map[string]string{
 	"system":    "System",
 }
 
-// slugOrder defines the order categories are walked through.
-var slugOrder = []string{
-	"gpu", "boot", "power", "keyboard", "mouse",
-	"audio", "bluetooth", "desktop", "network", "system",
+// slugOrder is derived from setup.Registry so adding a setting with a brand
+// new slug automatically yields a matching `ctdev configure <slug>` subcommand
+// and wizard step — no hand-kept list to drift from.
+var slugOrder = setup.Slugs(setup.Registry)
+
+// slugDescription returns a human-readable label for a slug, falling back to
+// the slug itself when no mapping exists.
+func slugDescription(slug string) string {
+	if d := slugDescriptions[slug]; d != "" {
+		return d
+	}
+	return slug
 }
 
 var wizardLabelStyle = lipgloss.NewStyle().Foreground(styles.Subtle).Width(26)
@@ -36,20 +48,25 @@ var wizardValueStyle = lipgloss.NewStyle().Foreground(styles.Bright)
 var wizardHeaderStyle = lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
 
 // runCategoryWizard runs the interactive wizard for a single category slug.
-func runCategoryWizard(slug string, showOnly bool) error {
-	settings := setup.FilterBySlug(setup.Registry, slug)
+func runCategoryWizard(ctx context.Context, slug string, showOnly bool) error {
+	return runCategoryWizardOn(ctx, setup.Registry, slug, showOnly)
+}
+
+// runCategoryWizardOn is the testable core of runCategoryWizard — it takes an
+// explicit registry so tests can supply a fixture without mutating global
+// state.
+func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug string, showOnly bool) error {
+	settings := setup.FilterBySlug(registry, slug)
 	settings = setup.FilterByHardware(settings)
 	if len(settings) == 0 {
+		fmt.Printf("  %s\n\n",
+			styles.Dimmed.Render(fmt.Sprintf("No applicable %s settings on this hardware.", slugDescription(slug))))
 		return nil
 	}
 
 	states := setup.InitStates(settings)
 
-	desc := slugDescriptions[slug]
-	if desc == "" {
-		desc = slug
-	}
-	fmt.Println(wizardHeaderStyle.Render(desc))
+	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug)))
 	fmt.Println()
 
 	if showOnly {
@@ -98,7 +115,7 @@ func runCategoryWizard(slug string, showOnly bool) error {
 		}
 	}
 
-	return applySettings(states, flagForce, flagDryRun, flagVerbose)
+	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
 
 // showSetting displays the current value of a setting (read-only).
@@ -279,7 +296,8 @@ func formatSliderVal(val, step float64) string {
 }
 
 // applySettings applies changed settings, running post-apply hooks for groups.
-func applySettings(states []setup.SettingState, force, dryRun, verbose bool) error {
+func applySettings(ctx context.Context, states []setup.SettingState, force, dryRun, verbose bool) error {
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: dryRun}
 	appliedGroups := make(map[string]bool)
 	var applied, failed int
 
@@ -302,7 +320,7 @@ func applySettings(states []setup.SettingState, force, dryRun, verbose bool) err
 		}
 
 		if s.ApplyFunc != nil {
-			if err := s.ApplyFunc(states[i].DesiredValue); err != nil {
+			if err := s.ApplyFunc(ctx, o, states[i].DesiredValue); err != nil {
 				fmt.Printf("  ✗ %s: %v\n", s.Name, err)
 				failed++
 				continue
@@ -319,7 +337,7 @@ func applySettings(states []setup.SettingState, force, dryRun, verbose bool) err
 	if !dryRun {
 		for group := range appliedGroups {
 			if hook, ok := setup.PostApplyHooks[group]; ok {
-				if err := hook(); err != nil {
+				if err := hook(ctx, o); err != nil {
 					fmt.Printf("  ✗ post-apply hook %s: %v\n", group, err)
 				}
 			}

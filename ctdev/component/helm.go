@@ -19,11 +19,11 @@ func helmInstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.OS == platform.MacOS {
 		fmt.Fprintln(opts.Stdout, "Installing helm...")
-		return sysutil.InstallPackage(o, "helm")
+		return sysutil.InstallPackage(ctx, o, "helm")
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing helm...")
-	ver, err := sysutil.DownloadGitHubBinary(o, sysutil.GitHubBinarySpec{
+	ver, err := sysutil.DownloadGitHubBinary(ctx, o, sysutil.GitHubBinarySpec{
 		Repo: "helm/helm",
 		ArchiveURL: func(ver, goos, goarch string) string {
 			return fmt.Sprintf("https://get.helm.sh/helm-v%s-%s-%s.tar.gz", ver, goos, goarch)
@@ -52,7 +52,7 @@ func helmUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing helm...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.RemovePackage(o, "helm")
+		return sysutil.RemovePackage(ctx, o, "helm")
 	}
-	return sysutil.SudoRun(o, "rm", "-f", "/usr/local/bin/helm")
+	return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/helm")
 }

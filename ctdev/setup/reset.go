@@ -2,23 +2,26 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
 // removeGrubCmdlineParam removes a kernel cmdline parameter from /etc/default/grub
 // by stripping " <param>" from GRUB_CMDLINE_LINUX lines.
-func removeGrubCmdlineParam(param string) error {
-	return sudoRun("sed", "-i", fmt.Sprintf("s| %s||", sedEscape(param)), "/etc/default/grub")
+func removeGrubCmdlineParam(ctx context.Context, o sysutil.Opts, param string) error {
+	return sysutil.SudoRun(ctx, o, "sed", "-i", fmt.Sprintf("s| %s||", sedEscape(param)), "/etc/default/grub")
 }
 
 // ResetLinuxDefaults resets Linux Mint system settings back to their defaults.
-func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
+// Honors o.DryRun (prints the plan) and o.Stdout (log destination).
+func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
+	w := o.Stdout
 	hasNvidia := detectNvidiaLoaded()
 
-	if dryRun {
+	if o.DryRun {
 		fmt.Fprintln(w, "[DRY-RUN] Would reset Power, Screensaver, Keyboard, Mouse, Sound, Nemo settings")
 		fmt.Fprintln(w, "[DRY-RUN] Would reset GRUB settings (timeout=10, menu, os-prober enabled)")
 		if hasNvidia {
@@ -34,7 +37,7 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 
 	// Power settings
 	fmt.Fprintf(w, "Resetting Power settings...\n")
-	if err := run("powerprofilesctl", "set", "balanced"); err != nil {
+	if err := sysutil.Run(ctx, o, "powerprofilesctl", "set", "balanced"); err != nil {
 		return fmt.Errorf("powerprofilesctl: %w", err)
 	}
 	for _, key := range []string{
@@ -42,7 +45,7 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 		"/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout",
 		"/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend",
 	} {
-		if err := run("dconf", "reset", key); err != nil {
+		if err := sysutil.Run(ctx, o, "dconf", "reset", key); err != nil {
 			return fmt.Errorf("dconf reset %s: %w", key, err)
 		}
 	}
@@ -54,7 +57,7 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 		"/org/cinnamon/desktop/screensaver/lock-enabled",
 		"/org/cinnamon/desktop/screensaver/lock-delay",
 	} {
-		if err := run("dconf", "reset", key); err != nil {
+		if err := sysutil.Run(ctx, o, "dconf", "reset", key); err != nil {
 			return fmt.Errorf("dconf reset %s: %w", key, err)
 		}
 	}
@@ -63,11 +66,11 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	fmt.Fprintf(w, "Resetting Keyboard settings...\n")
 	schema := "org.cinnamon.desktop.peripherals.keyboard"
 	for _, key := range []string{"repeat", "delay", "repeat-interval", "numlock-state"} {
-		if err := run("gsettings", "reset", schema, key); err != nil {
+		if err := sysutil.Run(ctx, o, "gsettings", "reset", schema, key); err != nil {
 			return fmt.Errorf("gsettings reset %s %s: %w", schema, key, err)
 		}
 	}
-	if err := run("xset", "r", "rate"); err != nil {
+	if err := sysutil.Run(ctx, o, "xset", "r", "rate"); err != nil {
 		return fmt.Errorf("xset r rate: %w", err)
 	}
 
@@ -78,20 +81,20 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 		"/org/gnome/desktop/peripherals/mouse/speed",
 		"/org/gnome/desktop/peripherals/mouse/natural-scroll",
 	} {
-		if err := run("dconf", "reset", key); err != nil {
+		if err := sysutil.Run(ctx, o, "dconf", "reset", key); err != nil {
 			return fmt.Errorf("dconf reset %s: %w", key, err)
 		}
 	}
 
 	// Sound settings
 	fmt.Fprintf(w, "Resetting Sound settings...\n")
-	if err := run("dconf", "reset", "/org/cinnamon/desktop/sound/event-sounds"); err != nil {
+	if err := sysutil.Run(ctx, o, "dconf", "reset", "/org/cinnamon/desktop/sound/event-sounds"); err != nil {
 		return fmt.Errorf("dconf reset event-sounds: %w", err)
 	}
 
 	// Nemo settings
 	fmt.Fprintf(w, "Resetting Nemo settings...\n")
-	if err := run("dconf", "reset", "/org/nemo/preferences/default-folder-viewer"); err != nil {
+	if err := sysutil.Run(ctx, o, "dconf", "reset", "/org/nemo/preferences/default-folder-viewer"); err != nil {
 		return fmt.Errorf("dconf reset nemo viewer: %w", err)
 	}
 
@@ -99,17 +102,17 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	fmt.Fprintf(w, "Removing WirePlumber LDAC config...\n")
 	ldacConf := "/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf"
 	if _, err := os.Stat(ldacConf); err == nil {
-		if err := sudoRun("rm", ldacConf); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "rm", ldacConf); err != nil {
 			return fmt.Errorf("remove wireplumber ldac config: %w", err)
 		}
 		// Best-effort restart of PipeWire stack.
-		_ = exec.Command("systemctl", "--user", "restart",
-			"pipewire", "pipewire-pulse", "wireplumber").Run()
+		_ = sysutil.Run(ctx, o, "systemctl", "--user", "restart",
+			"pipewire", "pipewire-pulse", "wireplumber")
 	}
 
 	// xbindkeys
 	fmt.Fprintf(w, "Resetting xbindkeys...\n")
-	_ = exec.Command("killall", "xbindkeys").Run()
+	_ = sysutil.Run(ctx, o, "killall", "xbindkeys")
 	home, _ := os.UserHomeDir()
 	_ = os.Remove(home + "/.config/autostart/xbindkeys.desktop")
 	info, err := os.Lstat(home + "/.xbindkeysrc")
@@ -120,11 +123,11 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	// GRUB settings
 	fmt.Fprintf(w, "Resetting GRUB settings...\n")
 	for varName, value := range map[string]string{
-		"GRUB_TIMEOUT_STYLE":    "menu",
-		"GRUB_TIMEOUT":          "10",
+		"GRUB_TIMEOUT_STYLE":     "menu",
+		"GRUB_TIMEOUT":           "10",
 		"GRUB_DISABLE_OS_PROBER": "false",
 	} {
-		if err := applyGrubVar(varName, value); err != nil {
+		if err := applyGrubVar(ctx, o, varName, value); err != nil {
 			return fmt.Errorf("applyGrubVar %s: %w", varName, err)
 		}
 	}
@@ -133,7 +136,7 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	mintGrubCfg := "/etc/default/grub.d/50_linuxmint.cfg"
 	if data, err := os.ReadFile(mintGrubCfg); err == nil {
 		if bytes.Contains(data, []byte("GRUB_DISABLE_OS_PROBER=true")) {
-			if err := sudoRun("sed", "-i",
+			if err := sysutil.SudoRun(ctx, o, "sed", "-i",
 				"s/GRUB_DISABLE_OS_PROBER=true/GRUB_DISABLE_OS_PROBER=false/",
 				mintGrubCfg); err != nil {
 				return fmt.Errorf("fix linuxmint grub cfg: %w", err)
@@ -149,7 +152,7 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 			"nvidia.NVreg_EnableS0ixPowerManagement=0",
 			"pcie_aspm=off",
 		} {
-			if err := removeGrubCmdlineParam(param); err != nil {
+			if err := removeGrubCmdlineParam(ctx, o, param); err != nil {
 				return fmt.Errorf("remove grub cmdline param %s: %w", param, err)
 			}
 		}
@@ -160,7 +163,7 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 			"nvidia-persistenced.service",
 		} {
 			// Best-effort: ignore errors for services that may not exist.
-			_ = exec.Command("sudo", "systemctl", "disable", svc).Run()
+			_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", svc)
 		}
 	}
 
@@ -168,45 +171,45 @@ func ResetLinuxDefaults(w io.Writer, dryRun bool) error {
 	kvmRule := "/etc/udev/rules.d/99-logitech-kvm-fix.rules"
 	if _, err := os.Stat(kvmRule); err == nil {
 		fmt.Fprintf(w, "Removing Logitech KVM mouse fix...\n")
-		if err := sudoRun("rm", "-f", kvmRule); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "rm", "-f", kvmRule); err != nil {
 			return fmt.Errorf("remove logitech kvm udev rule: %w", err)
 		}
 	}
 	kvmService := home + "/.config/systemd/user/solaar-restart.service"
 	if _, err := os.Stat(kvmService); err == nil {
-		_ = exec.Command("systemctl", "--user", "disable", "solaar-restart.service").Run()
+		_ = sysutil.Run(ctx, o, "systemctl", "--user", "disable", "solaar-restart.service")
 		_ = os.Remove(kvmService)
-		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		_ = sysutil.Run(ctx, o, "systemctl", "--user", "daemon-reload")
 	}
 
 	// Hide drives udev rule
 	hideDrives := "/etc/udev/rules.d/99-hide-drives.rules"
 	if _, err := os.Stat(hideDrives); err == nil {
 		fmt.Fprintf(w, "Removing hide-drives udev rule...\n")
-		if err := sudoRun("rm", "-f", hideDrives); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "rm", "-f", hideDrives); err != nil {
 			return fmt.Errorf("remove hide-drives udev rule: %w", err)
 		}
 	}
 
 	// Reload udev after removing rules
-	_ = exec.Command("sudo", "udevadm", "control", "--reload-rules").Run()
+	_ = sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 
 	// WiFi suspend hook
 	sleepHook := "/usr/lib/systemd/system-sleep/wifi-mt7925"
 	if _, err := os.Stat(sleepHook); err == nil {
 		fmt.Fprintf(w, "Removing WiFi suspend fix...\n")
-		if err := sudoRun("rm", "-f", sleepHook); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "rm", "-f", sleepHook); err != nil {
 			return fmt.Errorf("remove wifi suspend hook: %w", err)
 		}
 	}
 
 	// fstrim
 	fmt.Fprintf(w, "Resetting fstrim...\n")
-	_ = exec.Command("sudo", "systemctl", "stop", "fstrim.timer").Run()
-	_ = exec.Command("sudo", "systemctl", "disable", "fstrim.timer").Run()
+	_ = sysutil.SudoRun(ctx, o, "systemctl", "stop", "fstrim.timer")
+	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "fstrim.timer")
 
 	// Regenerate GRUB config
-	if err := applyUpdateGrub(); err != nil {
+	if err := applyUpdateGrub(ctx, o); err != nil {
 		return fmt.Errorf("update-grub: %w", err)
 	}
 

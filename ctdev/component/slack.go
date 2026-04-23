@@ -21,7 +21,7 @@ func slackInstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Installing Slack...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.BrewCaskInstall(o, "slack")
+		return sysutil.BrewCaskInstall(ctx, o, "slack")
 	}
 
 	if p.PackageManager == "apt" {
@@ -42,12 +42,7 @@ func slackInstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.DownloadFile("https://downloads.slack-edge.com/releases/linux/slack-desktop-amd64.deb", tmp.Name()); err != nil {
 			return fmt.Errorf("download slack: %w", err)
 		}
-		if err := sysutil.SudoRun(o, "dpkg", "-i", tmp.Name()); err != nil {
-			if fixErr := sysutil.SudoRun(o, "apt-get", "install", "-f", "-y"); fixErr != nil {
-				return fmt.Errorf("dpkg failed and apt-get fix failed: %w", fixErr)
-			}
-		}
-		return nil
+		return installDebWithDepFix(ctx, o, tmp.Name(), "slack-desktop")
 	}
 
 	return ErrUnsupportedOS
@@ -59,10 +54,10 @@ func slackUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing Slack...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.BrewCaskRemove(o, "slack")
+		return sysutil.BrewCaskRemove(ctx, o, "slack")
 	}
 	if p.PackageManager == "apt" {
-		return sysutil.RemovePackage(o, "slack-desktop")
+		return sysutil.RemovePackage(ctx, o, "slack-desktop")
 	}
 	return ErrUnsupportedOS
 }

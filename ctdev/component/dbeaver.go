@@ -22,20 +22,20 @@ func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskInstall(o, "dbeaver-community")
+		return sysutil.BrewCaskInstall(ctx, o, "dbeaver-community")
 	case "apt":
 		keyring := "/etc/apt/trusted.gpg.d/dbeaver.gpg"
-		if err := sysutil.AddAPTKeyring(o, "https://dbeaver.io/debs/dbeaver.gpg.key", keyring); err != nil {
+		if err := sysutil.AddAPTKeyring(ctx, o, "https://dbeaver.io/debs/dbeaver.gpg.key", keyring); err != nil {
 			return fmt.Errorf("add dbeaver GPG key: %w", err)
 		}
 		repoLine := fmt.Sprintf("deb [signed-by=%s] https://dbeaver.io/debs/dbeaver-ce /", keyring)
-		if err := sysutil.AddAPTSource(o, repoLine, "dbeaver.list"); err != nil {
+		if err := sysutil.AddAPTSource(ctx, o, repoLine, "dbeaver.list"); err != nil {
 			return fmt.Errorf("add dbeaver repo: %w", err)
 		}
-		if err := sysutil.APTUpdate(o); err != nil {
+		if err := sysutil.APTUpdate(ctx, o); err != nil {
 			return err
 		}
-		return sysutil.InstallPackage(o, "dbeaver-ce")
+		return sysutil.InstallPackage(ctx, o, "dbeaver-ce")
 	case "dnf":
 		archRPM := ""
 		switch p.Arch {
@@ -61,11 +61,11 @@ func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.DownloadFile(url, tmp.Name()); err != nil {
 			return fmt.Errorf("download dbeaver RPM: %w", err)
 		}
-		return sysutil.SudoRun(o, "dnf", "install", "-y", tmp.Name())
+		return sysutil.SudoRun(ctx, o, "dnf", "install", "-y", tmp.Name())
 	case "pacman":
-		return sysutil.SudoRun(o, "pacman", "-S", "--noconfirm", "dbeaver")
+		return sysutil.SudoRun(ctx, o, "pacman", "-S", "--noconfirm", "dbeaver")
 	default:
-		return fmt.Errorf("dbeaver install not supported for package manager: %s", p.PackageManager)
+		return unsupportedPMError("dbeaver", p.PackageManager)
 	}
 }
 
@@ -76,13 +76,13 @@ func dbeaverUninstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskRemove(o, "dbeaver-community")
+		return sysutil.BrewCaskRemove(ctx, o, "dbeaver-community")
 	case "apt":
-		return sysutil.RemovePackage(o, "dbeaver-ce")
+		return sysutil.RemovePackage(ctx, o, "dbeaver-ce")
 	case "dnf":
-		return sysutil.RemovePackage(o, "dbeaver-ce")
+		return sysutil.RemovePackage(ctx, o, "dbeaver-ce")
 	case "pacman":
-		return sysutil.RemovePackage(o, "dbeaver")
+		return sysutil.RemovePackage(ctx, o, "dbeaver")
 	default:
 		return ErrUnsupportedOS
 	}

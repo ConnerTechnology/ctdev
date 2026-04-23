@@ -22,7 +22,7 @@ func codexInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("node.js is required to install codex; run: ctdev install node")
 	}
 
-	return sysutil.Run(o, "npm", "install", "-g", "@openai/codex")
+	return sysutil.Run(ctx, o, "npm", "install", "-g", "@openai/codex")
 }
 
 func codexUninstall(ctx context.Context, opts ExecOpts) error {
@@ -30,7 +30,7 @@ func codexUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing Codex...")
 
 	if sysutil.CommandExists("npm") {
-		return sysutil.Run(o, "npm", "uninstall", "-g", "@openai/codex")
+		return sysutil.Run(ctx, o, "npm", "uninstall", "-g", "@openai/codex")
 	}
 	return nil
 }

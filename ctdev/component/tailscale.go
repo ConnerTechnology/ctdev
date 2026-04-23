@@ -21,7 +21,7 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskInstall(o, "tailscale")
+		return sysutil.BrewCaskInstall(ctx, o, "tailscale")
 	case "apt":
 		codename := p.Codename
 		if codename == "" {
@@ -43,29 +43,29 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 
 		keyring := "/usr/share/keyrings/tailscale-archive-keyring.gpg"
 		keyURL := fmt.Sprintf("https://pkgs.tailscale.com/stable/%s/%s.noarmor.gpg", distro, codename)
-		if err := sysutil.AddAPTKeyring(o, keyURL, keyring); err != nil {
+		if err := sysutil.AddAPTKeyring(ctx, o, keyURL, keyring); err != nil {
 			return fmt.Errorf("add tailscale GPG key: %w", err)
 		}
 
 		repoLine := fmt.Sprintf("deb [signed-by=%s] https://pkgs.tailscale.com/stable/%s %s main", keyring, distro, codename)
-		if err := sysutil.AddAPTSource(o, repoLine, "tailscale.list"); err != nil {
+		if err := sysutil.AddAPTSource(ctx, o, repoLine, "tailscale.list"); err != nil {
 			return fmt.Errorf("add tailscale repo: %w", err)
 		}
 
-		if err := sysutil.APTUpdate(o); err != nil {
+		if err := sysutil.APTUpdate(ctx, o); err != nil {
 			return err
 		}
-		if err := sysutil.InstallPackage(o, "tailscale"); err != nil {
+		if err := sysutil.InstallPackage(ctx, o, "tailscale"); err != nil {
 			return err
 		}
 
-		_ = sysutil.ServiceEnable(o, "tailscaled")
-		_ = sysutil.ServiceStart(o, "tailscaled")
+		_ = sysutil.ServiceEnable(ctx, o, "tailscaled")
+		_ = sysutil.ServiceStart(ctx, o, "tailscaled")
 
 		fmt.Fprintln(opts.Stdout, "Run 'sudo tailscale up' to authenticate")
 		return nil
 	default:
-		return fmt.Errorf("tailscale install not supported for package manager: %s", p.PackageManager)
+		return unsupportedPMError("tailscale", p.PackageManager)
 	}
 }
 
@@ -76,15 +76,15 @@ func tailscaleUninstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskRemove(o, "tailscale")
+		return sysutil.BrewCaskRemove(ctx, o, "tailscale")
 	case "apt":
-		_ = sysutil.SudoRun(o, "systemctl", "stop", "tailscaled")
-		_ = sysutil.SudoRun(o, "systemctl", "disable", "tailscaled")
-		if err := sysutil.RemovePackage(o, "tailscale"); err != nil {
+		_ = sysutil.SudoRun(ctx, o, "systemctl", "stop", "tailscaled")
+		_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "tailscaled")
+		if err := sysutil.RemovePackage(ctx, o, "tailscale"); err != nil {
 			return err
 		}
-		_ = sysutil.SudoRun(o, "rm", "-f", "/etc/apt/sources.list.d/tailscale.list")
-		_ = sysutil.SudoRun(o, "rm", "-f", "/usr/share/keyrings/tailscale-archive-keyring.gpg")
+		_ = sysutil.SudoRun(ctx, o, "rm", "-f", "/etc/apt/sources.list.d/tailscale.list")
+		_ = sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/share/keyrings/tailscale-archive-keyring.gpg")
 		return nil
 	default:
 		return ErrUnsupportedOS

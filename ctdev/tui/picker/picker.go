@@ -342,9 +342,16 @@ func (inst *Model) GetResult() Result {
 	if inst.quitting && !inst.confirmed {
 		return Result{Quit: true}
 	}
+	// Walk items in display order so the returned names are deterministic
+	// and match the ordering the user sees in the UI.
 	var names []string
-	for name := range inst.selected {
-		names = append(names, name)
+	for _, it := range inst.items {
+		if it.isCategory {
+			continue
+		}
+		if inst.selected[it.component.Name] {
+			names = append(names, it.component.Name)
+		}
 	}
 	return Result{Selected: names}
 }

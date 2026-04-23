@@ -151,8 +151,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 
 	if !isBatchMode() {
 		fmt.Print("\nProceed with cleanup? [y/N] ")
-		var answer string
-		fmt.Scanln(&answer)
+		answer := promptLine()
 		if strings.ToLower(answer) != "y" {
 			return nil
 		}

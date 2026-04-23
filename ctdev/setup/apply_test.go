@@ -132,6 +132,53 @@ func TestSedEscape(t *testing.T) {
 	}
 }
 
+func TestAppendGrubLine(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		varName string
+		value   string
+		want    string
+	}{
+		{
+			name:    "content ends with newline",
+			content: "GRUB_TIMEOUT=5\n",
+			varName: "GRUB_CMDLINE_LINUX",
+			value:   `""`,
+			want:    "GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX=\"\"\n",
+		},
+		{
+			name:    "content missing trailing newline gets one",
+			content: "GRUB_TIMEOUT=5",
+			varName: "GRUB_CMDLINE_LINUX",
+			value:   `""`,
+			want:    "GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX=\"\"\n",
+		},
+		{
+			name:    "empty content does not add leading newline",
+			content: "",
+			varName: "GRUB_TIMEOUT",
+			value:   "10",
+			want:    "GRUB_TIMEOUT=10\n",
+		},
+		{
+			name:    "value with quotes preserved",
+			content: "GRUB_DEFAULT=0\n",
+			varName: "GRUB_CMDLINE_LINUX",
+			value:   `"quiet splash"`,
+			want:    "GRUB_DEFAULT=0\nGRUB_CMDLINE_LINUX=\"quiet splash\"\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := appendGrubLine(tt.content, tt.varName, tt.value)
+			if got != tt.want {
+				t.Errorf("appendGrubLine = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSplitLines(t *testing.T) {
 	tests := []struct {
 		name     string

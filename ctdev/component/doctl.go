@@ -19,11 +19,11 @@ func doctlInstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.OS == platform.MacOS {
 		fmt.Fprintln(opts.Stdout, "Installing doctl...")
-		return sysutil.InstallPackage(o, "doctl")
+		return sysutil.InstallPackage(ctx, o, "doctl")
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing doctl...")
-	ver, err := sysutil.DownloadGitHubBinary(o, sysutil.GitHubBinarySpec{
+	ver, err := sysutil.DownloadGitHubBinary(ctx, o, sysutil.GitHubBinarySpec{
 		Repo: "digitalocean/doctl",
 		ArchiveURL: func(ver, goos, goarch string) string {
 			return fmt.Sprintf("https://github.com/digitalocean/doctl/releases/download/v%s/doctl-%s-%s-%s.tar.gz", ver, ver, goos, goarch)
@@ -50,7 +50,7 @@ func doctlUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing doctl...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.RemovePackage(o, "doctl")
+		return sysutil.RemovePackage(ctx, o, "doctl")
 	}
-	return sysutil.SudoRun(o, "rm", "-f", "/usr/local/bin/doctl")
+	return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/doctl")
 }

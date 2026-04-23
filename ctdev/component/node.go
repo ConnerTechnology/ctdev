@@ -31,16 +31,16 @@ func nodeInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		if err := sysutil.Run(o, "brew", "install", "nodenv", "node-build"); err != nil {
+		if err := sysutil.Run(ctx, o, "brew", "install", "nodenv", "node-build"); err != nil {
 			return err
 		}
 	default:
 		// Linux: git clone nodenv and node-build
-		if err := ensureGitClone(o, "https://github.com/nodenv/nodenv.git", nodenvDir); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/nodenv/nodenv.git", nodenvDir); err != nil {
 			return fmt.Errorf("clone nodenv: %w", err)
 		}
 		pluginDir := filepath.Join(nodenvDir, "plugins", "node-build")
-		if err := ensureGitClone(o, "https://github.com/nodenv/node-build.git", pluginDir); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/nodenv/node-build.git", pluginDir); err != nil {
 			return fmt.Errorf("clone node-build: %w", err)
 		}
 	}
@@ -52,11 +52,11 @@ func nodeInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	fmt.Fprintf(opts.Stdout, "Installing Node.js %s...\n", nodeVersion)
-	if err := sysutil.Run(o, nodenvBin, "install", nodeVersion); err != nil {
+	if err := sysutil.Run(ctx, o, nodenvBin, "install", "--skip-existing", nodeVersion); err != nil {
 		return fmt.Errorf("nodenv install %s: %w", nodeVersion, err)
 	}
 
-	if err := sysutil.Run(o, nodenvBin, "global", nodeVersion); err != nil {
+	if err := sysutil.Run(ctx, o, nodenvBin, "global", nodeVersion); err != nil {
 		return fmt.Errorf("nodenv global %s: %w", nodeVersion, err)
 	}
 
@@ -82,20 +82,20 @@ func nodeUninstall(ctx context.Context, opts ExecOpts) error {
 }
 
 // ensureGitClone clones a repo if the destination doesn't exist, or pulls if it does.
-func ensureGitClone(o sysutil.Opts, url, dest string) error {
+func ensureGitClone(ctx context.Context, o sysutil.Opts, url, dest string) error {
 	if o.DryRun {
 		fmt.Fprintf(o.Stdout, "[dry-run] git clone %s %s\n", url, dest)
 		return nil
 	}
 
 	if dirExists(dest) {
-		return sysutil.Run(o, "git", "-C", dest, "pull", "--ff-only")
+		return sysutil.Run(ctx, o, "git", "-C", dest, "pull", "--ff-only")
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return err
 	}
-	return sysutil.Run(o, "git", "clone", url, dest)
+	return sysutil.Run(ctx, o, "git", "clone", url, dest)
 }
 
 func dirExists(path string) bool {

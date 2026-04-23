@@ -22,11 +22,11 @@ func bunInstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Installing Bun...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.Run(o, "brew", "install", "oven-sh/bun/bun")
+		return sysutil.Run(ctx, o, "brew", "install", "oven-sh/bun/bun")
 	}
 
 	// Linux: use official installer
-	return sysutil.Run(o, "bash", "-c", "curl -fsSL https://bun.sh/install | bash")
+	return sysutil.Run(ctx, o, "bash", "-c", "curl -fsSL https://bun.sh/install | bash")
 }
 
 func bunUninstall(ctx context.Context, opts ExecOpts) error {
@@ -35,7 +35,7 @@ func bunUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing Bun...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.Run(o, "brew", "uninstall", "bun")
+		return sysutil.Run(ctx, o, "brew", "uninstall", "bun")
 	}
 
 	// Linux: remove ~/.bun directory
@@ -45,7 +45,7 @@ func bunUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	bunDir := filepath.Join(home, ".bun")
 	if _, err := os.Stat(bunDir); err == nil {
-		return sysutil.Run(o, "rm", "-rf", bunDir)
+		return sysutil.Run(ctx, o, "rm", "-rf", bunDir)
 	}
 	return nil
 }

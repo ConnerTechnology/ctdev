@@ -14,7 +14,7 @@ func claudeCodeInstall(ctx context.Context, opts ExecOpts) error {
 
 	if opts.Force || !sysutil.CommandExists("claude") {
 		fmt.Fprintln(opts.Stdout, "Installing Claude Code...")
-		if err := sysutil.Run(o, "bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"); err != nil {
+		if err := sysutil.Run(ctx, o, "bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"); err != nil {
 			return fmt.Errorf("claude code installer: %w", err)
 		}
 	}
@@ -64,7 +64,7 @@ func claudeCodeUninstall(ctx context.Context, opts ExecOpts) error {
 	// Remove CLI binary
 	claudeBin := filepath.Join(home, ".local", "bin", "claude")
 	if _, err := os.Stat(claudeBin); err == nil {
-		if err := sysutil.Run(o, "rm", "-f", claudeBin); err != nil {
+		if err := sysutil.Run(ctx, o, "rm", "-f", claudeBin); err != nil {
 			return err
 		}
 	}
@@ -74,7 +74,7 @@ func claudeCodeUninstall(ctx context.Context, opts ExecOpts) error {
 	for _, name := range []string{"CLAUDE.md", "settings.json", "settings.local.json"} {
 		f := filepath.Join(configDir, name)
 		if _, err := os.Stat(f); err == nil {
-			if err := sysutil.Run(o, "rm", "-f", f); err != nil {
+			if err := sysutil.Run(ctx, o, "rm", "-f", f); err != nil {
 				return err
 			}
 		}

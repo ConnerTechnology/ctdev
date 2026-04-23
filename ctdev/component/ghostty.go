@@ -19,21 +19,22 @@ func ghosttyInstall(ctx context.Context, opts ExecOpts) error {
 
 		switch p.PackageManager {
 		case "brew":
-			if err := sysutil.BrewCaskInstall(o, "ghostty"); err != nil {
+			if err := sysutil.BrewCaskInstall(ctx, o, "ghostty"); err != nil {
 				return err
 			}
 		case "apt":
-			if err := sysutil.Run(o, "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh | bash"); err != nil {
+			if err := sysutil.Run(ctx, o, "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh | bash"); err != nil {
 				return fmt.Errorf("ghostty ubuntu installer: %w", err)
 			}
 		case "pacman":
-			if err := sysutil.SudoRun(o, "pacman", "-S", "--noconfirm", "ghostty"); err != nil {
+			if err := sysutil.SudoRun(ctx, o, "pacman", "-S", "--noconfirm", "ghostty"); err != nil {
 				return err
 			}
 		case "dnf":
-			return fmt.Errorf("ghostty does not have an official Fedora package; build from source: https://ghostty.org/docs/install/build")
+			fmt.Fprintln(opts.Stdout, "ghostty has no official Fedora package; build from source: https://ghostty.org/docs/install/build")
+			return ErrUnsupportedOS
 		default:
-			return fmt.Errorf("ghostty install not supported for package manager: %s", p.PackageManager)
+			return unsupportedPMError("ghostty", p.PackageManager)
 		}
 	}
 
@@ -76,11 +77,11 @@ func ghosttyUninstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskRemove(o, "ghostty")
+		return sysutil.BrewCaskRemove(ctx, o, "ghostty")
 	case "apt":
-		return sysutil.RemovePackage(o, "ghostty")
+		return sysutil.RemovePackage(ctx, o, "ghostty")
 	case "pacman":
-		return sysutil.RemovePackage(o, "ghostty")
+		return sysutil.RemovePackage(ctx, o, "ghostty")
 	default:
 		return ErrUnsupportedOS
 	}

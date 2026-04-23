@@ -1,5 +1,11 @@
 package setup
 
+import (
+	"context"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+)
+
 type ControlType int
 
 const (
@@ -20,6 +26,14 @@ type PickerChoice struct {
 	Description string
 }
 
+// ApplyFunc applies a setting's desired value. Accepts ctx so Ctrl-C can
+// terminate any shell-out, and sysutil.Opts so dry-run + output routing go
+// through the same path as install/uninstall.
+type ApplyFunc func(ctx context.Context, o sysutil.Opts, value string) error
+
+// PostApplyHook runs once per ApplyGroup after all settings in that group apply.
+type PostApplyHook func(ctx context.Context, o sysutil.Opts) error
+
 type Setting struct {
 	Name        string
 	Slug        string       // configure subcommand category: "gpu", "boot", "power", etc.
@@ -29,10 +43,10 @@ type Setting struct {
 	Default     string       // our recommended value as string
 	Slider      *SliderRange
 	Choices     []PickerChoice
-	DetectFunc  func() string        // reads current system value
-	ApplyFunc   func(value string) error // writes value to system
-	HardwareFn  func() bool          // optional; setting hidden when returns false
-	ApplyGroup  string               // settings sharing a group run one post-apply hook
+	DetectFunc  func() string // reads current system value
+	ApplyFunc   ApplyFunc     // writes value to system
+	HardwareFn  func() bool   // optional; setting hidden when returns false
+	ApplyGroup  string        // settings sharing a group run one post-apply hook
 }
 
 // SettingState holds runtime state for a setting during TUI interaction.
@@ -55,7 +69,7 @@ func (inst *SettingState) NeedsApply(force bool) bool {
 }
 
 // PostApplyHooks maps ApplyGroup names to functions run after all settings in the group are applied.
-var PostApplyHooks = map[string]func() error{}
+var PostApplyHooks = map[string]PostApplyHook{}
 
 // FilterByHardware returns only settings whose HardwareFn is nil or returns true.
 func FilterByHardware(settings []Setting) []Setting {

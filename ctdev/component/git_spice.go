@@ -3,9 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
@@ -23,11 +21,11 @@ func gitSpiceInstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.OS == platform.MacOS {
 		fmt.Fprintln(opts.Stdout, "Installing git-spice...")
-		return sysutil.InstallPackage(o, "git-spice")
+		return sysutil.InstallPackage(ctx, o, "git-spice")
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing git-spice...")
-	ver, err := sysutil.DownloadGitHubBinary(o, sysutil.GitHubBinarySpec{
+	ver, err := sysutil.DownloadGitHubBinary(ctx, o, sysutil.GitHubBinarySpec{
 		Repo: "abhinav/git-spice",
 		ArchiveURL: func(ver, goos, goarch string) string {
 			arch := goarch
@@ -70,10 +68,13 @@ func gitSpiceUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing git-spice...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.RemovePackage(o, "git-spice")
+		return sysutil.RemovePackage(ctx, o, "git-spice")
 	}
-	// Could be in /usr/local/bin or ~/go/bin
-	home, _ := os.UserHomeDir()
-	_ = sysutil.Run(o, "rm", "-f", filepath.Join(home, "go", "bin", "gs"))
-	return sysutil.SudoRun(o, "rm", "-f", "/usr/local/bin/gs")
+	// `gs` collides with Ghostscript's binary. Only remove when we can confirm
+	// it is actually git-spice so we don't nuke an unrelated binary.
+	if !isGitSpiceInstalled() {
+		fmt.Fprintln(opts.Stdout, "git-spice not detected at /usr/local/bin/gs; leaving untouched")
+		return nil
+	}
+	return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/gs")
 }

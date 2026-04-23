@@ -27,7 +27,7 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskInstall(o, "docker")
+		return sysutil.BrewCaskInstall(ctx, o, "docker")
 
 	case "apt":
 		// Determine distro base for Docker repo URL
@@ -39,13 +39,13 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 		keyring := "/etc/apt/keyrings/docker.asc"
 		keyURL := fmt.Sprintf("https://download.docker.com/linux/%s/gpg", distroBase)
 
-		if err := sysutil.SudoRun(o, "install", "-m", "0755", "-d", "/etc/apt/keyrings"); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "install", "-m", "0755", "-d", "/etc/apt/keyrings"); err != nil {
 			return fmt.Errorf("create keyrings dir: %w", err)
 		}
-		if err := sysutil.AddAPTKeyring(o, keyURL, keyring); err != nil {
+		if err := sysutil.AddAPTKeyring(ctx, o, keyURL, keyring); err != nil {
 			return fmt.Errorf("add docker GPG key: %w", err)
 		}
-		if err := sysutil.SudoRun(o, "chmod", "a+r", keyring); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "chmod", "a+r", keyring); err != nil {
 			return fmt.Errorf("chmod keyring: %w", err)
 		}
 
@@ -55,58 +55,58 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 		}
 		repoLine := fmt.Sprintf("deb [arch=%s signed-by=%s] https://download.docker.com/linux/%s %s stable",
 			p.Arch, keyring, distroBase, codename)
-		if err := sysutil.AddAPTSource(o, repoLine, "docker.list"); err != nil {
+		if err := sysutil.AddAPTSource(ctx, o, repoLine, "docker.list"); err != nil {
 			return fmt.Errorf("add docker repo: %w", err)
 		}
 
-		if err := sysutil.APTUpdate(o); err != nil {
+		if err := sysutil.APTUpdate(ctx, o); err != nil {
 			return err
 		}
-		if err := sysutil.InstallPackage(o, dockerPackages...); err != nil {
+		if err := sysutil.InstallPackage(ctx, o, dockerPackages...); err != nil {
 			return err
 		}
 
-		_ = sysutil.ServiceEnable(o, "docker")
-		_ = sysutil.ServiceStart(o, "docker")
-		addUserToDockerGroup(o, opts.Stdout)
+		_ = sysutil.ServiceEnable(ctx, o, "docker")
+		_ = sysutil.ServiceStart(ctx, o, "docker")
+		addUserToDockerGroup(ctx, o, opts.Stdout)
 		return nil
 
 	case "dnf":
-		if err := sysutil.SudoRun(o, "dnf", "config-manager", "--add-repo",
+		if err := sysutil.SudoRun(ctx, o, "dnf", "config-manager", "--add-repo",
 			"https://download.docker.com/linux/fedora/docker-ce.repo"); err != nil {
 			return fmt.Errorf("add docker repo: %w", err)
 		}
 		args := append([]string{"install", "-y"}, dockerPackages...)
-		if err := sysutil.SudoRun(o, "dnf", args...); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "dnf", args...); err != nil {
 			return err
 		}
 
-		_ = sysutil.ServiceEnable(o, "docker")
-		_ = sysutil.ServiceStart(o, "docker")
-		addUserToDockerGroup(o, opts.Stdout)
+		_ = sysutil.ServiceEnable(ctx, o, "docker")
+		_ = sysutil.ServiceStart(ctx, o, "docker")
+		addUserToDockerGroup(ctx, o, opts.Stdout)
 		return nil
 
 	case "pacman":
-		if err := sysutil.SudoRun(o, "pacman", "-S", "--noconfirm", "docker", "docker-compose"); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "pacman", "-S", "--noconfirm", "docker", "docker-compose"); err != nil {
 			return err
 		}
 
-		_ = sysutil.ServiceEnable(o, "docker")
-		_ = sysutil.ServiceStart(o, "docker")
-		addUserToDockerGroup(o, opts.Stdout)
+		_ = sysutil.ServiceEnable(ctx, o, "docker")
+		_ = sysutil.ServiceStart(ctx, o, "docker")
+		addUserToDockerGroup(ctx, o, opts.Stdout)
 		return nil
 
 	default:
-		return fmt.Errorf("docker install not supported for package manager: %s", p.PackageManager)
+		return unsupportedPMError("docker", p.PackageManager)
 	}
 }
 
-func addUserToDockerGroup(o sysutil.Opts, w interface{ Write([]byte) (int, error) }) {
+func addUserToDockerGroup(ctx context.Context, o sysutil.Opts, w interface{ Write([]byte) (int, error) }) {
 	u, err := user.Current()
 	if err != nil || u.Uid == "0" {
 		return
 	}
-	_ = sysutil.SudoRun(o, "usermod", "-aG", "docker", u.Username)
+	_ = sysutil.SudoRun(ctx, o, "usermod", "-aG", "docker", u.Username)
 	fmt.Fprintf(w, "Added %s to docker group. Log out and back in for this to take effect.\n", u.Username)
 }
 
@@ -117,13 +117,13 @@ func dockerUninstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskRemove(o, "docker")
+		return sysutil.BrewCaskRemove(ctx, o, "docker")
 	case "apt":
-		return sysutil.RemovePackage(o, dockerPackages...)
+		return sysutil.RemovePackage(ctx, o, dockerPackages...)
 	case "dnf":
-		return sysutil.RemovePackage(o, dockerPackages...)
+		return sysutil.RemovePackage(ctx, o, dockerPackages...)
 	case "pacman":
-		return sysutil.RemovePackage(o, "docker", "docker-compose")
+		return sysutil.RemovePackage(ctx, o, "docker", "docker-compose")
 	default:
 		return ErrUnsupportedOS
 	}

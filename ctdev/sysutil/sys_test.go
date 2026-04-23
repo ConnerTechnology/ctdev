@@ -2,6 +2,7 @@ package sysutil
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,7 +42,7 @@ func TestSafeSymlinkCreates(t *testing.T) {
 func TestSudoWriteFileDryRun(t *testing.T) {
 	var buf bytes.Buffer
 	o := Opts{Stdout: &buf, DryRun: true}
-	err := SudoWriteFile(o, "test content", "/some/path")
+	err := SudoWriteFile(context.Background(), o, "test content", "/some/path")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

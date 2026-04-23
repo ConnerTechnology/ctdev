@@ -13,12 +13,12 @@ func chatgptInstall(ctx context.Context, opts ExecOpts) error {
 		return ErrUnsupportedOS
 	}
 	o := execOpts(opts)
-	if !opts.Force && dirExists("/Applications/ChatGPT.app") {
+	if !opts.Force && alreadyInstalled("chatgpt") {
 		fmt.Fprintln(opts.Stdout, "ChatGPT already installed")
 		return nil
 	}
 	fmt.Fprintln(opts.Stdout, "Installing ChatGPT...")
-	return sysutil.BrewCaskInstall(o, "chatgpt")
+	return sysutil.BrewCaskInstall(ctx, o, "chatgpt")
 }
 
 func chatgptUninstall(ctx context.Context, opts ExecOpts) error {
@@ -27,5 +27,5 @@ func chatgptUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing ChatGPT...")
-	return sysutil.BrewCaskRemove(o, "chatgpt")
+	return sysutil.BrewCaskRemove(ctx, o, "chatgpt")
 }

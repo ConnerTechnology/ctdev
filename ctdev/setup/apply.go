@@ -1,14 +1,15 @@
 package setup
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
 const wifiSleepHookScript = `#!/bin/bash
@@ -37,22 +38,6 @@ case "$1" in
         ;;
 esac
 `
-
-// sudoRun runs a command with sudo prepended.
-func sudoRun(args ...string) error {
-	cmd := exec.Command("sudo", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-// run runs a command without elevated privileges.
-func run(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
 
 // grubVarArgs returns the sed command args to set a GRUB variable.
 // Uses sudo sed -i to replace or append the variable in /etc/default/grub.
@@ -86,37 +71,46 @@ func dconfWriteArgs(path, value string) []string {
 
 // applyGrubVar sets a GRUB variable in /etc/default/grub using sed.
 // If the variable doesn't exist, it appends it.
-func applyGrubVar(varName, value string) error {
+func applyGrubVar(ctx context.Context, o sysutil.Opts, varName, value string) error {
 	content, err := os.ReadFile("/etc/default/grub")
 	if err != nil {
 		return fmt.Errorf("read /etc/default/grub: %w", err)
 	}
 
 	// Backup before modification (-n = no clobber, preserves original across multiple calls)
-	if err := sudoRun("cp", "-n", "/etc/default/grub", "/etc/default/grub.ctdev-backup"); err != nil {
+	if err := sysutil.SudoRun(ctx, o, "cp", "-n", "/etc/default/grub", "/etc/default/grub.ctdev-backup"); err != nil {
 		return fmt.Errorf("backup /etc/default/grub: %w", err)
 	}
 
 	// Check if variable already exists — if so, replace it; otherwise append.
 	if containsGrubVar(string(content), varName) {
 		args := grubVarArgs(varName, value)
-		return sudoRun(args...)
+		return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 	}
 
 	// Append the variable
-	line := fmt.Sprintf("%s=%s\n", varName, value)
 	tmpFile, err := os.CreateTemp("", "grub-*")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	if _, err := tmpFile.WriteString(string(content) + line); err != nil {
+	if _, err := tmpFile.WriteString(appendGrubLine(string(content), varName, value)); err != nil {
 		return fmt.Errorf("write temp file: %w", err)
 	}
 	tmpFile.Close()
 
-	return sudoRun("cp", tmpFile.Name(), "/etc/default/grub")
+	return sysutil.SudoRun(ctx, o, "cp", tmpFile.Name(), "/etc/default/grub")
+}
+
+// appendGrubLine returns content with `varName=value` appended as a new line.
+// A missing trailing newline on content is inserted first so the new variable
+// lands on its own line instead of merging with the last existing line.
+func appendGrubLine(content, varName, value string) string {
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	return content + fmt.Sprintf("%s=%s\n", varName, value)
 }
 
 // containsGrubVar returns true if the content has a non-commented line starting with varName=.
@@ -146,40 +140,40 @@ func splitLines(s string) []string {
 }
 
 // applyDconf writes a value to a dconf path (no quoting — suitable for int, bool, double).
-func applyDconf(path, value string) error {
+func applyDconf(ctx context.Context, o sysutil.Opts, path, value string) error {
 	args := dconfWriteArgs(path, value)
-	return run(args[0], args[1:]...)
+	return sysutil.Run(ctx, o, args[0], args[1:]...)
 }
 
 // applyDconfString writes a string value to a dconf path, wrapping it in single quotes.
-func applyDconfString(path, value string) error {
+func applyDconfString(ctx context.Context, o sysutil.Opts, path, value string) error {
 	quoted := fmt.Sprintf("'%s'", value)
 	args := dconfWriteArgs(path, quoted)
-	return run(args[0], args[1:]...)
+	return sysutil.Run(ctx, o, args[0], args[1:]...)
 }
 
 // applyGsettings runs gsettings set <schema> <key> <value>.
-func applyGsettings(schema, key, value string) error {
-	return run("gsettings", "set", schema, key, value)
+func applyGsettings(ctx context.Context, o sysutil.Opts, schema, key, value string) error {
+	return sysutil.Run(ctx, o, "gsettings", "set", schema, key, value)
 }
 
 // applyPowerProfile sets the system power profile via powerprofilesctl.
-func applyPowerProfile(value string) error {
-	return run("powerprofilesctl", "set", value)
+func applyPowerProfile(ctx context.Context, o sysutil.Opts, value string) error {
+	return sysutil.Run(ctx, o, "powerprofilesctl", "set", value)
 }
 
 // applyKeyRepeat sets the keyboard repeat rate using xset and gsettings.
 // delay is in ms, rate is in characters-per-second.
-func applyKeyRepeat(delay, rate string) error {
-	if err := run("xset", "r", "rate", delay, rate); err != nil {
+func applyKeyRepeat(ctx context.Context, o sysutil.Opts, delay, rate string) error {
+	if err := sysutil.Run(ctx, o, "xset", "r", "rate", delay, rate); err != nil {
 		return fmt.Errorf("xset r rate: %w", err)
 	}
-	if err := applyGsettings("org.cinnamon.desktop.peripherals.keyboard", "delay", delay); err != nil {
+	if err := applyGsettings(ctx, o, "org.cinnamon.desktop.peripherals.keyboard", "delay", delay); err != nil {
 		return fmt.Errorf("gsettings delay: %w", err)
 	}
 	// gsettings repeat-interval is in milliseconds between repeats, not cps.
 	interval := cpsToIntervalMs(rate)
-	if err := applyGsettings("org.cinnamon.desktop.peripherals.keyboard", "repeat-interval", interval); err != nil {
+	if err := applyGsettings(ctx, o, "org.cinnamon.desktop.peripherals.keyboard", "repeat-interval", interval); err != nil {
 		return fmt.Errorf("gsettings repeat-interval: %w", err)
 	}
 	return nil
@@ -196,32 +190,32 @@ func cpsToIntervalMs(rate string) string {
 }
 
 // applySystemdEnable enables and starts a systemd service.
-func applySystemdEnable(service string) error {
-	if err := sudoRun("systemctl", "enable", service); err != nil {
+func applySystemdEnable(ctx context.Context, o sysutil.Opts, service string) error {
+	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", service); err != nil {
 		return fmt.Errorf("systemctl enable %s: %w", service, err)
 	}
-	if err := sudoRun("systemctl", "start", service); err != nil {
+	if err := sysutil.SudoRun(ctx, o, "systemctl", "start", service); err != nil {
 		return fmt.Errorf("systemctl start %s: %w", service, err)
 	}
 	return nil
 }
 
 // applyPackages installs apt packages quietly.
-func applyPackages(packages []string) error {
+func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error {
 	args := append([]string{"apt-get", "install", "-y", "-qq"}, packages...)
-	return sudoRun(args...)
+	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
 // applyNvidiaSigning runs the GPU signing setup via the gpu package.
-func applyNvidiaSigning() error {
-	return gpu.RunSetup(gpu.Opts{
-		Stdout: os.Stdout,
+func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
+	return gpu.RunSetup(ctx, gpu.Opts{
+		Stdout: o.Stdout,
 		Stdin:  os.Stdin,
 	})
 }
 
 // applyNvidiaSuspendServices enables NVIDIA suspend-related systemd services.
-func applyNvidiaSuspendServices() error {
+func applyNvidiaSuspendServices(ctx context.Context, o sysutil.Opts) error {
 	services := []string{
 		"nvidia-suspend.service",
 		"nvidia-resume.service",
@@ -229,14 +223,15 @@ func applyNvidiaSuspendServices() error {
 	}
 	for _, svc := range services {
 		// Skip services that don't exist or are static (no [Install] section).
-		out, err := exec.Command("systemctl", "is-enabled", svc).Output()
+		// (systemctl is-enabled output read plainly; no ctx because this is a read-only probe.)
+		out, err := runOutput(ctx, "systemctl", "is-enabled", svc)
 		if err != nil {
 			continue
 		}
-		if strings.TrimSpace(string(out)) == "static" {
+		if strings.TrimSpace(out) == "static" {
 			continue
 		}
-		if err := sudoRun("systemctl", "enable", svc); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", svc); err != nil {
 			return fmt.Errorf("enable %s: %w", svc, err)
 		}
 	}
@@ -244,29 +239,13 @@ func applyNvidiaSuspendServices() error {
 }
 
 // applyWifiSuspendFix writes a systemd sleep hook to handle MT7925E WiFi suspend.
-func applyWifiSuspendFix() error {
-	hookPath := "/usr/lib/systemd/system-sleep/wifi-mt7925"
-
-	tmpFile, err := os.CreateTemp("", "wifi-mt7925-*")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.WriteString(wifiSleepHookScript); err != nil {
-		return fmt.Errorf("write temp file: %w", err)
-	}
-	tmpFile.Close()
-
-	if err := sudoRun("cp", tmpFile.Name(), hookPath); err != nil {
-		return fmt.Errorf("copy hook: %w", err)
-	}
-	return sudoRun("chmod", "755", hookPath)
+func applyWifiSuspendFix(ctx context.Context, o sysutil.Opts) error {
+	return sysutil.SudoWriteFile(ctx, o, wifiSleepHookScript, "/usr/lib/systemd/system-sleep/wifi-mt7925")
 }
 
 // applyXbindkeys installs xbindkeys and xdotool, deploys the config, and sets up autostart.
-func applyXbindkeys() error {
-	if err := applyPackages([]string{"xbindkeys", "xdotool"}); err != nil {
+func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
+	if err := applyPackages(ctx, o, []string{"xbindkeys", "xdotool"}); err != nil {
 		return fmt.Errorf("install xbindkeys/xdotool: %w", err)
 	}
 
@@ -276,13 +255,10 @@ func applyXbindkeys() error {
 	}
 	configDst := filepath.Join(home, ".xbindkeysrc")
 
-	content, err := Configs.ReadFile("configs/xbindkeys/.xbindkeysrc")
-	if err != nil {
-		return fmt.Errorf("read embedded .xbindkeysrc: %w", err)
-	}
-	os.Remove(configDst)
-	if err := os.WriteFile(configDst, content, 0644); err != nil {
-		return fmt.Errorf("write .xbindkeysrc: %w", err)
+	// Use DeployFileFromFS so any pre-existing user-customized file gets
+	// backed up on diff instead of silently overwritten.
+	if err := sysutil.DeployFileFromFS(Configs, "configs/xbindkeys/.xbindkeysrc", configDst); err != nil {
+		return fmt.Errorf("deploy .xbindkeysrc: %w", err)
 	}
 
 	autostartDir := filepath.Join(home, ".config", "autostart")
@@ -291,27 +267,24 @@ func applyXbindkeys() error {
 	}
 
 	desktopDst := filepath.Join(autostartDir, "xbindkeys.desktop")
-	desktopContent, err := Configs.ReadFile("configs/xbindkeys/xbindkeys.desktop")
-	if err != nil {
-		return fmt.Errorf("read embedded xbindkeys.desktop: %w", err)
-	}
-	if err := os.WriteFile(desktopDst, desktopContent, 0o644); err != nil {
-		return fmt.Errorf("write xbindkeys.desktop: %w", err)
+	if err := sysutil.DeployFileFromFS(Configs, "configs/xbindkeys/xbindkeys.desktop", desktopDst); err != nil {
+		return fmt.Errorf("deploy xbindkeys.desktop: %w", err)
 	}
 
-	// Restart xbindkeys to pick up new config; ignore errors since it may not be running.
-	_ = exec.Command("killall", "xbindkeys").Run()
-	_ = exec.Command("xbindkeys").Start()
+	// Restart xbindkeys to pick up new config; best-effort.
+	_ = sysutil.Run(ctx, o, "killall", "xbindkeys")
+	// Fire-and-forget: don't block on xbindkeys.
+	_ = startDetached("xbindkeys")
 
 	return nil
 }
 
 // applyWireplumberLDAC copies the WirePlumber LDAC config from the dotfiles repo.
-func applyWireplumberLDAC() error {
+func applyWireplumberLDAC(ctx context.Context, o sysutil.Opts) error {
 	confDir := "/etc/wireplumber/wireplumber.conf.d"
 	confDst := filepath.Join(confDir, "51-ldac-hq.conf")
 
-	if err := sudoRun("mkdir", "-p", confDir); err != nil {
+	if err := sysutil.SudoRun(ctx, o, "mkdir", "-p", confDir); err != nil {
 		return fmt.Errorf("mkdir wireplumber conf dir: %w", err)
 	}
 
@@ -319,46 +292,26 @@ func applyWireplumberLDAC() error {
 	if err != nil {
 		return fmt.Errorf("read embedded wireplumber config: %w", err)
 	}
-	tmpFile, err := os.CreateTemp("", "wireplumber-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.Write(content); err != nil {
-		tmpFile.Close()
-		return err
-	}
-	tmpFile.Close()
-	if err := sudoRun("cp", tmpFile.Name(), confDst); err != nil {
+	if err := sysutil.SudoWriteFile(ctx, o, string(content), confDst); err != nil {
 		return fmt.Errorf("copy wireplumber config: %w", err)
 	}
 
 	// Restart PipeWire stack to pick up new config; best-effort.
-	_ = exec.Command("systemctl", "--user", "restart",
-		"pipewire", "pipewire-pulse", "wireplumber").Run()
+	_ = sysutil.Run(ctx, o, "systemctl", "--user", "restart",
+		"pipewire", "pipewire-pulse", "wireplumber")
 
 	return nil
 }
 
 // applyLogitechKVMFix installs a udev rule and systemd user service to restart Solaar
 // when the Logi Bolt receiver reconnects after a KVM switch.
-func applyLogitechKVMFix() error {
+func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {
 	// Deploy udev rule
 	udevContent, err := Configs.ReadFile("configs/udev/99-logitech-kvm-fix.rules")
 	if err != nil {
 		return fmt.Errorf("read embedded udev rule: %w", err)
 	}
-	tmpFile, err := os.CreateTemp("", "udev-logitech-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.Write(udevContent); err != nil {
-		tmpFile.Close()
-		return err
-	}
-	tmpFile.Close()
-	if err := sudoRun("cp", tmpFile.Name(), "/etc/udev/rules.d/99-logitech-kvm-fix.rules"); err != nil {
+	if err := sysutil.SudoWriteFile(ctx, o, string(udevContent), "/etc/udev/rules.d/99-logitech-kvm-fix.rules"); err != nil {
 		return fmt.Errorf("copy udev rule: %w", err)
 	}
 
@@ -381,9 +334,9 @@ func applyLogitechKVMFix() error {
 	}
 
 	// Enable the user service and reload udev
-	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
-	_ = exec.Command("systemctl", "--user", "enable", "solaar-restart.service").Run()
-	if err := sudoRun("udevadm", "control", "--reload-rules"); err != nil {
+	_ = sysutil.Run(ctx, o, "systemctl", "--user", "daemon-reload")
+	_ = sysutil.Run(ctx, o, "systemctl", "--user", "enable", "solaar-restart.service")
+	if err := sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules"); err != nil {
 		return fmt.Errorf("reload udev rules: %w", err)
 	}
 
@@ -391,39 +344,29 @@ func applyLogitechKVMFix() error {
 }
 
 // applyHideDrives installs a udev rule to hide Windows/secondary partitions from the file manager.
-func applyHideDrives() error {
+func applyHideDrives(ctx context.Context, o sysutil.Opts) error {
 	content, err := Configs.ReadFile("configs/udev/99-hide-drives.rules")
 	if err != nil {
 		return fmt.Errorf("read embedded hide-drives rule: %w", err)
 	}
-	tmpFile, err := os.CreateTemp("", "udev-hide-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.Write(content); err != nil {
-		tmpFile.Close()
-		return err
-	}
-	tmpFile.Close()
-	if err := sudoRun("cp", tmpFile.Name(), "/etc/udev/rules.d/99-hide-drives.rules"); err != nil {
+	if err := sysutil.SudoWriteFile(ctx, o, string(content), "/etc/udev/rules.d/99-hide-drives.rules"); err != nil {
 		return fmt.Errorf("copy udev rule: %w", err)
 	}
-	return sudoRun("udevadm", "control", "--reload-rules")
+	return sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 }
 
 // applySSDTrim enables the fstrim.timer systemd unit for periodic SSD TRIM.
-func applySSDTrim() error {
-	if err := sudoRun("systemctl", "enable", "fstrim.timer"); err != nil {
+func applySSDTrim(ctx context.Context, o sysutil.Opts) error {
+	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "fstrim.timer"); err != nil {
 		return fmt.Errorf("enable fstrim.timer: %w", err)
 	}
-	if err := sudoRun("systemctl", "start", "fstrim.timer"); err != nil {
+	if err := sysutil.SudoRun(ctx, o, "systemctl", "start", "fstrim.timer"); err != nil {
 		return fmt.Errorf("start fstrim.timer: %w", err)
 	}
 	return nil
 }
 
 // applyUpdateGrub regenerates the GRUB configuration. Used as a post-apply hook.
-func applyUpdateGrub() error {
-	return sudoRun("update-grub")
+func applyUpdateGrub(ctx context.Context, o sysutil.Opts) error {
+	return sysutil.SudoRun(ctx, o, "update-grub")
 }

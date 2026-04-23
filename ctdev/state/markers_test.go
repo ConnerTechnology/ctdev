@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -123,5 +124,53 @@ func TestMarkerList(t *testing.T) {
 			t.Errorf("expected [docker], got %v", got)
 		}
 	})
+}
+
+func TestMarkerSave_AtomicLeavesNoPartial(t *testing.T) {
+	dir := t.TempDir()
+	ms := NewMarkerStore(dir)
+	now := time.Now()
+	if err := ms.Save("docker", InstallMarker{InstalledAt: now, UpdatedAt: now, Version: "27.0"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// After Save only docker.json should exist — no dangling .tmp files.
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if len(names) != 1 || names[0] != "docker.json" {
+		t.Errorf("expected exactly docker.json after atomic save, got %v", names)
+	}
+}
+
+func TestMarkerSave_OverwriteIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	ms := NewMarkerStore(dir)
+	now := time.Now()
+	if err := ms.Save("docker", InstallMarker{InstalledAt: now, Version: "1.0"}); err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+	if err := ms.Save("docker", InstallMarker{InstalledAt: now, Version: "2.0"}); err != nil {
+		t.Fatalf("second save: %v", err)
+	}
+	got, err := ms.Load("docker")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got.Version != "2.0" {
+		t.Errorf("version: got %q, want %q", got.Version, "2.0")
+	}
+	// Verify no temp file stuck around.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".tmp" || strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("leftover temp file: %s", e.Name())
+		}
+	}
 }
 

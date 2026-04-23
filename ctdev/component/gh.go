@@ -21,26 +21,26 @@ func ghInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.InstallPackage(o, "gh")
+		return sysutil.InstallPackage(ctx, o, "gh")
 	case "apt":
 		keyring := "/usr/share/keyrings/githubcli-archive-keyring.gpg"
-		if err := sysutil.AddAPTKeyring(o, "https://cli.github.com/packages/githubcli-archive-keyring.gpg", keyring); err != nil {
+		if err := sysutil.AddAPTKeyring(ctx, o, "https://cli.github.com/packages/githubcli-archive-keyring.gpg", keyring); err != nil {
 			return fmt.Errorf("add gh GPG key: %w", err)
 		}
 		repoLine := fmt.Sprintf("deb [arch=%s signed-by=%s] https://cli.github.com/packages stable main", p.Arch, keyring)
-		if err := sysutil.AddAPTSource(o, repoLine, "github-cli.list"); err != nil {
+		if err := sysutil.AddAPTSource(ctx, o, repoLine, "github-cli.list"); err != nil {
 			return fmt.Errorf("add gh repo: %w", err)
 		}
-		if err := sysutil.APTUpdate(o); err != nil {
+		if err := sysutil.APTUpdate(ctx, o); err != nil {
 			return err
 		}
-		return sysutil.InstallPackage(o, "gh")
+		return sysutil.InstallPackage(ctx, o, "gh")
 	case "dnf":
-		return sysutil.InstallPackage(o, "gh")
+		return sysutil.InstallPackage(ctx, o, "gh")
 	case "pacman":
-		return sysutil.InstallPackage(o, "github-cli")
+		return sysutil.InstallPackage(ctx, o, "github-cli")
 	default:
-		return fmt.Errorf("gh install not supported for package manager: %s", p.PackageManager)
+		return unsupportedPMError("gh", p.PackageManager)
 	}
 }
 
@@ -51,13 +51,13 @@ func ghUninstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.RemovePackage(o, "gh")
+		return sysutil.RemovePackage(ctx, o, "gh")
 	case "apt":
-		return sysutil.RemovePackage(o, "gh")
+		return sysutil.RemovePackage(ctx, o, "gh")
 	case "dnf":
-		return sysutil.RemovePackage(o, "gh")
+		return sysutil.RemovePackage(ctx, o, "gh")
 	case "pacman":
-		return sysutil.RemovePackage(o, "github-cli")
+		return sysutil.RemovePackage(ctx, o, "github-cli")
 	default:
 		return ErrUnsupportedOS
 	}

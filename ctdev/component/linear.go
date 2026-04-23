@@ -13,12 +13,12 @@ func linearInstall(ctx context.Context, opts ExecOpts) error {
 		return ErrUnsupportedOS
 	}
 	o := execOpts(opts)
-	if !opts.Force && dirExists("/Applications/Linear.app") {
+	if !opts.Force && alreadyInstalled("linear") {
 		fmt.Fprintln(opts.Stdout, "Linear already installed")
 		return nil
 	}
 	fmt.Fprintln(opts.Stdout, "Installing Linear...")
-	return sysutil.BrewCaskInstall(o, "linear-linear")
+	return sysutil.BrewCaskInstall(ctx, o, "linear-linear")
 }
 
 func linearUninstall(ctx context.Context, opts ExecOpts) error {
@@ -27,5 +27,5 @@ func linearUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Linear...")
-	return sysutil.BrewCaskRemove(o, "linear-linear")
+	return sysutil.BrewCaskRemove(ctx, o, "linear-linear")
 }

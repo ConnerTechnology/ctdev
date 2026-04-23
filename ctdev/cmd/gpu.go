@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -85,8 +86,12 @@ func runGPUSetup(cmd *cobra.Command, args []string) error {
 		Verbose: flagVerbose,
 	}
 
-	if flagGPURecover {
-		return gpu.RunRecover(opts)
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return gpu.RunSetup(opts)
+	if flagGPURecover {
+		return gpu.RunRecover(ctx, opts)
+	}
+	return gpu.RunSetup(ctx, opts)
 }

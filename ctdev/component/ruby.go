@@ -31,47 +31,47 @@ func rubyInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		if err := sysutil.Run(o, "brew", "install", "rbenv", "ruby-build"); err != nil {
+		if err := sysutil.Run(ctx, o, "brew", "install", "rbenv", "ruby-build"); err != nil {
 			return err
 		}
 		// Build deps
 		for _, pkg := range []string{"openssl", "readline", "libyaml", "gmp"} {
-			_ = sysutil.Run(o, "brew", "install", pkg)
+			_ = sysutil.Run(ctx, o, "brew", "install", pkg)
 		}
 
 	case "apt":
-		if err := ensureGitClone(o, "https://github.com/rbenv/rbenv.git", rbenvDir); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/rbenv/rbenv.git", rbenvDir); err != nil {
 			return fmt.Errorf("clone rbenv: %w", err)
 		}
 		pluginDir := filepath.Join(rbenvDir, "plugins", "ruby-build")
-		if err := ensureGitClone(o, "https://github.com/rbenv/ruby-build.git", pluginDir); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/rbenv/ruby-build.git", pluginDir); err != nil {
 			return fmt.Errorf("clone ruby-build: %w", err)
 		}
 		fmt.Fprintln(opts.Stdout, "Installing Ruby build dependencies...")
-		if err := sysutil.InstallPackage(o, "build-essential", "autoconf", "libssl-dev",
+		if err := sysutil.InstallPackage(ctx, o, "build-essential", "autoconf", "libssl-dev",
 			"libyaml-dev", "zlib1g-dev", "libffi-dev", "libgmp-dev", "rustc"); err != nil {
 			return fmt.Errorf("install build deps: %w", err)
 		}
 
 	case "dnf":
-		if err := ensureGitClone(o, "https://github.com/rbenv/rbenv.git", rbenvDir); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/rbenv/rbenv.git", rbenvDir); err != nil {
 			return fmt.Errorf("clone rbenv: %w", err)
 		}
 		pluginDir := filepath.Join(rbenvDir, "plugins", "ruby-build")
-		if err := ensureGitClone(o, "https://github.com/rbenv/ruby-build.git", pluginDir); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/rbenv/ruby-build.git", pluginDir); err != nil {
 			return fmt.Errorf("clone ruby-build: %w", err)
 		}
 		fmt.Fprintln(opts.Stdout, "Installing Ruby build dependencies...")
-		if err := sysutil.SudoRun(o, "dnf", "groupinstall", "-y", "Development Tools"); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "dnf", "groupinstall", "-y", "Development Tools"); err != nil {
 			return fmt.Errorf("install development tools: %w", err)
 		}
-		if err := sysutil.SudoRun(o, "dnf", "install", "-y",
+		if err := sysutil.SudoRun(ctx, o, "dnf", "install", "-y",
 			"openssl-devel", "libyaml-devel", "zlib-devel", "libffi-devel", "gmp-devel", "rust"); err != nil {
 			return fmt.Errorf("install build deps: %w", err)
 		}
 
 	default:
-		return fmt.Errorf("ruby install not supported for package manager: %s", p.PackageManager)
+		return unsupportedPMError("ruby", p.PackageManager)
 	}
 
 	// Use rbenv from the install location
@@ -81,11 +81,11 @@ func rubyInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	fmt.Fprintf(opts.Stdout, "Installing Ruby %s...\n", rubyVersion)
-	if err := sysutil.Run(o, rbenvBin, "install", rubyVersion); err != nil {
+	if err := sysutil.Run(ctx, o, rbenvBin, "install", "--skip-existing", rubyVersion); err != nil {
 		return fmt.Errorf("rbenv install %s: %w", rubyVersion, err)
 	}
 
-	if err := sysutil.Run(o, rbenvBin, "global", rubyVersion); err != nil {
+	if err := sysutil.Run(ctx, o, rbenvBin, "global", rubyVersion); err != nil {
 		return fmt.Errorf("rbenv global %s: %w", rubyVersion, err)
 	}
 
@@ -95,7 +95,7 @@ func rubyInstall(ctx context.Context, opts ExecOpts) error {
 	if p.PackageManager != "brew" {
 		gemBin = filepath.Join(rbenvDir, "shims", "gem")
 	}
-	if err := sysutil.Run(o, gemBin, "install", "colorls"); err != nil {
+	if err := sysutil.Run(ctx, o, gemBin, "install", "colorls"); err != nil {
 		fmt.Fprintf(opts.Stdout, "warning: could not install colorls: %v\n", err)
 	} else if !opts.DryRun {
 		aliasLine := "alias lc='colorls -lA --sd'"

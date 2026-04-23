@@ -2,6 +2,7 @@ package sysutil
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -9,7 +10,7 @@ import (
 func TestAddAPTKeyringDryRun(t *testing.T) {
 	var buf bytes.Buffer
 	o := Opts{Stdout: &buf, DryRun: true}
-	err := AddAPTKeyring(o, "https://example.com/key.gpg", "/etc/apt/keyrings/example.gpg")
+	err := AddAPTKeyring(context.Background(), o, "https://example.com/key.gpg", "/etc/apt/keyrings/example.gpg")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -24,7 +25,7 @@ func TestAddAPTKeyringDryRun(t *testing.T) {
 func TestAddAPTSourceDryRun(t *testing.T) {
 	var buf bytes.Buffer
 	o := Opts{Stdout: &buf, DryRun: true}
-	err := AddAPTSource(o, "deb [arch=amd64] https://example.com stable main", "example.list")
+	err := AddAPTSource(context.Background(), o, "deb [arch=amd64] https://example.com stable main", "example.list")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

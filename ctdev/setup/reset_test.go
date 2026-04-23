@@ -2,13 +2,16 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
 func TestResetLinuxDefaultsDryRun(t *testing.T) {
 	var buf bytes.Buffer
-	err := ResetLinuxDefaults(&buf, true)
+	err := ResetLinuxDefaults(context.Background(), sysutil.Opts{Stdout: &buf, DryRun: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

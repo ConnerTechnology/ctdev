@@ -2,6 +2,7 @@ package gpu
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
@@ -20,17 +21,17 @@ type Opts struct {
 }
 
 // CreateMOKKeypair generates a new MOK key pair (MOK.priv + MOK.der).
-func CreateMOKKeypair(opts Opts) error {
+func CreateMOKKeypair(ctx context.Context, opts Opts) error {
 	if opts.DryRun {
 		fmt.Fprintf(opts.Stdout, "[dry-run] Would create MOK key pair at %s\n", MOKDir)
 		return nil
 	}
 
-	if err := sudoRun(opts, "mkdir", "-p", MOKDir); err != nil {
+	if err := sudoRun(ctx, opts, "mkdir", "-p", MOKDir); err != nil {
 		return fmt.Errorf("create MOK directory: %w", err)
 	}
 
-	if err := sudoRun(opts, "openssl", "req", "-new", "-x509", "-newkey", "rsa:2048",
+	if err := sudoRun(ctx, opts, "openssl", "req", "-new", "-x509", "-newkey", "rsa:2048",
 		"-keyout", MOKPriv,
 		"-outform", "DER",
 		"-out", MOKCert,
@@ -40,10 +41,10 @@ func CreateMOKKeypair(opts Opts) error {
 		return fmt.Errorf("generate MOK keypair: %w", err)
 	}
 
-	if err := sudoRun(opts, "chmod", "600", MOKPriv); err != nil {
+	if err := sudoRun(ctx, opts, "chmod", "600", MOKPriv); err != nil {
 		return fmt.Errorf("set MOK.priv permissions: %w", err)
 	}
-	if err := sudoRun(opts, "chmod", "644", MOKCert); err != nil {
+	if err := sudoRun(ctx, opts, "chmod", "644", MOKCert); err != nil {
 		return fmt.Errorf("set MOK.der permissions: %w", err)
 	}
 
@@ -51,7 +52,7 @@ func CreateMOKKeypair(opts Opts) error {
 }
 
 // ConfigureDKMSFramework configures /etc/dkms/framework.conf for automatic module signing.
-func ConfigureDKMSFramework(opts Opts) error {
+func ConfigureDKMSFramework(ctx context.Context, opts Opts) error {
 	if opts.DryRun {
 		fmt.Fprintf(opts.Stdout, "[dry-run] Would configure %s\n", DKMSFrameworkConf)
 		return nil
@@ -59,15 +60,15 @@ func ConfigureDKMSFramework(opts Opts) error {
 
 	// Backup
 	backup := fmt.Sprintf("%s.backup-%s", DKMSFrameworkConf, time.Now().Format("20060102-150405"))
-	if err := sudoRun(opts, "cp", DKMSFrameworkConf, backup); err != nil {
+	if err := sudoRun(ctx, opts, "cp", DKMSFrameworkConf, backup); err != nil {
 		return fmt.Errorf("backup framework.conf: %w", err)
 	}
 
 	// Remove existing mok_signing_key and mok_certificate lines (commented or not)
-	if err := sudoRun(opts, "sed", "-i", `/^[#[:space:]]*mok_signing_key=/d`, DKMSFrameworkConf); err != nil {
+	if err := sudoRun(ctx, opts, "sed", "-i", `/^[#[:space:]]*mok_signing_key=/d`, DKMSFrameworkConf); err != nil {
 		return fmt.Errorf("remove old mok_signing_key lines: %w", err)
 	}
-	if err := sudoRun(opts, "sed", "-i", `/^[#[:space:]]*mok_certificate=/d`, DKMSFrameworkConf); err != nil {
+	if err := sudoRun(ctx, opts, "sed", "-i", `/^[#[:space:]]*mok_certificate=/d`, DKMSFrameworkConf); err != nil {
 		return fmt.Errorf("remove old mok_certificate lines: %w", err)
 	}
 
@@ -75,10 +76,10 @@ func ConfigureDKMSFramework(opts Opts) error {
 	keyLine := fmt.Sprintf("mok_signing_key=%s", MOKPriv)
 	certLine := fmt.Sprintf("mok_certificate=%s", MOKCert)
 
-	if err := sudoTeeAppend(opts, DKMSFrameworkConf, keyLine); err != nil {
+	if err := sudoTeeAppend(ctx, opts, DKMSFrameworkConf, keyLine); err != nil {
 		return fmt.Errorf("write mok_signing_key: %w", err)
 	}
-	if err := sudoTeeAppend(opts, DKMSFrameworkConf, certLine); err != nil {
+	if err := sudoTeeAppend(ctx, opts, DKMSFrameworkConf, certLine); err != nil {
 		return fmt.Errorf("write mok_certificate: %w", err)
 	}
 
@@ -86,28 +87,28 @@ func ConfigureDKMSFramework(opts Opts) error {
 }
 
 // ConfigureDKMSLegacy configures DKMS signing via the conf.d approach.
-func ConfigureDKMSLegacy(opts Opts) error {
+func ConfigureDKMSLegacy(ctx context.Context, opts Opts) error {
 	if opts.DryRun {
 		fmt.Fprintf(opts.Stdout, "[dry-run] Would configure DKMS signing at %s\n", DKMSConf)
 		return nil
 	}
 
-	if err := sudoRun(opts, "mkdir", "-p", DKMSConfDir); err != nil {
+	if err := sudoRun(ctx, opts, "mkdir", "-p", DKMSConfDir); err != nil {
 		return fmt.Errorf("create conf.d directory: %w", err)
 	}
 
 	confContent := fmt.Sprintf("mok_signing_key=\"%s\"\nmok_certificate=\"%s\"\nsign_tool=\"%s\"\n",
 		MOKPriv, MOKCert, DKMSSignScript)
-	if err := sudoTeeWrite(opts, DKMSConf, confContent); err != nil {
+	if err := sudoTeeWrite(ctx, opts, DKMSConf, confContent); err != nil {
 		return fmt.Errorf("write DKMS conf: %w", err)
 	}
 
 	scriptContent := "#!/bin/bash\n/lib/modules/\"$1\"/build/scripts/sign-file sha256 \"$2\" \"$3\" \"$4\"\n"
-	if err := sudoTeeWrite(opts, DKMSSignScript, scriptContent); err != nil {
+	if err := sudoTeeWrite(ctx, opts, DKMSSignScript, scriptContent); err != nil {
 		return fmt.Errorf("write sign script: %w", err)
 	}
 
-	if err := sudoRun(opts, "chmod", "+x", DKMSSignScript); err != nil {
+	if err := sudoRun(ctx, opts, "chmod", "+x", DKMSSignScript); err != nil {
 		return fmt.Errorf("make sign script executable: %w", err)
 	}
 
@@ -116,7 +117,7 @@ func ConfigureDKMSLegacy(opts Opts) error {
 
 // EnrollMOK imports the MOK certificate for enrollment at next reboot.
 // The user will be prompted for a one-time password via stdin.
-func EnrollMOK(opts Opts) error {
+func EnrollMOK(ctx context.Context, opts Opts) error {
 	if opts.DryRun {
 		fmt.Fprintf(opts.Stdout, "[dry-run] Would run: mokutil --import %s\n", MOKCert)
 		return nil
@@ -133,7 +134,7 @@ func EnrollMOK(opts Opts) error {
 }
 
 // RebuildDKMS removes and reinstalls the NVIDIA DKMS module to trigger signing.
-func RebuildDKMS(opts Opts) error {
+func RebuildDKMS(ctx context.Context, opts Opts) error {
 	info := GetNvidiaDKMSInfo()
 	if info == "" {
 		return fmt.Errorf("no NVIDIA DKMS module found")
@@ -153,10 +154,10 @@ func RebuildDKMS(opts Opts) error {
 
 	fmt.Fprintf(opts.Stdout, "Removing NVIDIA DKMS module: %s for kernel %s\n", info, kernel)
 	// Ignore remove errors (module might not be installed for this kernel)
-	_ = sudoRun(opts, "dkms", "remove", info, "-k", kernel, "--no-depmod")
+	_ = sudoRun(ctx, opts, "dkms", "remove", info, "-k", kernel, "--no-depmod")
 
 	fmt.Fprintf(opts.Stdout, "Rebuilding NVIDIA DKMS module: %s for kernel %s\n", info, kernel)
-	if err := sudoRun(opts, "dkms", "install", info, "-k", kernel); err != nil {
+	if err := sudoRun(ctx, opts, "dkms", "install", info, "-k", kernel); err != nil {
 		return fmt.Errorf("DKMS rebuild failed: %w", err)
 	}
 
@@ -165,7 +166,7 @@ func RebuildDKMS(opts Opts) error {
 }
 
 // SignNvidiaModules manually signs NVIDIA kernel modules for the current kernel.
-func SignNvidiaModules(opts Opts) error {
+func SignNvidiaModules(ctx context.Context, opts Opts) error {
 	kernelOut, err := exec.Command("uname", "-r").Output()
 	if err != nil {
 		return fmt.Errorf("get kernel version: %w", err)
@@ -198,15 +199,15 @@ func SignNvidiaModules(opts Opts) error {
 			actual = strings.TrimSuffix(module, ".zst")
 			compressFormat = "zst"
 			compressed = true
-			_ = sudoRun(opts, "zstd", "-d", "-f", module, "-o", actual)
+			_ = sudoRun(ctx, opts, "zstd", "-d", "-f", module, "-o", actual)
 		} else if strings.HasSuffix(module, ".xz") {
 			actual = strings.TrimSuffix(module, ".xz")
 			compressFormat = "xz"
 			compressed = true
-			_ = sudoRun(opts, "xz", "-d", "-k", "-f", module)
+			_ = sudoRun(ctx, opts, "xz", "-d", "-k", "-f", module)
 		}
 
-		if err := sudoRun(opts, signFile, "sha256", MOKPriv, MOKCert, actual); err != nil {
+		if err := sudoRun(ctx, opts, signFile, "sha256", MOKPriv, MOKCert, actual); err != nil {
 			fmt.Fprintf(opts.Stdout, "Failed to sign: %s\n", module)
 			continue
 		}
@@ -217,10 +218,10 @@ func SignNvidiaModules(opts Opts) error {
 		if compressed {
 			switch compressFormat {
 			case "zst":
-				_ = sudoRun(opts, "zstd", "-f", actual, "-o", module)
-				_ = sudoRun(opts, "rm", "-f", actual)
+				_ = sudoRun(ctx, opts, "zstd", "-f", actual, "-o", module)
+				_ = sudoRun(ctx, opts, "rm", "-f", actual)
 			case "xz":
-				_ = sudoRun(opts, "xz", "-f", actual)
+				_ = sudoRun(ctx, opts, "xz", "-f", actual)
 			}
 		}
 	}
@@ -232,7 +233,7 @@ func SignNvidiaModules(opts Opts) error {
 }
 
 // CleanMOKClutter prompts the user to remove unexpected files from MOKDir.
-func CleanMOKClutter(opts Opts) error {
+func CleanMOKClutter(ctx context.Context, opts Opts) error {
 	clutter := FindMOKClutter()
 	if len(clutter) == 0 {
 		return nil
@@ -253,7 +254,7 @@ func CleanMOKClutter(opts Opts) error {
 			fmt.Fprintf(opts.Stdout, "[dry-run] Would remove: %s\n", f)
 			continue
 		}
-		if err := sudoRun(opts, "rm", "-f", f); err != nil {
+		if err := sudoRun(ctx, opts, "rm", "-f", f); err != nil {
 			fmt.Fprintf(opts.Stdout, "Warning: could not remove %s: %v\n", f, err)
 		} else {
 			fmt.Fprintf(opts.Stdout, "Removed: %s\n", f)
@@ -263,7 +264,7 @@ func CleanMOKClutter(opts Opts) error {
 }
 
 // RunSetup orchestrates the full GPU signing setup flow.
-func RunSetup(opts Opts) error {
+func RunSetup(ctx context.Context, opts Opts) error {
 	if runtime.GOOS == "darwin" {
 		return fmt.Errorf("GPU driver signing setup is not applicable on macOS")
 	}
@@ -311,14 +312,14 @@ func RunSetup(opts Opts) error {
 	if MOKKeyExists() && !opts.Force {
 		fmt.Fprintf(opts.Stdout, "MOK keys already exist at %s\n", MOKDir)
 	} else {
-		if err := CreateMOKKeypair(opts); err != nil {
+		if err := CreateMOKKeypair(ctx, opts); err != nil {
 			return fmt.Errorf("failed to create MOK key pair: %w", err)
 		}
 		fmt.Fprintf(opts.Stdout, "Created MOK key pair at %s\n", MOKDir)
 	}
 
 	// Clean MOK clutter
-	if err := CleanMOKClutter(opts); err != nil {
+	if err := CleanMOKClutter(ctx, opts); err != nil {
 		fmt.Fprintf(opts.Stdout, "Warning: clutter cleanup failed: %v\n", err)
 	}
 	fmt.Fprintln(opts.Stdout)
@@ -328,9 +329,9 @@ func RunSetup(opts Opts) error {
 	if DKMSFrameworkConfConfigured() && !opts.Force {
 		fmt.Fprintln(opts.Stdout, "DKMS framework.conf already configured")
 	} else {
-		if err := ConfigureDKMSFramework(opts); err != nil {
+		if err := ConfigureDKMSFramework(ctx, opts); err != nil {
 			fmt.Fprintf(opts.Stdout, "Could not configure framework.conf, trying conf.d approach: %v\n", err)
-			if err := ConfigureDKMSLegacy(opts); err != nil {
+			if err := ConfigureDKMSLegacy(ctx, opts); err != nil {
 				return fmt.Errorf("failed to configure DKMS signing: %w", err)
 			}
 			fmt.Fprintln(opts.Stdout, "DKMS signing configured (via conf.d)")
@@ -350,7 +351,7 @@ func RunSetup(opts Opts) error {
 		fmt.Fprintln(opts.Stdout, "You will be prompted to create a one-time password.")
 		fmt.Fprintln(opts.Stdout, "Remember this password - you'll need it at the next reboot.")
 		fmt.Fprintln(opts.Stdout)
-		if err := EnrollMOK(opts); err != nil {
+		if err := EnrollMOK(ctx, opts); err != nil {
 			return fmt.Errorf("failed to import MOK key: %w", err)
 		}
 		fmt.Fprintln(opts.Stdout, "MOK key queued for enrollment")
@@ -362,9 +363,9 @@ func RunSetup(opts Opts) error {
 	if ModuleSignatureValid() && !opts.Force {
 		fmt.Fprintln(opts.Stdout, "NVIDIA modules already signed with correct key")
 	} else {
-		if err := RebuildDKMS(opts); err != nil {
+		if err := RebuildDKMS(ctx, opts); err != nil {
 			fmt.Fprintf(opts.Stdout, "DKMS rebuild failed, falling back to manual signing: %v\n", err)
-			if err := SignNvidiaModules(opts); err != nil {
+			if err := SignNvidiaModules(ctx, opts); err != nil {
 				fmt.Fprintf(opts.Stdout, "Warning: manual signing also failed: %v\n", err)
 			}
 		}
@@ -380,7 +381,7 @@ func RunSetup(opts Opts) error {
 }
 
 // RunRecover re-enrolls an existing MOK key after a CMOS/firmware reset.
-func RunRecover(opts Opts) error {
+func RunRecover(ctx context.Context, opts Opts) error {
 	if runtime.GOOS == "darwin" {
 		return fmt.Errorf("GPU driver signing recovery is not applicable on macOS")
 	}
@@ -409,7 +410,7 @@ func RunRecover(opts Opts) error {
 	fmt.Fprintln(opts.Stdout, "Remember this password - you'll need it at the next reboot.")
 	fmt.Fprintln(opts.Stdout)
 
-	if err := EnrollMOK(opts); err != nil {
+	if err := EnrollMOK(ctx, opts); err != nil {
 		return fmt.Errorf("failed to import MOK key: %w", err)
 	}
 	fmt.Fprintln(opts.Stdout, "MOK key queued for enrollment")
@@ -422,10 +423,10 @@ func RunRecover(opts Opts) error {
 	return nil
 }
 
-// sudoRun executes a command with sudo.
-func sudoRun(opts Opts, name string, args ...string) error {
+// sudoRun executes a command with sudo, honoring ctx for cancellation.
+func sudoRun(ctx context.Context, opts Opts, name string, args ...string) error {
 	allArgs := append([]string{name}, args...)
-	cmd := exec.Command("sudo", allArgs...)
+	cmd := exec.CommandContext(ctx, "sudo", allArgs...)
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stdout
 	if opts.Verbose {
@@ -435,8 +436,8 @@ func sudoRun(opts Opts, name string, args ...string) error {
 }
 
 // sudoTeeAppend appends a line to a file using sudo tee -a.
-func sudoTeeAppend(opts Opts, path, line string) error {
-	cmd := exec.Command("sudo", "tee", "-a", path)
+func sudoTeeAppend(ctx context.Context, opts Opts, path, line string) error {
+	cmd := exec.CommandContext(ctx, "sudo", "tee", "-a", path)
 	cmd.Stdin = strings.NewReader(line + "\n")
 	cmd.Stderr = opts.Stdout
 	// Suppress stdout from tee (it echoes back)
@@ -444,8 +445,8 @@ func sudoTeeAppend(opts Opts, path, line string) error {
 }
 
 // sudoTeeWrite writes content to a file using sudo tee (overwrite).
-func sudoTeeWrite(opts Opts, path, content string) error {
-	cmd := exec.Command("sudo", "tee", path)
+func sudoTeeWrite(ctx context.Context, opts Opts, path, content string) error {
+	cmd := exec.CommandContext(ctx, "sudo", "tee", path)
 	cmd.Stdin = strings.NewReader(content)
 	cmd.Stderr = opts.Stdout
 	return cmd.Run()

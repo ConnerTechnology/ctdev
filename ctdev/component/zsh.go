@@ -24,7 +24,7 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 		fmt.Fprintln(opts.Stdout, "Installing Zsh...")
 
 		if !sysutil.CommandExists("zsh") {
-			if err := sysutil.InstallPackage(o, "zsh"); err != nil {
+			if err := sysutil.InstallPackage(ctx, o, "zsh"); err != nil {
 				return fmt.Errorf("install zsh: %w", err)
 			}
 		}
@@ -33,20 +33,20 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 		if which, err := exec.LookPath("zsh"); err == nil {
 			zshPath = which
 		}
-		if err := sysutil.Run(o, "chsh", "-s", zshPath); err != nil {
+		if err := sysutil.Run(ctx, o, "chsh", "-s", zshPath); err != nil {
 			fmt.Fprintf(opts.Stdout, "warning: could not change shell: %v\n", err)
 		}
 
 		if !dirExists(omzDir) {
 			fmt.Fprintln(opts.Stdout, "Installing Oh My Zsh...")
-			if err := sysutil.Run(o, "bash", "-c",
+			if err := sysutil.Run(ctx, o, "bash", "-c",
 				"curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh | bash -s -- --unattended"); err != nil {
 				return fmt.Errorf("install oh-my-zsh: %w", err)
 			}
 		}
 
 		pureDir := filepath.Join(home, ".zsh", "pure")
-		if err := ensureGitClone(o, "https://github.com/sindresorhus/pure.git", pureDir); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/sindresorhus/pure.git", pureDir); err != nil {
 			return fmt.Errorf("clone pure prompt: %w", err)
 		}
 
@@ -62,27 +62,28 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 		}
 
 		customPlugins := filepath.Join(omzDir, "custom", "plugins")
-		if err := ensureGitClone(o, "https://github.com/zsh-users/zsh-autosuggestions", filepath.Join(customPlugins, "zsh-autosuggestions")); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/zsh-users/zsh-autosuggestions", filepath.Join(customPlugins, "zsh-autosuggestions")); err != nil {
 			return fmt.Errorf("clone zsh-autosuggestions: %w", err)
 		}
-		if err := ensureGitClone(o, "https://github.com/zsh-users/zsh-completions.git", filepath.Join(customPlugins, "zsh-completions")); err != nil {
+		if err := ensureGitClone(ctx, o, "https://github.com/zsh-users/zsh-completions.git", filepath.Join(customPlugins, "zsh-completions")); err != nil {
 			return fmt.Errorf("clone zsh-completions: %w", err)
 		}
 	} else {
 		fmt.Fprintln(opts.Stdout, "Zsh already installed, updating configs...")
 	}
 
-	// Phase 2: Always deploy configs (keeps dotfiles in sync)
-	deploys := map[string]string{
-		"configs/zsh/aliases.zsh":  filepath.Join(omzDir, "custom", "aliases.zsh"),
-		"configs/zsh/exports.zsh":  filepath.Join(omzDir, "custom", "exports.zsh"),
-		"configs/zsh/path.zsh":     filepath.Join(home, ".zsh", "path.zsh"),
-		"configs/zsh/.zshrc":       filepath.Join(home, ".zshrc"),
+	// Phase 2: Always deploy configs (keeps dotfiles in sync).
+	// Order is fixed so output and backup timestamps are reproducible across runs.
+	deploys := []struct{ src, dst string }{
+		{"configs/zsh/.zshrc", filepath.Join(home, ".zshrc")},
+		{"configs/zsh/aliases.zsh", filepath.Join(omzDir, "custom", "aliases.zsh")},
+		{"configs/zsh/exports.zsh", filepath.Join(omzDir, "custom", "exports.zsh")},
+		{"configs/zsh/path.zsh", filepath.Join(home, ".zsh", "path.zsh")},
 	}
 
-	for src, dst := range deploys {
-		if err := deployOrDryRun(o, src, dst); err != nil {
-			fmt.Fprintf(opts.Stdout, "warning: could not deploy %s: %v\n", filepath.Base(src), err)
+	for _, d := range deploys {
+		if err := deployOrDryRun(o, d.src, d.dst); err != nil {
+			fmt.Fprintf(opts.Stdout, "warning: could not deploy %s: %v\n", filepath.Base(d.src), err)
 		}
 	}
 

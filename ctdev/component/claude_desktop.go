@@ -13,12 +13,12 @@ func claudeDesktopInstall(ctx context.Context, opts ExecOpts) error {
 		return ErrUnsupportedOS
 	}
 	o := execOpts(opts)
-	if !opts.Force && dirExists("/Applications/Claude.app") {
+	if !opts.Force && alreadyInstalled("claude-desktop") {
 		fmt.Fprintln(opts.Stdout, "Claude Desktop already installed")
 		return nil
 	}
 	fmt.Fprintln(opts.Stdout, "Installing Claude Desktop...")
-	return sysutil.BrewCaskInstall(o, "claude")
+	return sysutil.BrewCaskInstall(ctx, o, "claude")
 }
 
 func claudeDesktopUninstall(ctx context.Context, opts ExecOpts) error {
@@ -27,5 +27,5 @@ func claudeDesktopUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing Claude Desktop...")
-	return sysutil.BrewCaskRemove(o, "claude")
+	return sysutil.BrewCaskRemove(ctx, o, "claude")
 }

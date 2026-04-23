@@ -23,7 +23,7 @@ func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.OS == platform.MacOS {
 		fmt.Fprintln(opts.Stdout, "Installing kubectl...")
-		return sysutil.InstallPackage(o, "kubectl")
+		return sysutil.InstallPackage(ctx, o, "kubectl")
 	}
 
 	// Fetch latest stable version
@@ -66,7 +66,7 @@ func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 		return err
 	}
 
-	return sysutil.InstallBinary(o, binaryPath, "/usr/local/bin/kubectl")
+	return sysutil.InstallBinary(ctx, o, binaryPath, "/usr/local/bin/kubectl")
 }
 
 func fetchKubectlStableVersion() (string, error) {
@@ -88,7 +88,7 @@ func kubectlUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing kubectl...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.RemovePackage(o, "kubectl")
+		return sysutil.RemovePackage(ctx, o, "kubectl")
 	}
-	return sysutil.SudoRun(o, "rm", "-f", "/usr/local/bin/kubectl")
+	return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/kubectl")
 }

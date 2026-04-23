@@ -1,13 +1,14 @@
 package sysutil
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 )
 
 // AddAPTKeyring downloads a GPG key and installs it as an APT keyring.
-func AddAPTKeyring(o Opts, url, keyringPath string) error {
+func AddAPTKeyring(ctx context.Context, o Opts, url, keyringPath string) error {
 	if o.DryRun {
 		fmt.Fprintf(o.Stdout, "[dry-run] download GPG key %s → %s\n", url, keyringPath)
 		return nil
@@ -31,7 +32,7 @@ func AddAPTKeyring(o Opts, url, keyringPath string) error {
 	defer os.Remove(dearmorTmp.Name())
 	dearmorTmp.Close()
 
-	dearmor := exec.Command("gpg", "--dearmor", "--yes", "-o", dearmorTmp.Name())
+	dearmor := exec.CommandContext(ctx, "gpg", "--dearmor", "--yes", "-o", dearmorTmp.Name())
 	in, err := os.Open(tmp.Name())
 	if err != nil {
 		return err
@@ -43,11 +44,11 @@ func AddAPTKeyring(o Opts, url, keyringPath string) error {
 	if err := dearmor.Run(); err != nil {
 		return err
 	}
-	return SudoRun(o, "cp", dearmorTmp.Name(), keyringPath)
+	return SudoRun(ctx, o, "cp", dearmorTmp.Name(), keyringPath)
 }
 
 // AddAPTSource writes an APT sources list entry.
-func AddAPTSource(o Opts, line, filename string) error {
+func AddAPTSource(ctx context.Context, o Opts, line, filename string) error {
 	path := "/etc/apt/sources.list.d/" + filename
 	if o.DryRun {
 		fmt.Fprintf(o.Stdout, "[dry-run] write %s\n", path)
@@ -63,10 +64,10 @@ func AddAPTSource(o Opts, line, filename string) error {
 		return err
 	}
 	tmp.Close()
-	return SudoRun(o, "cp", tmp.Name(), path)
+	return SudoRun(ctx, o, "cp", tmp.Name(), path)
 }
 
 // APTUpdate runs apt-get update.
-func APTUpdate(o Opts) error {
-	return SudoRun(o, "apt-get", "update", "-qq")
+func APTUpdate(ctx context.Context, o Opts) error {
+	return SudoRun(ctx, o, "apt-get", "update", "-qq")
 }

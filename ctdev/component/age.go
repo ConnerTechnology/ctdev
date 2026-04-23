@@ -21,7 +21,12 @@ func ageInstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.OS == platform.MacOS {
 		fmt.Fprintln(opts.Stdout, "Installing age...")
-		return sysutil.InstallPackage(o, "age")
+		return sysutil.InstallPackage(ctx, o, "age")
+	}
+
+	// age only publishes Linux tarballs for amd64 and arm64.
+	if p.Arch != "amd64" && p.Arch != "arm64" {
+		return fmt.Errorf("age Linux build only available for amd64/arm64 (got %s): %w", p.Arch, ErrUnsupportedOS)
 	}
 
 	ver, err := sysutil.GitHubLatestVersion("FiloSottile/age")
@@ -48,13 +53,13 @@ func ageInstall(ctx context.Context, opts ExecOpts) error {
 	if err := sysutil.DownloadFile(url, archivePath); err != nil {
 		return err
 	}
-	if err := sysutil.Run(o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
+	if err := sysutil.Run(ctx, o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
 		return err
 	}
-	if err := sysutil.InstallBinary(o, filepath.Join(tmpDir, "age", "age"), "/usr/local/bin/age"); err != nil {
+	if err := sysutil.InstallBinary(ctx, o, filepath.Join(tmpDir, "age", "age"), "/usr/local/bin/age"); err != nil {
 		return err
 	}
-	return sysutil.InstallBinary(o, filepath.Join(tmpDir, "age", "age-keygen"), "/usr/local/bin/age-keygen")
+	return sysutil.InstallBinary(ctx, o, filepath.Join(tmpDir, "age", "age-keygen"), "/usr/local/bin/age-keygen")
 }
 
 func ageUninstall(ctx context.Context, opts ExecOpts) error {
@@ -63,8 +68,8 @@ func ageUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing age...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.RemovePackage(o, "age")
+		return sysutil.RemovePackage(ctx, o, "age")
 	}
-	_ = sysutil.SudoRun(o, "rm", "-f", "/usr/local/bin/age")
-	return sysutil.SudoRun(o, "rm", "-f", "/usr/local/bin/age-keygen")
+	_ = sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/age")
+	return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/age-keygen")
 }

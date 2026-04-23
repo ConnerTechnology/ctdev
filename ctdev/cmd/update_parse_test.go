@@ -221,3 +221,79 @@ func TestParseNPMOutdatedJSONInvalid(t *testing.T) {
 		t.Error("expected error for invalid JSON")
 	}
 }
+
+func TestGoArchiveSHA256(t *testing.T) {
+	releases := []goRelease{
+		{
+			Version: "go1.23.4",
+			Files: []struct {
+				Filename string `json:"filename"`
+				OS       string `json:"os"`
+				Arch     string `json:"arch"`
+				Kind     string `json:"kind"`
+				SHA256   string `json:"sha256"`
+			}{
+				{Filename: "go1.23.4.linux-amd64.tar.gz", OS: "linux", Arch: "amd64", Kind: "archive", SHA256: "abc123"},
+				{Filename: "go1.23.4.darwin-arm64.tar.gz", OS: "darwin", Arch: "arm64", Kind: "archive", SHA256: "def456"},
+			},
+		},
+		{
+			Version: "go1.23.3",
+			Files: []struct {
+				Filename string `json:"filename"`
+				OS       string `json:"os"`
+				Arch     string `json:"arch"`
+				Kind     string `json:"kind"`
+				SHA256   string `json:"sha256"`
+			}{
+				{Filename: "go1.23.3.linux-amd64.tar.gz", OS: "linux", Arch: "amd64", Kind: "archive", SHA256: "older"},
+			},
+		},
+	}
+
+	t.Run("finds matching version+os+arch", func(t *testing.T) {
+		got := goArchiveSHA256(releases, "1.23.4", "linux", "amd64")
+		if got != "abc123" {
+			t.Errorf("got %q, want abc123", got)
+		}
+	})
+	t.Run("finds older release when pinned", func(t *testing.T) {
+		got := goArchiveSHA256(releases, "1.23.3", "linux", "amd64")
+		if got != "older" {
+			t.Errorf("got %q, want older", got)
+		}
+	})
+	t.Run("unknown version returns empty", func(t *testing.T) {
+		got := goArchiveSHA256(releases, "9.9.9", "linux", "amd64")
+		if got != "" {
+			t.Errorf("expected empty; got %q", got)
+		}
+	})
+	t.Run("unknown arch returns empty", func(t *testing.T) {
+		got := goArchiveSHA256(releases, "1.23.4", "linux", "riscv64")
+		if got != "" {
+			t.Errorf("expected empty; got %q", got)
+		}
+	})
+}
+
+func TestShouldRefreshKeys(t *testing.T) {
+	tests := []struct {
+		name         string
+		refreshKeys  bool
+		check        bool
+		want         bool
+	}{
+		{"refresh-keys without check", true, false, true},
+		{"refresh-keys with check is suppressed", true, true, false},
+		{"no refresh-keys", false, false, false},
+		{"check alone", false, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldRefreshKeys(tt.refreshKeys, tt.check); got != tt.want {
+				t.Errorf("shouldRefreshKeys(%v, %v) = %v, want %v", tt.refreshKeys, tt.check, got, tt.want)
+			}
+		})
+	}
+}

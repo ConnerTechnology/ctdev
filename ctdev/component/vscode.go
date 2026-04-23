@@ -21,32 +21,32 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskInstall(o, "visual-studio-code")
+		return sysutil.BrewCaskInstall(ctx, o, "visual-studio-code")
 	case "apt":
 		keyring := "/etc/apt/trusted.gpg.d/packages.microsoft.gpg"
-		if err := sysutil.AddAPTKeyring(o, "https://packages.microsoft.com/keys/microsoft.asc", keyring); err != nil {
+		if err := sysutil.AddAPTKeyring(ctx, o, "https://packages.microsoft.com/keys/microsoft.asc", keyring); err != nil {
 			return fmt.Errorf("add microsoft GPG key: %w", err)
 		}
 		repoLine := fmt.Sprintf("deb [arch=amd64,arm64,armhf signed-by=%s] https://packages.microsoft.com/repos/code stable main", keyring)
-		if err := sysutil.AddAPTSource(o, repoLine, "vscode.list"); err != nil {
+		if err := sysutil.AddAPTSource(ctx, o, repoLine, "vscode.list"); err != nil {
 			return fmt.Errorf("add vscode repo: %w", err)
 		}
-		if err := sysutil.APTUpdate(o); err != nil {
+		if err := sysutil.APTUpdate(ctx, o); err != nil {
 			return err
 		}
-		return sysutil.InstallPackage(o, "code")
+		return sysutil.InstallPackage(ctx, o, "code")
 	case "dnf":
 		// Add Microsoft repo
-		if err := sysutil.SudoRun(o, "rpm", "--import", "https://packages.microsoft.com/keys/microsoft.asc"); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "rpm", "--import", "https://packages.microsoft.com/keys/microsoft.asc"); err != nil {
 			return fmt.Errorf("import microsoft GPG key: %w", err)
 		}
 		repoContent := "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc\n"
-		if err := sysutil.SudoWriteFile(o, repoContent, "/etc/yum.repos.d/vscode.repo"); err != nil {
+		if err := sysutil.SudoWriteFile(ctx, o, repoContent, "/etc/yum.repos.d/vscode.repo"); err != nil {
 			return fmt.Errorf("add vscode repo: %w", err)
 		}
-		return sysutil.SudoRun(o, "dnf", "install", "-y", "code")
+		return sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "code")
 	default:
-		return fmt.Errorf("VS Code install not supported for package manager: %s", p.PackageManager)
+		return unsupportedPMError("VS Code", p.PackageManager)
 	}
 }
 
@@ -56,10 +56,10 @@ func vscodeUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing VS Code...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.BrewCaskRemove(o, "visual-studio-code")
+		return sysutil.BrewCaskRemove(ctx, o, "visual-studio-code")
 	}
 	if p.PackageManager == "apt" || p.PackageManager == "dnf" {
-		return sysutil.RemovePackage(o, "code")
+		return sysutil.RemovePackage(ctx, o, "code")
 	}
 	return ErrUnsupportedOS
 }

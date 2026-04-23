@@ -22,7 +22,7 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskInstall(o, "google-chrome")
+		return sysutil.BrewCaskInstall(ctx, o, "google-chrome")
 	case "apt":
 		if p.Arch != "amd64" {
 			return fmt.Errorf("chrome .deb only available on amd64 (got %s)", p.Arch)
@@ -41,22 +41,17 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.DownloadFile("https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", tmp.Name()); err != nil {
 			return fmt.Errorf("download chrome: %w", err)
 		}
-		if err := sysutil.SudoRun(o, "dpkg", "-i", tmp.Name()); err != nil {
-			if fixErr := sysutil.SudoRun(o, "apt-get", "install", "-f", "-y"); fixErr != nil {
-				return fmt.Errorf("dpkg failed and apt-get fix failed: %w", fixErr)
-			}
-		}
-		return nil
+		return installDebWithDepFix(ctx, o, tmp.Name(), "google-chrome-stable")
 	case "dnf":
-		if err := sysutil.SudoRun(o, "dnf", "install", "-y", "fedora-workstation-repositories"); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "fedora-workstation-repositories"); err != nil {
 			return fmt.Errorf("install fedora-workstation-repositories: %w", err)
 		}
-		if err := sysutil.SudoRun(o, "dnf", "config-manager", "--set-enabled", "google-chrome"); err != nil {
+		if err := sysutil.SudoRun(ctx, o, "dnf", "config-manager", "--set-enabled", "google-chrome"); err != nil {
 			return fmt.Errorf("enable google-chrome repo: %w", err)
 		}
-		return sysutil.SudoRun(o, "dnf", "install", "-y", "google-chrome-stable")
+		return sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "google-chrome-stable")
 	default:
-		return fmt.Errorf("chrome install not supported for package manager: %s", p.PackageManager)
+		return unsupportedPMError("chrome", p.PackageManager)
 	}
 }
 
@@ -67,11 +62,11 @@ func chromeUninstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskRemove(o, "google-chrome")
+		return sysutil.BrewCaskRemove(ctx, o, "google-chrome")
 	case "apt":
-		return sysutil.RemovePackage(o, "google-chrome-stable")
+		return sysutil.RemovePackage(ctx, o, "google-chrome-stable")
 	case "dnf":
-		return sysutil.RemovePackage(o, "google-chrome-stable")
+		return sysutil.RemovePackage(ctx, o, "google-chrome-stable")
 	default:
 		return ErrUnsupportedOS
 	}

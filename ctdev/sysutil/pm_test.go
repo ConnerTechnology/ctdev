@@ -2,13 +2,14 @@ package sysutil
 
 import (
 	"bytes"
+	"context"
 	"testing"
 )
 
 func TestInstallPackageDryRun(t *testing.T) {
 	var buf bytes.Buffer
 	o := Opts{Stdout: &buf, DryRun: true}
-	err := InstallPackage(o, "testpkg")
+	err := InstallPackage(context.Background(), o, "testpkg")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -21,7 +22,7 @@ func TestInstallPackageDryRun(t *testing.T) {
 func TestRemovePackageDryRun(t *testing.T) {
 	var buf bytes.Buffer
 	o := Opts{Stdout: &buf, DryRun: true}
-	err := RemovePackage(o, "testpkg")
+	err := RemovePackage(context.Background(), o, "testpkg")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

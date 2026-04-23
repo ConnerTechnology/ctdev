@@ -1,6 +1,7 @@
 package sysutil
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ var httpClient = &http.Client{Timeout: 60 * time.Second}
 func HTTPClient() *http.Client { return httpClient }
 
 // DownloadFile downloads a URL to a local file path.
+// On error the partial destination file is removed so retries see a clean slate.
 func DownloadFile(url, dest string) error {
 	resp, err := httpClient.Get(url)
 	if err != nil {
@@ -38,9 +40,14 @@ func DownloadFile(url, dest string) error {
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
 		f.Close()
-		return err
+		os.Remove(dest)
+		return fmt.Errorf("download %s: %w", url, err)
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		os.Remove(dest)
+		return fmt.Errorf("download %s: %w", url, err)
+	}
+	return nil
 }
 
 // GitHubLatestVersion fetches the latest release version from a GitHub repo.
@@ -123,8 +130,8 @@ func VerifyChecksum(filePath, expected string) error {
 }
 
 // InstallBinary copies a binary to a destination path with sudo.
-func InstallBinary(o Opts, src, dest string) error {
-	return SudoRun(o, "install", "-o", "root", "-g", "root", "-m", "0755", src, dest)
+func InstallBinary(ctx context.Context, o Opts, src, dest string) error {
+	return SudoRun(ctx, o, "install", "-o", "root", "-g", "root", "-m", "0755", src, dest)
 }
 
 // GitHubBinarySpec describes how to download and install a binary from a GitHub release.
@@ -139,7 +146,7 @@ type GitHubBinarySpec struct {
 
 // DownloadGitHubBinary fetches the latest release, downloads, verifies, extracts, and installs.
 // Returns the version string and any error.
-func DownloadGitHubBinary(o Opts, spec GitHubBinarySpec) (string, error) {
+func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (string, error) {
 	ver, err := GitHubLatestVersion(spec.Repo)
 	if err != nil {
 		return "", err
@@ -180,18 +187,18 @@ func DownloadGitHubBinary(o Opts, spec GitHubBinarySpec) (string, error) {
 
 	switch spec.ArchFormat {
 	case "tar.gz":
-		if err := Run(o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
+		if err := Run(ctx, o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
 			return ver, fmt.Errorf("extract %s: %w", spec.Repo, err)
 		}
 	case "zip":
-		if err := Run(o, "unzip", "-o", archivePath, "-d", tmpDir); err != nil {
+		if err := Run(ctx, o, "unzip", "-o", archivePath, "-d", tmpDir); err != nil {
 			return ver, fmt.Errorf("extract %s: %w", spec.Repo, err)
 		}
 	case "":
 		// Raw binary, no extraction needed
-		return ver, InstallBinary(o, archivePath, spec.InstallDest)
+		return ver, InstallBinary(ctx, o, archivePath, spec.InstallDest)
 	}
 
 	binaryPath := filepath.Join(tmpDir, spec.BinaryPath(goos, goarch))
-	return ver, InstallBinary(o, binaryPath, spec.InstallDest)
+	return ver, InstallBinary(ctx, o, binaryPath, spec.InstallDest)
 }

@@ -152,6 +152,8 @@ func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		cmd := inst.progressBar.SetPercent(inst.donePercent())
+		return inst, cmd
 	case tickMsg:
 		if !inst.done {
 			return inst, tickEvery()

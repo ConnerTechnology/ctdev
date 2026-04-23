@@ -15,7 +15,7 @@ func gitInstall(ctx context.Context, opts ExecOpts) error {
 	// Ensure git is installed
 	if !sysutil.CommandExists("git") {
 		fmt.Fprintln(opts.Stdout, "Installing git...")
-		if err := sysutil.InstallPackage(o, "git"); err != nil {
+		if err := sysutil.InstallPackage(ctx, o, "git"); err != nil {
 			return err
 		}
 	}
@@ -64,6 +64,8 @@ func gitUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	_ = os.Remove(gitconfig)
-	fmt.Fprintln(opts.Stdout, ".gitconfig.local preserved")
+	if _, err := os.Stat(filepath.Join(home, ".gitconfig.local")); err == nil {
+		fmt.Fprintln(opts.Stdout, ".gitconfig.local preserved")
+	}
 	return nil
 }

@@ -19,11 +19,11 @@ func sopsInstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.OS == platform.MacOS {
 		fmt.Fprintln(opts.Stdout, "Installing sops...")
-		return sysutil.InstallPackage(o, "sops")
+		return sysutil.InstallPackage(ctx, o, "sops")
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing sops...")
-	ver, err := sysutil.DownloadGitHubBinary(o, sysutil.GitHubBinarySpec{
+	ver, err := sysutil.DownloadGitHubBinary(ctx, o, sysutil.GitHubBinarySpec{
 		Repo: "getsops/sops",
 		ArchiveURL: func(ver, goos, goarch string) string {
 			return fmt.Sprintf("https://github.com/getsops/sops/releases/download/v%s/sops-v%s.%s.%s", ver, ver, goos, goarch)
@@ -50,7 +50,7 @@ func sopsUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing sops...")
 
 	if p.OS == platform.MacOS {
-		return sysutil.RemovePackage(o, "sops")
+		return sysutil.RemovePackage(ctx, o, "sops")
 	}
-	return sysutil.SudoRun(o, "rm", "-f", "/usr/local/bin/sops")
+	return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/sops")
 }

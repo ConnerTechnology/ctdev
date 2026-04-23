@@ -21,6 +21,12 @@ type progressOperation struct {
 	names    []string
 }
 
+// msgSender is the subset of *tea.Program that we depend on, letting tests
+// swap in a fake for runOneComponent without spinning up a real TUI.
+type msgSender interface {
+	Send(tea.Msg)
+}
+
 func runWithProgress(op progressOperation) error {
 	if isBatchMode() {
 		return runWithProgressBatch(op)
@@ -32,78 +38,95 @@ func runWithProgress(op progressOperation) error {
 	progressModel := progress.New(op.names, op.mode)
 	p := tea.NewProgram(&progressModel)
 
+	// workerDone lets us block on the install loop after the TUI exits so we
+	// never return (and let the parent process continue) while install
+	// goroutines are still running.
+	workerDone := make(chan struct{})
 	go func() {
+		defer close(workerDone)
+		defer p.Send(progress.AllDoneMsg{})
 		for _, name := range op.names {
 			if ctx.Err() != nil {
-				break
+				return
 			}
-			c := comp.FindByName(name)
-			if c == nil {
-				continue
-			}
-
-			p.Send(progress.InstallStartMsg{Name: name})
-			start := time.Now()
-
-			pr, pw, err := os.Pipe()
-			if err != nil {
-				p.Send(progress.InstallFailMsg{Name: name, Error: err.Error(), Duration: time.Since(start)})
-				continue
-			}
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go func(name string) {
-				defer wg.Done()
-				scanner := bufio.NewScanner(pr)
-				for scanner.Scan() {
-					p.Send(progress.InstallOutputMsg{Name: name, Line: scanner.Text()})
-				}
-			}(name)
-
-			opts := comp.ExecOpts{
-				Force:   flagForce,
-				DryRun:  flagDryRun,
-				Verbose: flagVerbose,
-				Stdout:  pw,
-				Stderr:  pw,
-			}
-
-			var result comp.ExecResult
-			if op.mode == progress.ModeUninstall {
-				result = op.executor.Uninstall(ctx, c, opts)
-			} else {
-				result = op.executor.Install(ctx, c, opts)
-			}
-			pw.Close()
-			wg.Wait()
-			pr.Close()
-
-			duration := time.Since(start)
-
-			if result.Skipped {
-				p.Send(progress.InstallSkipMsg{Name: name})
-			} else if result.Err != nil {
-				p.Send(progress.InstallFailMsg{Name: name, Error: result.Err.Error(), Duration: duration})
-			} else {
-				if op.mode == progress.ModeUninstall {
-					op.markers.Remove(name)
-				} else {
-					op.markers.Save(name, state.InstallMarker{
-						InstalledAt: time.Now(),
-						Version:     "unknown",
-						UpdatedAt:   time.Now(),
-					})
-				}
-				p.Send(progress.InstallDoneMsg{Name: name, Duration: duration})
-			}
+			runOneComponent(ctx, p, op, name)
 		}
-		p.Send(progress.AllDoneMsg{})
 	}()
 
 	_, err := p.Run()
 	cancel()
+	<-workerDone
 	resetTerminal()
 	return err
+}
+
+// runOneComponent runs install/uninstall for a single named component and
+// streams its output through `send`. Pipe fds are cleaned up via defer so a
+// panic in the install func can't leak file descriptors.
+func runOneComponent(ctx context.Context, send msgSender, op progressOperation, name string) {
+	c := comp.FindByName(name)
+	if c == nil {
+		return
+	}
+
+	send.Send(progress.InstallStartMsg{Name: name})
+	start := time.Now()
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		send.Send(progress.InstallFailMsg{Name: name, Error: err.Error(), Duration: time.Since(start)})
+		return
+	}
+	// pr is closed after the scanner goroutine returns; pw is closed once the
+	// install function has finished so the scanner can drain and exit.
+	defer pr.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(pr)
+		for scanner.Scan() {
+			send.Send(progress.InstallOutputMsg{Name: name, Line: scanner.Text()})
+		}
+	}()
+
+	opts := comp.ExecOpts{
+		Force:   flagForce,
+		DryRun:  flagDryRun,
+		Verbose: flagVerbose,
+		Stdout:  pw,
+		Stderr:  pw,
+	}
+
+	var result comp.ExecResult
+	if op.mode == progress.ModeUninstall {
+		result = op.executor.Uninstall(ctx, c, opts)
+	} else {
+		result = op.executor.Install(ctx, c, opts)
+	}
+	pw.Close()
+	wg.Wait()
+
+	duration := time.Since(start)
+
+	switch {
+	case result.Skipped:
+		send.Send(progress.InstallSkipMsg{Name: name})
+	case result.Err != nil:
+		send.Send(progress.InstallFailMsg{Name: name, Error: result.Err.Error(), Duration: duration})
+	default:
+		if op.mode == progress.ModeUninstall {
+			op.markers.Remove(name)
+		} else {
+			op.markers.Save(name, state.InstallMarker{
+				InstalledAt: time.Now(),
+				Version:     "unknown",
+				UpdatedAt:   time.Now(),
+			})
+		}
+		send.Send(progress.InstallDoneMsg{Name: name, Duration: duration})
+	}
 }
 
 // runWithProgressBatch runs install/uninstall without a TUI (for CI/pipes).

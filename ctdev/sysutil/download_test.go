@@ -3,10 +3,82 @@ package sysutil
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestDownloadFile_Success(t *testing.T) {
+	body := []byte("payload-bytes")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out.bin")
+	if err := DownloadFile(srv.URL, dest); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read dest: %v", err)
+	}
+	if string(got) != string(body) {
+		t.Errorf("dest body = %q, want %q", got, body)
+	}
+}
+
+func TestDownloadFile_HTTPErrorNoFileCreated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out.bin")
+	err := DownloadFile(srv.URL, dest)
+	if err == nil {
+		t.Fatal("expected error for 500 response")
+	}
+	if _, statErr := os.Stat(dest); !os.IsNotExist(statErr) {
+		t.Errorf("expected dest to be absent after HTTP error; stat err = %v", statErr)
+	}
+}
+
+func TestDownloadFile_PartialTransferCleansUp(t *testing.T) {
+	// Advertise a longer Content-Length than we send so io.Copy returns
+	// ErrUnexpectedEOF. DownloadFile must remove the partial file.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "short")
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			return
+		}
+		conn.Close()
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out.bin")
+	err := DownloadFile(srv.URL, dest)
+	if err == nil {
+		t.Fatal("expected error from truncated response")
+	}
+	if _, statErr := os.Stat(dest); !os.IsNotExist(statErr) {
+		t.Errorf("expected dest to be removed on partial transfer; stat err = %v", statErr)
+	}
+}
 
 func TestVerifyChecksum(t *testing.T) {
 	dir := t.TempDir()

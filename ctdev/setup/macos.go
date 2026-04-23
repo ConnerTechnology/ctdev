@@ -1,10 +1,22 @@
 package setup
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 )
+
+// defaultsWrite runs `defaults write <domain> <key> <args...>` and appends any
+// failure to errs. A failure is logged to w but doesn't abort — subsequent
+// writes still run so unrelated keys apply even if one is SIP-restricted.
+func defaultsWrite(w io.Writer, errs *[]error, domain, key string, args ...string) {
+	full := append([]string{"write", domain, key}, args...)
+	if err := exec.Command("defaults", full...).Run(); err != nil {
+		fmt.Fprintf(w, "warning: defaults write %s %s failed: %v\n", domain, key, err)
+		*errs = append(*errs, fmt.Errorf("defaults write %s %s: %w", domain, key, err))
+	}
+}
 
 func ApplyMacOSDefaults(w io.Writer, dryRun bool) error {
 	if dryRun {
@@ -18,54 +30,59 @@ func ApplyMacOSDefaults(w io.Writer, dryRun bool) error {
 		return nil
 	}
 
+	var errs []error
+
 	// Dock
 	fmt.Fprintln(w, "Configuring Dock...")
-	run("defaults", "write", "com.apple.dock", "autohide", "-bool", "true")
-	run("defaults", "write", "com.apple.dock", "launchanim", "-bool", "false")
-	run("defaults", "write", "com.apple.dock", "show-recents", "-bool", "false")
+	defaultsWrite(w, &errs, "com.apple.dock", "autohide", "-bool", "true")
+	defaultsWrite(w, &errs, "com.apple.dock", "launchanim", "-bool", "false")
+	defaultsWrite(w, &errs, "com.apple.dock", "show-recents", "-bool", "false")
 
 	// Sound
 	fmt.Fprintln(w, "Configuring Sound...")
-	run("defaults", "write", "NSGlobalDomain", "com.apple.sound.beep.feedback", "-bool", "true")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "com.apple.sound.beep.feedback", "-bool", "true")
 
 	// Finder
 	fmt.Fprintln(w, "Configuring Finder...")
-	run("defaults", "write", "com.apple.finder", "ShowPathbar", "-bool", "true")
-	run("defaults", "write", "com.apple.finder", "ShowStatusBar", "-bool", "true")
-	run("defaults", "write", "com.apple.desktopservices", "DSDontWriteNetworkStores", "-bool", "true")
-	run("defaults", "write", "com.apple.desktopservices", "DSDontWriteUSBStores", "-bool", "true")
-	run("defaults", "write", "com.apple.finder", "FXDefaultSearchScope", "-string", "SCcf")
-	run("defaults", "write", "com.apple.finder", "FXPreferredViewStyle", "-string", "Nlsv")
-	run("defaults", "write", "com.apple.finder", "QuitMenuItem", "-bool", "true")
+	defaultsWrite(w, &errs, "com.apple.finder", "ShowPathbar", "-bool", "true")
+	defaultsWrite(w, &errs, "com.apple.finder", "ShowStatusBar", "-bool", "true")
+	defaultsWrite(w, &errs, "com.apple.desktopservices", "DSDontWriteNetworkStores", "-bool", "true")
+	defaultsWrite(w, &errs, "com.apple.desktopservices", "DSDontWriteUSBStores", "-bool", "true")
+	defaultsWrite(w, &errs, "com.apple.finder", "FXDefaultSearchScope", "-string", "SCcf")
+	defaultsWrite(w, &errs, "com.apple.finder", "FXPreferredViewStyle", "-string", "Nlsv")
+	defaultsWrite(w, &errs, "com.apple.finder", "QuitMenuItem", "-bool", "true")
 
 	// Keyboard
 	fmt.Fprintln(w, "Configuring Keyboard...")
-	run("defaults", "write", "NSGlobalDomain", "NSAutomaticQuoteSubstitutionEnabled", "-bool", "false")
-	run("defaults", "write", "NSGlobalDomain", "NSAutomaticDashSubstitutionEnabled", "-bool", "false")
-	run("defaults", "write", "NSGlobalDomain", "NSAutomaticSpellingCorrectionEnabled", "-bool", "false")
-	run("defaults", "write", "NSGlobalDomain", "NSAutomaticCapitalizationEnabled", "-bool", "false")
-	run("defaults", "write", "NSGlobalDomain", "NSAutomaticPeriodSubstitutionEnabled", "-bool", "false")
-	run("defaults", "write", "NSGlobalDomain", "KeyRepeat", "-int", "2")
-	run("defaults", "write", "NSGlobalDomain", "InitialKeyRepeat", "-int", "15")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "NSAutomaticQuoteSubstitutionEnabled", "-bool", "false")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "NSAutomaticDashSubstitutionEnabled", "-bool", "false")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "NSAutomaticSpellingCorrectionEnabled", "-bool", "false")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "NSAutomaticCapitalizationEnabled", "-bool", "false")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "NSAutomaticPeriodSubstitutionEnabled", "-bool", "false")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "KeyRepeat", "-int", "2")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "InitialKeyRepeat", "-int", "15")
 
 	// Dialogs
 	fmt.Fprintln(w, "Configuring Dialogs...")
-	run("defaults", "write", "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode", "-bool", "true")
-	run("defaults", "write", "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode2", "-bool", "true")
-	run("defaults", "write", "NSGlobalDomain", "PMPrintingExpandedStateForPrint", "-bool", "true")
-	run("defaults", "write", "NSGlobalDomain", "PMPrintingExpandedStateForPrint2", "-bool", "true")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode", "-bool", "true")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode2", "-bool", "true")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "PMPrintingExpandedStateForPrint", "-bool", "true")
+	defaultsWrite(w, &errs, "NSGlobalDomain", "PMPrintingExpandedStateForPrint2", "-bool", "true")
 
 	// Security
 	fmt.Fprintln(w, "Configuring Security...")
-	run("defaults", "write", "com.apple.screensaver", "askForPassword", "-int", "1")
-	run("defaults", "write", "com.apple.screensaver", "askForPasswordDelay", "-int", "0")
+	defaultsWrite(w, &errs, "com.apple.screensaver", "askForPassword", "-int", "1")
+	defaultsWrite(w, &errs, "com.apple.screensaver", "askForPasswordDelay", "-int", "0")
 
 	// Apply
 	fmt.Fprintln(w, "Applying changes...")
 	_ = exec.Command("killall", "Dock").Run()
 	_ = exec.Command("killall", "Finder").Run()
 
+	if len(errs) > 0 {
+		fmt.Fprintf(w, "macOS defaults applied with %d warning(s)\n", len(errs))
+		return errors.Join(errs...)
+	}
 	fmt.Fprintln(w, "macOS defaults configured")
 	return nil
 }
-

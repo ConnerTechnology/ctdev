@@ -42,13 +42,24 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 }
 
+// shouldRefreshKeys decides whether to run the (write-performing) APT key
+// refresh. --check is read-only so it must suppress refresh even when the
+// user also passed --refresh-keys.
+func shouldRefreshKeys(refreshKeys, check bool) bool {
+	return refreshKeys && !check
+}
+
 func runUpdate(cmd *cobra.Command, args []string) error {
-	if flagRefreshKeys {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if shouldRefreshKeys(flagRefreshKeys, flagCheck) {
 		fmt.Println(styles.Dimmed.Render("Refreshing APT GPG keys..."))
-		refreshAPTKeys(args)
+		refreshAPTKeys(ctx, args)
 	}
 
-	items := scanAll(context.Background())
+	items := scanAll(ctx)
 
 	if len(items) == 0 {
 		fmt.Println(styles.Success.Render("Everything is up to date."))
@@ -83,7 +94,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return executeUpdates(items, selected)
+	return executeUpdates(ctx, items, selected)
 }
 
 func scanAll(ctx context.Context) []checklist.UpdateItem {
@@ -766,19 +777,56 @@ func fetchLatestNodeLTS(ctx context.Context) string {
 	return ""
 }
 
-func fetchLatestGoVersion(ctx context.Context) string {
+// goRelease mirrors the subset of https://go.dev/dl/?mode=json we consume.
+type goRelease struct {
+	Version string `json:"version"`
+	Files   []struct {
+		Filename string `json:"filename"`
+		OS       string `json:"os"`
+		Arch     string `json:"arch"`
+		Kind     string `json:"kind"`
+		SHA256   string `json:"sha256"`
+	} `json:"files"`
+}
+
+// fetchGoReleases returns the list of published Go releases (newest first).
+// Each release includes per-OS/arch archive metadata with SHA256 hashes.
+func fetchGoReleases() ([]goRelease, error) {
 	resp, err := sysutil.HTTPClient().Get("https://go.dev/dl/?mode=json")
 	if err != nil {
-		return ""
+		return nil, err
 	}
 	defer resp.Body.Close()
-	var releases []struct {
-		Version string `json:"version"`
+	var releases []goRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, err
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil || len(releases) == 0 {
+	return releases, nil
+}
+
+func fetchLatestGoVersion(ctx context.Context) string {
+	releases, err := fetchGoReleases()
+	if err != nil || len(releases) == 0 {
 		return ""
 	}
 	return strings.TrimPrefix(releases[0].Version, "go")
+}
+
+// goArchiveSHA256 looks up the published sha256 for the archive tarball
+// matching ver/goos/goarch. Returns "" if not found.
+func goArchiveSHA256(releases []goRelease, ver, goos, goarch string) string {
+	target := fmt.Sprintf("go%s.%s-%s.tar.gz", ver, goos, goarch)
+	for _, r := range releases {
+		if strings.TrimPrefix(r.Version, "go") != ver {
+			continue
+		}
+		for _, f := range r.Files {
+			if f.Filename == target {
+				return f.SHA256
+			}
+		}
+	}
+	return ""
 }
 
 func fetchLatestRubyVersion(ctx context.Context) string {
@@ -843,7 +891,9 @@ func printUpdateList(items []checklist.UpdateItem) {
 	fmt.Printf("\n%s\n", styles.Success.Render(fmt.Sprintf("%d updates available", len(items))))
 }
 
-func executeUpdates(allItems, items []checklist.UpdateItem) error {
+func executeUpdates(ctx context.Context, allItems, items []checklist.UpdateItem) error {
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+
 	// Group items by source
 	bySource := make(map[string][]checklist.UpdateItem)
 	for _, item := range items {
@@ -858,16 +908,9 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 	if pkgs := bySource["apt"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d apt packages...", len(names))))
-		if flagDryRun {
-			fmt.Printf("  [dry-run] sudo apt install --only-upgrade -y %s\n", strings.Join(names, " "))
-		} else {
-			args := append([]string{"apt", "install", "--only-upgrade", "-y"}, names...)
-			cmd := exec.Command("sudo", args...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("apt upgrade failed: %w", err)
-			}
+		args := append([]string{"apt", "install", "--only-upgrade", "-y"}, names...)
+		if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
+			return fmt.Errorf("apt upgrade failed: %w", err)
 		}
 	}
 
@@ -888,30 +931,16 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 		if len(ignoreNames) > 0 {
 			args = append(args, "-i", strings.Join(ignoreNames, ","))
 		}
-		if flagDryRun {
-			fmt.Printf("  [dry-run] sudo %s\n", strings.Join(args, " "))
-		} else {
-			cmd := exec.Command("sudo", args...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("  mintupdate upgrade warning: %v\n", err)
-			}
+		if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
+			fmt.Printf("  mintupdate upgrade warning: %v\n", err)
 		}
 	}
 
 	// Flatpak
 	for _, item := range bySource["flatpak"] {
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating flatpak: %s...", item.Name)))
-		if flagDryRun {
-			fmt.Printf("  [dry-run] flatpak update -y %s\n", item.Name)
-		} else {
-			cmd := exec.Command("flatpak", "update", "-y", item.Name)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("  flatpak update warning (%s): %v\n", item.Name, err)
-			}
+		if err := sysutil.Run(ctx, o, "flatpak", "update", "-y", item.Name); err != nil {
+			fmt.Printf("  flatpak update warning (%s): %v\n", item.Name, err)
 		}
 	}
 
@@ -919,16 +948,9 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 	if pkgs := bySource["brew"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d brew packages...", len(names))))
-		if flagDryRun {
-			fmt.Printf("  [dry-run] brew upgrade %s\n", strings.Join(names, " "))
-		} else {
-			args := append([]string{"upgrade"}, names...)
-			cmd := exec.Command("brew", args...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("  brew upgrade warning: %v\n", err)
-			}
+		args := append([]string{"upgrade"}, names...)
+		if err := sysutil.Run(ctx, o, "brew", args...); err != nil {
+			fmt.Printf("  brew upgrade warning: %v\n", err)
 		}
 	}
 
@@ -936,16 +958,9 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 	if pkgs := bySource["brew-cask"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d brew cask apps...", len(names))))
-		if flagDryRun {
-			fmt.Printf("  [dry-run] brew upgrade --cask %s\n", strings.Join(names, " "))
-		} else {
-			args := append([]string{"upgrade", "--cask"}, names...)
-			cmd := exec.Command("brew", args...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("  brew cask upgrade warning: %v\n", err)
-			}
+		args := append([]string{"upgrade", "--cask"}, names...)
+		if err := sysutil.Run(ctx, o, "brew", args...); err != nil {
+			fmt.Printf("  brew cask upgrade warning: %v\n", err)
 		}
 	}
 
@@ -953,84 +968,48 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 	for range bySource["git"] {
 		fmt.Println(styles.Dimmed.Render("Updating Oh My Zsh..."))
 		omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
-		if flagDryRun {
-			fmt.Printf("  [dry-run] git -C %s pull --rebase\n", omzDir)
-		} else {
-			cmd := exec.Command("git", "-C", omzDir, "pull", "--rebase", "--quiet")
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("  oh-my-zsh update warning: %v\n", err)
-			}
+		if err := sysutil.Run(ctx, o, "git", "-C", omzDir, "pull", "--rebase", "--quiet"); err != nil {
+			fmt.Printf("  oh-my-zsh update warning: %v\n", err)
 		}
 		break // only one oh-my-zsh
 	}
 
-	// Bun
+	// Runtimes (bun / node / go / ruby)
 	for _, item := range bySource["runtime"] {
 		switch item.Name {
 		case "bun":
 			fmt.Println(styles.Dimmed.Render("Updating bun..."))
-			if flagDryRun {
-				fmt.Println("  [dry-run] bun upgrade")
-			} else {
-				cmd := exec.Command("bun", "upgrade")
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				if err := cmd.Run(); err != nil {
-					fmt.Printf("  bun upgrade warning: %v\n", err)
-				}
+			if err := sysutil.Run(ctx, o, "bun", "upgrade"); err != nil {
+				fmt.Printf("  bun upgrade warning: %v\n", err)
 			}
 		case "node (nodenv)":
 			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating node to %s via nodenv...", item.NewVer)))
-			if flagDryRun {
-				fmt.Printf("  [dry-run] nodenv install %s && nodenv global %s\n", item.NewVer, item.NewVer)
-			} else {
-				cmd := exec.Command("nodenv", "install", item.NewVer)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				if err := cmd.Run(); err != nil {
-					fmt.Printf("  nodenv install warning: %v\n", err)
-				} else {
-					cmd = exec.Command("nodenv", "global", item.NewVer)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					if err := cmd.Run(); err != nil {
-						fmt.Printf("  nodenv global warning: %v\n", err)
-					}
-				}
+			if err := sysutil.Run(ctx, o, "nodenv", "install", "--skip-existing", item.NewVer); err != nil {
+				fmt.Printf("  nodenv install warning: %v\n", err)
+				continue
+			}
+			if err := sysutil.Run(ctx, o, "nodenv", "global", item.NewVer); err != nil {
+				fmt.Printf("  nodenv global warning: %v\n", err)
 			}
 		case "go":
 			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating Go %s → %s...", item.CurrentVer, item.NewVer)))
-			if flagDryRun {
-				fmt.Printf("  [dry-run] download and install go%s\n", item.NewVer)
-			} else {
-				if err := updateGo(item.NewVer); err != nil {
-					fmt.Printf("  go update warning: %v\n", err)
-				}
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download and install go%s\n", item.NewVer)
+			} else if err := updateGo(ctx, o, item.NewVer); err != nil {
+				fmt.Printf("  go update warning: %v\n", err)
 			}
 		case "ruby":
 			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Ruby %s available (current: %s)", item.NewVer, item.CurrentVer)))
-			if _, err := exec.LookPath("rbenv"); err == nil {
-				if flagDryRun {
-					fmt.Printf("  [dry-run] rbenv install %s && rbenv global %s\n", item.NewVer, item.NewVer)
-				} else {
-					cmd := exec.Command("rbenv", "install", item.NewVer)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					if err := cmd.Run(); err != nil {
-						fmt.Printf("  rbenv install warning: %v\n", err)
-					} else {
-						cmd = exec.Command("rbenv", "global", item.NewVer)
-						cmd.Stdout = os.Stdout
-						cmd.Stderr = os.Stderr
-						if err := cmd.Run(); err != nil {
-							fmt.Printf("  rbenv global warning: %v\n", err)
-						}
-					}
-				}
-			} else {
+			if _, err := exec.LookPath("rbenv"); err != nil {
 				fmt.Println(styles.Help.Render("  Install manually or via rbenv"))
+				continue
+			}
+			if err := sysutil.Run(ctx, o, "rbenv", "install", "--skip-existing", item.NewVer); err != nil {
+				fmt.Printf("  rbenv install warning: %v\n", err)
+				continue
+			}
+			if err := sysutil.Run(ctx, o, "rbenv", "global", item.NewVer); err != nil {
+				fmt.Printf("  rbenv global warning: %v\n", err)
 			}
 		}
 	}
@@ -1039,31 +1018,18 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 	if pkgs := bySource["npm"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d npm global packages...", len(names))))
-		if flagDryRun {
-			fmt.Printf("  [dry-run] npm update -g %s\n", strings.Join(names, " "))
-		} else {
-			args := append([]string{"update", "-g"}, names...)
-			cmd := exec.Command("npm", args...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("  npm update -g warning: %v\n", err)
-			}
+		args := append([]string{"update", "-g"}, names...)
+		if err := sysutil.Run(ctx, o, "npm", args...); err != nil {
+			fmt.Printf("  npm update -g warning: %v\n", err)
 		}
 	}
 
 	// ctdev self-update
 	for _, item := range bySource["ctdev"] {
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating ctdev %s → %s...", item.CurrentVer, item.NewVer)))
-		if flagDryRun {
-			fmt.Println("  [dry-run] curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash")
-		} else {
-			cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash")
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Printf("  ctdev update warning: %v\n", err)
-			}
+		if err := sysutil.Run(ctx, o, "bash", "-c",
+			"curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash"); err != nil {
+			fmt.Printf("  ctdev update warning: %v\n", err)
 		}
 	}
 
@@ -1072,28 +1038,22 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %s %s → %s...", item.Name, item.CurrentVer, item.NewVer)))
 		switch item.Name {
 		case "helm":
-			if flagDryRun {
-				fmt.Printf("  [dry-run] download helm v%s and install to /usr/local/bin\n", item.NewVer)
-			} else {
-				if err := updateHelm(item.NewVer); err != nil {
-					fmt.Printf("  helm update warning: %v\n", err)
-				}
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download helm v%s and install to /usr/local/bin\n", item.NewVer)
+			} else if err := updateHelm(ctx, o, item.NewVer); err != nil {
+				fmt.Printf("  helm update warning: %v\n", err)
 			}
 		case "kubectl":
-			if flagDryRun {
-				fmt.Printf("  [dry-run] download kubectl v%s and install to /usr/local/bin\n", item.NewVer)
-			} else {
-				if err := updateKubectl(item.NewVer); err != nil {
-					fmt.Printf("  kubectl update warning: %v\n", err)
-				}
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download kubectl v%s and install to /usr/local/bin\n", item.NewVer)
+			} else if err := updateKubectl(ctx, o, item.NewVer); err != nil {
+				fmt.Printf("  kubectl update warning: %v\n", err)
 			}
 		case "terraform":
-			if flagDryRun {
-				fmt.Printf("  [dry-run] download terraform %s and install\n", item.NewVer)
-			} else {
-				if err := updateTerraform(item.NewVer); err != nil {
-					fmt.Printf("  terraform update warning: %v\n", err)
-				}
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download terraform %s and install\n", item.NewVer)
+			} else if err := updateTerraform(ctx, o, item.NewVer); err != nil {
+				fmt.Printf("  terraform update warning: %v\n", err)
 			}
 		}
 	}
@@ -1102,7 +1062,18 @@ func executeUpdates(allItems, items []checklist.UpdateItem) error {
 	return nil
 }
 
-func updateHelm(ver string) error {
+// resolveInstallDest returns the existing install path for bin (from `which`)
+// or a sensible default under /usr/local/bin.
+func resolveInstallDest(ctx context.Context, bin, fallback string) string {
+	out, _ := exec.CommandContext(ctx, "which", bin).Output()
+	dest := strings.TrimSpace(string(out))
+	if dest == "" {
+		return fallback
+	}
+	return dest
+}
+
+func updateHelm(ctx context.Context, o sysutil.Opts, ver string) error {
 	goos := detectUpdateOS()
 	goarch := detectUpdateArch()
 	archive := fmt.Sprintf("helm-v%s-%s-%s.tar.gz", ver, goos, goarch)
@@ -1117,16 +1088,10 @@ func updateHelm(ver string) error {
 	tmpFile := filepath.Join(tmpDir, archive)
 	csFile := filepath.Join(tmpDir, "checksum")
 
-	dl := exec.Command("curl", "-fsSL", "-o", tmpFile, url)
-	dl.Stdout = os.Stdout
-	dl.Stderr = os.Stderr
-	if err := dl.Run(); err != nil {
+	if err := sysutil.DownloadFile(url, tmpFile); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	csDl := exec.Command("curl", "-fsSL", "-o", csFile, csURL)
-	csDl.Stdout = os.Stdout
-	csDl.Stderr = os.Stderr
-	if err := csDl.Run(); err != nil {
+	if err := sysutil.DownloadFile(csURL, csFile); err != nil {
 		return fmt.Errorf("download checksum failed: %w", err)
 	}
 
@@ -1143,24 +1108,14 @@ func updateHelm(ver string) error {
 		return fmt.Errorf("helm checksum mismatch: %w", err)
 	}
 
-	tar := exec.Command("tar", "-xzf", tmpFile, "-C", tmpDir)
-	tar.Stdout = os.Stdout
-	tar.Stderr = os.Stderr
-	if err := tar.Run(); err != nil {
+	if err := sysutil.Run(ctx, o, "tar", "-xzf", tmpFile, "-C", tmpDir); err != nil {
 		return fmt.Errorf("extract failed: %w", err)
 	}
-	installPath, _ := exec.Command("which", "helm").Output()
-	dest := strings.TrimSpace(string(installPath))
-	if dest == "" {
-		dest = "/usr/local/bin/helm"
-	}
-	mv := exec.Command("sudo", "mv", fmt.Sprintf("%s/%s-%s/helm", tmpDir, goos, goarch), dest)
-	mv.Stdout = os.Stdout
-	mv.Stderr = os.Stderr
-	return mv.Run()
+	dest := resolveInstallDest(ctx, "helm", "/usr/local/bin/helm")
+	return sysutil.SudoRun(ctx, o, "mv", fmt.Sprintf("%s/%s-%s/helm", tmpDir, goos, goarch), dest)
 }
 
-func updateKubectl(ver string) error {
+func updateKubectl(ctx context.Context, o sysutil.Opts, ver string) error {
 	goos := detectUpdateOS()
 	goarch := detectUpdateArch()
 	url := fmt.Sprintf("https://dl.k8s.io/release/v%s/bin/%s/%s/kubectl", ver, goos, goarch)
@@ -1174,21 +1129,13 @@ func updateKubectl(ver string) error {
 	tmpPath := filepath.Join(tmpDir, "kubectl")
 	csPath := filepath.Join(tmpDir, "kubectl.sha256")
 
-	// Download binary and checksum
-	dl := exec.Command("curl", "-fsSL", "-o", tmpPath, url)
-	dl.Stdout = os.Stdout
-	dl.Stderr = os.Stderr
-	if err := dl.Run(); err != nil {
+	if err := sysutil.DownloadFile(url, tmpPath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	csDl := exec.Command("curl", "-fsSL", "-o", csPath, csURL)
-	csDl.Stdout = os.Stdout
-	csDl.Stderr = os.Stderr
-	if err := csDl.Run(); err != nil {
+	if err := sysutil.DownloadFile(csURL, csPath); err != nil {
 		return fmt.Errorf("download checksum failed: %w", err)
 	}
 
-	// Verify checksum
 	expected, err := os.ReadFile(csPath)
 	if err != nil {
 		return fmt.Errorf("read checksum: %w", err)
@@ -1200,18 +1147,11 @@ func updateKubectl(ver string) error {
 	if err := os.Chmod(tmpPath, 0755); err != nil {
 		return err
 	}
-	installPath, _ := exec.Command("which", "kubectl").Output()
-	dest := strings.TrimSpace(string(installPath))
-	if dest == "" {
-		dest = "/usr/local/bin/kubectl"
-	}
-	mv := exec.Command("sudo", "mv", tmpPath, dest)
-	mv.Stdout = os.Stdout
-	mv.Stderr = os.Stderr
-	return mv.Run()
+	dest := resolveInstallDest(ctx, "kubectl", "/usr/local/bin/kubectl")
+	return sysutil.SudoRun(ctx, o, "mv", tmpPath, dest)
 }
 
-func updateTerraform(ver string) error {
+func updateTerraform(ctx context.Context, o sysutil.Opts, ver string) error {
 	goos := detectUpdateOS()
 	goarch := detectUpdateArch()
 	zipName := fmt.Sprintf("terraform_%s_%s_%s.zip", ver, goos, goarch)
@@ -1226,16 +1166,10 @@ func updateTerraform(ver string) error {
 	tmpZip := filepath.Join(tmpDir, "terraform.zip")
 	csFile := filepath.Join(tmpDir, "checksums")
 
-	dl := exec.Command("curl", "-fsSL", "-o", tmpZip, url)
-	dl.Stdout = os.Stdout
-	dl.Stderr = os.Stderr
-	if err := dl.Run(); err != nil {
+	if err := sysutil.DownloadFile(url, tmpZip); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	csDl := exec.Command("curl", "-fsSL", "-o", csFile, csURL)
-	csDl.Stdout = os.Stdout
-	csDl.Stderr = os.Stderr
-	if err := csDl.Run(); err != nil {
+	if err := sysutil.DownloadFile(csURL, csFile); err != nil {
 		return fmt.Errorf("download checksum failed: %w", err)
 	}
 
@@ -1261,27 +1195,28 @@ func updateTerraform(ver string) error {
 		return fmt.Errorf("terraform checksum mismatch: %w", err)
 	}
 
-	unzip := exec.Command("unzip", "-o", tmpZip, "-d", tmpDir)
-	unzip.Stdout = os.Stdout
-	unzip.Stderr = os.Stderr
-	if err := unzip.Run(); err != nil {
+	if err := sysutil.Run(ctx, o, "unzip", "-o", tmpZip, "-d", tmpDir); err != nil {
 		return fmt.Errorf("unzip failed: %w", err)
 	}
-	installPath, _ := exec.Command("which", "terraform").Output()
-	dest := strings.TrimSpace(string(installPath))
-	if dest == "" {
-		dest = "/usr/local/bin/terraform"
-	}
-	mv := exec.Command("sudo", "mv", filepath.Join(tmpDir, "terraform"), dest)
-	mv.Stdout = os.Stdout
-	mv.Stderr = os.Stderr
-	return mv.Run()
+	dest := resolveInstallDest(ctx, "terraform", "/usr/local/bin/terraform")
+	return sysutil.SudoRun(ctx, o, "mv", filepath.Join(tmpDir, "terraform"), dest)
 }
 
-func updateGo(ver string) error {
+func updateGo(ctx context.Context, o sysutil.Opts, ver string) error {
 	goos := detectUpdateOS()
 	goarch := detectUpdateArch()
 	url := fmt.Sprintf("https://go.dev/dl/go%s.%s-%s.tar.gz", ver, goos, goarch)
+
+	// Fetch the release manifest first so we can verify the tarball checksum
+	// before touching the existing /usr/local/go install.
+	releases, err := fetchGoReleases()
+	if err != nil {
+		return fmt.Errorf("fetch go release manifest: %w", err)
+	}
+	expectedSHA := goArchiveSHA256(releases, ver, goos, goarch)
+	if expectedSHA == "" {
+		return fmt.Errorf("no published sha256 for go%s %s/%s", ver, goos, goarch)
+	}
 
 	tmpFile, err := os.CreateTemp("", "ctdev-go-*.tar.gz")
 	if err != nil {
@@ -1290,11 +1225,11 @@ func updateGo(ver string) error {
 	tmpPath := tmpFile.Name()
 	tmpFile.Close()
 	defer os.Remove(tmpPath)
-	dl := exec.Command("curl", "-fsSL", "-o", tmpPath, url)
-	dl.Stdout = os.Stdout
-	dl.Stderr = os.Stderr
-	if err := dl.Run(); err != nil {
+	if err := sysutil.DownloadFile(url, tmpPath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
+	}
+	if err := sysutil.VerifyChecksum(tmpPath, expectedSHA); err != nil {
+		return fmt.Errorf("go checksum mismatch: %w", err)
 	}
 	// Extract to a temp directory first so we don't destroy the existing install
 	// if the archive is corrupted or extraction fails.
@@ -1303,10 +1238,7 @@ func updateGo(ver string) error {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
-	tar := exec.Command("tar", "-C", tmpDir, "-xzf", tmpPath)
-	tar.Stdout = os.Stdout
-	tar.Stderr = os.Stderr
-	if err := tar.Run(); err != nil {
+	if err := sysutil.Run(ctx, o, "tar", "-C", tmpDir, "-xzf", tmpPath); err != nil {
 		return fmt.Errorf("extract failed: %w", err)
 	}
 	// Verify the extraction produced a go directory with a binary
@@ -1314,16 +1246,10 @@ func updateGo(ver string) error {
 		return fmt.Errorf("extracted archive missing go binary: %w", err)
 	}
 	// Safe to replace now
-	rm := exec.Command("sudo", "rm", "-rf", "/usr/local/go")
-	rm.Stdout = os.Stdout
-	rm.Stderr = os.Stderr
-	if err := rm.Run(); err != nil {
+	if err := sysutil.SudoRun(ctx, o, "rm", "-rf", "/usr/local/go"); err != nil {
 		return fmt.Errorf("remove old go failed: %w", err)
 	}
-	mv := exec.Command("sudo", "mv", filepath.Join(tmpDir, "go"), "/usr/local/go")
-	mv.Stdout = os.Stdout
-	mv.Stderr = os.Stderr
-	if err := mv.Run(); err != nil {
+	if err := sysutil.SudoRun(ctx, o, "mv", filepath.Join(tmpDir, "go"), "/usr/local/go"); err != nil {
 		return fmt.Errorf("install new go failed: %w", err)
 	}
 	return nil
@@ -1356,7 +1282,7 @@ var aptKeyRefreshers = map[string]struct {
 	"tailscale": {KeyURL: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg", KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg"},
 }
 
-func refreshAPTKeys(components []string) {
+func refreshAPTKeys(ctx context.Context, components []string) {
 	if _, err := exec.LookPath("apt"); err != nil {
 		return
 	}
@@ -1372,7 +1298,7 @@ func refreshAPTKeys(components []string) {
 	}
 	for name, r := range targets {
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("  Refreshing %s key...", name)))
-		if err := sysutil.AddAPTKeyring(o, r.KeyURL, r.KeyringPath); err != nil {
+		if err := sysutil.AddAPTKeyring(ctx, o, r.KeyURL, r.KeyringPath); err != nil {
 			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("Warning: %s key refresh failed: %v", name, err)))
 		}
 	}

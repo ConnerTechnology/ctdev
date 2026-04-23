@@ -1,6 +1,7 @@
 package sysutil
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,23 +15,23 @@ func CommandExists(name string) bool {
 }
 
 // ServiceEnable enables a systemd service.
-func ServiceEnable(o Opts, name string) error {
-	return SudoRun(o, "systemctl", "enable", name+".service")
+func ServiceEnable(ctx context.Context, o Opts, name string) error {
+	return SudoRun(ctx, o, "systemctl", "enable", name+".service")
 }
 
 // ServiceDisable stops and disables a systemd service.
-func ServiceDisable(o Opts, name string) error {
-	_ = SudoRun(o, "systemctl", "stop", name+".service")
-	return SudoRun(o, "systemctl", "disable", name+".service")
+func ServiceDisable(ctx context.Context, o Opts, name string) error {
+	_ = SudoRun(ctx, o, "systemctl", "stop", name+".service")
+	return SudoRun(ctx, o, "systemctl", "disable", name+".service")
 }
 
 // ServiceStart starts a systemd service.
-func ServiceStart(o Opts, name string) error {
-	return SudoRun(o, "systemctl", "start", name+".service")
+func ServiceStart(ctx context.Context, o Opts, name string) error {
+	return SudoRun(ctx, o, "systemctl", "start", name+".service")
 }
 
 // SudoWriteFile writes content to a root-owned path via a temp file and sudo cp.
-func SudoWriteFile(o Opts, content, path string) error {
+func SudoWriteFile(ctx context.Context, o Opts, content, path string) error {
 	if o.DryRun {
 		fmt.Fprintf(o.Stdout, "[dry-run] write %s\n", path)
 		return nil
@@ -45,7 +46,7 @@ func SudoWriteFile(o Opts, content, path string) error {
 		return err
 	}
 	tmp.Close()
-	return SudoRun(o, "cp", tmp.Name(), path)
+	return SudoRun(ctx, o, "cp", tmp.Name(), path)
 }
 
 // SafeSymlink creates a symlink at dst pointing to src.

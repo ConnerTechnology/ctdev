@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -33,7 +34,34 @@ func (inst *MarkerStore) Save(name string, m InstallMarker) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(inst.dir, name+".json"), data, 0644)
+	final := filepath.Join(inst.dir, name+".json")
+	// Atomic write: stage in a same-directory temp file then rename. A crash
+	// mid-write leaves the previous marker intact instead of an empty/corrupt
+	// JSON file that would fail to Load next run.
+	tmp, err := os.CreateTemp(inst.dir, name+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Chmod(0644); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, final); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func (inst *MarkerStore) Load(name string) (InstallMarker, error) {
@@ -67,7 +95,7 @@ func (inst *MarkerStore) List() ([]string, error) {
 	for _, e := range entries {
 		name := e.Name()
 		if filepath.Ext(name) == ".json" {
-			names = append(names, name[:len(name)-5])
+			names = append(names, strings.TrimSuffix(name, ".json"))
 		}
 	}
 	return names, nil

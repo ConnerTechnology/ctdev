@@ -1,6 +1,7 @@
 package sysutil
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 
@@ -8,47 +9,47 @@ import (
 )
 
 // InstallPackage installs packages using the detected system package manager.
-func InstallPackage(o Opts, names ...string) error {
+func InstallPackage(ctx context.Context, o Opts, names ...string) error {
 	pm := platform.Detect().PackageManager
 	switch pm {
 	case "apt":
-		return SudoRun(o, "apt-get", append([]string{"install", "-y", "-qq"}, names...)...)
+		return SudoRun(ctx, o, "apt-get", append([]string{"install", "-y", "-qq"}, names...)...)
 	case "brew":
-		return Run(o, "brew", append([]string{"install"}, names...)...)
+		return Run(ctx, o, "brew", append([]string{"install"}, names...)...)
 	case "dnf":
-		return SudoRun(o, "dnf", append([]string{"install", "-y"}, names...)...)
+		return SudoRun(ctx, o, "dnf", append([]string{"install", "-y"}, names...)...)
 	case "pacman":
-		return SudoRun(o, "pacman", append([]string{"-S", "--noconfirm"}, names...)...)
+		return SudoRun(ctx, o, "pacman", append([]string{"-S", "--noconfirm"}, names...)...)
 	default:
 		return fmt.Errorf("unsupported package manager: %s", pm)
 	}
 }
 
 // RemovePackage removes packages using the detected system package manager.
-func RemovePackage(o Opts, names ...string) error {
+func RemovePackage(ctx context.Context, o Opts, names ...string) error {
 	pm := platform.Detect().PackageManager
 	switch pm {
 	case "apt":
-		return SudoRun(o, "apt-get", append([]string{"remove", "-y"}, names...)...)
+		return SudoRun(ctx, o, "apt-get", append([]string{"remove", "-y"}, names...)...)
 	case "brew":
-		return Run(o, "brew", append([]string{"uninstall"}, names...)...)
+		return Run(ctx, o, "brew", append([]string{"uninstall"}, names...)...)
 	case "dnf":
-		return SudoRun(o, "dnf", append([]string{"remove", "-y"}, names...)...)
+		return SudoRun(ctx, o, "dnf", append([]string{"remove", "-y"}, names...)...)
 	case "pacman":
-		return SudoRun(o, "pacman", append([]string{"-R", "--noconfirm"}, names...)...)
+		return SudoRun(ctx, o, "pacman", append([]string{"-R", "--noconfirm"}, names...)...)
 	default:
 		return fmt.Errorf("unsupported package manager: %s", pm)
 	}
 }
 
 // BrewCaskInstall installs a Homebrew cask (macOS GUI apps).
-func BrewCaskInstall(o Opts, name string) error {
-	return Run(o, "brew", "install", "--cask", name)
+func BrewCaskInstall(ctx context.Context, o Opts, name string) error {
+	return Run(ctx, o, "brew", "install", "--cask", name)
 }
 
 // BrewCaskRemove removes a Homebrew cask.
-func BrewCaskRemove(o Opts, name string) error {
-	return Run(o, "brew", "uninstall", "--cask", name)
+func BrewCaskRemove(ctx context.Context, o Opts, name string) error {
+	return Run(ctx, o, "brew", "uninstall", "--cask", name)
 }
 
 // IsPackageInstalled checks if a package is installed via the system package manager.
@@ -61,6 +62,8 @@ func IsPackageInstalled(name string) bool {
 		return exec.Command("brew", "list", name).Run() == nil
 	case "dnf":
 		return exec.Command("rpm", "-q", name).Run() == nil
+	case "pacman":
+		return exec.Command("pacman", "-Qi", name).Run() == nil
 	default:
 		return false
 	}

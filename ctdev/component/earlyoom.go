@@ -18,13 +18,13 @@ func earlyoomInstall(ctx context.Context, opts ExecOpts) error {
 		return nil
 	}
 	fmt.Fprintln(opts.Stdout, "Installing earlyoom...")
-	if err := sysutil.InstallPackage(o, "earlyoom"); err != nil {
+	if err := sysutil.InstallPackage(ctx, o, "earlyoom"); err != nil {
 		return err
 	}
-	if err := sysutil.ServiceEnable(o, "earlyoom"); err != nil {
+	if err := sysutil.ServiceEnable(ctx, o, "earlyoom"); err != nil {
 		return err
 	}
-	return sysutil.ServiceStart(o, "earlyoom")
+	return sysutil.ServiceStart(ctx, o, "earlyoom")
 }
 
 func earlyoomUninstall(ctx context.Context, opts ExecOpts) error {
@@ -33,6 +33,6 @@ func earlyoomUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing earlyoom...")
-	_ = sysutil.ServiceDisable(o, "earlyoom")
-	return sysutil.RemovePackage(o, "earlyoom")
+	_ = sysutil.ServiceDisable(ctx, o, "earlyoom")
+	return sysutil.RemovePackage(ctx, o, "earlyoom")
 }

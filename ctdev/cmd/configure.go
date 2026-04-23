@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -62,17 +63,16 @@ func init() {
 	// Register system configuration category subcommands.
 	for _, slug := range slugOrder {
 		slug := slug // capture
-		desc := slugDescriptions[slug]
 		cmd := &cobra.Command{
 			Use:   slug,
-			Short: fmt.Sprintf("Configure %s settings", desc),
+			Short: fmt.Sprintf("Configure %s settings", slugDescription(slug)),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				if !flagDryRun && !flagConfigShow {
 					if err := ensureSudo(); err != nil {
 						return fmt.Errorf("sudo required: %w", err)
 					}
 				}
-				return runCategoryWizard(slug, flagConfigShow)
+				return runCategoryWizard(cmdContext(cmd), slug, flagConfigShow)
 			},
 		}
 		configureCmd.AddCommand(cmd)
@@ -88,12 +88,24 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	ctx := cmdContext(cmd)
 	for _, slug := range slugOrder {
-		if err := runCategoryWizard(slug, flagConfigShow); err != nil {
+		if err := runCategoryWizard(ctx, slug, flagConfigShow); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// cmdContext returns cmd.Context() or context.Background() if cobra hasn't
+// seeded one yet — keeps helpers safe to call from both normal and test paths.
+func cmdContext(cmd *cobra.Command) context.Context {
+	if cmd != nil {
+		if c := cmd.Context(); c != nil {
+			return c
+		}
+	}
+	return context.Background()
 }
 
 var stdinScanner = bufio.NewScanner(os.Stdin)

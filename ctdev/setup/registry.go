@@ -1,5 +1,10 @@
 package setup
 
+import (
+	"context"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+)
 
 func init() {
 	PostApplyHooks["grub"] = applyUpdateGrub
@@ -17,8 +22,10 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "signed",
 		DetectFunc:  detectModuleSigned,
-		ApplyFunc:   func(_ string) error { return applyNvidiaSigning() },
-		HardwareFn:  detectNvidiaLoaded,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyNvidiaSigning(ctx, o)
+		},
+		HardwareFn: detectNvidiaLoaded,
 	},
 	{
 		Name:        "NVIDIA suspend services",
@@ -28,8 +35,10 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "enabled",
 		DetectFunc:  detectNvidiaSuspendServices,
-		ApplyFunc:   func(_ string) error { return applyNvidiaSuspendServices() },
-		HardwareFn:  detectNvidiaLoaded,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyNvidiaSuspendServices(ctx, o)
+		},
+		HardwareFn: detectNvidiaLoaded,
 	},
 	{
 		Name:        "GRUB menu style",
@@ -44,7 +53,9 @@ var Registry = []Setting{
 			{Value: "countdown", Description: "Show a countdown timer"},
 		},
 		DetectFunc: detectGrubStyle,
-		ApplyFunc:  func(v string) error { return applyGrubVar("GRUB_TIMEOUT_STYLE", v) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyGrubVar(ctx, o, "GRUB_TIMEOUT_STYLE", v)
+		},
 		ApplyGroup: "grub",
 	},
 	{
@@ -56,8 +67,10 @@ var Registry = []Setting{
 		Default:     "10",
 		Slider:      &SliderRange{Min: 0, Max: 30, Step: 1, Unit: "s"},
 		DetectFunc:  detectGrubTimeout,
-		ApplyFunc:   func(v string) error { return applyGrubVar("GRUB_TIMEOUT", v) },
-		ApplyGroup:  "grub",
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyGrubVar(ctx, o, "GRUB_TIMEOUT", v)
+		},
+		ApplyGroup: "grub",
 	},
 	{
 		Name:        "OS prober",
@@ -67,12 +80,12 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "enabled",
 		DetectFunc:  detectGrubOSProber,
-		ApplyFunc: func(v string) error {
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			grubVal := "true"
 			if v == "enabled" {
 				grubVal = "false"
 			}
-			return applyGrubVar("GRUB_DISABLE_OS_PROBER", grubVal)
+			return applyGrubVar(ctx, o, "GRUB_DISABLE_OS_PROBER", grubVal)
 		},
 		ApplyGroup: "grub",
 	},
@@ -103,7 +116,9 @@ var Registry = []Setting{
 		Default:     "3600",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
 		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac") },
-		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v)
+		},
 	},
 	{
 		Name:        "Inactive sleep",
@@ -114,8 +129,8 @@ var Registry = []Setting{
 		Default:     "2700",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
 		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout") },
-		ApplyFunc: func(v string) error {
-			return applyDconf("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
 		},
 	},
 	{
@@ -126,7 +141,9 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "true",
 		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend") },
-		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v)
+		},
 	},
 	{
 		Name:        "Screensaver lock",
@@ -136,7 +153,9 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/desktop/screensaver/lock-enabled") },
-		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/desktop/screensaver/lock-enabled", v) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/cinnamon/desktop/screensaver/lock-enabled", v)
+		},
 	},
 	{
 		Name:        "Idle delay",
@@ -147,7 +166,9 @@ var Registry = []Setting{
 		Default:     "1800",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
 		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/desktop/session/idle-delay") },
-		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/desktop/session/idle-delay", v) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/cinnamon/desktop/session/idle-delay", v)
+		},
 	},
 
 	// ── Keyboard ───────────────────────────────────────────────────────
@@ -161,13 +182,13 @@ var Registry = []Setting{
 		Default:     "200",
 		Slider:      &SliderRange{Min: 100, Max: 1000, Step: 25, Unit: "ms"},
 		DetectFunc:  detectKeyRepeatDelay,
-		ApplyFunc: func(v string) error {
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			// applyKeyRepeat needs both delay and rate; detect current rate to preserve it.
 			rate := detectKeyRepeatRate()
 			if rate == "" {
 				rate = "50"
 			}
-			return applyKeyRepeat(v, rate)
+			return applyKeyRepeat(ctx, o, v, rate)
 		},
 	},
 	{
@@ -179,13 +200,13 @@ var Registry = []Setting{
 		Default:     "50",
 		Slider:      &SliderRange{Min: 10, Max: 100, Step: 5, Unit: "cps"},
 		DetectFunc:  detectKeyRepeatRate,
-		ApplyFunc: func(v string) error {
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			// applyKeyRepeat needs both delay and rate; detect current delay to preserve it.
 			delay := detectKeyRepeatDelay()
 			if delay == "" {
 				delay = "200"
 			}
-			return applyKeyRepeat(delay, v)
+			return applyKeyRepeat(ctx, o, delay, v)
 		},
 	},
 	{
@@ -201,7 +222,9 @@ var Registry = []Setting{
 			}
 			return "not installed"
 		},
-		ApplyFunc: func(_ string) error { return applyPackages([]string{"numlockx"}) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyPackages(ctx, o, []string{"numlockx"})
+		},
 	},
 	{
 		Name:        "Mouse accel profile",
@@ -217,8 +240,8 @@ var Registry = []Setting{
 		DetectFunc: func() string {
 			return detectDconfString("/org/gnome/desktop/peripherals/mouse/accel-profile")
 		},
-		ApplyFunc: func(v string) error {
-			return applyDconfString("/org/gnome/desktop/peripherals/mouse/accel-profile", v)
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconfString(ctx, o, "/org/gnome/desktop/peripherals/mouse/accel-profile", v)
 		},
 	},
 	{
@@ -230,8 +253,8 @@ var Registry = []Setting{
 		Default:     "0.65",
 		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: 0.05, Unit: ""},
 		DetectFunc:  detectMouseSpeed,
-		ApplyFunc: func(v string) error {
-			return applyDconf("/org/gnome/desktop/peripherals/mouse/speed", v)
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/gnome/desktop/peripherals/mouse/speed", v)
 		},
 	},
 	{
@@ -242,8 +265,8 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "true",
 		DetectFunc:  detectNaturalScroll,
-		ApplyFunc: func(v string) error {
-			return applyDconf("/org/gnome/desktop/peripherals/mouse/natural-scroll", v)
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/gnome/desktop/peripherals/mouse/natural-scroll", v)
 		},
 	},
 	{
@@ -259,7 +282,9 @@ var Registry = []Setting{
 			}
 			return "not installed"
 		},
-		ApplyFunc: func(_ string) error { return applyXbindkeys() },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyXbindkeys(ctx, o)
+		},
 	},
 
 	// ── Audio ──────────────────────────────────────────────────────────
@@ -280,8 +305,8 @@ var Registry = []Setting{
 			}
 			return "installed"
 		},
-		ApplyFunc: func(_ string) error {
-			return applyPackages([]string{
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyPackages(ctx, o, []string{
 				"pipewire-audio", "bluez", "blueman",
 				"libspa-0.2-bluetooth", "pulseaudio-utils",
 			})
@@ -295,7 +320,9 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "active",
 		DetectFunc:  func() string { return detectSystemdService("bluetooth.service") },
-		ApplyFunc:   func(_ string) error { return applySystemdEnable("bluetooth.service") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applySystemdEnable(ctx, o, "bluetooth.service")
+		},
 	},
 	{
 		Name:        "WirePlumber LDAC config",
@@ -305,7 +332,9 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "installed",
 		DetectFunc:  func() string { return detectFileExists("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf") },
-		ApplyFunc:   func(_ string) error { return applyWireplumberLDAC() },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyWireplumberLDAC(ctx, o)
+		},
 	},
 	{
 		Name:        "Event sounds",
@@ -315,7 +344,9 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/desktop/sound/event-sounds") },
-		ApplyFunc:   func(v string) error { return applyDconf("/org/cinnamon/desktop/sound/event-sounds", v) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconf(ctx, o, "/org/cinnamon/desktop/sound/event-sounds", v)
+		},
 	},
 
 	// ── Desktop ────────────────────────────────────────────────────────
@@ -334,8 +365,8 @@ var Registry = []Setting{
 		DetectFunc: func() string {
 			return detectDconfString("/org/nemo/preferences/default-folder-viewer")
 		},
-		ApplyFunc: func(v string) error {
-			return applyDconfString("/org/nemo/preferences/default-folder-viewer", v)
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyDconfString(ctx, o, "/org/nemo/preferences/default-folder-viewer", v)
 		},
 	},
 
@@ -347,7 +378,9 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "installed",
 		DetectFunc:  func() string { return detectFileExists("/etc/udev/rules.d/99-hide-drives.rules") },
-		ApplyFunc:   func(_ string) error { return applyHideDrives() },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyHideDrives(ctx, o)
+		},
 	},
 
 	// ── System ─────────────────────────────────────────────────────────
@@ -360,8 +393,10 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "installed",
 		DetectFunc:  func() string { return detectFileExists("/etc/udev/rules.d/99-logitech-kvm-fix.rules") },
-		ApplyFunc:   func(_ string) error { return applyLogitechKVMFix() },
-		HardwareFn:  detectLogitechBolt,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyLogitechKVMFix(ctx, o)
+		},
+		HardwareFn: detectLogitechBolt,
 	},
 
 	// ── Network ────────────────────────────────────────────────────────
@@ -374,8 +409,10 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "installed",
 		DetectFunc:  func() string { return detectFileExists("/usr/lib/systemd/system-sleep/wifi-mt7925") },
-		ApplyFunc:   func(_ string) error { return applyWifiSuspendFix() },
-		HardwareFn:  detectMT7925E,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyWifiSuspendFix(ctx, o)
+		},
+		HardwareFn: detectMT7925E,
 	},
 	{
 		Name:        "SSD TRIM timer",
@@ -385,6 +422,8 @@ var Registry = []Setting{
 		Control:     ControlToggle,
 		Default:     "active",
 		DetectFunc:  func() string { return detectSystemdService("fstrim.timer") },
-		ApplyFunc:   func(_ string) error { return applySSDTrim() },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applySSDTrim(ctx, o)
+		},
 	},
 }

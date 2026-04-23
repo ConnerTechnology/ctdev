@@ -43,7 +43,7 @@ func fontsInstall(ctx context.Context, opts ExecOpts) error {
 			"font-jetbrains-mono-nerd-font",
 		}
 		for _, cask := range casks {
-			if err := sysutil.Run(o, "brew", "install", "--cask", cask); err != nil {
+			if err := sysutil.Run(ctx, o, "brew", "install", "--cask", cask); err != nil {
 				return fmt.Errorf("install %s: %w", cask, err)
 			}
 		}
@@ -73,7 +73,7 @@ func fontsInstall(ctx context.Context, opts ExecOpts) error {
 			continue
 		}
 
-		err := sysutil.Run(o, "unzip", "-oq", zipPath, "-d", fontDir)
+		err := sysutil.Run(ctx, o, "unzip", "-oq", zipPath, "-d", fontDir)
 		os.Remove(zipPath)
 		if err != nil {
 			fmt.Fprintf(opts.Stdout, "warning: failed to extract %s: %v\n", font, err)
@@ -81,7 +81,7 @@ func fontsInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	if !o.DryRun {
-		_ = sysutil.Run(o, "fc-cache", "-f", fontDir)
+		_ = sysutil.Run(ctx, o, "fc-cache", "-f", fontDir)
 	}
 
 	return nil
@@ -98,8 +98,8 @@ func fontsUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	if p.PackageManager == "brew" {
-		_ = sysutil.Run(o, "brew", "uninstall", "--cask", "font-fira-code-nerd-font")
-		_ = sysutil.Run(o, "brew", "uninstall", "--cask", "font-jetbrains-mono-nerd-font")
+		_ = sysutil.Run(ctx, o, "brew", "uninstall", "--cask", "font-fira-code-nerd-font")
+		_ = sysutil.Run(ctx, o, "brew", "uninstall", "--cask", "font-jetbrains-mono-nerd-font")
 		return nil
 	}
 

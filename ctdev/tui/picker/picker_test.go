@@ -150,3 +150,44 @@ func TestCountInstalled(t *testing.T) {
 		t.Errorf("expected 1 installed, got %d", count)
 	}
 }
+
+func TestGetResult_DeterministicOrder(t *testing.T) {
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	m.selected["chrome"] = true
+	m.selected["docker"] = true
+	m.selected["btop"] = true
+	m.confirmed = true
+
+	// Expected order follows the display order:
+	// CLI category: btop, docker (registry order), then Desktop: chrome.
+	want := []string{"docker", "btop", "chrome"}
+	got := m.GetResult().Selected
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("index %d: got %q, want %q (full %v)", i, got[i], want[i], got)
+		}
+	}
+
+	// Re-run the same selection a second time — order must not drift.
+	got2 := m.GetResult().Selected
+	for i := range got {
+		if got[i] != got2[i] {
+			t.Errorf("non-deterministic GetResult: run1=%v run2=%v", got, got2)
+			break
+		}
+	}
+}
+
+func TestGetResult_SkipsUnselected(t *testing.T) {
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	m.selected["docker"] = true
+	m.confirmed = true
+
+	got := m.GetResult().Selected
+	if len(got) != 1 || got[0] != "docker" {
+		t.Errorf("expected [docker], got %v", got)
+	}
+}
