@@ -9,8 +9,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A tag push and the branch push that produced the tagged commit trigger two
+# separate workflow runs on the same SHA. Grouping by SHA with
+# cancel-in-progress lets the later run (the tag push, which gates the release
+# job) supersede the earlier one instead of running in parallel.
+concurrency:
+  group: ci-${{ github.sha }}
+  cancel-in-progress: true
+
+# Default to read-only; write perms are granted per-job where actually needed.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   shellcheck:
@@ -95,22 +104,21 @@ jobs:
           apt-get update
           apt-get install -y git sudo curl
 
-      - name: Install Go
-        run: |
-          curl -fsSL "https://go.dev/dl/go1.24.2.linux-amd64.tar.gz" -o /tmp/go.tar.gz
-          tar -C /usr/local -xzf /tmp/go.tar.gz
-          rm /tmp/go.tar.gz
-
       - name: Checkout code
         uses: actions/checkout@v6
 
       - name: Configure git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: ctdev/go.mod
+          cache-dependency-path: ctdev/go.sum
+
       - name: Build ctdev
         working-directory: ctdev
         run: |
-          export PATH="/usr/local/go/bin:$PATH"
           VERSION=$(cat ../VERSION)
           go build -ldflags "-X main.version=$VERSION" -o ctdev .
 
@@ -190,6 +198,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      # Guard against tag/VERSION drift — otherwise the built binary's
+      # --version output silently disagrees with the release tag.
+      - name: Verify VERSION matches tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          want="v$(cat VERSION)"
+          if [ "$want" != "$TAG_NAME" ]; then
+            echo "VERSION file says $want but tag is $TAG_NAME — refusing to release a mismatched binary."
+            exit 1
+          fi
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -217,6 +237,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
