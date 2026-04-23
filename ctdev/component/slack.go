@@ -39,7 +39,7 @@ func slackInstall(ctx context.Context, opts ExecOpts) error {
 		defer os.Remove(tmp.Name())
 		tmp.Close()
 
-		if err := sysutil.DownloadFile("https://downloads.slack-edge.com/releases/linux/slack-desktop-amd64.deb", tmp.Name()); err != nil {
+		if err := sysutil.DownloadFile(ctx, "https://downloads.slack-edge.com/releases/linux/slack-desktop-amd64.deb", tmp.Name()); err != nil {
 			return fmt.Errorf("download slack: %w", err)
 		}
 		return installDebWithDepFix(ctx, o, tmp.Name(), "slack-desktop")

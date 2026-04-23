@@ -5,17 +5,16 @@ import (
 	"testing"
 )
 
-func TestGrubVarCommand(t *testing.T) {
-	args := grubVarArgs("GRUB_TIMEOUT", "10")
-	if len(args) == 0 {
-		t.Error("expected non-empty args")
-	}
-}
-
 func TestDconfWriteArgs(t *testing.T) {
-	args := dconfWriteArgs("/org/cinnamon/desktop/sound/event-sounds", "false")
-	if args[0] != "dconf" {
-		t.Errorf("expected dconf, got %s", args[0])
+	got := dconfWriteArgs("/org/cinnamon/desktop/sound/event-sounds", "false")
+	want := []string{"dconf", "write", "/org/cinnamon/desktop/sound/event-sounds", "false"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d args, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("args[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 

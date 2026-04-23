@@ -14,7 +14,7 @@ func gitSpiceInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	if !opts.Force && isGitSpiceInstalled() {
+	if !opts.Force && isGitSpiceInstalled(ctx) {
 		fmt.Fprintln(opts.Stdout, "git-spice already installed")
 		return nil
 	}
@@ -54,8 +54,10 @@ func gitSpiceInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 // isGitSpiceInstalled checks if gs is git-spice (not Ghostscript).
-func isGitSpiceInstalled() bool {
-	out, err := exec.Command("gs", "--version").CombinedOutput()
+// Uses ctx so a hung `gs` process (e.g. ghostscript waiting on stdin) can be
+// cancelled instead of blocking the whole install/uninstall indefinitely.
+func isGitSpiceInstalled(ctx context.Context) bool {
+	out, err := exec.CommandContext(ctx, "gs", "--version").CombinedOutput()
 	if err != nil {
 		return false
 	}
@@ -72,7 +74,7 @@ func gitSpiceUninstall(ctx context.Context, opts ExecOpts) error {
 	}
 	// `gs` collides with Ghostscript's binary. Only remove when we can confirm
 	// it is actually git-spice so we don't nuke an unrelated binary.
-	if !isGitSpiceInstalled() {
+	if !isGitSpiceInstalled(ctx) {
 		fmt.Fprintln(opts.Stdout, "git-spice not detected at /usr/local/bin/gs; leaving untouched")
 		return nil
 	}

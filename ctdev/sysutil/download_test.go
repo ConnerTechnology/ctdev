@@ -1,6 +1,7 @@
 package sysutil
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -20,7 +21,7 @@ func TestDownloadFile_Success(t *testing.T) {
 	defer srv.Close()
 
 	dest := filepath.Join(t.TempDir(), "out.bin")
-	if err := DownloadFile(srv.URL, dest); err != nil {
+	if err := DownloadFile(context.Background(), srv.URL, dest); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got, err := os.ReadFile(dest)
@@ -39,7 +40,7 @@ func TestDownloadFile_HTTPErrorNoFileCreated(t *testing.T) {
 	defer srv.Close()
 
 	dest := filepath.Join(t.TempDir(), "out.bin")
-	err := DownloadFile(srv.URL, dest)
+	err := DownloadFile(context.Background(), srv.URL, dest)
 	if err == nil {
 		t.Fatal("expected error for 500 response")
 	}
@@ -71,7 +72,7 @@ func TestDownloadFile_PartialTransferCleansUp(t *testing.T) {
 	defer srv.Close()
 
 	dest := filepath.Join(t.TempDir(), "out.bin")
-	err := DownloadFile(srv.URL, dest)
+	err := DownloadFile(context.Background(), srv.URL, dest)
 	if err == nil {
 		t.Fatal("expected error from truncated response")
 	}

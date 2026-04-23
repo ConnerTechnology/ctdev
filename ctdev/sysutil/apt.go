@@ -20,7 +20,7 @@ func AddAPTKeyring(ctx context.Context, o Opts, url, keyringPath string) error {
 	defer os.Remove(tmp.Name())
 	tmp.Close()
 
-	if err := DownloadFile(url, tmp.Name()); err != nil {
+	if err := DownloadFile(ctx, url, tmp.Name()); err != nil {
 		return fmt.Errorf("download GPG key: %w", err)
 	}
 

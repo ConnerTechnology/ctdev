@@ -58,24 +58,32 @@ func fontsInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
+	var tmpDir string
+	if !o.DryRun {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "ctdev-fonts-*")
+		if err != nil {
+			return fmt.Errorf("create temp dir: %w", err)
+		}
+		defer os.RemoveAll(tmpDir)
+	}
+
 	for _, font := range nerdFonts {
 		url := fmt.Sprintf("https://github.com/ryanoasis/nerd-fonts/releases/latest/download/%s.zip", font)
-		zipPath := filepath.Join(os.TempDir(), font+".zip")
 
 		if o.DryRun {
 			fmt.Fprintf(o.Stdout, "[dry-run] download %s and extract to %s\n", url, fontDir)
 			continue
 		}
 
+		zipPath := filepath.Join(tmpDir, font+".zip")
 		fmt.Fprintf(opts.Stdout, "Downloading %s...\n", font)
-		if err := sysutil.DownloadFile(url, zipPath); err != nil {
+		if err := sysutil.DownloadFile(ctx, url, zipPath); err != nil {
 			fmt.Fprintf(opts.Stdout, "warning: failed to download %s: %v\n", font, err)
 			continue
 		}
 
-		err := sysutil.Run(ctx, o, "unzip", "-oq", zipPath, "-d", fontDir)
-		os.Remove(zipPath)
-		if err != nil {
+		if err := sysutil.Run(ctx, o, "unzip", "-oq", zipPath, "-d", fontDir); err != nil {
 			fmt.Fprintf(opts.Stdout, "warning: failed to extract %s: %v\n", font, err)
 		}
 	}

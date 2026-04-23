@@ -50,10 +50,10 @@ func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 	dlURL := fmt.Sprintf("https://dl.k8s.io/release/%s/bin/linux/%s/kubectl", ver, p.Arch)
 	csURL := fmt.Sprintf("https://dl.k8s.io/release/%s/bin/linux/%s/kubectl.sha256", ver, p.Arch)
 
-	if err := sysutil.DownloadFile(dlURL, binaryPath); err != nil {
+	if err := sysutil.DownloadFile(ctx, dlURL, binaryPath); err != nil {
 		return err
 	}
-	if err := sysutil.DownloadFile(csURL, checksumPath); err != nil {
+	if err := sysutil.DownloadFile(ctx, csURL, checksumPath); err != nil {
 		return err
 	}
 

@@ -277,6 +277,30 @@ func TestGoArchiveSHA256(t *testing.T) {
 	})
 }
 
+func TestAPTKeyRefreshers_PathsMatchInstallers(t *testing.T) {
+	// If these drift from the keyring paths embedded in the component
+	// installers, `ctdev update --refresh-keys` silently updates a file
+	// APT's signed-by doesn't read. Any change to an installer's keyring
+	// path must be mirrored here, and vice versa.
+	want := map[string]string{
+		"gh":        "/usr/share/keyrings/githubcli-archive-keyring.gpg",
+		"vscode":    "/etc/apt/trusted.gpg.d/packages.microsoft.gpg",
+		"1password": "/usr/share/keyrings/1password-archive-keyring.gpg",
+		"terraform": "/usr/share/keyrings/hashicorp-archive-keyring.gpg",
+		"tailscale": "/usr/share/keyrings/tailscale-archive-keyring.gpg",
+	}
+	for name, expected := range want {
+		r, ok := aptKeyRefreshers[name]
+		if !ok {
+			t.Errorf("aptKeyRefreshers missing entry for %q", name)
+			continue
+		}
+		if r.KeyringPath != expected {
+			t.Errorf("aptKeyRefreshers[%q].KeyringPath = %q, want %q", name, r.KeyringPath, expected)
+		}
+	}
+}
+
 func TestShouldRefreshKeys(t *testing.T) {
 	tests := []struct {
 		name         string

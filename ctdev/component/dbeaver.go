@@ -58,7 +58,7 @@ func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 		tmp.Close()
 
 		url := fmt.Sprintf("https://dbeaver.io/files/dbeaver-ce-latest-stable.%s.rpm", archRPM)
-		if err := sysutil.DownloadFile(url, tmp.Name()); err != nil {
+		if err := sysutil.DownloadFile(ctx, url, tmp.Name()); err != nil {
 			return fmt.Errorf("download dbeaver RPM: %w", err)
 		}
 		return sysutil.SudoRun(ctx, o, "dnf", "install", "-y", tmp.Name())

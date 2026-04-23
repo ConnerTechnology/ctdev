@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -424,7 +425,7 @@ func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current := strings.TrimSpace(string(currentOut))
 
 	// Check latest via bun's upgrade --dry-run (not supported), use GitHub API
-	tag, err := sysutil.GitHubLatestVersion("oven-sh/bun")
+	tag, err := sysutil.GitHubLatestVersion(ctx, "oven-sh/bun")
 	if err != nil {
 		return nil, nil
 	}
@@ -512,7 +513,7 @@ func scanCtdev(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if version == "" {
 		return nil, nil
 	}
-	latest, err := sysutil.GitHubLatestVersion("ConnerTechnology/dotfiles")
+	latest, err := sysutil.GitHubLatestVersion(ctx, "ConnerTechnology/dotfiles")
 	if err != nil || latest == "" {
 		return nil, nil
 	}
@@ -606,7 +607,7 @@ func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current = strings.TrimPrefix(current, "v")
 
 	currentMajor := majorVersion(current)
-	tags := fetchGitHubReleaseTags("helm/helm")
+	tags := fetchGitHubReleaseTags(ctx, "helm/helm")
 
 	var items []checklist.UpdateItem
 	latestSameMajor := ""
@@ -700,7 +701,7 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, nil
 	}
 
-	latest, err := sysutil.GitHubLatestVersion("hashicorp/terraform")
+	latest, err := sysutil.GitHubLatestVersion(ctx, "hashicorp/terraform")
 	if err != nil || latest == "" {
 		return nil, nil
 	}
@@ -716,9 +717,9 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 }
 
 // fetchGitHubReleaseTags returns release tags from newest to oldest (excludes pre-releases).
-func fetchGitHubReleaseTags(repo string) []string {
+func fetchGitHubReleaseTags(ctx context.Context, repo string) []string {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=50", repo)
-	resp, err := sysutil.HTTPClient().Get(url)
+	resp, err := httpGetJSON(ctx, url)
 	if err != nil {
 		return nil
 	}
@@ -789,10 +790,20 @@ type goRelease struct {
 	} `json:"files"`
 }
 
+// httpGetJSON issues a GET with ctx so Ctrl-C cancels in-flight requests.
+// Callers are expected to close the response body.
+func httpGetJSON(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return sysutil.HTTPClient().Do(req)
+}
+
 // fetchGoReleases returns the list of published Go releases (newest first).
 // Each release includes per-OS/arch archive metadata with SHA256 hashes.
-func fetchGoReleases() ([]goRelease, error) {
-	resp, err := sysutil.HTTPClient().Get("https://go.dev/dl/?mode=json")
+func fetchGoReleases(ctx context.Context) ([]goRelease, error) {
+	resp, err := httpGetJSON(ctx, "https://go.dev/dl/?mode=json")
 	if err != nil {
 		return nil, err
 	}
@@ -805,7 +816,7 @@ func fetchGoReleases() ([]goRelease, error) {
 }
 
 func fetchLatestGoVersion(ctx context.Context) string {
-	releases, err := fetchGoReleases()
+	releases, err := fetchGoReleases(ctx)
 	if err != nil || len(releases) == 0 {
 		return ""
 	}
@@ -856,7 +867,7 @@ func fetchLatestRubyVersion(ctx context.Context) string {
 }
 
 func fetchLatestKubectlVersion(ctx context.Context) string {
-	resp, err := sysutil.HTTPClient().Get("https://dl.k8s.io/release/stable.txt")
+	resp, err := httpGetJSON(ctx, "https://dl.k8s.io/release/stable.txt")
 	if err != nil {
 		return ""
 	}
@@ -1088,10 +1099,10 @@ func updateHelm(ctx context.Context, o sysutil.Opts, ver string) error {
 	tmpFile := filepath.Join(tmpDir, archive)
 	csFile := filepath.Join(tmpDir, "checksum")
 
-	if err := sysutil.DownloadFile(url, tmpFile); err != nil {
+	if err := sysutil.DownloadFile(ctx, url, tmpFile); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	if err := sysutil.DownloadFile(csURL, csFile); err != nil {
+	if err := sysutil.DownloadFile(ctx, csURL, csFile); err != nil {
 		return fmt.Errorf("download checksum failed: %w", err)
 	}
 
@@ -1129,10 +1140,10 @@ func updateKubectl(ctx context.Context, o sysutil.Opts, ver string) error {
 	tmpPath := filepath.Join(tmpDir, "kubectl")
 	csPath := filepath.Join(tmpDir, "kubectl.sha256")
 
-	if err := sysutil.DownloadFile(url, tmpPath); err != nil {
+	if err := sysutil.DownloadFile(ctx, url, tmpPath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	if err := sysutil.DownloadFile(csURL, csPath); err != nil {
+	if err := sysutil.DownloadFile(ctx, csURL, csPath); err != nil {
 		return fmt.Errorf("download checksum failed: %w", err)
 	}
 
@@ -1166,10 +1177,10 @@ func updateTerraform(ctx context.Context, o sysutil.Opts, ver string) error {
 	tmpZip := filepath.Join(tmpDir, "terraform.zip")
 	csFile := filepath.Join(tmpDir, "checksums")
 
-	if err := sysutil.DownloadFile(url, tmpZip); err != nil {
+	if err := sysutil.DownloadFile(ctx, url, tmpZip); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	if err := sysutil.DownloadFile(csURL, csFile); err != nil {
+	if err := sysutil.DownloadFile(ctx, csURL, csFile); err != nil {
 		return fmt.Errorf("download checksum failed: %w", err)
 	}
 
@@ -1209,7 +1220,7 @@ func updateGo(ctx context.Context, o sysutil.Opts, ver string) error {
 
 	// Fetch the release manifest first so we can verify the tarball checksum
 	// before touching the existing /usr/local/go install.
-	releases, err := fetchGoReleases()
+	releases, err := fetchGoReleases(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch go release manifest: %w", err)
 	}
@@ -1225,7 +1236,7 @@ func updateGo(ctx context.Context, o sysutil.Opts, ver string) error {
 	tmpPath := tmpFile.Name()
 	tmpFile.Close()
 	defer os.Remove(tmpPath)
-	if err := sysutil.DownloadFile(url, tmpPath); err != nil {
+	if err := sysutil.DownloadFile(ctx, url, tmpPath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
 	if err := sysutil.VerifyChecksum(tmpPath, expectedSHA); err != nil {
@@ -1276,7 +1287,10 @@ var aptKeyRefreshers = map[string]struct {
 	KeyringPath string
 }{
 	"gh":        {KeyURL: "https://cli.github.com/packages/githubcli-archive-keyring.gpg", KeyringPath: "/usr/share/keyrings/githubcli-archive-keyring.gpg"},
-	"vscode":    {KeyURL: "https://packages.microsoft.com/keys/microsoft.asc", KeyringPath: "/usr/share/keyrings/packages.microsoft.gpg"},
+	// KeyringPath must match what vscodeInstall writes — APT's signed-by
+	// points at /etc/apt/trusted.gpg.d/packages.microsoft.gpg, so refreshing
+	// a keyring at /usr/share/keyrings/ would be silently ineffective.
+	"vscode":    {KeyURL: "https://packages.microsoft.com/keys/microsoft.asc", KeyringPath: "/etc/apt/trusted.gpg.d/packages.microsoft.gpg"},
 	"1password": {KeyURL: "https://downloads.1password.com/linux/keys/1password.asc", KeyringPath: "/usr/share/keyrings/1password-archive-keyring.gpg"},
 	"terraform": {KeyURL: "https://apt.releases.hashicorp.com/gpg", KeyringPath: "/usr/share/keyrings/hashicorp-archive-keyring.gpg"},
 	"tailscale": {KeyURL: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg", KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg"},

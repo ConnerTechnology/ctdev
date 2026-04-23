@@ -29,7 +29,7 @@ func ageInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("age Linux build only available for amd64/arm64 (got %s): %w", p.Arch, ErrUnsupportedOS)
 	}
 
-	ver, err := sysutil.GitHubLatestVersion("FiloSottile/age")
+	ver, err := sysutil.GitHubLatestVersion(ctx, "FiloSottile/age")
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func ageInstall(ctx context.Context, opts ExecOpts) error {
 	archivePath := filepath.Join(tmpDir, archive)
 	url := fmt.Sprintf("https://github.com/FiloSottile/age/releases/download/v%s/%s", ver, archive)
 
-	if err := sysutil.DownloadFile(url, archivePath); err != nil {
+	if err := sysutil.DownloadFile(ctx, url, archivePath); err != nil {
 		return err
 	}
 	if err := sysutil.Run(ctx, o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {

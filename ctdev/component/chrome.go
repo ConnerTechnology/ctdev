@@ -38,7 +38,7 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 		defer os.Remove(tmp.Name())
 		tmp.Close()
 
-		if err := sysutil.DownloadFile("https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", tmp.Name()); err != nil {
+		if err := sysutil.DownloadFile(ctx, "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", tmp.Name()); err != nil {
 			return fmt.Errorf("download chrome: %w", err)
 		}
 		return installDebWithDepFix(ctx, o, tmp.Name(), "google-chrome-stable")

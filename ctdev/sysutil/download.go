@@ -20,10 +20,19 @@ var httpClient = &http.Client{Timeout: 60 * time.Second}
 // HTTPClient returns the shared HTTP client with a 60-second timeout.
 func HTTPClient() *http.Client { return httpClient }
 
-// DownloadFile downloads a URL to a local file path.
+// httpGet issues a GET with ctx so cancellation terminates in-flight requests.
+func httpGet(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return httpClient.Do(req)
+}
+
+// DownloadFile downloads a URL to a local file path, honoring ctx for cancellation.
 // On error the partial destination file is removed so retries see a clean slate.
-func DownloadFile(url, dest string) error {
-	resp, err := httpClient.Get(url)
+func DownloadFile(ctx context.Context, url, dest string) error {
+	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", url, err)
 	}
@@ -52,9 +61,9 @@ func DownloadFile(url, dest string) error {
 
 // GitHubLatestVersion fetches the latest release version from a GitHub repo.
 // Returns the version without the "v" prefix.
-func GitHubLatestVersion(repo string) (string, error) {
+func GitHubLatestVersion(ctx context.Context, repo string) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	resp, err := httpClient.Get(url)
+	resp, err := httpGet(ctx, url)
 	if err != nil {
 		return "", fmt.Errorf("fetch latest version for %s: %w", repo, err)
 	}
@@ -147,7 +156,7 @@ type GitHubBinarySpec struct {
 // DownloadGitHubBinary fetches the latest release, downloads, verifies, extracts, and installs.
 // Returns the version string and any error.
 func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (string, error) {
-	ver, err := GitHubLatestVersion(spec.Repo)
+	ver, err := GitHubLatestVersion(ctx, spec.Repo)
 	if err != nil {
 		return "", err
 	}
@@ -170,14 +179,14 @@ func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (s
 	archiveName := filepath.Base(dlURL)
 	archivePath := filepath.Join(tmpDir, archiveName)
 
-	if err := DownloadFile(dlURL, archivePath); err != nil {
+	if err := DownloadFile(ctx, dlURL, archivePath); err != nil {
 		return ver, fmt.Errorf("download %s: %w", spec.Repo, err)
 	}
 
 	if spec.ChecksumURL != nil {
 		csURL := spec.ChecksumURL(ver, goos, goarch)
 		csPath := filepath.Join(tmpDir, "checksums.txt")
-		if err := DownloadFile(csURL, csPath); err != nil {
+		if err := DownloadFile(ctx, csURL, csPath); err != nil {
 			return ver, fmt.Errorf("download checksums for %s: %w", spec.Repo, err)
 		}
 		if err := VerifyChecksumFile(archivePath, csPath); err != nil {

@@ -56,7 +56,7 @@ func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 		}
 		defer os.Remove(polTmp.Name())
 		polTmp.Close()
-		if err := sysutil.DownloadFile("https://downloads.1password.com/linux/debian/debsig/1password.pol", polTmp.Name()); err != nil {
+		if err := sysutil.DownloadFile(ctx, "https://downloads.1password.com/linux/debian/debsig/1password.pol", polTmp.Name()); err != nil {
 			return fmt.Errorf("download debsig policy: %w", err)
 		}
 		if err := sysutil.SudoRun(ctx, o, "cp", polTmp.Name(), policyDir+"/1password.pol"); err != nil {
