@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Run a command inside the devcontainer for the current working directory.
+# Usage: dx <command> [args...]   e.g. `dx npm test`, `dx bash`
+exec devcontainer exec --workspace-folder "$(pwd)" "$@"

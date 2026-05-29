@@ -2,7 +2,51 @@
 
 Modular dotfiles for macOS and Linux. Managed via the `ctdev` CLI.
 
-## Install
+## Fresh Machine Setup
+
+On a fresh Linux Mint 22.x (Ubuntu 24.04 base) machine, one command bootstraps
+the whole development + remote-access environment:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/bootstrap.sh)
+```
+
+Or, from a clone (builds `ctdev` from source when Go is present):
+
+```bash
+./bootstrap.sh
+```
+
+`bootstrap.sh` is a thin orchestrator — it primes sudo once, installs base apt
+packages, installs the `ctdev` binary, then delegates to `ctdev`. It's
+idempotent and safe to re-run.
+
+**What it installs**
+
+- Base apt packages: `git curl wget build-essential zsh tmux mosh openssh-server ufw htop jq ripgrep fd-find unzip`
+- Via `ctdev install`: zsh (+ Oh My Zsh, Pure prompt, plugins, dotfiles), git, gh,
+  Node (nodenv), Go (official tarball), Docker (official repo + Compose), Tailscale,
+  VS Code (Microsoft repo), Claude Code, tmux, jq, and the Dev Containers CLI (`@devcontainers/cli` + the `dx` wrapper)
+
+**What it configures** (`ctdev configure remote`)
+
+- SSH server enabled; key-based auth hardened (password auth disabled only once an authorized key exists)
+- UFW allowing SSH (22/tcp) + Mosh (60000:61000/udp) from private LAN ranges
+- `en_US.UTF-8` locale (required by Mosh)
+- Sleep/suspend/hibernate masked (always-on desktop)
+- WiFi power-save disabled (NetworkManager drop-in)
+- systemd lingering enabled (keeps user services alive without a login session)
+- VS Code tunnel service (reach this machine from a browser at vscode.dev)
+
+**Manual steps after the script runs**
+
+- Add your client's SSH public key: `echo 'ssh-ed25519 ...' >> ~/.ssh/authorized_keys`, then re-run `ctdev configure remote --batch`
+- Authenticate the VS Code tunnel once: `code tunnel user login`
+- `gh auth login` · `ctdev configure git` · (optional) `sudo tailscale up`
+- Reboot (or log out/in) to apply docker group membership, suspend masking, and WiFi power-save
+- Verify everything: `ctdev verify`
+
+## Install (ctdev only)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
@@ -32,9 +76,11 @@ ctdev configure <category>      # Configure a single category (gpu, boot, power,
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
+ctdev configure remote          # Configure SSH/Mosh/UFW/tunnel for remote access
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
 ctdev cleanup                   # Run all cleanup tasks
+ctdev verify                    # Verify the bootstrap installation
 ```
 
 Run `ctdev install` (no args) for an interactive component picker.
@@ -43,7 +89,7 @@ Run `ctdev install` (no args) for an interactive component picker.
 
 ## Components
 
-35 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
+37 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
 
 ## DevContainers
 

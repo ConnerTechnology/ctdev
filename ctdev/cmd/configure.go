@@ -72,7 +72,14 @@ func init() {
 						return fmt.Errorf("sudo required: %w", err)
 					}
 				}
-				return runCategoryWizard(cmdContext(cmd), slug, flagConfigShow)
+				if flagConfigShow {
+					return runCategoryWizard(cmdContext(cmd), slug, true)
+				}
+				// Non-interactive (--batch or piped stdin): apply defaults without prompting.
+				if isBatchMode() {
+					return runCategoryBatch(cmdContext(cmd), slug)
+				}
+				return runCategoryWizard(cmdContext(cmd), slug, false)
 			},
 		}
 		configureCmd.AddCommand(cmd)

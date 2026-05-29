@@ -27,6 +27,7 @@ var slugDescriptions = map[string]string{
 	"desktop":   "Desktop",
 	"network":   "Network & WiFi",
 	"system":    "System",
+	"remote":    "Remote Access",
 }
 
 // slugOrder is derived from setup.Registry so adding a setting with a brand
@@ -50,6 +51,21 @@ var wizardHeaderStyle = lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
 // runCategoryWizard runs the interactive wizard for a single category slug.
 func runCategoryWizard(ctx context.Context, slug string, showOnly bool) error {
 	return runCategoryWizardOn(ctx, setup.Registry, slug, showOnly)
+}
+
+// runCategoryBatch applies a category's settings non-interactively at their
+// recommended defaults. Used by bootstrap (`ctdev configure <slug> --batch`).
+// Idempotent: applySettings skips settings already at their desired value.
+func runCategoryBatch(ctx context.Context, slug string) error {
+	settings := setup.FilterBySlug(setup.Registry, slug)
+	settings = setup.FilterByHardware(settings)
+	if len(settings) == 0 {
+		fmt.Printf("  %s\n", styles.Dimmed.Render(fmt.Sprintf("No applicable %s settings on this hardware.", slugDescription(slug))))
+		return nil
+	}
+	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug) + " (batch)"))
+	states := setup.InitStates(settings)
+	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
 
 // runCategoryWizardOn is the testable core of runCategoryWizard — it takes an
@@ -351,4 +367,3 @@ func applySettings(ctx context.Context, states []setup.SettingState, force, dryR
 	fmt.Println()
 	return nil
 }
-

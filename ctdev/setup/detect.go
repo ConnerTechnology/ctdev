@@ -3,6 +3,8 @@ package setup
 import (
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
 	"strings"
 )
 
@@ -244,6 +246,54 @@ func detectLogitechBolt() bool {
 		return false
 	}
 	return strings.Contains(string(out), "046d:c548")
+}
+
+// detectUTF8Locale reports "installed" if an en_US UTF-8 locale is generated.
+func detectUTF8Locale() string {
+	out, _ := exec.Command("locale", "-a").Output()
+	low := strings.ToLower(string(out))
+	if strings.Contains(low, "en_us.utf-8") || strings.Contains(low, "en_us.utf8") {
+		return "installed"
+	}
+	return "not installed"
+}
+
+// detectSuspendMasked reports "enabled" when all sleep targets are masked.
+// `systemctl is-enabled` prints "masked" with a non-zero exit, so the captured
+// stdout is checked rather than the error.
+func detectSuspendMasked() string {
+	for _, t := range sleepTargets {
+		out, _ := exec.Command("systemctl", "is-enabled", t).Output()
+		if strings.TrimSpace(string(out)) != "masked" {
+			return "disabled"
+		}
+	}
+	return "enabled"
+}
+
+// detectLinger reports whether systemd lingering is enabled for the current user.
+func detectLinger() string {
+	u, err := user.Current()
+	if err != nil {
+		return "disabled"
+	}
+	out, err := exec.Command("loginctl", "show-user", u.Username, "--property=Linger").Output()
+	if err != nil {
+		return "disabled"
+	}
+	if strings.TrimSpace(string(out)) == "Linger=yes" {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+// detectCodeTunnelService reports whether the VS Code tunnel user service exists.
+func detectCodeTunnelService() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "not installed"
+	}
+	return detectFileExists(filepath.Join(home, ".config", "systemd", "user", "code-tunnel.service"))
 }
 
 func detectMouseSpeed() string {

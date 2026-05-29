@@ -16,18 +16,29 @@ ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
+ctdev configure remote          # Configure remote access (SSH/Mosh/UFW/tunnel)
+ctdev configure remote --batch  # Apply remote-access defaults non-interactively
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
 ctdev cleanup                   # Run all cleanup tasks (with prompts)
+ctdev verify                    # Verify the bootstrap installation
 ```
+
+## Bootstrap
+
+`bootstrap.sh` (repo root) sets up a fresh Linux Mint machine in one command. It's a
+thin orchestrator: base apt packages → install/build the `ctdev` binary →
+`ctdev install <components>` → `ctdev configure remote --batch`. When run from a
+clone with Go present it builds `ctdev` from source; otherwise it downloads the
+released binary. Idempotent. See README "Fresh Machine Setup".
 
 **Flags:** `--help`, `--verbose`, `--dry-run`, `--force`, `--version`, `--refresh-keys`
 
 ## Components
 
-35 components:
+37 components:
 
-1password, age, btop, bun, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, helm, jq, kubectl, linear, logi-options, node, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, btop, bun, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
 
 ## Directory structure
 

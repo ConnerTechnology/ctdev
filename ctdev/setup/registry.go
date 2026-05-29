@@ -128,7 +128,9 @@ var Registry = []Setting{
 		Control:     ControlSlider,
 		Default:     "2700",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
-		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout") },
+		DetectFunc: func() string {
+			return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
 		},
@@ -424,6 +426,105 @@ var Registry = []Setting{
 		DetectFunc:  func() string { return detectSystemdService("fstrim.timer") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySSDTrim(ctx, o)
+		},
+	},
+
+	// ── Remote Access ────────────────────────────────────────────────────
+
+	{
+		Name:        "SSH server",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Enables and starts the OpenSSH server so you can connect to this machine over SSH.",
+		Control:     ControlToggle,
+		Default:     "active",
+		DetectFunc:  func() string { return detectSystemdService("ssh.service") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applySSHServer(ctx, o)
+		},
+	},
+	{
+		Name:        "SSH key-based auth",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Hardens sshd for key-based login (pubkey on, keyboard-interactive off, keepalives). Password auth is disabled only once an authorized key exists, so you can't lock yourself out.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func() string { return detectFileExists("/etc/ssh/sshd_config.d/99-ctdev.conf") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applySSHKeyAuth(ctx, o)
+		},
+	},
+	{
+		Name:        "Firewall (UFW)",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Allows SSH (22/tcp) and Mosh (60000:61000/udp) from private LAN ranges and enables UFW. VLAN/subnet enforcement is left to your gateway firewall.",
+		Control:     ControlToggle,
+		Default:     "active",
+		DetectFunc:  func() string { return detectSystemdService("ufw.service") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyUFWRemote(ctx, o)
+		},
+	},
+	{
+		Name:        "UTF-8 locale (Mosh)",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Generates the en_US.UTF-8 locale. Mosh refuses to start without a UTF-8 locale.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  detectUTF8Locale,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyUTF8Locale(ctx, o)
+		},
+	},
+	{
+		Name:        "Never suspend",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Masks the sleep, suspend, hibernate and hybrid-sleep systemd targets so an always-on desktop stays reachable.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectSuspendMasked,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applySuspendMask(ctx, o)
+		},
+	},
+	{
+		Name:        "WiFi power save off",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func() string { return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyWifiPowersaveOff(ctx, o)
+		},
+	},
+	{
+		Name:        "User service lingering",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Enables systemd lingering for your user so user services (VS Code tunnel, tmux) keep running without an active login session.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectLinger,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyLinger(ctx, o)
+		},
+	},
+	{
+		Name:        "VS Code tunnel service",
+		Slug:        "remote",
+		Category:    "Remote Access",
+		Description: "Installs the VS Code tunnel as a background service so you can open this machine from vscode.dev in a browser (e.g. iPad Safari). Requires VS Code; run 'code tunnel user login' once to authenticate.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  detectCodeTunnelService,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyCodeTunnelService(ctx, o)
 		},
 	},
 }

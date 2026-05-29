@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
@@ -32,6 +33,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 		fmt.Fprintln(w, "[DRY-RUN] Would remove hide-drives udev rule")
 		fmt.Fprintln(w, "[DRY-RUN] Would reset xbindkeys (stop, remove autostart and config symlink)")
 		fmt.Fprintln(w, "[DRY-RUN] Would remove WirePlumber LDAC config")
+		fmt.Fprintln(w, "[DRY-RUN] Would reset remote access (unmask sleep targets, remove sshd/NM drop-ins, disable UFW + linger, uninstall VS Code tunnel)")
 		return nil
 	}
 
@@ -207,6 +209,27 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 	fmt.Fprintf(w, "Resetting fstrim...\n")
 	_ = sysutil.SudoRun(ctx, o, "systemctl", "stop", "fstrim.timer")
 	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "fstrim.timer")
+
+	// Remote access settings (best-effort — all reversible tweaks)
+	fmt.Fprintf(w, "Resetting remote access settings...\n")
+	_ = sysutil.SudoRun(ctx, o, "systemctl", append([]string{"unmask"}, sleepTargets...)...)
+	if _, err := os.Stat(sshdDropIn); err == nil {
+		_ = sysutil.SudoRun(ctx, o, "rm", "-f", sshdDropIn)
+		_ = sysutil.SudoRun(ctx, o, "systemctl", "reload", "ssh")
+	}
+	nmConf := "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
+	if _, err := os.Stat(nmConf); err == nil {
+		_ = sysutil.SudoRun(ctx, o, "rm", "-f", nmConf)
+	}
+	if sysutil.CommandExists("ufw") {
+		_ = sysutil.SudoRun(ctx, o, "ufw", "--force", "disable")
+	}
+	if u, err := user.Current(); err == nil {
+		_ = sysutil.SudoRun(ctx, o, "loginctl", "disable-linger", u.Username)
+	}
+	if sysutil.CommandExists("code") {
+		_ = sysutil.Run(ctx, o, "code", "tunnel", "service", "uninstall")
+	}
 
 	// Regenerate GRUB config
 	if err := applyUpdateGrub(ctx, o); err != nil {

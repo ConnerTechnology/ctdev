@@ -11,6 +11,8 @@ path=(
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Go ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+# Official tarball install location (ctdev `go` component installs here)
+[[ -d "/usr/local/go/bin" ]] && path+=(/usr/local/go/bin)
 [[ -n "$GOPATH" && -d "$GOPATH/bin" ]] && path+=($GOPATH/bin)
 [[ -n "$GOROOT" && -d "$GOROOT/bin" ]] && path+=($GOROOT/bin)
 
