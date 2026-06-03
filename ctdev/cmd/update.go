@@ -1084,82 +1084,76 @@ func resolveInstallDest(ctx context.Context, bin, fallback string) string {
 	return dest
 }
 
-func updateHelm(ctx context.Context, o sysutil.Opts, ver string) error {
-	goos := detectUpdateOS()
-	goarch := detectUpdateArch()
-	archive := fmt.Sprintf("helm-v%s-%s-%s.tar.gz", ver, goos, goarch)
-	url := fmt.Sprintf("https://get.helm.sh/%s", archive)
-	csURL := url + ".sha256sum"
-
-	tmpDir, err := os.MkdirTemp("", "ctdev-helm-*")
+// downloadVerifiedArchive downloads archiveURL into a fresh temp dir, fetches
+// checksumURL, verifies the archive against the hash that pickHash extracts
+// from the checksum file, then calls install with the temp dir and archive
+// path. The temp dir is always cleaned up. Each caller keeps its own checksum
+// format (bare hash, "hash file", or SHA256SUMS) and extraction step, so this
+// only collapses the shared download/verify boilerplate.
+func downloadVerifiedArchive(ctx context.Context, archiveURL, checksumURL string, pickHash func(checksumContents string) (string, error), install func(tmpDir, archivePath string) error) error {
+	tmpDir, err := os.MkdirTemp("", "ctdev-dl-*")
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
-	tmpFile := filepath.Join(tmpDir, archive)
-	csFile := filepath.Join(tmpDir, "checksum")
 
-	if err := sysutil.DownloadFile(ctx, url, tmpFile); err != nil {
+	archivePath := filepath.Join(tmpDir, filepath.Base(archiveURL))
+	if err := sysutil.DownloadFile(ctx, archiveURL, archivePath); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	if err := sysutil.DownloadFile(ctx, csURL, csFile); err != nil {
+	csPath := filepath.Join(tmpDir, "checksum")
+	if err := sysutil.DownloadFile(ctx, checksumURL, csPath); err != nil {
 		return fmt.Errorf("download checksum failed: %w", err)
 	}
-
-	// helm sha256sum format: "hash  filename"
-	csData, err := os.ReadFile(csFile)
+	csData, err := os.ReadFile(csPath)
 	if err != nil {
 		return fmt.Errorf("read checksum: %w", err)
 	}
-	parts := strings.Fields(strings.TrimSpace(string(csData)))
-	if len(parts) == 0 {
-		return fmt.Errorf("empty checksum file")
+	expected, err := pickHash(string(csData))
+	if err != nil {
+		return err
 	}
-	if err := sysutil.VerifyChecksum(tmpFile, parts[0]); err != nil {
-		return fmt.Errorf("helm checksum mismatch: %w", err)
+	if err := sysutil.VerifyChecksum(archivePath, expected); err != nil {
+		return fmt.Errorf("checksum mismatch: %w", err)
 	}
+	return install(tmpDir, archivePath)
+}
 
-	if err := sysutil.Run(ctx, o, "tar", "-xzf", tmpFile, "-C", tmpDir); err != nil {
-		return fmt.Errorf("extract failed: %w", err)
-	}
-	dest := resolveInstallDest(ctx, "helm", "/usr/local/bin/helm")
-	return sysutil.SudoRun(ctx, o, "mv", fmt.Sprintf("%s/%s-%s/helm", tmpDir, goos, goarch), dest)
+func updateHelm(ctx context.Context, o sysutil.Opts, ver string) error {
+	goos := detectUpdateOS()
+	goarch := detectUpdateArch()
+	url := fmt.Sprintf("https://get.helm.sh/helm-v%s-%s-%s.tar.gz", ver, goos, goarch)
+	return downloadVerifiedArchive(ctx, url, url+".sha256sum",
+		func(cs string) (string, error) {
+			// helm publishes the bare hash (optionally "hash  filename").
+			parts := strings.Fields(strings.TrimSpace(cs))
+			if len(parts) == 0 {
+				return "", fmt.Errorf("empty checksum file")
+			}
+			return parts[0], nil
+		},
+		func(tmpDir, archivePath string) error {
+			if err := sysutil.Run(ctx, o, "tar", "-xzf", archivePath, "-C", tmpDir); err != nil {
+				return fmt.Errorf("extract failed: %w", err)
+			}
+			dest := resolveInstallDest(ctx, "helm", "/usr/local/bin/helm")
+			return sysutil.SudoRun(ctx, o, "mv", fmt.Sprintf("%s/%s-%s/helm", tmpDir, goos, goarch), dest)
+		})
 }
 
 func updateKubectl(ctx context.Context, o sysutil.Opts, ver string) error {
 	goos := detectUpdateOS()
 	goarch := detectUpdateArch()
 	url := fmt.Sprintf("https://dl.k8s.io/release/v%s/bin/%s/%s/kubectl", ver, goos, goarch)
-	csURL := fmt.Sprintf("https://dl.k8s.io/release/v%s/bin/%s/%s/kubectl.sha256", ver, goos, goarch)
-
-	tmpDir, err := os.MkdirTemp("", "ctdev-kubectl-*")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-	tmpPath := filepath.Join(tmpDir, "kubectl")
-	csPath := filepath.Join(tmpDir, "kubectl.sha256")
-
-	if err := sysutil.DownloadFile(ctx, url, tmpPath); err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-	if err := sysutil.DownloadFile(ctx, csURL, csPath); err != nil {
-		return fmt.Errorf("download checksum failed: %w", err)
-	}
-
-	expected, err := os.ReadFile(csPath)
-	if err != nil {
-		return fmt.Errorf("read checksum: %w", err)
-	}
-	if err := sysutil.VerifyChecksum(tmpPath, strings.TrimSpace(string(expected))); err != nil {
-		return fmt.Errorf("kubectl checksum mismatch: %w", err)
-	}
-
-	if err := os.Chmod(tmpPath, 0755); err != nil {
-		return err
-	}
-	dest := resolveInstallDest(ctx, "kubectl", "/usr/local/bin/kubectl")
-	return sysutil.SudoRun(ctx, o, "mv", tmpPath, dest)
+	return downloadVerifiedArchive(ctx, url, url+".sha256",
+		func(cs string) (string, error) { return strings.TrimSpace(cs), nil },
+		func(tmpDir, archivePath string) error {
+			if err := os.Chmod(archivePath, 0755); err != nil {
+				return err
+			}
+			dest := resolveInstallDest(ctx, "kubectl", "/usr/local/bin/kubectl")
+			return sysutil.SudoRun(ctx, o, "mv", archivePath, dest)
+		})
 }
 
 func updateTerraform(ctx context.Context, o sysutil.Opts, ver string) error {
@@ -1168,49 +1162,25 @@ func updateTerraform(ctx context.Context, o sysutil.Opts, ver string) error {
 	zipName := fmt.Sprintf("terraform_%s_%s_%s.zip", ver, goos, goarch)
 	url := fmt.Sprintf("https://releases.hashicorp.com/terraform/%s/%s", ver, zipName)
 	csURL := fmt.Sprintf("https://releases.hashicorp.com/terraform/%s/terraform_%s_SHA256SUMS", ver, ver)
-
-	tmpDir, err := os.MkdirTemp("", "ctdev-terraform-*")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-	tmpZip := filepath.Join(tmpDir, "terraform.zip")
-	csFile := filepath.Join(tmpDir, "checksums")
-
-	if err := sysutil.DownloadFile(ctx, url, tmpZip); err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-	if err := sysutil.DownloadFile(ctx, csURL, csFile); err != nil {
-		return fmt.Errorf("download checksum failed: %w", err)
-	}
-
-	// SHA256SUMS has lines like "hash  terraform_1.2.3_linux_amd64.zip"
-	csData, err := os.ReadFile(csFile)
-	if err != nil {
-		return fmt.Errorf("read checksum: %w", err)
-	}
-	var expectedHash string
-	for _, line := range strings.Split(string(csData), "\n") {
-		if strings.Contains(line, zipName) {
-			parts := strings.Fields(line)
-			if len(parts) >= 1 {
-				expectedHash = parts[0]
+	return downloadVerifiedArchive(ctx, url, csURL,
+		func(cs string) (string, error) {
+			// SHA256SUMS has lines like "hash  terraform_1.2.3_linux_amd64.zip".
+			for _, line := range strings.Split(cs, "\n") {
+				if strings.Contains(line, zipName) {
+					if parts := strings.Fields(line); len(parts) >= 1 {
+						return parts[0], nil
+					}
+				}
 			}
-			break
-		}
-	}
-	if expectedHash == "" {
-		return fmt.Errorf("checksum not found for %s", zipName)
-	}
-	if err := sysutil.VerifyChecksum(tmpZip, expectedHash); err != nil {
-		return fmt.Errorf("terraform checksum mismatch: %w", err)
-	}
-
-	if err := sysutil.Run(ctx, o, "unzip", "-o", tmpZip, "-d", tmpDir); err != nil {
-		return fmt.Errorf("unzip failed: %w", err)
-	}
-	dest := resolveInstallDest(ctx, "terraform", "/usr/local/bin/terraform")
-	return sysutil.SudoRun(ctx, o, "mv", filepath.Join(tmpDir, "terraform"), dest)
+			return "", fmt.Errorf("checksum not found for %s", zipName)
+		},
+		func(tmpDir, archivePath string) error {
+			if err := sysutil.Run(ctx, o, "unzip", "-o", archivePath, "-d", tmpDir); err != nil {
+				return fmt.Errorf("unzip failed: %w", err)
+			}
+			dest := resolveInstallDest(ctx, "terraform", "/usr/local/bin/terraform")
+			return sysutil.SudoRun(ctx, o, "mv", filepath.Join(tmpDir, "terraform"), dest)
+		})
 }
 
 func updateGo(ctx context.Context, o sysutil.Opts, ver string) error {
