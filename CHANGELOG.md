@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [10.0.0] - 2026-06-03
 
 ### Security
 - vscode and dbeaver GPG keys are now written to `/usr/share/keyrings/` and scoped via `signed-by=` instead of `/etc/apt/trusted.gpg.d/`, so a compromise of either vendor key can no longer authenticate packages for unrelated repos.
