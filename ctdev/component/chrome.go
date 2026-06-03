@@ -42,14 +42,6 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 			return fmt.Errorf("download chrome: %w", err)
 		}
 		return installDebWithDepFix(ctx, o, tmp.Name(), "google-chrome-stable")
-	case "dnf":
-		if err := sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "fedora-workstation-repositories"); err != nil {
-			return fmt.Errorf("install fedora-workstation-repositories: %w", err)
-		}
-		if err := sysutil.SudoRun(ctx, o, "dnf", "config-manager", "--set-enabled", "google-chrome"); err != nil {
-			return fmt.Errorf("enable google-chrome repo: %w", err)
-		}
-		return sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "google-chrome-stable")
 	default:
 		return unsupportedPMError("chrome", p.PackageManager)
 	}
@@ -64,8 +56,6 @@ func chromeUninstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.BrewCaskRemove(ctx, o, "google-chrome")
 	case "apt":
-		return sysutil.RemovePackage(ctx, o, "google-chrome-stable")
-	case "dnf":
 		return sysutil.RemovePackage(ctx, o, "google-chrome-stable")
 	default:
 		return ErrUnsupportedOS

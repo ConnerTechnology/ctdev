@@ -38,16 +38,6 @@ func terraformInstall(ctx context.Context, opts ExecOpts) error {
 			return err
 		}
 		return sysutil.InstallPackage(ctx, o, "terraform")
-	case "dnf":
-		if err := sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "dnf-plugins-core"); err != nil {
-			return err
-		}
-		if err := sysutil.SudoRun(ctx, o, "dnf", "config-manager", "--add-repo", "https://rpm.releases.hashicorp.com/fedora/hashicorp.repo"); err != nil {
-			return err
-		}
-		return sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "terraform")
-	case "pacman":
-		return sysutil.InstallPackage(ctx, o, "terraform")
 	default:
 		return unsupportedPMError("terraform", p.PackageManager)
 	}
@@ -58,11 +48,8 @@ func terraformUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing terraform...")
 
-	// Mirror the install-side package-manager switch so we reach the right
-	// removal path on every distro instead of probing with a dpkg-only
-	// heuristic and falling through to a wrong binary path.
 	switch p.PackageManager {
-	case "brew", "apt", "dnf", "pacman":
+	case "brew", "apt":
 		if sysutil.IsPackageInstalled("terraform") {
 			return sysutil.RemovePackage(ctx, o, "terraform")
 		}

@@ -35,16 +35,6 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 			return err
 		}
 		return sysutil.InstallPackage(ctx, o, "code")
-	case "dnf":
-		// Add Microsoft repo
-		if err := sysutil.SudoRun(ctx, o, "rpm", "--import", "https://packages.microsoft.com/keys/microsoft.asc"); err != nil {
-			return fmt.Errorf("import microsoft GPG key: %w", err)
-		}
-		repoContent := "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc\n"
-		if err := sysutil.SudoWriteFile(ctx, o, repoContent, "/etc/yum.repos.d/vscode.repo"); err != nil {
-			return fmt.Errorf("add vscode repo: %w", err)
-		}
-		return sysutil.SudoRun(ctx, o, "dnf", "install", "-y", "code")
 	default:
 		return unsupportedPMError("VS Code", p.PackageManager)
 	}
@@ -58,7 +48,7 @@ func vscodeUninstall(ctx context.Context, opts ExecOpts) error {
 	if p.OS == platform.MacOS {
 		return sysutil.BrewCaskRemove(ctx, o, "visual-studio-code")
 	}
-	if p.PackageManager == "apt" || p.PackageManager == "dnf" {
+	if p.PackageManager == "apt" {
 		return sysutil.RemovePackage(ctx, o, "code")
 	}
 	return ErrUnsupportedOS

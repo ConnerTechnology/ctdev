@@ -71,31 +71,6 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 		addUserToDockerGroup(ctx, o, opts.Stdout)
 		return nil
 
-	case "dnf":
-		if err := sysutil.SudoRun(ctx, o, "dnf", "config-manager", "--add-repo",
-			"https://download.docker.com/linux/fedora/docker-ce.repo"); err != nil {
-			return fmt.Errorf("add docker repo: %w", err)
-		}
-		args := append([]string{"install", "-y"}, dockerPackages...)
-		if err := sysutil.SudoRun(ctx, o, "dnf", args...); err != nil {
-			return err
-		}
-
-		_ = sysutil.ServiceEnable(ctx, o, "docker")
-		_ = sysutil.ServiceStart(ctx, o, "docker")
-		addUserToDockerGroup(ctx, o, opts.Stdout)
-		return nil
-
-	case "pacman":
-		if err := sysutil.SudoRun(ctx, o, "pacman", "-S", "--noconfirm", "docker", "docker-compose"); err != nil {
-			return err
-		}
-
-		_ = sysutil.ServiceEnable(ctx, o, "docker")
-		_ = sysutil.ServiceStart(ctx, o, "docker")
-		addUserToDockerGroup(ctx, o, opts.Stdout)
-		return nil
-
 	default:
 		return unsupportedPMError("docker", p.PackageManager)
 	}
@@ -120,10 +95,6 @@ func dockerUninstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.BrewCaskRemove(ctx, o, "docker")
 	case "apt":
 		return sysutil.RemovePackage(ctx, o, dockerPackages...)
-	case "dnf":
-		return sysutil.RemovePackage(ctx, o, dockerPackages...)
-	case "pacman":
-		return sysutil.RemovePackage(ctx, o, "docker", "docker-compose")
 	default:
 		return ErrUnsupportedOS
 	}

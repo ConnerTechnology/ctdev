@@ -14,7 +14,7 @@ import (
 // than attempting to remove a binary we never placed.
 func TestTerraformUninstall_ReportsNotInstalledOnSupportedPM(t *testing.T) {
 	pm := platform.Detect().PackageManager
-	supported := map[string]bool{"brew": true, "apt": true, "dnf": true, "pacman": true}
+	supported := map[string]bool{"brew": true, "apt": true}
 	if !supported[pm] {
 		t.Skipf("package manager %q not exercised by this test", pm)
 	}

@@ -35,10 +35,6 @@ func ghInstall(ctx context.Context, opts ExecOpts) error {
 			return err
 		}
 		return sysutil.InstallPackage(ctx, o, "gh")
-	case "dnf":
-		return sysutil.InstallPackage(ctx, o, "gh")
-	case "pacman":
-		return sysutil.InstallPackage(ctx, o, "github-cli")
 	default:
 		return unsupportedPMError("gh", p.PackageManager)
 	}
@@ -54,10 +50,6 @@ func ghUninstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.RemovePackage(ctx, o, "gh")
 	case "apt":
 		return sysutil.RemovePackage(ctx, o, "gh")
-	case "dnf":
-		return sysutil.RemovePackage(ctx, o, "gh")
-	case "pacman":
-		return sysutil.RemovePackage(ctx, o, "github-cli")
 	default:
 		return ErrUnsupportedOS
 	}

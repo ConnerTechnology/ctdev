@@ -16,10 +16,6 @@ func InstallPackage(ctx context.Context, o Opts, names ...string) error {
 		return SudoRun(ctx, o, "apt-get", append([]string{"install", "-y", "-qq"}, names...)...)
 	case "brew":
 		return Run(ctx, o, "brew", append([]string{"install"}, names...)...)
-	case "dnf":
-		return SudoRun(ctx, o, "dnf", append([]string{"install", "-y"}, names...)...)
-	case "pacman":
-		return SudoRun(ctx, o, "pacman", append([]string{"-S", "--noconfirm"}, names...)...)
 	default:
 		return fmt.Errorf("unsupported package manager: %s", pm)
 	}
@@ -33,10 +29,6 @@ func RemovePackage(ctx context.Context, o Opts, names ...string) error {
 		return SudoRun(ctx, o, "apt-get", append([]string{"remove", "-y"}, names...)...)
 	case "brew":
 		return Run(ctx, o, "brew", append([]string{"uninstall"}, names...)...)
-	case "dnf":
-		return SudoRun(ctx, o, "dnf", append([]string{"remove", "-y"}, names...)...)
-	case "pacman":
-		return SudoRun(ctx, o, "pacman", append([]string{"-R", "--noconfirm"}, names...)...)
 	default:
 		return fmt.Errorf("unsupported package manager: %s", pm)
 	}
@@ -60,10 +52,6 @@ func IsPackageInstalled(name string) bool {
 		return exec.Command("dpkg", "-s", name).Run() == nil
 	case "brew":
 		return exec.Command("brew", "list", name).Run() == nil
-	case "dnf":
-		return exec.Command("rpm", "-q", name).Run() == nil
-	case "pacman":
-		return exec.Command("pacman", "-Qi", name).Run() == nil
 	default:
 		return false
 	}

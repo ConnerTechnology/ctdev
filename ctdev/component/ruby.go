@@ -53,23 +53,6 @@ func rubyInstall(ctx context.Context, opts ExecOpts) error {
 			return fmt.Errorf("install build deps: %w", err)
 		}
 
-	case "dnf":
-		if err := ensureGitClone(ctx, o, "https://github.com/rbenv/rbenv.git", rbenvDir); err != nil {
-			return fmt.Errorf("clone rbenv: %w", err)
-		}
-		pluginDir := filepath.Join(rbenvDir, "plugins", "ruby-build")
-		if err := ensureGitClone(ctx, o, "https://github.com/rbenv/ruby-build.git", pluginDir); err != nil {
-			return fmt.Errorf("clone ruby-build: %w", err)
-		}
-		fmt.Fprintln(opts.Stdout, "Installing Ruby build dependencies...")
-		if err := sysutil.SudoRun(ctx, o, "dnf", "groupinstall", "-y", "Development Tools"); err != nil {
-			return fmt.Errorf("install development tools: %w", err)
-		}
-		if err := sysutil.SudoRun(ctx, o, "dnf", "install", "-y",
-			"openssl-devel", "libyaml-devel", "zlib-devel", "libffi-devel", "gmp-devel", "rust"); err != nil {
-			return fmt.Errorf("install build deps: %w", err)
-		}
-
 	default:
 		return unsupportedPMError("ruby", p.PackageManager)
 	}
