@@ -260,6 +260,9 @@ jobs:
             gh release delete "$TAG_NAME" --yes
           fi
           chmod +x dist/ctdev-*
-          gh release create "$TAG_NAME" dist/ctdev-* \
+          # Publish a checksums file so install.sh can verify the binary it
+          # downloads (defends the self-update path against a tampered asset).
+          ( cd dist && sha256sum ctdev-* > SHA256SUMS )
+          gh release create "$TAG_NAME" dist/ctdev-* dist/SHA256SUMS \
             --title "$TAG_NAME" \
             --generate-notes

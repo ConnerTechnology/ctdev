@@ -106,9 +106,30 @@ if ! download "$BINARY_URL" "$TMP"; then
     error "Download failed. Check that a release exists for $PLATFORM at:\n  https://github.com/${REPO}/releases/tag/${VERSION}"
 fi
 
+# Verify checksum against the release's SHA256SUMS (skipped only if the release
+# predates checksum publishing or sha256sum is unavailable).
+SUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/SHA256SUMS"
+SUMS_TMP=$(mktemp)
+trap 'rm -f "$TMP" "$SUMS_TMP"' EXIT
+if command -v sha256sum >/dev/null 2>&1 && download "$SUMS_URL" "$SUMS_TMP" 2>/dev/null; then
+    expected=$(grep "ctdev-${PLATFORM}\$" "$SUMS_TMP" | awk '{print $1}')
+    if [[ -n "$expected" ]]; then
+        actual=$(sha256sum "$TMP" | awk '{print $1}')
+        if [[ "$expected" != "$actual" ]]; then
+            error "Checksum mismatch for ctdev-${PLATFORM}.\n  expected: $expected\n  actual:   $actual"
+        fi
+        info "Checksum verified"
+    else
+        warn "No checksum entry for ctdev-${PLATFORM}; skipping verification"
+    fi
+else
+    warn "Could not fetch SHA256SUMS; skipping checksum verification"
+fi
+
 # Install
 chmod +x "$TMP"
 mv "$TMP" "$INSTALL_DIR/ctdev"
+rm -f "$SUMS_TMP"
 trap - EXIT
 
 success "ctdev ${VERSION} installed to $INSTALL_DIR/ctdev"

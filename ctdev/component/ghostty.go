@@ -23,7 +23,11 @@ func ghosttyInstall(ctx context.Context, opts ExecOpts) error {
 				return err
 			}
 		case "apt":
-			if err := sysutil.Run(ctx, o, "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh | bash"); err != nil {
+			// Pin to a tagged release of the third-party installer rather than
+			// HEAD so a push to the upstream default branch can't inject code on
+			// our machines. Bump this tag periodically to pick up new releases.
+			const ghosttyInstaller = "https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/1.3.1-0-ppa2/install.sh"
+			if err := sysutil.Run(ctx, o, "bash", "-c", "curl -fsSL "+ghosttyInstaller+" | bash"); err != nil {
 				return fmt.Errorf("ghostty ubuntu installer: %w", err)
 			}
 		case "pacman":
