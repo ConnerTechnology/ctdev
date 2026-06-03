@@ -221,6 +221,12 @@ func (inst *Model) viewProgress() string {
 				c.Name,
 				styles.Error.Render(c.Error),
 			))
+		case StatusSkipped:
+			b.WriteString(fmt.Sprintf("  %s %s %s\n",
+				styles.Warning.Render("–"),
+				styles.Dimmed.Render(c.Name),
+				styles.Dimmed.Render("skipped"),
+			))
 		case StatusWaiting:
 			b.WriteString(fmt.Sprintf("  %s %s\n",
 				styles.Dimmed.Render("○"),
@@ -236,7 +242,7 @@ func (inst *Model) viewProgress() string {
 
 func (inst *Model) viewSummary() string {
 	var b strings.Builder
-	succeeded, failed := 0, 0
+	succeeded, failed, skipped := 0, 0, 0
 	var failedNames []string
 
 	completeMsg := "✓ Installation complete"
@@ -261,6 +267,7 @@ func (inst *Model) viewSummary() string {
 				styles.Error.Render(c.Error),
 			))
 		case StatusSkipped:
+			skipped++
 			b.WriteString(fmt.Sprintf("  %s %s %s\n",
 				styles.Warning.Render("–"), c.Name,
 				styles.Dimmed.Render("skipped (unsupported OS)"),
@@ -268,10 +275,16 @@ func (inst *Model) viewSummary() string {
 		}
 	}
 
-	b.WriteString(fmt.Sprintf("\n  %s · %s\n",
-		styles.Success.Render(fmt.Sprintf("%d succeeded", succeeded)),
-		styles.Error.Render(fmt.Sprintf("%d failed", failed)),
-	))
+	// Build the tally so a clean run reads "N succeeded" without an alarming
+	// red "0 failed"; failed/skipped segments appear only when non-zero.
+	segments := []string{styles.Success.Render(fmt.Sprintf("%d succeeded", succeeded))}
+	if skipped > 0 {
+		segments = append(segments, styles.Warning.Render(fmt.Sprintf("%d skipped", skipped)))
+	}
+	if failed > 0 {
+		segments = append(segments, styles.Error.Render(fmt.Sprintf("%d failed", failed)))
+	}
+	b.WriteString("\n  " + strings.Join(segments, " · ") + "\n")
 
 	if len(failedNames) > 0 {
 		retryCmd := "install"
