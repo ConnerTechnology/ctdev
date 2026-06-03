@@ -22,23 +22,23 @@ type item struct {
 type Mode int
 
 const (
-	ModeInstall   Mode = iota
+	ModeInstall Mode = iota
 	ModeUninstall
 )
 
 type Model struct {
-	items     []item
-	cursor    int
-	selected  map[string]bool
-	filtering bool
-	filter    string
-	filtered  []int
-	quitting  bool
-	confirmed bool
-	width     int
-	height    int
-	platform  component.OS
-	mode      Mode
+	items        []item
+	cursor       int
+	selected     map[string]bool
+	filtering    bool
+	filter       string
+	quitting     bool
+	confirmed    bool
+	width        int
+	height       int
+	scrollOffset int
+	platform     component.OS
+	mode         Mode
 }
 
 type Result struct {
@@ -130,19 +130,73 @@ func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return inst, nil
 }
 
+// visible reports whether a row is currently rendered: not collapsed under a
+// category and (for components) matching the active filter.
+func (inst *Model) visible(idx int) bool {
+	if inst.isHidden(idx) {
+		return false
+	}
+	it := inst.items[idx]
+	if it.isCategory {
+		// While filtering, drop category headers whose children all filter out.
+		return inst.filter == "" || inst.categoryHasMatch(idx)
+	}
+	return inst.matchesFilter(it.component)
+}
+
+// categoryHasMatch reports whether any component under the category at catIdx
+// matches the active filter.
+func (inst *Model) categoryHasMatch(catIdx int) bool {
+	for i := catIdx + 1; i < len(inst.items) && !inst.items[i].isCategory; i++ {
+		if inst.matchesFilter(inst.items[i].component) {
+			return true
+		}
+	}
+	return false
+}
+
+// landable reports whether the cursor may rest on a row — it must be visible
+// and selectable (categories are landable so Tab can collapse them).
+func (inst *Model) landable(idx int) bool {
+	return idx >= 0 && idx < len(inst.items) && inst.visible(idx) && !inst.items[idx].unsupported
+}
+
 func (inst *Model) moveCursor(dir int) {
 	for {
 		inst.cursor += dir
 		if inst.cursor < 0 {
 			inst.cursor = 0
-			return
+			break
 		}
 		if inst.cursor >= len(inst.items) {
 			inst.cursor = len(inst.items) - 1
+			break
+		}
+		if inst.landable(inst.cursor) {
 			return
 		}
-		it := inst.items[inst.cursor]
-		if !inst.isHidden(inst.cursor) && !it.unsupported {
+	}
+	// Hit a boundary on a non-landable row (e.g. a filtered-out edge); snap
+	// back to the nearest row the cursor is allowed to rest on.
+	inst.snapCursor()
+}
+
+// snapCursor moves the cursor to the nearest landable row, searching forward
+// then backward. Used after the filter or collapse state changes the set of
+// visible rows out from under the cursor.
+func (inst *Model) snapCursor() {
+	if inst.landable(inst.cursor) {
+		return
+	}
+	for i := inst.cursor + 1; i < len(inst.items); i++ {
+		if inst.landable(i) {
+			inst.cursor = i
+			return
+		}
+	}
+	for i := inst.cursor - 1; i >= 0; i-- {
+		if inst.landable(i) {
+			inst.cursor = i
 			return
 		}
 	}
@@ -179,6 +233,21 @@ func (inst *Model) toggleCategory() {
 	}
 }
 
+// onFilterChanged lands the cursor on the first matching component after the
+// filter string changes, so the highlight is always on a real result rather
+// than a category header or a filtered-out row.
+func (inst *Model) onFilterChanged() {
+	for i := range inst.items {
+		if !inst.items[i].isCategory && inst.landable(i) {
+			inst.cursor = i
+			return
+		}
+	}
+	// No component matches; fall back to the nearest landable row.
+	inst.cursor = 0
+	inst.snapCursor()
+}
+
 func (inst *Model) selectAll() {
 	for _, it := range inst.items {
 		if it.isCategory || it.unsupported {
@@ -202,16 +271,26 @@ func (inst *Model) selectNone() {
 
 func (inst *Model) updateFilter(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter", "esc":
+	case "enter":
+		// Keep the filter applied and return to navigation over the matches.
 		inst.filtering = false
+		inst.onFilterChanged()
+		return inst, nil
+	case "esc":
+		// Cancel: clear the filter and restore the full list.
+		inst.filtering = false
+		inst.filter = ""
+		inst.snapCursor()
 		return inst, nil
 	case "backspace":
 		if len(inst.filter) > 0 {
 			inst.filter = inst.filter[:len(inst.filter)-1]
+			inst.onFilterChanged()
 		}
 	default:
 		if len(msg.String()) == 1 {
 			inst.filter += msg.String()
+			inst.onFilterChanged()
 		}
 	}
 	return inst, nil
@@ -236,6 +315,68 @@ func matchTags(tags []string, filter string) bool {
 	return false
 }
 
+// visibleIndices returns the indices of all currently-rendered rows in order.
+func (inst *Model) visibleIndices() []int {
+	var out []int
+	for i := range inst.items {
+		if inst.visible(i) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// windowFor slices visible into the rows that fit on screen around the cursor,
+// updating scrollOffset so the cursor stays in view. It returns the window plus
+// the count of rows hidden above and below it (for the "N more" indicators).
+func (inst *Model) windowFor(visible []int) (window []int, above, below int) {
+	// Chrome = title + help + blank + (filter line + blank) + status bar.
+	chrome := 4
+	if inst.filtering {
+		chrome = 6
+	}
+	avail := inst.height - chrome
+	if inst.height <= 0 || avail >= len(visible) {
+		// Size unknown or everything fits: render all, no scrolling.
+		inst.scrollOffset = 0
+		return visible, 0, 0
+	}
+	if avail < 1 {
+		avail = 1
+	}
+	// Reserve a line top and bottom for the "N more" indicators.
+	capacity := avail - 2
+	if capacity < 1 {
+		capacity = 1
+	}
+
+	cursorPos := 0
+	for p, idx := range visible {
+		if idx == inst.cursor {
+			cursorPos = p
+			break
+		}
+	}
+	if cursorPos < inst.scrollOffset {
+		inst.scrollOffset = cursorPos
+	}
+	if cursorPos >= inst.scrollOffset+capacity {
+		inst.scrollOffset = cursorPos - capacity + 1
+	}
+	if max := len(visible) - capacity; inst.scrollOffset > max {
+		inst.scrollOffset = max
+	}
+	if inst.scrollOffset < 0 {
+		inst.scrollOffset = 0
+	}
+
+	end := inst.scrollOffset + capacity
+	if end > len(visible) {
+		end = len(visible)
+	}
+	return visible[inst.scrollOffset:end], inst.scrollOffset, len(visible) - end
+}
+
 func (inst *Model) View() tea.View {
 	var b strings.Builder
 
@@ -245,20 +386,22 @@ func (inst *Model) View() tea.View {
 		b.WriteString(styles.Title.Render("Select components to install"))
 	}
 	b.WriteString("\n")
-	b.WriteString(styles.Help.Render("Space toggle · a all · n none · Tab expand/collapse · / filter · Enter confirm · q quit"))
+	b.WriteString(styles.Help.Render("↑/↓ (j/k) move · Space toggle · a all · n none · Tab expand · / filter (Esc clear) · Enter confirm · q quit"))
 	b.WriteString("\n\n")
 
 	if inst.filtering {
 		b.WriteString(fmt.Sprintf("Filter: %s█\n\n", inst.filter))
 	}
 
-	for i, it := range inst.items {
-		if inst.isHidden(i) {
-			continue
-		}
-		if !it.isCategory && !inst.matchesFilter(it.component) {
-			continue
-		}
+	// Compute the scrolling window: which visible rows fit in the terminal.
+	visible := inst.visibleIndices()
+	window, above, below := inst.windowFor(visible)
+	if above > 0 {
+		b.WriteString(styles.Dimmed.Render(fmt.Sprintf("  ↑ %d more", above)) + "\n")
+	}
+
+	for _, i := range window {
+		it := inst.items[i]
 
 		isCursor := i == inst.cursor
 		line := ""
@@ -284,7 +427,7 @@ func (inst *Model) View() tea.View {
 				osLabel = "other"
 			}
 			indicator := styles.Dimmed.Render("⊘")
-			name := lipgloss.NewStyle().Foreground(styles.Subtle).Width(14).Render(it.component.Name)
+			name := lipgloss.NewStyle().Foreground(styles.Subtle).Width(16).Render(it.component.Name)
 			desc := styles.Dimmed.Render(it.component.Description + " (" + osLabel + " only)")
 			line = fmt.Sprintf("  %s  %s %s", indicator, name, desc)
 		} else {
@@ -294,7 +437,7 @@ func (inst *Model) View() tea.View {
 			} else if it.installed && inst.mode == ModeInstall {
 				indicator = styles.Success.Render("●")
 			}
-			name := lipgloss.NewStyle().Foreground(styles.Bright).Width(14).Render(it.component.Name)
+			name := lipgloss.NewStyle().Foreground(styles.Bright).Width(16).Render(it.component.Name)
 			desc := styles.Dimmed.Render(it.component.Description)
 			line = fmt.Sprintf("  %s %s %s", indicator, name, desc)
 		}
@@ -303,6 +446,10 @@ func (inst *Model) View() tea.View {
 			line = styles.Cursor.Render(line)
 		}
 		b.WriteString(line + "\n")
+	}
+
+	if below > 0 {
+		b.WriteString(styles.Dimmed.Render(fmt.Sprintf("  ↓ %d more", below)) + "\n")
 	}
 
 	selectedCount := len(inst.selected)

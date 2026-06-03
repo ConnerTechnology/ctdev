@@ -181,6 +181,50 @@ func TestGetResult_DeterministicOrder(t *testing.T) {
 	}
 }
 
+// After filtering to a single match, the cursor must land on that visible
+// match — never on a filtered-out row, which previously left the highlight on
+// an invisible item and toggled the wrong component.
+func TestFilter_CursorSnapsToVisibleMatch(t *testing.T) {
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	m.filter = "chrome"
+	m.onFilterChanged()
+
+	if !m.landable(m.cursor) {
+		t.Fatalf("cursor %d not landable after filtering", m.cursor)
+	}
+	it := m.items[m.cursor]
+	if it.isCategory || it.component.Name != "chrome" {
+		t.Errorf("cursor should rest on 'chrome', got category=%v name=%q", it.isCategory, it.component.Name)
+	}
+
+	// Toggling now must select the visible match, not a hidden row.
+	m.toggleSelected()
+	if !m.selected["chrome"] {
+		t.Errorf("expected 'chrome' selected, got %v", m.selected)
+	}
+}
+
+// windowFor must keep the cursor inside the rendered slice on a short terminal.
+func TestWindow_KeepsCursorVisible(t *testing.T) {
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	m.height = 8 // small enough to force scrolling given chrome + indicators
+
+	// Move to the last component and confirm it is within the window.
+	for i := 0; i < len(m.items); i++ {
+		m.moveCursor(1)
+	}
+	window, _, _ := m.windowFor(m.visibleIndices())
+	found := false
+	for _, idx := range window {
+		if idx == m.cursor {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("cursor %d not in rendered window %v", m.cursor, window)
+	}
+}
+
 func TestGetResult_SkipsUnselected(t *testing.T) {
 	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
 	m.selected["docker"] = true
