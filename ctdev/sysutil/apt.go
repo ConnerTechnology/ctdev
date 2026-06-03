@@ -71,3 +71,28 @@ func AddAPTSource(ctx context.Context, o Opts, line, filename string) error {
 func APTUpdate(ctx context.Context, o Opts) error {
 	return SudoRun(ctx, o, "apt-get", "update", "-qq")
 }
+
+// APTRepoPackage describes a third-party APT repository and the package(s) to
+// install from it. RepoLine should already embed signed-by=KeyringPath.
+type APTRepoPackage struct {
+	KeyURL      string
+	KeyringPath string
+	RepoLine    string
+	SourceFile  string
+	Packages    []string
+}
+
+// InstallAPTRepoPackage runs the standard add-keyring → add-source → update →
+// install sequence shared by most third-party APT components.
+func InstallAPTRepoPackage(ctx context.Context, o Opts, spec APTRepoPackage) error {
+	if err := AddAPTKeyring(ctx, o, spec.KeyURL, spec.KeyringPath); err != nil {
+		return fmt.Errorf("add GPG key: %w", err)
+	}
+	if err := AddAPTSource(ctx, o, spec.RepoLine, spec.SourceFile); err != nil {
+		return fmt.Errorf("add apt source: %w", err)
+	}
+	if err := APTUpdate(ctx, o); err != nil {
+		return err
+	}
+	return InstallPackage(ctx, o, spec.Packages...)
+}

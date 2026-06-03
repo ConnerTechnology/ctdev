@@ -24,17 +24,13 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.BrewCaskInstall(ctx, o, "visual-studio-code")
 	case "apt":
 		keyring := "/usr/share/keyrings/microsoft-archive-keyring.gpg"
-		if err := sysutil.AddAPTKeyring(ctx, o, "https://packages.microsoft.com/keys/microsoft.asc", keyring); err != nil {
-			return fmt.Errorf("add microsoft GPG key: %w", err)
-		}
-		repoLine := fmt.Sprintf("deb [arch=amd64,arm64,armhf signed-by=%s] https://packages.microsoft.com/repos/code stable main", keyring)
-		if err := sysutil.AddAPTSource(ctx, o, repoLine, "vscode.list"); err != nil {
-			return fmt.Errorf("add vscode repo: %w", err)
-		}
-		if err := sysutil.APTUpdate(ctx, o); err != nil {
-			return err
-		}
-		return sysutil.InstallPackage(ctx, o, "code")
+		return sysutil.InstallAPTRepoPackage(ctx, o, sysutil.APTRepoPackage{
+			KeyURL:      "https://packages.microsoft.com/keys/microsoft.asc",
+			KeyringPath: keyring,
+			RepoLine:    fmt.Sprintf("deb [arch=amd64,arm64,armhf signed-by=%s] https://packages.microsoft.com/repos/code stable main", keyring),
+			SourceFile:  "vscode.list",
+			Packages:    []string{"code"},
+		})
 	default:
 		return unsupportedPMError("VS Code", p.PackageManager)
 	}

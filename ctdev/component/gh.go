@@ -24,17 +24,13 @@ func ghInstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.InstallPackage(ctx, o, "gh")
 	case "apt":
 		keyring := "/usr/share/keyrings/githubcli-archive-keyring.gpg"
-		if err := sysutil.AddAPTKeyring(ctx, o, "https://cli.github.com/packages/githubcli-archive-keyring.gpg", keyring); err != nil {
-			return fmt.Errorf("add gh GPG key: %w", err)
-		}
-		repoLine := fmt.Sprintf("deb [arch=%s signed-by=%s] https://cli.github.com/packages stable main", p.Arch, keyring)
-		if err := sysutil.AddAPTSource(ctx, o, repoLine, "github-cli.list"); err != nil {
-			return fmt.Errorf("add gh repo: %w", err)
-		}
-		if err := sysutil.APTUpdate(ctx, o); err != nil {
-			return err
-		}
-		return sysutil.InstallPackage(ctx, o, "gh")
+		return sysutil.InstallAPTRepoPackage(ctx, o, sysutil.APTRepoPackage{
+			KeyURL:      "https://cli.github.com/packages/githubcli-archive-keyring.gpg",
+			KeyringPath: keyring,
+			RepoLine:    fmt.Sprintf("deb [arch=%s signed-by=%s] https://cli.github.com/packages stable main", p.Arch, keyring),
+			SourceFile:  "github-cli.list",
+			Packages:    []string{"gh"},
+		})
 	default:
 		return unsupportedPMError("gh", p.PackageManager)
 	}

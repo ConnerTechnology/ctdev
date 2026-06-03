@@ -24,17 +24,13 @@ func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.BrewCaskInstall(ctx, o, "dbeaver-community")
 	case "apt":
 		keyring := "/usr/share/keyrings/dbeaver-archive-keyring.gpg"
-		if err := sysutil.AddAPTKeyring(ctx, o, "https://dbeaver.io/debs/dbeaver.gpg.key", keyring); err != nil {
-			return fmt.Errorf("add dbeaver GPG key: %w", err)
-		}
-		repoLine := fmt.Sprintf("deb [signed-by=%s] https://dbeaver.io/debs/dbeaver-ce /", keyring)
-		if err := sysutil.AddAPTSource(ctx, o, repoLine, "dbeaver.list"); err != nil {
-			return fmt.Errorf("add dbeaver repo: %w", err)
-		}
-		if err := sysutil.APTUpdate(ctx, o); err != nil {
-			return err
-		}
-		return sysutil.InstallPackage(ctx, o, "dbeaver-ce")
+		return sysutil.InstallAPTRepoPackage(ctx, o, sysutil.APTRepoPackage{
+			KeyURL:      "https://dbeaver.io/debs/dbeaver.gpg.key",
+			KeyringPath: keyring,
+			RepoLine:    fmt.Sprintf("deb [signed-by=%s] https://dbeaver.io/debs/dbeaver-ce /", keyring),
+			SourceFile:  "dbeaver.list",
+			Packages:    []string{"dbeaver-ce"},
+		})
 	default:
 		return unsupportedPMError("dbeaver", p.PackageManager)
 	}

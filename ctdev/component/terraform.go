@@ -27,17 +27,13 @@ func terraformInstall(ctx context.Context, opts ExecOpts) error {
 			return fmt.Errorf("could not determine distribution codename for APT repo")
 		}
 		keyring := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
-		if err := sysutil.AddAPTKeyring(ctx, o, "https://apt.releases.hashicorp.com/gpg", keyring); err != nil {
-			return fmt.Errorf("add hashicorp GPG key: %w", err)
-		}
-		repoLine := fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main", keyring, p.Codename)
-		if err := sysutil.AddAPTSource(ctx, o, repoLine, "hashicorp.list"); err != nil {
-			return fmt.Errorf("add hashicorp repo: %w", err)
-		}
-		if err := sysutil.APTUpdate(ctx, o); err != nil {
-			return err
-		}
-		return sysutil.InstallPackage(ctx, o, "terraform")
+		return sysutil.InstallAPTRepoPackage(ctx, o, sysutil.APTRepoPackage{
+			KeyURL:      "https://apt.releases.hashicorp.com/gpg",
+			KeyringPath: keyring,
+			RepoLine:    fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main", keyring, p.Codename),
+			SourceFile:  "hashicorp.list",
+			Packages:    []string{"terraform"},
+		})
 	default:
 		return unsupportedPMError("terraform", p.PackageManager)
 	}
