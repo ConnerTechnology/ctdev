@@ -78,6 +78,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		m := checklist.New(items)
 		p := tea.NewProgram(&m)
 		result, err := p.Run()
+		resetTerminal()
 		if err != nil {
 			return err
 		}

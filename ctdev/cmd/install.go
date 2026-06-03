@@ -42,6 +42,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		m := picker.New(comp.Registry, installed, osType, picker.ModeInstall)
 		p := tea.NewProgram(&m)
 		result, err := p.Run()
+		resetTerminal()
 		if err != nil {
 			return err
 		}
