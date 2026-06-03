@@ -14,9 +14,8 @@ import (
 )
 
 type progressOperation struct {
-	mode     progress.Mode
-	executor *comp.Executor
-	names    []string
+	mode  progress.Mode
+	names []string
 }
 
 // msgSender is the subset of *tea.Program that we depend on, letting tests
@@ -99,9 +98,9 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 
 	var result comp.ExecResult
 	if op.mode == progress.ModeUninstall {
-		result = op.executor.Uninstall(ctx, c, opts)
+		result = comp.Uninstall(ctx, c, opts)
 	} else {
-		result = op.executor.Install(ctx, c, opts)
+		result = comp.Install(ctx, c, opts)
 	}
 	pw.Close()
 	wg.Wait()
@@ -141,9 +140,9 @@ func runWithProgressBatch(ctx context.Context, op progressOperation) error {
 
 		var result comp.ExecResult
 		if op.mode == progress.ModeUninstall {
-			result = op.executor.Uninstall(ctx, c, opts)
+			result = comp.Uninstall(ctx, c, opts)
 		} else {
-			result = op.executor.Install(ctx, c, opts)
+			result = comp.Install(ctx, c, opts)
 		}
 		duration := time.Since(start)
 

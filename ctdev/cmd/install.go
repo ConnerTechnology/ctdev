@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/picker"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 	"github.com/spf13/cobra"
@@ -23,8 +24,6 @@ func init() {
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
-	executor := comp.NewExecutor()
-
 	var selected []string
 
 	if len(args) > 0 {
@@ -38,7 +37,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no components specified (batch mode requires arguments)")
 	} else {
 		installed := comp.InstalledSet()
-		osType := comp.OS(executor.Platform.OS)
+		osType := comp.OS(platform.Detect().OS)
 		m := picker.New(comp.Registry, installed, osType, picker.ModeInstall)
 		p := tea.NewProgram(&m)
 		result, err := p.Run()
@@ -64,8 +63,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return runWithProgress(cmd.Context(), progressOperation{
-		mode:     progress.ModeInstall,
-		executor: executor,
-		names:    selected,
+		mode:  progress.ModeInstall,
+		names: selected,
 	})
 }

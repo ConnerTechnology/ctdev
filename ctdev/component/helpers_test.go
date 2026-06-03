@@ -79,7 +79,6 @@ func rebuildComponentIndex() map[string]*Component {
 }
 
 func TestUnsupportedPMError_ExecutorMapsToSkipped(t *testing.T) {
-	exec := NewExecutor()
 	c := &Component{
 		Name: "test-unsupported",
 		GoInstall: func(ctx context.Context, opts ExecOpts) error {
@@ -87,7 +86,7 @@ func TestUnsupportedPMError_ExecutorMapsToSkipped(t *testing.T) {
 		},
 		GoUninstall: func(ctx context.Context, opts ExecOpts) error { return nil },
 	}
-	result := exec.Install(context.Background(), c, ExecOpts{})
+	result := Install(context.Background(), c, ExecOpts{})
 	if !result.Skipped {
 		t.Errorf("expected Skipped=true via ErrUnsupportedOS wrap; got Skipped=%v, Err=%v", result.Skipped, result.Err)
 	}

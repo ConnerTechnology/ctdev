@@ -6,7 +6,6 @@ import (
 )
 
 func TestExecutorGoInstallUnsupportedOS(t *testing.T) {
-	exec := NewExecutor()
 
 	c := &Component{
 		Name: "test-skip",
@@ -18,7 +17,7 @@ func TestExecutorGoInstallUnsupportedOS(t *testing.T) {
 		},
 	}
 
-	result := exec.Install(context.Background(), c, ExecOpts{})
+	result := Install(context.Background(), c, ExecOpts{})
 	if !result.Skipped {
 		t.Error("expected Skipped=true for ErrUnsupportedOS")
 	}
@@ -28,7 +27,6 @@ func TestExecutorGoInstallUnsupportedOS(t *testing.T) {
 }
 
 func TestExecutorGoUninstallUnsupportedOS(t *testing.T) {
-	exec := NewExecutor()
 
 	c := &Component{
 		Name: "test-skip",
@@ -40,14 +38,13 @@ func TestExecutorGoUninstallUnsupportedOS(t *testing.T) {
 		},
 	}
 
-	result := exec.Uninstall(context.Background(), c, ExecOpts{})
+	result := Uninstall(context.Background(), c, ExecOpts{})
 	if !result.Skipped {
 		t.Error("expected Skipped=true for ErrUnsupportedOS")
 	}
 }
 
 func TestExecutorGoInstallSuccess(t *testing.T) {
-	exec := NewExecutor()
 
 	called := false
 	c := &Component{
@@ -61,7 +58,7 @@ func TestExecutorGoInstallSuccess(t *testing.T) {
 		},
 	}
 
-	result := exec.Install(context.Background(), c, ExecOpts{})
+	result := Install(context.Background(), c, ExecOpts{})
 	if result.Err != nil {
 		t.Fatalf("install failed: %v", result.Err)
 	}

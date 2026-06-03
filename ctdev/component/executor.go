@@ -3,19 +3,7 @@ package component
 import (
 	"context"
 	"errors"
-
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 )
-
-type Executor struct {
-	Platform platform.Info
-}
-
-func NewExecutor() *Executor {
-	return &Executor{
-		Platform: platform.Detect(),
-	}
-}
 
 type ExecResult struct {
 	Component string
@@ -23,19 +11,20 @@ type ExecResult struct {
 	Skipped   bool
 }
 
-func (inst *Executor) Install(ctx context.Context, c *Component, opts ExecOpts) ExecResult {
-	result := ExecResult{Component: c.Name}
-	result.Err = c.GoInstall(ctx, opts)
-	if errors.Is(result.Err, ErrUnsupportedOS) {
-		result.Skipped = true
-		result.Err = nil
-	}
-	return result
+// Install runs a component's installer, mapping ErrUnsupportedOS to a Skipped
+// result so unsupported platforms report cleanly instead of as failures.
+func Install(ctx context.Context, c *Component, opts ExecOpts) ExecResult {
+	return runComponent(c, c.GoInstall, ctx, opts)
 }
 
-func (inst *Executor) Uninstall(ctx context.Context, c *Component, opts ExecOpts) ExecResult {
+// Uninstall runs a component's uninstaller with the same Skipped mapping.
+func Uninstall(ctx context.Context, c *Component, opts ExecOpts) ExecResult {
+	return runComponent(c, c.GoUninstall, ctx, opts)
+}
+
+func runComponent(c *Component, fn func(context.Context, ExecOpts) error, ctx context.Context, opts ExecOpts) ExecResult {
 	result := ExecResult{Component: c.Name}
-	result.Err = c.GoUninstall(ctx, opts)
+	result.Err = fn(ctx, opts)
 	if errors.Is(result.Err, ErrUnsupportedOS) {
 		result.Skipped = true
 		result.Err = nil

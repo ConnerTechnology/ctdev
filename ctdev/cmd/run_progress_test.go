@@ -36,8 +36,7 @@ func (inst *captureSender) Messages() []tea.Msg {
 func newTestOp(t *testing.T, mode progress.Mode) progressOperation {
 	t.Helper()
 	return progressOperation{
-		mode:     mode,
-		executor: comp.NewExecutor(),
+		mode: mode,
 	}
 }
 

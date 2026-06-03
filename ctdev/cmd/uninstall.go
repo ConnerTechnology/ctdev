@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/picker"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
@@ -24,8 +25,6 @@ func init() {
 }
 
 func runUninstall(cmd *cobra.Command, args []string) error {
-	executor := comp.NewExecutor()
-
 	var selected []string
 
 	if len(args) > 0 {
@@ -49,7 +48,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 			fmt.Println(styles.Dimmed.Render("No components installed."))
 			return nil
 		}
-		osType := comp.OS(executor.Platform.OS)
+		osType := comp.OS(platform.Detect().OS)
 		m := picker.New(installedComps, installed, osType, picker.ModeUninstall)
 		p := tea.NewProgram(&m)
 		result, err := p.Run()
@@ -74,8 +73,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return runWithProgress(cmd.Context(), progressOperation{
-		mode:     progress.ModeUninstall,
-		executor: executor,
-		names:    selected,
+		mode:  progress.ModeUninstall,
+		names: selected,
 	})
 }

@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"io"
 	"os/user"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
@@ -76,7 +77,7 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 	}
 }
 
-func addUserToDockerGroup(ctx context.Context, o sysutil.Opts, w interface{ Write([]byte) (int, error) }) {
+func addUserToDockerGroup(ctx context.Context, o sysutil.Opts, w io.Writer) {
 	u, err := user.Current()
 	if err != nil || u.Uid == "0" {
 		return
