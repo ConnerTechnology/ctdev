@@ -25,8 +25,14 @@ var (
 	Unselected = lipgloss.NewStyle().Foreground(Subtle).SetString("○")
 	Cursor     = lipgloss.NewStyle().Background(lipgloss.Color("#161b22"))
 
-	// Category header
-	CategoryHeader = lipgloss.NewStyle().Bold(true).Foreground(Orange)
+	// Header is the bold-orange accent shared by section and category headers.
+	Header = lipgloss.NewStyle().Bold(true).Foreground(Orange)
+	// CategoryHeader is an alias kept for the picker/progress call sites.
+	CategoryHeader = Header
+
+	// Value styles the value half of a label/value pair. Pair it with Label,
+	// which takes the column width since that varies per screen.
+	Value = lipgloss.NewStyle().Foreground(Bright)
 
 	// Status bar
 	StatusBar = lipgloss.NewStyle().
@@ -40,3 +46,8 @@ var (
 	// Help text
 	Help = lipgloss.NewStyle().Foreground(Subtle)
 )
+
+// Label styles the label half of a label/value pair at the given column width.
+func Label(width int) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(Subtle).Width(width)
+}

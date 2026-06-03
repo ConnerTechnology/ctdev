@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
@@ -182,8 +181,8 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(20)
-	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+	labelStyle := styles.Label(20)
+	valueStyle := styles.Value
 
 	scope := "global"
 	if local {
@@ -395,9 +394,9 @@ func printManualGitHubInstructions(keyPath string) {
 }
 
 func showGitConfig() error {
-	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(20)
-	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
+	labelStyle := styles.Label(20)
+	valueStyle := styles.Value
+	headerStyle := styles.Header
 
 	name := getGitConfig("user.name", false)
 	email := getGitConfig("user.email", false)

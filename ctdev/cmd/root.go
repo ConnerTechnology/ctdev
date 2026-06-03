@@ -107,4 +107,3 @@ func isBatchMode() bool {
 	}
 	return fi.Mode()&os.ModeCharDevice == 0
 }
-

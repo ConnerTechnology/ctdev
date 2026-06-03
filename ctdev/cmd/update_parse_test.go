@@ -303,10 +303,10 @@ func TestAPTKeyRefreshers_PathsMatchInstallers(t *testing.T) {
 
 func TestShouldRefreshKeys(t *testing.T) {
 	tests := []struct {
-		name         string
-		refreshKeys  bool
-		check        bool
-		want         bool
+		name        string
+		refreshKeys bool
+		check       bool
+		want        bool
 	}{
 		{"refresh-keys without check", true, false, true},
 		{"refresh-keys with check is suppressed", true, true, false},

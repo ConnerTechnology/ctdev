@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
@@ -880,9 +879,9 @@ func fetchLatestKubectlVersion(ctx context.Context) string {
 }
 
 func printUpdateList(items []checklist.UpdateItem) {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
-	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(30)
-	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+	headerStyle := styles.Header
+	labelStyle := styles.Label(30)
+	valueStyle := styles.Value
 
 	currentSource := ""
 	for _, item := range items {

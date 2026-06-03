@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
@@ -136,8 +135,8 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(30)
-	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+	labelStyle := styles.Label(30)
+	valueStyle := styles.Value
 
 	for _, task := range tasks {
 		info := task.check()

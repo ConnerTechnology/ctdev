@@ -30,9 +30,9 @@ func Render(sysInfo platform.SystemInfo, version string, components []ComponentI
 	b.WriteString(styles.Title.Render("System Information"))
 	b.WriteString("\n\n")
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
-	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(20)
-	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+	headerStyle := styles.Header
+	labelStyle := styles.Label(20)
+	valueStyle := styles.Value
 
 	// System section
 	b.WriteString(headerStyle.Render("System"))
@@ -156,7 +156,7 @@ func renderComponentEntry(c ComponentInfo, width int) string {
 		return icon + " " + name
 	}
 	icon := lipgloss.NewStyle().Foreground(styles.Subtle).Render("○")
-	name := lipgloss.NewStyle().Foreground(styles.Subtle).Width(width - 2).Render(c.Name)
+	name := styles.Label(width - 2).Render(c.Name)
 	return icon + " " + name
 }
 

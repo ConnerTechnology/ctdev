@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
@@ -44,9 +43,9 @@ func slugDescription(slug string) string {
 	return slug
 }
 
-var wizardLabelStyle = lipgloss.NewStyle().Foreground(styles.Subtle).Width(26)
-var wizardValueStyle = lipgloss.NewStyle().Foreground(styles.Bright)
-var wizardHeaderStyle = lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
+var wizardLabelStyle = styles.Label(26)
+var wizardValueStyle = styles.Value
+var wizardHeaderStyle = styles.Header
 
 // runCategoryWizard runs the interactive wizard for a single category slug.
 func runCategoryWizard(ctx context.Context, slug string, showOnly bool) error {

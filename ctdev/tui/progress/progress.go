@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	bprogress "charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 )
@@ -56,7 +56,7 @@ type AllDoneMsg struct{}
 type Mode int
 
 const (
-	ModeInstall   Mode = iota
+	ModeInstall Mode = iota
 	ModeUninstall
 )
 

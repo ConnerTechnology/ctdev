@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
@@ -44,9 +43,9 @@ func runGPUInfo(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("GPU info is only supported on Linux")
 	}
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Orange)
-	labelStyle := lipgloss.NewStyle().Foreground(styles.Subtle).Width(16)
-	valueStyle := lipgloss.NewStyle().Foreground(styles.Bright)
+	headerStyle := styles.Header
+	labelStyle := styles.Label(16)
+	valueStyle := styles.Value
 	checkPass := styles.Success.Render("✓")
 	checkFail := styles.Error.Render("✗")
 
