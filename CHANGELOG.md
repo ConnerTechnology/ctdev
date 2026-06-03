@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- vscode and dbeaver GPG keys are now written to `/usr/share/keyrings/` and scoped via `signed-by=` instead of `/etc/apt/trusted.gpg.d/`, so a compromise of either vendor key can no longer authenticate packages for unrelated repos.
+- The ghostty installer is pinned to a tagged release of the third-party `ghostty-ubuntu` script instead of tracking `HEAD`, and `install.sh` verifies the downloaded `ctdev` binary against a published `SHA256SUMS` (CI now emits it), hardening the self-update path.
+
+### Fixed
+- Ctrl-C / SIGTERM now cancel in-flight installs, updates, and shell-outs everywhere — `Execute()` binds a `signal.NotifyContext` and the progress/update runners derive from it (previously batch mode and `update` had no signal wiring).
+- `ctdev update` no longer offers version downgrades: scanners use a dotted-numeric `versionNewer` comparison instead of string inequality, so a locally-newer tool isn't "updated" backwards.
+- A failed `apt` upgrade during `ctdev update` no longer aborts the other selected sources (brew/flatpak/runtime/cli/npm); it warns and continues like every other manager.
+- The component picker now scrolls long lists (uses terminal height) and keeps the cursor on a real, visible match while filtering — previously the highlight could land on an off-screen or filtered-out row and toggle the wrong component.
+- `ctdev info` detects the real terminal width and strips color when its output is piped or redirected (was emitting ANSI escapes and ignoring width).
+- Skipped components now appear in the progress view and the summary tally, and a clean run no longer prints a red "0 failed".
+- Terminal state is reset after the picker and checklist programs too, for consistent cleanup across all TUI entry points.
+
+### Changed
+- **Supported package managers narrowed to apt and brew.** The untested dnf and pacman branches were removed; components on those systems report as Skipped.
+- Removed the write-only install-marker store (`state.MarkerStore`) — nothing read it; install state is derived from live detection.
+- Internal refactors: `InstallAPTRepoPackage` helper for the keyring+repo+install pattern; shared download/verify skeleton across the helm/kubectl/terraform updaters; consolidated header/label/value styles into the `styles` package; replaced the `Executor` struct with package functions.
+- Removed completed-migration design/plan docs under `docs/`.
+
 ## [9.2.0] - 2026-04-23
 
 ### Fixed

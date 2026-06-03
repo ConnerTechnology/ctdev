@@ -105,10 +105,11 @@ Add to your VS Code `settings.json`:
 
 ## Platform Support
 
+- **Ubuntu/Debian/Linux Mint** - apt (primary target)
 - **macOS** - Homebrew
-- **Ubuntu/Debian/Linux Mint** - apt
-- **Fedora/RHEL** - dnf
-- **Arch** - pacman
+
+Other package managers (dnf, pacman) are not supported; components on those
+systems report as skipped.
 
 ## Uninstall
 
