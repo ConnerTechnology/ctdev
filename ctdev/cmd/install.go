@@ -62,7 +62,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("sudo required for install: %w", err)
 		}
 	}
-	return runWithProgress(progressOperation{
+	return runWithProgress(cmd.Context(), progressOperation{
 		mode:     progress.ModeInstall,
 		executor: executor,
 		names:    selected,

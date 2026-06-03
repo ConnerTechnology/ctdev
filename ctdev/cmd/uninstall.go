@@ -72,7 +72,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("sudo required for uninstall: %w", err)
 		}
 	}
-	return runWithProgress(progressOperation{
+	return runWithProgress(cmd.Context(), progressOperation{
 		mode:     progress.ModeUninstall,
 		executor: executor,
 		names:    selected,

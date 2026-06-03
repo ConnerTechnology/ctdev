@@ -25,12 +25,12 @@ type msgSender interface {
 	Send(tea.Msg)
 }
 
-func runWithProgress(op progressOperation) error {
+func runWithProgress(parent context.Context, op progressOperation) error {
 	if isBatchMode() {
-		return runWithProgressBatch(op)
+		return runWithProgressBatch(parent, op)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 
 	progressModel := progress.New(op.names, op.mode)
@@ -119,8 +119,7 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 }
 
 // runWithProgressBatch runs install/uninstall without a TUI (for CI/pipes).
-func runWithProgressBatch(op progressOperation) error {
-	ctx := context.Background()
+func runWithProgressBatch(ctx context.Context, op progressOperation) error {
 	var failed int
 
 	for _, name := range op.names {

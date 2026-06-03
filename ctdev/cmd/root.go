@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -37,7 +40,13 @@ var rootCmd = &cobra.Command{
 
 func Execute() error {
 	rootCmd.Version = version
-	return rootCmd.Execute()
+	// Bind SIGINT/SIGTERM to a context so Ctrl-C cancels in-flight installs,
+	// updates, and other long-running shell-outs via the ctx threaded through
+	// sysutil. A second signal aborts hard (signal.NotifyContext stops trapping
+	// once the context is canceled).
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {
