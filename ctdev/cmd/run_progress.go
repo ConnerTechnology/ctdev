@@ -10,14 +10,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 )
 
 type progressOperation struct {
 	mode     progress.Mode
 	executor *comp.Executor
-	markers  *state.MarkerStore
 	names    []string
 }
 
@@ -116,15 +114,6 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 	case result.Err != nil:
 		send.Send(progress.InstallFailMsg{Name: name, Error: result.Err.Error(), Duration: duration})
 	default:
-		if op.mode == progress.ModeUninstall {
-			op.markers.Remove(name)
-		} else {
-			op.markers.Save(name, state.InstallMarker{
-				InstalledAt: time.Now(),
-				Version:     "unknown",
-				UpdatedAt:   time.Now(),
-			})
-		}
 		send.Send(progress.InstallDoneMsg{Name: name, Duration: duration})
 	}
 }
@@ -165,15 +154,6 @@ func runWithProgressBatch(op progressOperation) error {
 			fmt.Fprintf(os.Stderr, "  %s failed (%s): %v\n", name, duration, result.Err)
 			failed++
 		} else {
-			if op.mode == progress.ModeUninstall {
-				op.markers.Remove(name)
-			} else {
-				op.markers.Save(name, state.InstallMarker{
-					InstalledAt: time.Now(),
-					Version:     "unknown",
-					UpdatedAt:   time.Now(),
-				})
-			}
 			fmt.Fprintf(os.Stdout, "  %s done (%s)\n", name, duration)
 		}
 	}

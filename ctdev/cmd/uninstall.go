@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/picker"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
@@ -25,7 +24,6 @@ func init() {
 }
 
 func runUninstall(cmd *cobra.Command, args []string) error {
-	markers := state.DefaultMarkerStore()
 	executor := comp.NewExecutor()
 
 	var selected []string
@@ -77,7 +75,6 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	return runWithProgress(progressOperation{
 		mode:     progress.ModeUninstall,
 		executor: executor,
-		markers:  markers,
 		names:    selected,
 	})
 }

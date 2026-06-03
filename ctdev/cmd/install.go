@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/picker"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 	"github.com/spf13/cobra"
@@ -24,7 +23,6 @@ func init() {
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
-	markers := state.DefaultMarkerStore()
 	executor := comp.NewExecutor()
 
 	var selected []string
@@ -67,7 +65,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	return runWithProgress(progressOperation{
 		mode:     progress.ModeInstall,
 		executor: executor,
-		markers:  markers,
 		names:    selected,
 	})
 }

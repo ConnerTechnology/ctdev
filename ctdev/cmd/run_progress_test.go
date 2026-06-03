@@ -9,7 +9,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 )
 
@@ -39,7 +38,6 @@ func newTestOp(t *testing.T, mode progress.Mode) progressOperation {
 	return progressOperation{
 		mode:     mode,
 		executor: comp.NewExecutor(),
-		markers:  state.NewMarkerStore(t.TempDir()),
 	}
 }
 
