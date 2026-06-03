@@ -24,7 +24,7 @@ func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.BrewCaskInstall(ctx, o, "dbeaver-community")
 	case "apt":
-		keyring := "/etc/apt/trusted.gpg.d/dbeaver.gpg"
+		keyring := "/usr/share/keyrings/dbeaver-archive-keyring.gpg"
 		if err := sysutil.AddAPTKeyring(ctx, o, "https://dbeaver.io/debs/dbeaver.gpg.key", keyring); err != nil {
 			return fmt.Errorf("add dbeaver GPG key: %w", err)
 		}

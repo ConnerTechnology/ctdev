@@ -284,7 +284,7 @@ func TestAPTKeyRefreshers_PathsMatchInstallers(t *testing.T) {
 	// path must be mirrored here, and vice versa.
 	want := map[string]string{
 		"gh":        "/usr/share/keyrings/githubcli-archive-keyring.gpg",
-		"vscode":    "/etc/apt/trusted.gpg.d/packages.microsoft.gpg",
+		"vscode":    "/usr/share/keyrings/microsoft-archive-keyring.gpg",
 		"1password": "/usr/share/keyrings/1password-archive-keyring.gpg",
 		"terraform": "/usr/share/keyrings/hashicorp-archive-keyring.gpg",
 		"tailscale": "/usr/share/keyrings/tailscale-archive-keyring.gpg",

@@ -324,19 +324,19 @@ func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
 // managedCasks maps brew cask names to ctdev component names.
 // Only installed components are shown in update output.
 var managedCasks = map[string]string{
-	"1password":                      "1password",
-	"chatgpt":                        "chatgpt",
-	"cleanmymac":                     "cleanmymac",
-	"claude":                         "claude-desktop",
-	"dbeaver-community":              "dbeaver",
-	"docker":                         "docker",
-	"ghostty":                        "ghostty",
-	"google-chrome":                  "chrome",
-	"linear-linear":                  "linear",
-	"logi-options+":                  "logi-options",
-	"slack":                          "slack",
-	"tailscale":                      "tailscale",
-	"visual-studio-code":             "vscode",
+	"1password":                     "1password",
+	"chatgpt":                       "chatgpt",
+	"cleanmymac":                    "cleanmymac",
+	"claude":                        "claude-desktop",
+	"dbeaver-community":             "dbeaver",
+	"docker":                        "docker",
+	"ghostty":                       "ghostty",
+	"google-chrome":                 "chrome",
+	"linear-linear":                 "linear",
+	"logi-options+":                 "logi-options",
+	"slack":                         "slack",
+	"tailscale":                     "tailscale",
+	"visual-studio-code":            "vscode",
 	"font-fira-code-nerd-font":      "fonts",
 	"font-jetbrains-mono-nerd-font": "fonts",
 }
@@ -1286,11 +1286,9 @@ var aptKeyRefreshers = map[string]struct {
 	KeyURL      string
 	KeyringPath string
 }{
-	"gh":        {KeyURL: "https://cli.github.com/packages/githubcli-archive-keyring.gpg", KeyringPath: "/usr/share/keyrings/githubcli-archive-keyring.gpg"},
-	// KeyringPath must match what vscodeInstall writes — APT's signed-by
-	// points at /etc/apt/trusted.gpg.d/packages.microsoft.gpg, so refreshing
-	// a keyring at /usr/share/keyrings/ would be silently ineffective.
-	"vscode":    {KeyURL: "https://packages.microsoft.com/keys/microsoft.asc", KeyringPath: "/etc/apt/trusted.gpg.d/packages.microsoft.gpg"},
+	"gh": {KeyURL: "https://cli.github.com/packages/githubcli-archive-keyring.gpg", KeyringPath: "/usr/share/keyrings/githubcli-archive-keyring.gpg"},
+	// KeyringPath must match what vscodeInstall writes.
+	"vscode":    {KeyURL: "https://packages.microsoft.com/keys/microsoft.asc", KeyringPath: "/usr/share/keyrings/microsoft-archive-keyring.gpg"},
 	"1password": {KeyURL: "https://downloads.1password.com/linux/keys/1password.asc", KeyringPath: "/usr/share/keyrings/1password-archive-keyring.gpg"},
 	"terraform": {KeyURL: "https://apt.releases.hashicorp.com/gpg", KeyringPath: "/usr/share/keyrings/hashicorp-archive-keyring.gpg"},
 	"tailscale": {KeyURL: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg", KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg"},

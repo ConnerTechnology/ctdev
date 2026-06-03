@@ -23,7 +23,7 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.BrewCaskInstall(ctx, o, "visual-studio-code")
 	case "apt":
-		keyring := "/etc/apt/trusted.gpg.d/packages.microsoft.gpg"
+		keyring := "/usr/share/keyrings/microsoft-archive-keyring.gpg"
 		if err := sysutil.AddAPTKeyring(ctx, o, "https://packages.microsoft.com/keys/microsoft.asc", keyring); err != nil {
 			return fmt.Errorf("add microsoft GPG key: %w", err)
 		}
