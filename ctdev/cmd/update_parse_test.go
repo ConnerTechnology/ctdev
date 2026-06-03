@@ -173,6 +173,29 @@ func TestMajorVersion(t *testing.T) {
 	}
 }
 
+func TestVersionNewer(t *testing.T) {
+	tests := []struct {
+		candidate, current string
+		want               bool
+	}{
+		{"1.2.4", "1.2.3", true},
+		{"1.3.0", "1.2.9", true},
+		{"2.0.0", "1.9.9", true},
+		{"1.2.3", "1.2.3", false}, // equal is not newer
+		{"1.2.3", "1.2.4", false}, // downgrade must not be offered
+		{"1.2.9", "1.3.0", false},
+		{"v1.2.4", "1.2.3", true},     // leading v ignored
+		{"1.2.0", "1.2", false},       // 1.2.0 == 1.2
+		{"1.23.4", "1.23.3", true},    // multi-digit components
+		{"1.2.3-rc1", "1.2.3", false}, // pre-release suffix ignored
+	}
+	for _, tt := range tests {
+		if got := versionNewer(tt.candidate, tt.current); got != tt.want {
+			t.Errorf("versionNewer(%q, %q) = %v, want %v", tt.candidate, tt.current, got, tt.want)
+		}
+	}
+}
+
 func TestParseBrewCaskOutdatedEmpty(t *testing.T) {
 	items := parseBrewCaskOutdated("")
 	if len(items) != 0 {

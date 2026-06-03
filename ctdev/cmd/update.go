@@ -431,7 +431,7 @@ func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	latest := strings.TrimPrefix(tag, "bun-v")
 	latest = strings.TrimPrefix(latest, "v")
-	if latest == current {
+	if !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -459,7 +459,7 @@ func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
 
 	// Get latest available LTS
 	latest := fetchLatestNodeLTS(ctx)
-	if latest == "" || latest == current {
+	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -518,7 +518,7 @@ func scanCtdev(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, nil
 	}
 	current := strings.TrimPrefix(version, "v")
-	if latest == current {
+	if !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -553,7 +553,7 @@ func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current := strings.TrimPrefix(fields[2], "go")
 
 	latest := fetchLatestGoVersion(ctx)
-	if latest == "" || latest == current {
+	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -580,7 +580,7 @@ func scanRuby(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current := fields[1]
 
 	latest := fetchLatestRubyVersion(ctx)
-	if latest == "" || latest == current {
+	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -630,7 +630,7 @@ func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
 		}
 	}
 
-	if latestSameMajor != "" && latestSameMajor != current {
+	if versionNewer(latestSameMajor, current) {
 		items = append(items, checklist.UpdateItem{
 			Name:       "helm",
 			Source:     "cli",
@@ -671,7 +671,7 @@ func scanKubectl(ctx context.Context) ([]checklist.UpdateItem, error) {
 
 	// Fetch latest stable kubectl version
 	latest := fetchLatestKubectlVersion(ctx)
-	if latest == "" || latest == current {
+	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -705,7 +705,7 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if err != nil || latest == "" {
 		return nil, nil
 	}
-	if latest == current {
+	if !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -748,6 +748,55 @@ func majorVersion(ver string) int {
 	var major int
 	fmt.Sscanf(parts[0], "%d", &major)
 	return major
+}
+
+// versionParts splits a dotted version into its leading numeric components,
+// ignoring a leading "v" and any pre-release/build suffix.
+func versionParts(v string) []int {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	fields := strings.FieldsFunc(v, func(r rune) bool {
+		return r == '.' || r == '-' || r == '+' || r == '_'
+	})
+	var parts []int
+	for _, f := range fields {
+		num, got := 0, false
+		for _, r := range f {
+			if r < '0' || r > '9' {
+				break
+			}
+			num, got = num*10+int(r-'0'), true
+		}
+		if !got {
+			break
+		}
+		parts = append(parts, num)
+	}
+	return parts
+}
+
+// versionNewer reports whether candidate is a strictly higher dotted-numeric
+// version than current. It's used to avoid offering a "downgrade" when the
+// locally installed tool is newer than the registry's notion of latest (e.g. a
+// manually built Go or a pre-release). Equal versions return false.
+func versionNewer(candidate, current string) bool {
+	c, cur := versionParts(candidate), versionParts(current)
+	n := len(c)
+	if len(cur) > n {
+		n = len(cur)
+	}
+	for i := 0; i < n; i++ {
+		a, b := 0, 0
+		if i < len(c) {
+			a = c[i]
+		}
+		if i < len(cur) {
+			b = cur[i]
+		}
+		if a != b {
+			return a > b
+		}
+	}
+	return false
 }
 
 func fetchLatestNodeLTS(ctx context.Context) string {
@@ -921,7 +970,10 @@ func executeUpdates(ctx context.Context, allItems, items []checklist.UpdateItem)
 		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d apt packages...", len(names))))
 		args := append([]string{"apt", "install", "--only-upgrade", "-y"}, names...)
 		if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
-			return fmt.Errorf("apt upgrade failed: %w", err)
+			// Warn and continue like every other source, so one failing manager
+			// doesn't strand the brew/flatpak/runtime/cli/npm updates the user
+			// also selected.
+			fmt.Printf("  apt upgrade warning: %v\n", err)
 		}
 	}
 
