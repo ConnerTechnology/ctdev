@@ -10,6 +10,8 @@ import (
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	tuiinfo "github.com/ConnerTechnology/dotfiles/ctdev/tui/info"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -64,13 +66,31 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	width := 80
-	if cols := os.Getenv("COLUMNS"); cols != "" {
-		if w, err := strconv.Atoi(cols); err == nil {
-			width = w
-		}
-	}
+	width, isTTY := infoTerminalSize()
 	output := tuiinfo.Render(sysInfo, version, components, width)
+	// Piped/redirected output shouldn't carry color escapes.
+	if !isTTY {
+		output = ansi.Strip(output)
+	}
 	fmt.Print(output)
 	return nil
+}
+
+// infoTerminalSize returns the usable column width and whether stdout is a TTY.
+// For a real terminal it queries the actual size; when piped it honors $COLUMNS
+// if set, otherwise defaults to 80.
+func infoTerminalSize() (width int, isTTY bool) {
+	fd := os.Stdout.Fd()
+	if term.IsTerminal(fd) {
+		if w, _, err := term.GetSize(fd); err == nil && w > 0 {
+			return w, true
+		}
+		return 80, true
+	}
+	if cols := os.Getenv("COLUMNS"); cols != "" {
+		if w, err := strconv.Atoi(cols); err == nil && w > 0 {
+			return w, false
+		}
+	}
+	return 80, false
 }
