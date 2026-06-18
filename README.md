@@ -46,6 +46,46 @@ idempotent and safe to re-run.
 - Reboot (or log out/in) to apply docker group membership, suspend masking, and WiFi power-save
 - Verify everything: `ctdev verify`
 
+## Homelab Node Setup
+
+Turn a freshly flashed **Raspberry Pi OS Lite** (or Ubuntu/Debian) box into a
+homelab node — Docker, Tailscale, Pi-hole, and a Caddy reverse proxy serving
+`https://*.<your-domain>` with a Let's Encrypt **wildcard** cert (Cloudflare
+DNS-01, so nothing is exposed to the internet). After flashing and SSHing in,
+from a clone:
+
+```bash
+./bootstrap-homelab.sh ctpi01
+```
+
+The node name must match an encrypted host config at
+`ctdev/component/configs/homelab/hosts/<node>.sops.env`. The script installs the
+server components, sets the hostname, configures remote access, and brings up
+the proxy stack.
+
+**Per-node config & secrets (SOPS).** Each node's domain, ACME email, and
+Cloudflare API token live in a SOPS-encrypted dotenv, decrypted on the node into
+`~/homelab/.env` (mode 600). To add a node:
+
+```bash
+# 1. put the homelab age PRIVATE key on the node (out-of-band; never commit it)
+mkdir -p ~/.config/sops/age && cp keys.txt ~/.config/sops/age/keys.txt
+
+# 2. create/edit the encrypted host config (uses the age recipient in .sops.yaml)
+sops ctdev/component/configs/homelab/hosts/<node>.sops.env
+#    keys: HOSTNAME, HOMELAB_DOMAIN, HOMELAB_ACME_EMAIL, CF_API_TOKEN
+```
+
+**Manual steps after the script:** `sudo tailscale up`, then finish DNS wiring
+with `CTDEV_HOMELAB_HOST=<node> ctdev install homelab --force`; set the node's
+Tailscale IP as a Global Nameserver (Override on) in the Tailscale admin console;
+`sudo pihole setpassword`.
+
+**Adding a service** to a node: add the container to `~/homelab/docker-compose.yml`
+and a route snippet in `~/homelab/sites/<svc>.caddy`, then
+`sudo docker compose -f ~/homelab/docker-compose.yml up -d && ... restart caddy`.
+The wildcard DNS + cert already cover it — no DNS or cert changes needed.
+
 ## Install (ctdev only)
 
 ```bash
@@ -89,7 +129,7 @@ Run `ctdev install` (no args) for an interactive component picker.
 
 ## Components
 
-37 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
+39 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
 
 ## DevContainers
 

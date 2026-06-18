@@ -36,9 +36,28 @@ released binary. Idempotent. See README "Fresh Machine Setup".
 
 ## Components
 
-37 components:
+39 components:
 
-1password, age, btop, bun, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, btop, bun, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, homelab, jq, kubectl, linear, logi-options, node, pihole, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+
+## Homelab nodes
+
+`bootstrap-homelab.sh <node>` provisions a headless Debian/Ubuntu box (e.g.
+Raspberry Pi OS Lite) as a homelab node: Docker + Tailscale + Pi-hole + a Caddy
+reverse proxy serving `https://*.<domain>` (Let's Encrypt wildcard via Cloudflare
+DNS-01, nothing exposed). Two components back it:
+
+- `pihole` — official unattended Pi-hole install + base config.
+- `homelab` — deploys the Caddy stack from `component/configs/homelab/` (generic;
+  domain/token come from `~/homelab/.env`), wires Pi-hole (frees 443, wildcard →
+  Tailscale IP), and runs `docker compose up`.
+
+Per-node secrets are SOPS-encrypted dotenvs at
+`component/configs/homelab/hosts/<node>.sops.env` (age recipient in `.sops.yaml`),
+embedded in the binary and decrypted on the node (age key at
+`~/.config/sops/age/keys.txt`) into `~/homelab/.env`. The host is chosen by
+`os.Hostname()` or the `CTDEV_HOMELAB_HOST` override. **Never commit a plaintext
+host config or an age private key.**
 
 ## Directory structure
 

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.1.0] - 2026-06-18
+
+### Added
+- **Homelab node provisioning.** A fresh Debian/Ubuntu box (e.g. Raspberry Pi OS Lite) becomes a homelab node — Docker + Tailscale + Pi-hole + Caddy reverse proxy serving `https://*.<domain>` with a Let's Encrypt wildcard (Cloudflare DNS-01, nothing exposed to the internet) — via `./bootstrap-homelab.sh <node>`.
+- New `pihole` component: installs Pi-hole via its official unattended installer and applies base config (Cloudflare upstreams, listen-on-all).
+- New `homelab` component (depends on `docker` + `sops`): decrypts the node's SOPS host config to `~/homelab/.env`, deploys the Caddy stack, frees Pi-hole's port 443, points `*.<domain>` at the node's Tailscale IP, and brings the stack up.
+- Per-node secrets via SOPS: encrypted host configs at `ctdev/component/configs/homelab/hosts/<node>.sops.env` (age recipient in `.sops.yaml`), decrypted on the node with the age key at `~/.config/sops/age/keys.txt`.
+
 ## [10.0.0] - 2026-06-03
 
 ### Security

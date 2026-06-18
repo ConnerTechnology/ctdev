@@ -1,0 +1,29 @@
+# Homelab reverse-proxy stack. Reads ~/homelab/.env (rendered by `ctdev install
+# homelab` from the node's SOPS-encrypted host config) for CF_API_TOKEN,
+# HOMELAB_DOMAIN, and HOMELAB_ACME_EMAIL.
+services:
+  caddy:
+    build: .
+    image: caddy-homelab:local
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - HOMELAB_DOMAIN=${HOMELAB_DOMAIN}
+      - HOMELAB_ACME_EMAIL=${HOMELAB_ACME_EMAIL:-admin@localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # Lets Caddy reach the bare-metal Pi-hole (and other host services) at
+    # host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  caddy_data:
+  caddy_config:
