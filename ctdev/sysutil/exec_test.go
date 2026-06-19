@@ -89,4 +89,3 @@ func TestSudoRun_DryRunIncludesSudo(t *testing.T) {
 		t.Errorf("got %q, want %q", buf.String(), want)
 	}
 }
-
