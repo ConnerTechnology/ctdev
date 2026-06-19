@@ -44,7 +44,13 @@ func AddAPTKeyring(ctx context.Context, o Opts, url, keyringPath string) error {
 	if err := dearmor.Run(); err != nil {
 		return err
 	}
-	return SudoRun(ctx, o, "cp", dearmorTmp.Name(), keyringPath)
+	if err := SudoRun(ctx, o, "cp", dearmorTmp.Name(), keyringPath); err != nil {
+		return err
+	}
+	// World-readable: the temp source is 0600 and cp preserves that, but apt's
+	// signature verifier (Debian 13's sqv runs sandboxed) must be able to read
+	// the keyring or the repo is rejected as unsigned.
+	return SudoRun(ctx, o, "chmod", "0644", keyringPath)
 }
 
 // AddAPTSource writes an APT sources list entry.
