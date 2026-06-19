@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
 ### Removed
 - `bootstrap.sh` and `bootstrap-homelab.sh`, and the `homelab` umbrella component. There's no all-in-one machine bootstrap anymore — install the `ctdev` binary (`install.sh`) and compose the machine from individual `ctdev install <component>` and `ctdev configure <category>` calls.
 
+### Fixed
+- APT keyrings are now written world-readable (0644) so Debian 13's sandboxed `sqv` verifier can read them; previously `ctdev install gh` (and other apt-repo components) failed on trixie with "repository is not signed".
+
 ## [10.0.0] - 2026-06-03
 
 ### Security
