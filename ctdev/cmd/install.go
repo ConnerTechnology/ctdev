@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
@@ -56,14 +57,68 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		selected = pickerResult.Selected
 	}
 
-	selected = comp.ResolveDependencies(comp.Registry, selected)
+	// Track what the user actually asked for (vs. auto-pulled dependencies) so
+	// only those get a configuration step, and note what was already installed.
+	requested := append([]string(nil), selected...)
+	installedBefore := comp.InstalledSet()
+
+	resolved := comp.ResolveDependencies(comp.Registry, selected)
 	if !flagDryRun {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required for install: %w", err)
 		}
 	}
-	return runWithProgress(cmd.Context(), progressOperation{
+	if err := runWithProgress(cmd.Context(), progressOperation{
 		mode:  progress.ModeInstall,
-		names: selected,
-	})
+		names: resolved,
+	}); err != nil {
+		return err
+	}
+
+	// install = install + configure: after installing, run each requested
+	// component's configuration step when it has one. `ctdev configure <x>`
+	// alone still configures without installing. Skipped in batch/dry-run
+	// because the wizards are interactive.
+	if flagDryRun || isBatchMode() {
+		return nil
+	}
+	for _, name := range requested {
+		hasCfg := componentHasConfigure(name)
+		if installedBefore[name] {
+			if hasCfg {
+				fmt.Printf("\n%s is already installed — opening its configuration.\n", name)
+			} else {
+				fmt.Printf("\n%s is already installed.\n", name)
+			}
+		}
+		if hasCfg {
+			if err := runComponentConfigure(cmd.Context(), name); err != nil {
+				fmt.Printf("  configure %s: %v\n", name, err)
+			}
+		}
+	}
+	return nil
+}
+
+// componentHasConfigure reports whether a component has a configuration step —
+// the caddy wizard or a `configure <name>` category sharing its name.
+func componentHasConfigure(name string) bool {
+	if name == "caddy" {
+		return true
+	}
+	for _, slug := range slugOrder {
+		if slug == name {
+			return true
+		}
+	}
+	return false
+}
+
+// runComponentConfigure runs a component's configuration step — the caddy
+// wizard or its `configure <name>` category.
+func runComponentConfigure(ctx context.Context, name string) error {
+	if name == "caddy" {
+		return configureCaddy(ctx)
+	}
+	return runCategoryWizard(ctx, name, false)
 }
