@@ -1,6 +1,6 @@
-# Homelab reverse proxy. Generic across nodes — the domain and ACME email come
-# from the environment (rendered from the node's SOPS-encrypted ~/homelab/.env),
-# so this same file works on every homelab node.
+# Caddy reverse proxy. Generic across nodes — the domain and ACME email come
+# from the environment (~/caddy/.env, written by `ctdev configure caddy`), so
+# this same file works on every node.
 {
 	email {$HOMELAB_ACME_EMAIL:admin@localhost}
 }
@@ -17,7 +17,7 @@
 		reverse_proxy host.docker.internal:80
 	}
 
-	# Per-node extra services: drop a *.caddy snippet in ~/homelab/sites/.
+	# Per-node extra services: drop a *.caddy snippet in ~/caddy/sites/.
 	import sites/*.caddy
 
 	handle {

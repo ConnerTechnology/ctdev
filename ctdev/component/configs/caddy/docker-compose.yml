@@ -1,6 +1,5 @@
-# Homelab reverse-proxy stack. Reads ~/homelab/.env (rendered by `ctdev install
-# homelab` from the node's SOPS-encrypted host config) for CF_API_TOKEN,
-# HOMELAB_DOMAIN, and HOMELAB_ACME_EMAIL.
+# Caddy reverse-proxy stack. Reads ~/caddy/.env (written by `ctdev configure
+# caddy`) for CF_API_TOKEN, HOMELAB_DOMAIN, and HOMELAB_ACME_EMAIL.
 services:
   caddy:
     build: .
