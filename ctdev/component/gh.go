@@ -45,7 +45,10 @@ func ghUninstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.RemovePackage(ctx, o, "gh")
 	case "apt":
-		return sysutil.RemovePackage(ctx, o, "gh")
+		if err := sysutil.RemovePackage(ctx, o, "gh"); err != nil {
+			return err
+		}
+		return sysutil.RemoveAPTRepo(ctx, o, "github-cli.list", "/usr/share/keyrings/githubcli-archive-keyring.gpg")
 	default:
 		return ErrUnsupportedOS
 	}

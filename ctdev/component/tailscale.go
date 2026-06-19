@@ -83,9 +83,7 @@ func tailscaleUninstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.RemovePackage(ctx, o, "tailscale"); err != nil {
 			return err
 		}
-		_ = sysutil.SudoRun(ctx, o, "rm", "-f", "/etc/apt/sources.list.d/tailscale.list")
-		_ = sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/share/keyrings/tailscale-archive-keyring.gpg")
-		return nil
+		return sysutil.RemoveAPTRepo(ctx, o, "tailscale.list", "/usr/share/keyrings/tailscale-archive-keyring.gpg")
 	default:
 		return ErrUnsupportedOS
 	}

@@ -86,7 +86,13 @@ func onePasswordUninstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.BrewCaskRemove(ctx, o, "1password")
 	}
 	if p.PackageManager == "apt" {
-		return sysutil.RemovePackage(ctx, o, "1password")
+		if err := sysutil.RemovePackage(ctx, o, "1password"); err != nil {
+			return err
+		}
+		// Remove the debsig policy + keyring dirs the installer created.
+		_ = sysutil.SudoRun(ctx, o, "rm", "-rf", "/etc/debsig/policies/AC2D62742012EA22")
+		_ = sysutil.SudoRun(ctx, o, "rm", "-rf", "/usr/share/debsig/keyrings/AC2D62742012EA22")
+		return sysutil.RemoveAPTRepo(ctx, o, "1password.list", "/usr/share/keyrings/1password-archive-keyring.gpg")
 	}
 	return ErrUnsupportedOS
 }

@@ -45,12 +45,23 @@ func terraformUninstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "Removing terraform...")
 
 	switch p.PackageManager {
-	case "brew", "apt":
+	case "brew":
 		if sysutil.IsPackageInstalled("terraform") {
 			return sysutil.RemovePackage(ctx, o, "terraform")
 		}
 		fmt.Fprintln(opts.Stdout, "terraform package not installed")
 		return nil
+	case "apt":
+		if sysutil.IsPackageInstalled("terraform") {
+			if err := sysutil.RemovePackage(ctx, o, "terraform"); err != nil {
+				return err
+			}
+		} else {
+			fmt.Fprintln(opts.Stdout, "terraform package not installed")
+		}
+		// Clean up the HashiCorp repo regardless, so a dangling source doesn't
+		// linger after the package is gone.
+		return sysutil.RemoveAPTRepo(ctx, o, "hashicorp.list", "/usr/share/keyrings/hashicorp-archive-keyring.gpg")
 	default:
 		// Fallback: remove a hand-placed standalone binary at the conventional path.
 		return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/terraform")

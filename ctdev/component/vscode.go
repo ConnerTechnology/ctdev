@@ -45,7 +45,10 @@ func vscodeUninstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.BrewCaskRemove(ctx, o, "visual-studio-code")
 	}
 	if p.PackageManager == "apt" {
-		return sysutil.RemovePackage(ctx, o, "code")
+		if err := sysutil.RemovePackage(ctx, o, "code"); err != nil {
+			return err
+		}
+		return sysutil.RemoveAPTRepo(ctx, o, "vscode.list", "/usr/share/keyrings/microsoft-archive-keyring.gpg")
 	}
 	return ErrUnsupportedOS
 }

@@ -86,6 +86,16 @@ func addUserToDockerGroup(ctx context.Context, o sysutil.Opts, w io.Writer) {
 	fmt.Fprintf(w, "Added %s to docker group. Log out and back in for this to take effect.\n", u.Username)
 }
 
+// removeUserFromDockerGroup reverses addUserToDockerGroup. Best-effort: gpasswd
+// exits non-zero if the user isn't a member, which we ignore.
+func removeUserFromDockerGroup(ctx context.Context, o sysutil.Opts) {
+	u, err := user.Current()
+	if err != nil || u.Uid == "0" {
+		return
+	}
+	_ = sysutil.SudoRun(ctx, o, "gpasswd", "-d", u.Username, "docker")
+}
+
 func dockerUninstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
@@ -95,7 +105,11 @@ func dockerUninstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.BrewCaskRemove(ctx, o, "docker")
 	case "apt":
-		return sysutil.RemovePackage(ctx, o, dockerPackages...)
+		if err := sysutil.RemovePackage(ctx, o, dockerPackages...); err != nil {
+			return err
+		}
+		removeUserFromDockerGroup(ctx, o)
+		return sysutil.RemoveAPTRepo(ctx, o, "docker.list", "/etc/apt/keyrings/docker.asc")
 	default:
 		return ErrUnsupportedOS
 	}

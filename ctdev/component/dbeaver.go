@@ -45,7 +45,10 @@ func dbeaverUninstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.BrewCaskRemove(ctx, o, "dbeaver-community")
 	case "apt":
-		return sysutil.RemovePackage(ctx, o, "dbeaver-ce")
+		if err := sysutil.RemovePackage(ctx, o, "dbeaver-ce"); err != nil {
+			return err
+		}
+		return sysutil.RemoveAPTRepo(ctx, o, "dbeaver.list", "/usr/share/keyrings/dbeaver-archive-keyring.gpg")
 	default:
 		return ErrUnsupportedOS
 	}

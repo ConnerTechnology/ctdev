@@ -78,6 +78,23 @@ func APTUpdate(ctx context.Context, o Opts) error {
 	return SudoRun(ctx, o, "apt-get", "update", "-qq")
 }
 
+// RemoveAPTRepo removes a third-party APT source list and its signing keyring —
+// the inverse of the keyring+source setup InstallAPTRepoPackage performs. Left
+// behind, the dangling repo makes `apt-get update` keep hitting a now-removed
+// source and keeps an orphaned signing key trusted. sourceFile is the bare
+// filename under /etc/apt/sources.list.d (e.g. "github-cli.list"); keyringPath
+// is the absolute keyring path, or "" to skip key removal. Both removals are
+// best-effort (`rm -f`); a missing file is not an error.
+func RemoveAPTRepo(ctx context.Context, o Opts, sourceFile, keyringPath string) error {
+	if err := SudoRun(ctx, o, "rm", "-f", "/etc/apt/sources.list.d/"+sourceFile); err != nil {
+		return err
+	}
+	if keyringPath != "" {
+		return SudoRun(ctx, o, "rm", "-f", keyringPath)
+	}
+	return nil
+}
+
 // APTRepoPackage describes a third-party APT repository and the package(s) to
 // install from it. RepoLine should already embed signed-by=KeyringPath.
 type APTRepoPackage struct {
