@@ -26,6 +26,7 @@ var (
 	flagYes         bool
 	flagCheck       bool
 	flagRefreshKeys bool
+	flagNoRefresh   bool
 )
 
 var updateCmd = &cobra.Command{
@@ -39,6 +40,7 @@ func init() {
 	updateCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation (install all updates)")
 	updateCmd.Flags().BoolVar(&flagCheck, "check", false, "list available updates without installing")
 	updateCmd.Flags().BoolVar(&flagRefreshKeys, "refresh-keys", false, "refresh APT GPG keys before updating")
+	updateCmd.Flags().BoolVar(&flagNoRefresh, "no-refresh", false, "skip refreshing the APT package index before scanning")
 	rootCmd.AddCommand(updateCmd)
 }
 
@@ -58,6 +60,11 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		fmt.Println(styles.Dimmed.Render("Refreshing APT GPG keys..."))
 		refreshAPTKeys(ctx, args)
 	}
+
+	// Refresh the APT index before scanning so `apt list --upgradable` reflects
+	// reality. Without this, an update run on a machine with a stale index can
+	// report "everything is up to date" while security updates are pending.
+	refreshAptIndex(ctx)
 
 	items := scanAll(ctx)
 
@@ -98,28 +105,58 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	return executeUpdates(ctx, items, selected)
 }
 
+// refreshAptIndex runs `apt-get update` before scanning so the upgradable list
+// is accurate. It is a no-op on non-apt systems, in dry-run, or when
+// --no-refresh is passed. Failures (including an unavailable sudo) are
+// non-fatal: we warn and let the scan proceed against the existing index rather
+// than abort the whole update.
+func refreshAptIndex(ctx context.Context) {
+	if _, err := exec.LookPath("apt-get"); err != nil {
+		return
+	}
+	if flagDryRun || flagNoRefresh {
+		return
+	}
+	fmt.Println(styles.Dimmed.Render("Refreshing APT package index..."))
+	if err := ensureSudo(); err != nil {
+		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("sudo unavailable; scanning against a possibly stale index: %v", err)))
+		return
+	}
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	if err := sysutil.APTUpdate(ctx, o); err != nil {
+		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("apt index refresh failed; results may be stale: %v", err)))
+	}
+}
+
 func scanAll(ctx context.Context) []checklist.UpdateItem {
 	var mu sync.Mutex
 	var allItems []checklist.UpdateItem
 
-	type scanner func(context.Context) ([]checklist.UpdateItem, error)
-	scanners := []scanner{
-		scanAPT,
-		scanMintUpdate,
-		scanFlatpak,
-		scanBrew,
-		scanBrewCask,
-		scanOhMyZsh,
-		scanBun,
-		scanNodeEnv,
-		scanNPMGlobals,
-		scanCtdev,
-		scanGo,
-		scanRuby,
-		scanHelm,
-		scanKubectl,
-		scanTerraform,
+	type namedScanner struct {
+		name string
+		fn   func(context.Context) ([]checklist.UpdateItem, error)
 	}
+	scanners := []namedScanner{
+		{"apt", scanAPT},
+		{"mintupdate", scanMintUpdate},
+		{"flatpak", scanFlatpak},
+		{"brew", scanBrew},
+		{"brew-cask", scanBrewCask},
+		{"oh-my-zsh", scanOhMyZsh},
+		{"bun", scanBun},
+		{"nodenv", scanNodeEnv},
+		{"npm", scanNPMGlobals},
+		{"ctdev", scanCtdev},
+		{"go", scanGo},
+		{"ruby", scanRuby},
+		{"helm", scanHelm},
+		{"kubectl", scanKubectl},
+		{"terraform", scanTerraform},
+	}
+
+	// scanErrs collects failures so one broken source doesn't silently make the
+	// machine look up to date. Protected by mu alongside allItems.
+	var scanErrs []string
 
 	total := len(scanners)
 	done := make(chan struct{}, total)
@@ -136,20 +173,29 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	}()
 
 	var wg sync.WaitGroup
-	for _, fn := range scanners {
-		fn := fn
+	for _, s := range scanners {
+		s := s
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer func() { done <- struct{}{} }()
 			defer func() {
 				if r := recover(); r != nil {
-					// Swallow panic from individual scanners so one failure
-					// doesn't crash the entire update check.
+					// Record (don't crash on) a panicking scanner so one
+					// failure doesn't take down the entire update check.
+					mu.Lock()
+					scanErrs = append(scanErrs, fmt.Sprintf("%s: panic: %v", s.name, r))
+					mu.Unlock()
 				}
 			}()
-			items, err := fn(ctx)
-			if err == nil && len(items) > 0 {
+			items, err := s.fn(ctx)
+			if err != nil {
+				mu.Lock()
+				scanErrs = append(scanErrs, fmt.Sprintf("%s: %v", s.name, err))
+				mu.Unlock()
+				return
+			}
+			if len(items) > 0 {
 				mu.Lock()
 				allItems = append(allItems, items...)
 				mu.Unlock()
@@ -160,6 +206,19 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	wg.Wait()
 	close(done)
 	<-printerDone
+
+	// Surface scanner failures so a rate-limited / broken source isn't mistaken
+	// for "nothing to update". Detail is gated behind --verbose to keep the
+	// common path quiet.
+	if len(scanErrs) > 0 {
+		if flagVerbose {
+			for _, e := range scanErrs {
+				fmt.Printf("  %s\n", styles.Warning.Render("update source failed — "+e))
+			}
+		} else {
+			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("%d update source(s) failed to check (run with -v for detail)", len(scanErrs))))
+		}
+	}
 
 	// Sort by source for grouped display
 	sourceOrder := map[string]int{
@@ -390,12 +449,12 @@ func scanOhMyZsh(ctx context.Context) ([]checklist.UpdateItem, error) {
 	// Fetch latest from remote
 	fetch := exec.CommandContext(ctx, "git", "-C", omzDir, "fetch", "--quiet")
 	if err := fetch.Run(); err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("git fetch oh-my-zsh: %w", err)
 	}
 	// Check if behind
 	out, err := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-list", "--count", "HEAD..@{u}").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("oh-my-zsh rev-list: %w", err)
 	}
 	behind := strings.TrimSpace(string(out))
 	if behind == "" || behind == "0" {
@@ -427,7 +486,7 @@ func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
 	// Check latest via bun's upgrade --dry-run (not supported), use GitHub API
 	tag, err := sysutil.GitHubLatestVersion(ctx, "oven-sh/bun")
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("check latest bun: %w", err)
 	}
 	latest := strings.TrimPrefix(tag, "bun-v")
 	latest = strings.TrimPrefix(latest, "v")
@@ -449,7 +508,7 @@ func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	// Get current version
 	currentOut, err := exec.CommandContext(ctx, "nodenv", "version").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("nodenv version: %w", err)
 	}
 	fields := strings.Fields(strings.TrimSpace(string(currentOut)))
 	if len(fields) == 0 {
@@ -457,7 +516,8 @@ func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	current := fields[0]
 
-	// Get latest available LTS
+	// fetchLatestNodeLTS returns "" when nodenv has no usable definition list,
+	// which is a "can't determine", not a failure — stay silent in that case.
 	latest := fetchLatestNodeLTS(ctx)
 	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
@@ -474,9 +534,12 @@ func scanNPMGlobals(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("npm"); err != nil {
 		return nil, nil
 	}
+	// `npm outdated` exits non-zero precisely when there ARE outdated packages,
+	// so a non-zero exit WITH output is the normal case. Only an error with no
+	// output at all is a genuine failure worth surfacing.
 	out, err := exec.CommandContext(ctx, "npm", "outdated", "-g", "--json").Output()
 	if err != nil && len(out) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("npm outdated -g: %w", err)
 	}
 	// npm outdated -g --json returns {} if nothing outdated, or {"pkg": {"current": "x", "wanted": "y", "latest": "z"}}
 	// Parse manually to avoid encoding/json import overhead for simple case
@@ -514,7 +577,10 @@ func scanCtdev(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, nil
 	}
 	latest, err := sysutil.GitHubLatestVersion(ctx, "ConnerTechnology/dotfiles")
-	if err != nil || latest == "" {
+	if err != nil {
+		return nil, fmt.Errorf("check latest ctdev: %w", err)
+	}
+	if latest == "" {
 		return nil, nil
 	}
 	current := strings.TrimPrefix(version, "v")
@@ -543,7 +609,7 @@ func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
 
 	out, err := exec.CommandContext(ctx, "go", "version").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("go version: %w", err)
 	}
 	// "go version go1.26.1 linux/amd64"
 	fields := strings.Fields(string(out))
@@ -552,7 +618,10 @@ func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	current := strings.TrimPrefix(fields[2], "go")
 
-	latest := fetchLatestGoVersion(ctx)
+	latest, err := fetchLatestGoVersion(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check latest go: %w", err)
+	}
 	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
@@ -570,7 +639,7 @@ func scanRuby(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	out, err := exec.CommandContext(ctx, "ruby", "--version").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("ruby --version: %w", err)
 	}
 	// "ruby 3.4.1 (2024-12-25 revision 48d4efcb85) +PRISM [x86_64-linux]"
 	fields := strings.Fields(string(out))
@@ -579,6 +648,8 @@ func scanRuby(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	current := fields[1]
 
+	// fetchLatestRubyVersion returns "" when ruby-build isn't present, which is a
+	// legitimate "can't determine", not a failure — stay silent in that case.
 	latest := fetchLatestRubyVersion(ctx)
 	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
@@ -607,7 +678,10 @@ func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current = strings.TrimPrefix(current, "v")
 
 	currentMajor := majorVersion(current)
-	tags := fetchGitHubReleaseTags(ctx, "helm/helm")
+	tags, err := fetchGitHubReleaseTags(ctx, "helm/helm")
+	if err != nil {
+		return nil, fmt.Errorf("check latest helm: %w", err)
+	}
 
 	var items []checklist.UpdateItem
 	latestSameMajor := ""
@@ -670,7 +744,10 @@ func scanKubectl(ctx context.Context) ([]checklist.UpdateItem, error) {
 	current := strings.TrimPrefix(kubectlVer.ClientVersion.GitVersion, "v")
 
 	// Fetch latest stable kubectl version
-	latest := fetchLatestKubectlVersion(ctx)
+	latest, err := fetchLatestKubectlVersion(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check latest kubectl: %w", err)
+	}
 	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
@@ -702,10 +779,10 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 
 	latest, err := sysutil.GitHubLatestVersion(ctx, "hashicorp/terraform")
-	if err != nil || latest == "" {
-		return nil, nil
+	if err != nil {
+		return nil, fmt.Errorf("check latest terraform: %w", err)
 	}
-	if !versionNewer(latest, current) {
+	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
 	return []checklist.UpdateItem{{
@@ -717,11 +794,11 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 }
 
 // fetchGitHubReleaseTags returns release tags from newest to oldest (excludes pre-releases).
-func fetchGitHubReleaseTags(ctx context.Context, repo string) []string {
+func fetchGitHubReleaseTags(ctx context.Context, repo string) ([]string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=50", repo)
 	resp, err := httpGetJSON(ctx, url)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer resp.Body.Close()
 	var releases []struct {
@@ -729,7 +806,7 @@ func fetchGitHubReleaseTags(ctx context.Context, repo string) []string {
 		Prerelease bool   `json:"prerelease"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return nil
+		return nil, err
 	}
 	var tags []string
 	for _, r := range releases {
@@ -737,7 +814,7 @@ func fetchGitHubReleaseTags(ctx context.Context, repo string) []string {
 			tags = append(tags, r.TagName)
 		}
 	}
-	return tags
+	return tags, nil
 }
 
 func majorVersion(ver string) int {
@@ -864,12 +941,15 @@ func fetchGoReleases(ctx context.Context) ([]goRelease, error) {
 	return releases, nil
 }
 
-func fetchLatestGoVersion(ctx context.Context) string {
+func fetchLatestGoVersion(ctx context.Context) (string, error) {
 	releases, err := fetchGoReleases(ctx)
-	if err != nil || len(releases) == 0 {
-		return ""
+	if err != nil {
+		return "", err
 	}
-	return strings.TrimPrefix(releases[0].Version, "go")
+	if len(releases) == 0 {
+		return "", nil
+	}
+	return strings.TrimPrefix(releases[0].Version, "go"), nil
 }
 
 // goArchiveSHA256 looks up the published sha256 for the archive tarball
@@ -915,17 +995,17 @@ func fetchLatestRubyVersion(ctx context.Context) string {
 	return ""
 }
 
-func fetchLatestKubectlVersion(ctx context.Context) string {
+func fetchLatestKubectlVersion(ctx context.Context) (string, error) {
 	resp, err := httpGetJSON(ctx, "https://dl.k8s.io/release/stable.txt")
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return strings.TrimPrefix(strings.TrimSpace(string(body)), "v")
+	return strings.TrimPrefix(strings.TrimSpace(string(body)), "v"), nil
 }
 
 func printUpdateList(items []checklist.UpdateItem) {
