@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.1.0] - 2026-06-18
+
+### Added
+- New `pihole` component: installs Pi-hole via its official unattended installer and applies base config (Cloudflare upstreams, listen-on-all).
+- New `ctdev configure pihole` category: pick upstream resolvers, listening mode, and blocking on/off (shown only on nodes where Pi-hole is installed).
+- New `caddy` component (depends on `docker`): deploys a Caddy reverse-proxy stack to `~/caddy/` serving `https://*.<domain>` with a Let's Encrypt wildcard (Cloudflare DNS-01, nothing exposed to the internet) and brings it up.
+- New `ctdev configure caddy`: sets the domain, ACME email, and Cloudflare token (`~/caddy/.env`) and, when Pi-hole is present, frees port 443 and points `*.<domain>` at the node's Tailscale IP. Optional per-node SOPS host configs live at `ctdev/component/configs/caddy/hosts/<node>.sops.env`.
+
+### Changed
+- `ctdev configure remote` is split into focused categories — `ssh`, `ufw`, `locale`, `sleep`, `linger`, and `tunnel` — so each system concern is configured on its own rather than as one bundle. WiFi power-save moved under `ctdev configure network`.
+- `ctdev install <component>` now runs that component's configuration step afterward when it has one (e.g. `install pihole` → `configure pihole`, `install caddy` → `configure caddy`). Re-running `install` on an already-installed component says so and goes straight to configuration. `ctdev configure <component>` still configures without installing. Declared prerequisites (component `Dependencies`, e.g. caddy → docker) are installed first.
+
+### Removed
+- `bootstrap.sh` and `bootstrap-homelab.sh`, and the `homelab` umbrella component. There's no all-in-one machine bootstrap anymore — install the `ctdev` binary (`install.sh`) and compose the machine from individual `ctdev install <component>` and `ctdev configure <category>` calls.
+
+### Fixed
+- APT keyrings are now written world-readable (0644) so Debian 13's sandboxed `sqv` verifier can read them; previously `ctdev install gh` (and other apt-repo components) failed on trixie with "repository is not signed".
+
 ## [10.0.0] - 2026-06-03
 
 ### Security

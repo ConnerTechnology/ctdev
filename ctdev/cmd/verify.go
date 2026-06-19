@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -89,7 +90,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 
 	// Shell + dotfiles
 	home, _ := os.UserHomeDir()
-	shell := os.Getenv("SHELL")
+	shell := loginShell()
 	add("shell is zsh", strings.HasSuffix(shell, "zsh"), shell)
 	add("oh-my-zsh", pathIsDir(filepath.Join(home, ".oh-my-zsh")), "")
 	add("pure prompt", pathExists(filepath.Join(home, ".zsh", "functions", "prompt_pure_setup")), "")
@@ -153,6 +154,21 @@ func goBinaryPath() string {
 		return p
 	}
 	return ""
+}
+
+// loginShell returns the current user's login shell from the passwd database,
+// so it reflects a `chsh` change immediately (unlike $SHELL, which only updates
+// on the next login). Falls back to $SHELL when passwd can't be read.
+func loginShell() string {
+	if u, err := user.Current(); err == nil {
+		if out, err := exec.Command("getent", "passwd", u.Username).Output(); err == nil {
+			fields := strings.Split(strings.TrimSpace(string(out)), ":")
+			if len(fields) >= 7 && fields[6] != "" {
+				return fields[6]
+			}
+		}
+	}
+	return os.Getenv("SHELL")
 }
 
 func serviceActive(name string) bool {

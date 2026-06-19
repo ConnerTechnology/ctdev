@@ -1,0 +1,9 @@
+# SOPS rules for homelab node secrets. Encrypted host configs live at
+# ctdev/component/configs/homelab/hosts/<hostname>.sops.env and are decrypted on
+# the node by `ctdev install homelab` (which writes ~/homelab/.env, mode 600).
+#
+# The matching age private key must be present on each node at
+# ~/.config/sops/age/keys.txt (deploy it out-of-band; never commit it).
+creation_rules:
+  - path_regex: ctdev/component/configs/homelab/hosts/.*\.sops\.env$
+    age: age1uer0729xtqvedwv6n7r2e04pyqahutv82annjmqa5uh68aezgg8qz64tga

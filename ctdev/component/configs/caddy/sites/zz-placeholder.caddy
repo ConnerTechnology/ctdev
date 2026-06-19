@@ -1,0 +1,12 @@
+# Per-node service routes go here, one file per service. Example:
+#
+#   @grafana host grafana.{$HOMELAB_DOMAIN}
+#   handle @grafana {
+#       reverse_proxy grafana:3000
+#   }
+#
+# Add the matching container to ~/homelab/docker-compose.yml, then:
+#   sudo docker compose -f ~/homelab/docker-compose.yml up -d
+#   sudo docker compose -f ~/homelab/docker-compose.yml restart caddy
+#
+# This placeholder keeps `import sites/*.caddy` valid when no services exist yet.

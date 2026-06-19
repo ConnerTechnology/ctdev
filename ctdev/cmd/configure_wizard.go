@@ -26,7 +26,14 @@ var slugDescriptions = map[string]string{
 	"desktop":   "Desktop",
 	"network":   "Network & WiFi",
 	"system":    "System",
-	"remote":    "Remote Access",
+	"ssh":       "SSH",
+	"ufw":       "Firewall (UFW)",
+	"locale":    "Locale",
+	"sleep":     "Sleep & Suspend",
+	"linger":    "Service Lingering",
+	"tunnel":    "VS Code Tunnel",
+	"pihole":    "Pi-hole DNS",
+	"caddy":     "Caddy reverse proxy",
 }
 
 // slugOrder is derived from setup.Registry so adding a setting with a brand

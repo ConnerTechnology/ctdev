@@ -1,0 +1,26 @@
+# Caddy reverse proxy. Generic across nodes — the domain and ACME email come
+# from the environment (~/caddy/.env, written by `ctdev configure caddy`), so
+# this same file works on every node.
+{
+	email {$HOMELAB_ACME_EMAIL:admin@localhost}
+}
+
+# One wildcard cert (*.<domain>) via Cloudflare DNS-01 covers every service.
+*.{$HOMELAB_DOMAIN} {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+
+	# Pi-hole runs on the host (bare metal), not in a container.
+	@pihole host pihole.{$HOMELAB_DOMAIN}
+	handle @pihole {
+		reverse_proxy host.docker.internal:80
+	}
+
+	# Per-node extra services: drop a *.caddy snippet in ~/caddy/sites/.
+	import sites/*.caddy
+
+	handle {
+		respond "homelab: no service mapped to this name" 404
+	}
+}
