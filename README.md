@@ -4,46 +4,34 @@ Modular dotfiles for macOS and Linux. Managed via the `ctdev` CLI.
 
 ## Fresh Machine Setup
 
-On a fresh Linux Mint 22.x (Ubuntu 24.04 base) machine, one command bootstraps
-the whole development + remote-access environment:
+There's no all-in-one bootstrap — install the `ctdev` binary, then compose the
+machine from the components and `configure` categories you want.
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/bootstrap.sh)
+# 1. install ctdev
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
+
+# 2. install the components you want (each runs its configure step afterward)
+ctdev install zsh git gh node go docker tailscale vscode claude-code tmux
+
+# 3. apply the system settings you want
+ctdev configure ssh --batch      # SSH server + key-based auth hardening
+ctdev configure sleep --batch    # never suspend (always-on box)
+ctdev configure locale --batch   # en_US.UTF-8 (for Mosh)
+ctdev configure linger --batch   # keep user services alive without a login
+ctdev configure tunnel --batch   # VS Code tunnel (optional)
+# ctdev configure ufw --batch    # firewall — skip on a DNS/proxy host (Pi-hole/Caddy)
 ```
 
-Or, from a clone (builds `ctdev` from source when Go is present):
+`ctdev install <x>` pulls in declared dependencies first and runs `<x>`'s
+configure step afterward; `ctdev configure <x>` configures without installing.
+Everything is idempotent and safe to re-run.
 
-```bash
-./bootstrap.sh
-```
+**Manual steps**
 
-`bootstrap.sh` is a thin orchestrator — it primes sudo once, installs base apt
-packages, installs the `ctdev` binary, then delegates to `ctdev`. It's
-idempotent and safe to re-run.
-
-**What it installs**
-
-- Base apt packages: `git curl wget build-essential zsh tmux mosh openssh-server ufw htop jq ripgrep fd-find unzip`
-- Via `ctdev install`: zsh (+ Oh My Zsh, Pure prompt, plugins, dotfiles), git, gh,
-  Node (nodenv), Go (official tarball), Docker (official repo + Compose), Tailscale,
-  VS Code (Microsoft repo), Claude Code, tmux, jq, and the Dev Containers CLI (`@devcontainers/cli` + the `dx` wrapper)
-
-**What it configures** (via `ctdev configure ssh / ufw / locale / sleep / linger / tunnel --batch`)
-
-- SSH server enabled; key-based auth hardened (password auth disabled only once an authorized key exists)
-- UFW allowing SSH (22/tcp) + Mosh (60000:61000/udp) from private LAN ranges
-- `en_US.UTF-8` locale (required by Mosh)
-- Sleep/suspend/hibernate masked (always-on desktop)
-- WiFi power-save disabled (NetworkManager drop-in)
-- systemd lingering enabled (keeps user services alive without a login session)
-- VS Code tunnel service (reach this machine from a browser at vscode.dev)
-
-**Manual steps after the script runs**
-
-- Add your client's SSH public key: `echo 'ssh-ed25519 ...' >> ~/.ssh/authorized_keys`, then re-run `ctdev configure ssh --batch`
+- Add your client's SSH public key: `echo 'ssh-ed25519 ...' >> ~/.ssh/authorized_keys`, then re-run `ctdev configure ssh --batch` (password auth is disabled only once a key is present)
 - Authenticate the VS Code tunnel once: `code tunnel user login`
 - `gh auth login` · `ctdev configure git` · (optional) `sudo tailscale up`
-- Reboot (or log out/in) to apply docker group membership, suspend masking, and WiFi power-save
 - Verify everything: `ctdev verify`
 
 ## Pi-hole / Homelab Node

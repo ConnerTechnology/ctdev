@@ -37,14 +37,13 @@ ctdev cleanup                   # Run all cleanup tasks (with prompts)
 ctdev verify                    # Verify the bootstrap installation
 ```
 
-## Bootstrap
+## Install
 
-`bootstrap.sh` (repo root) sets up a fresh Linux Mint machine in one command. It's a
-thin orchestrator: base apt packages → install/build the `ctdev` binary →
-`ctdev install <components>` → `ctdev configure <category> --batch` for each
-system category. When run from a clone with Go present it builds `ctdev` from
-source; otherwise it downloads the released binary. Idempotent. See README
-"Fresh Machine Setup".
+`install.sh` (repo root) installs just the `ctdev` binary (downloads the latest
+release, or builds from source in a clone when Go is present, verifying against
+`SHA256SUMS`). There is no all-in-one machine bootstrap — compose a machine from
+individual `ctdev install <component>` and `ctdev configure <category>` calls.
+See README "Fresh Machine Setup".
 
 **Flags:** `--help`, `--verbose`, `--dry-run`, `--force`, `--version`, `--refresh-keys`
 

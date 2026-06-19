@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
 - `ctdev install <component>` now runs that component's configuration step afterward when it has one (e.g. `install pihole` → `configure pihole`, `install caddy` → `configure caddy`). Re-running `install` on an already-installed component says so and goes straight to configuration. `ctdev configure <component>` still configures without installing. Declared prerequisites (component `Dependencies`, e.g. caddy → docker) are installed first.
 
 ### Removed
-- `bootstrap-homelab.sh` and the `homelab` umbrella component. Compose a node from the individual `pihole` and `caddy` components plus the relevant `configure` categories instead.
+- `bootstrap.sh` and `bootstrap-homelab.sh`, and the `homelab` umbrella component. There's no all-in-one machine bootstrap anymore — install the `ctdev` binary (`install.sh`) and compose the machine from individual `ctdev install <component>` and `ctdev configure <category>` calls.
 
 ## [10.0.0] - 2026-06-03
 
