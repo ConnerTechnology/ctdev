@@ -14,7 +14,7 @@ func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 
 	if p.OS == platform.MacOS {
-		if !opts.Force && sysutil.CommandExists("1password") {
+		if !opts.Force && alreadyInstalled("1password") {
 			fmt.Fprintln(opts.Stdout, "1Password already installed")
 			return nil
 		}
@@ -26,7 +26,7 @@ func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 		return ErrUnsupportedOS
 	}
 
-	if !opts.Force && sysutil.CommandExists("1password") {
+	if !opts.Force && alreadyInstalled("1password") {
 		fmt.Fprintln(opts.Stdout, "1Password already installed")
 		return nil
 	}

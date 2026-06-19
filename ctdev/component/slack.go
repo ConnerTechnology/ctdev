@@ -13,7 +13,7 @@ func slackInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	if !opts.Force && sysutil.CommandExists("slack") {
+	if !opts.Force && alreadyInstalled("slack") {
 		fmt.Fprintln(opts.Stdout, "Slack already installed")
 		return nil
 	}
