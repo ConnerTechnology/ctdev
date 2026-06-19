@@ -8,6 +8,7 @@ import (
 
 func init() {
 	PostApplyHooks["grub"] = applyUpdateGrub
+	PostApplyHooks["pihole-ftl"] = applyPiholeRestart
 }
 
 // Registry is the single source of truth for all setup settings.
@@ -417,6 +418,18 @@ var Registry = []Setting{
 		HardwareFn: detectMT7925E,
 	},
 	{
+		Name:        "WiFi power save off",
+		Slug:        "network",
+		Category:    "Network",
+		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func() string { return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyWifiPowersaveOff(ctx, o)
+		},
+	},
+	{
 		Name:        "SSD TRIM timer",
 		Slug:        "system",
 		Category:    "System",
@@ -429,12 +442,12 @@ var Registry = []Setting{
 		},
 	},
 
-	// ── Remote Access ────────────────────────────────────────────────────
+	// ── SSH ──────────────────────────────────────────────────────────────
 
 	{
 		Name:        "SSH server",
-		Slug:        "remote",
-		Category:    "Remote Access",
+		Slug:        "ssh",
+		Category:    "SSH",
 		Description: "Enables and starts the OpenSSH server so you can connect to this machine over SSH.",
 		Control:     ControlToggle,
 		Default:     "active",
@@ -445,8 +458,8 @@ var Registry = []Setting{
 	},
 	{
 		Name:        "SSH key-based auth",
-		Slug:        "remote",
-		Category:    "Remote Access",
+		Slug:        "ssh",
+		Category:    "SSH",
 		Description: "Hardens sshd for key-based login (pubkey on, keyboard-interactive off, keepalives). Password auth is disabled only once an authorized key exists, so you can't lock yourself out.",
 		Control:     ControlToggle,
 		Default:     "installed",
@@ -455,11 +468,14 @@ var Registry = []Setting{
 			return applySSHKeyAuth(ctx, o)
 		},
 	},
+
+	// ── Firewall ─────────────────────────────────────────────────────────
+
 	{
 		Name:        "Firewall (UFW)",
-		Slug:        "remote",
-		Category:    "Remote Access",
-		Description: "Allows SSH (22/tcp) and Mosh (60000:61000/udp) from private LAN ranges and enables UFW. VLAN/subnet enforcement is left to your gateway firewall.",
+		Slug:        "ufw",
+		Category:    "Firewall",
+		Description: "Allows SSH (22/tcp) and Mosh (60000:61000/udp) from private LAN ranges and enables UFW. VLAN/subnet enforcement is left to your gateway firewall. Heads up: on a DNS or web host (Pi-hole, reverse proxy) UFW's default-deny will block those services unless you open their ports first.",
 		Control:     ControlToggle,
 		Default:     "active",
 		DetectFunc:  func() string { return detectSystemdService("ufw.service") },
@@ -467,10 +483,13 @@ var Registry = []Setting{
 			return applyUFWRemote(ctx, o)
 		},
 	},
+
+	// ── Locale ───────────────────────────────────────────────────────────
+
 	{
 		Name:        "UTF-8 locale (Mosh)",
-		Slug:        "remote",
-		Category:    "Remote Access",
+		Slug:        "locale",
+		Category:    "Locale",
 		Description: "Generates the en_US.UTF-8 locale. Mosh refuses to start without a UTF-8 locale.",
 		Control:     ControlToggle,
 		Default:     "installed",
@@ -479,11 +498,14 @@ var Registry = []Setting{
 			return applyUTF8Locale(ctx, o)
 		},
 	},
+
+	// ── Sleep ────────────────────────────────────────────────────────────
+
 	{
 		Name:        "Never suspend",
-		Slug:        "remote",
-		Category:    "Remote Access",
-		Description: "Masks the sleep, suspend, hibernate and hybrid-sleep systemd targets so an always-on desktop stays reachable.",
+		Slug:        "sleep",
+		Category:    "Sleep",
+		Description: "Masks the sleep, suspend, hibernate and hybrid-sleep systemd targets so an always-on machine stays reachable.",
 		Control:     ControlToggle,
 		Default:     "enabled",
 		DetectFunc:  detectSuspendMasked,
@@ -491,22 +513,13 @@ var Registry = []Setting{
 			return applySuspendMask(ctx, o)
 		},
 	},
-	{
-		Name:        "WiFi power save off",
-		Slug:        "remote",
-		Category:    "Remote Access",
-		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
-		Control:     ControlToggle,
-		Default:     "installed",
-		DetectFunc:  func() string { return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyWifiPowersaveOff(ctx, o)
-		},
-	},
+
+	// ── Service lingering ────────────────────────────────────────────────
+
 	{
 		Name:        "User service lingering",
-		Slug:        "remote",
-		Category:    "Remote Access",
+		Slug:        "linger",
+		Category:    "Service Lingering",
 		Description: "Enables systemd lingering for your user so user services (VS Code tunnel, tmux) keep running without an active login session.",
 		Control:     ControlToggle,
 		Default:     "enabled",
@@ -515,10 +528,13 @@ var Registry = []Setting{
 			return applyLinger(ctx, o)
 		},
 	},
+
+	// ── VS Code tunnel ───────────────────────────────────────────────────
+
 	{
 		Name:        "VS Code tunnel service",
-		Slug:        "remote",
-		Category:    "Remote Access",
+		Slug:        "tunnel",
+		Category:    "VS Code Tunnel",
 		Description: "Installs the VS Code tunnel as a background service so you can open this machine from vscode.dev in a browser (e.g. iPad Safari). Requires VS Code; run 'code tunnel user login' once to authenticate.",
 		Control:     ControlToggle,
 		Default:     "installed",
@@ -526,5 +542,53 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyCodeTunnelService(ctx, o)
 		},
+	},
+
+	// ── Pi-hole DNS ──────────────────────────────────────────────────────
+	// Shown only on nodes where Pi-hole is installed (HardwareFn).
+
+	{
+		Name:        "Pi-hole upstream DNS",
+		Slug:        "pihole",
+		Category:    "Pi-hole DNS",
+		Description: "Upstream resolvers Pi-hole forwards cache misses to.",
+		Control:     ControlPicker,
+		Default:     "cloudflare",
+		Choices: []PickerChoice{
+			{Value: "cloudflare", Description: "Cloudflare (1.1.1.1, 1.0.0.1)"},
+			{Value: "quad9", Description: "Quad9 (9.9.9.9, 149.112.112.112)"},
+			{Value: "google", Description: "Google (8.8.8.8, 8.8.4.4)"},
+		},
+		DetectFunc: detectPiholeUpstreams,
+		ApplyFunc:  applyPiholeUpstreams,
+		ApplyGroup: "pihole-ftl",
+		HardwareFn: piholeInstalled,
+	},
+	{
+		Name:        "Pi-hole listening mode",
+		Slug:        "pihole",
+		Category:    "Pi-hole DNS",
+		Description: "Which clients Pi-hole answers. LOCAL responds only to devices on the same subnet; ALL answers on every interface (needed for clients on other subnets/VLANs or over Tailscale).",
+		Control:     ControlPicker,
+		Default:     "ALL",
+		Choices: []PickerChoice{
+			{Value: "ALL", Description: "Respond on all interfaces"},
+			{Value: "LOCAL", Description: "Respond to the local subnet only"},
+		},
+		DetectFunc: detectPiholeListenMode,
+		ApplyFunc:  applyPiholeListenMode,
+		ApplyGroup: "pihole-ftl",
+		HardwareFn: piholeInstalled,
+	},
+	{
+		Name:        "Pi-hole blocking",
+		Slug:        "pihole",
+		Category:    "Pi-hole DNS",
+		Description: "Whether Pi-hole is actively blocking ad and tracker domains.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectPiholeBlocking,
+		ApplyFunc:   applyPiholeBlocking,
+		HardwareFn:  piholeInstalled,
 	},
 }
