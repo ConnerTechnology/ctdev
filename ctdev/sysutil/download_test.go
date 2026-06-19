@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -117,6 +118,34 @@ func TestVerifyChecksumFile(t *testing.T) {
 
 	if err := VerifyChecksumFile(file, checksums); err != nil {
 		t.Errorf("expected valid checksum file match, got: %v", err)
+	}
+}
+
+func TestVerifyChecksumFileFormats(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "test.bin")
+	content := []byte("test data")
+	if err := os.WriteFile(file, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256(content)
+	hash := hex.EncodeToString(h[:])
+
+	cases := map[string]string{
+		"binary marker":   hash + " *test.bin\n",
+		"uppercase hash":  strings.ToUpper(hash) + "  test.bin\n",
+		"trailing column": hash + "  test.bin  extra\n",
+	}
+	for name, csContent := range cases {
+		t.Run(name, func(t *testing.T) {
+			checksums := filepath.Join(dir, "SHA256SUMS")
+			if err := os.WriteFile(checksums, []byte(csContent), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := VerifyChecksumFile(file, checksums); err != nil {
+				t.Errorf("expected match for %s format, got: %v", name, err)
+			}
+		})
 	}
 }
 

@@ -107,12 +107,19 @@ func VerifyChecksumFile(filePath, checksumsPath string) error {
 	target := filepath.Base(filePath)
 	for _, line := range strings.Split(string(data), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[1] == target {
-			if fields[0] == actual {
-				return nil
-			}
-			return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", target, fields[0], actual)
+		if len(fields) < 2 {
+			continue
 		}
+		// Tolerate the `sha256sum -b` binary marker ("hash *file"), uppercase
+		// hashes, and trailing columns by matching on the filename field.
+		name := strings.TrimPrefix(fields[1], "*")
+		if name != target {
+			continue
+		}
+		if strings.EqualFold(fields[0], actual) {
+			return nil
+		}
+		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", target, fields[0], actual)
 	}
 	return fmt.Errorf("no checksum found for %s in checksums file", target)
 }
@@ -145,12 +152,12 @@ func InstallBinary(ctx context.Context, o Opts, src, dest string) error {
 
 // GitHubBinarySpec describes how to download and install a binary from a GitHub release.
 type GitHubBinarySpec struct {
-	Repo        string                                     // e.g. "helm/helm"
-	ArchiveURL  func(version, goos, goarch string) string  // returns download URL
-	ChecksumURL func(version, goos, goarch string) string  // optional, returns checksum URL
-	BinaryPath  func(goos, goarch string) string           // path within extracted archive
-	InstallDest string                                      // e.g. "/usr/local/bin/helm"
-	ArchFormat  string                                      // "tar.gz", "zip", or "" for raw binary
+	Repo        string                                    // e.g. "helm/helm"
+	ArchiveURL  func(version, goos, goarch string) string // returns download URL
+	ChecksumURL func(version, goos, goarch string) string // optional, returns checksum URL
+	BinaryPath  func(goos, goarch string) string          // path within extracted archive
+	InstallDest string                                    // e.g. "/usr/local/bin/helm"
+	ArchFormat  string                                    // "tar.gz", "zip", or "" for raw binary
 }
 
 // DownloadGitHubBinary fetches the latest release, downloads, verifies, extracts, and installs.
