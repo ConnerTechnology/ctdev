@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.2.0] - 2026-06-19
+
+### Added
+- `ctdev update --no-refresh` to skip the pre-scan APT index refresh.
+
+### Fixed
+- `ctdev update` now refreshes the APT package index (`apt-get update`) before scanning, so it can no longer report a machine is current while security updates are actually pending. Skipped in dry-run and with `--no-refresh`.
+- `ctdev update` surfaces scanner failures instead of silently dropping them: a source that errors or panics (rate-limited GitHub API, broken `apt list`, failed `git fetch`) is reported as "N update source(s) failed to check" rather than masquerading as "everything is up to date" (`-v` for per-source detail).
+- Update scanners distinguish a real check failure (tool present but its latest-version lookup failed) from "can't determine" (tool absent, or no nodenv/ruby-build definitions), so a transient network error no longer hides available updates.
+- `ctdev verify` derives its checks from the components actually installed on the machine, so a headless/homelab node (e.g. Pi-hole) no longer fails for desktop tooling it was never meant to have. Adds `pihole`/`pihole-FTL` checks; `ufw` and never-suspend are now informational rather than failures.
+- Uninstalling an APT-repo component (gh, vscode, terraform, dbeaver, docker, 1password) now removes its `signed-by` source list and keyring instead of leaving a dangling repo behind — and additionally drops the user from the `docker` group (docker) and removes the debsig policy/keyring (1password).
+- Checksum-file verification tolerates the `sha256sum -b` binary marker (`hash *file`), uppercase hashes, and trailing columns, so an upstream checksum-format change won't silently break verified installs/updates.
+- `1password` and `slack` install-time detection now uses the registry's own detection (the app bundle on macOS) instead of a command-name lookup, avoiding needless reinstall churn.
+
 ## [10.1.0] - 2026-06-18
 
 ### Added
