@@ -4,8 +4,14 @@ Instructions for Claude Code when working with this repository.
 
 ## ctdev CLI
 
+`ctdev install <component>` installs the component (pulling in its `Dependencies`
+first) and then runs its configuration step if it has one — a `configure <name>`
+category (e.g. `pihole`) or the `caddy` wizard. Re-running `install` on something
+already installed says so and jumps straight to configuration. `ctdev configure
+<name>` configures without installing. (Both skipped in `--batch`/`--dry-run`.)
+
 ```bash
-ctdev install <component...>    # Install specific components
+ctdev install <component...>    # Install components (then configure them)
 ctdev uninstall <component...>  # Remove specific components
 ctdev update [-y]               # Update system packages and components
 ctdev update --check            # List available updates without installing
@@ -16,8 +22,15 @@ ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
-ctdev configure remote          # Configure remote access (SSH/Mosh/UFW/tunnel)
-ctdev configure remote --batch  # Apply remote-access defaults non-interactively
+ctdev configure ssh             # SSH server + key-based auth hardening
+ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
+ctdev configure sleep           # Never-suspend (mask sleep targets)
+ctdev configure locale          # UTF-8 locale (for Mosh)
+ctdev configure linger          # User-service lingering
+ctdev configure tunnel          # VS Code tunnel service
+ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
+ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
+ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
 ctdev cleanup                   # Run all cleanup tasks (with prompts)
@@ -28,9 +41,10 @@ ctdev verify                    # Verify the bootstrap installation
 
 `bootstrap.sh` (repo root) sets up a fresh Linux Mint machine in one command. It's a
 thin orchestrator: base apt packages → install/build the `ctdev` binary →
-`ctdev install <components>` → `ctdev configure remote --batch`. When run from a
-clone with Go present it builds `ctdev` from source; otherwise it downloads the
-released binary. Idempotent. See README "Fresh Machine Setup".
+`ctdev install <components>` → `ctdev configure <category> --batch` for each
+system category. When run from a clone with Go present it builds `ctdev` from
+source; otherwise it downloads the released binary. Idempotent. See README
+"Fresh Machine Setup".
 
 **Flags:** `--help`, `--verbose`, `--dry-run`, `--force`, `--version`, `--refresh-keys`
 
@@ -38,26 +52,30 @@ released binary. Idempotent. See README "Fresh Machine Setup".
 
 39 components:
 
-1password, age, btop, bun, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, homelab, jq, kubectl, linear, logi-options, node, pihole, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
 
-## Homelab nodes
+## Homelab / Pi-hole nodes
 
-`bootstrap-homelab.sh <node>` provisions a headless Debian/Ubuntu box (e.g.
-Raspberry Pi OS Lite) as a homelab node: Docker + Tailscale + Pi-hole + a Caddy
-reverse proxy serving `https://*.<domain>` (Let's Encrypt wildcard via Cloudflare
-DNS-01, nothing exposed). Two components back it:
+ctdev has no "homelab mode" — you compose a node from individual components and
+`configure` categories, the same way you would a desktop. For a Raspberry Pi
+running Pi-hole behind a Caddy reverse proxy:
 
-- `pihole` — official unattended Pi-hole install + base config.
-- `homelab` — deploys the Caddy stack from `component/configs/homelab/` (generic;
-  domain/token come from `~/homelab/.env`), wires Pi-hole (frees 443, wildcard →
-  Tailscale IP), and runs `docker compose up`.
+- `ctdev install pihole` — official unattended Pi-hole install + base config.
+- `ctdev configure pihole` — upstream resolvers, listening mode, blocking on/off.
+- `ctdev install caddy` — deploys the Caddy stack from `component/configs/caddy/`
+  to `~/caddy/` and runs `docker compose up`. The stack is generic; the domain,
+  ACME email, and Cloudflare token come from `~/caddy/.env`.
+- `ctdev configure caddy` — writes `~/caddy/.env` (domain / ACME email / CF token)
+  and, when Pi-hole is present, wires it (frees port 443, points `*.<domain>` at
+  this node's Tailscale IP). Run this before `ctdev install caddy`.
 
-Per-node secrets are SOPS-encrypted dotenvs at
-`component/configs/homelab/hosts/<node>.sops.env` (age recipient in `.sops.yaml`),
-embedded in the binary and decrypted on the node (age key at
-`~/.config/sops/age/keys.txt`) into `~/homelab/.env`. The host is chosen by
-`os.Hostname()` or the `CTDEV_HOMELAB_HOST` override. **Never commit a plaintext
-host config or an age private key.**
+Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
+default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.
+
+`component/configs/caddy/hosts/<node>.sops.env` holds optional SOPS-encrypted
+per-node secrets (age recipient in `.sops.yaml`); decrypt one into `~/caddy/.env`
+manually with `sops` if you prefer that over the `configure caddy` wizard.
+**Never commit a plaintext host config or an age private key.**
 
 ## Directory structure
 

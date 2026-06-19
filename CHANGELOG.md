@@ -5,10 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [10.1.0] - 2026-06-18
 
 ### Added
-- **Homelab node provisioning.** A fresh Debian/Ubuntu box (e.g. Raspberry Pi OS Lite) becomes a homelab node — Docker + Tailscale + Pi-hole + Caddy reverse proxy serving `https://*.<domain>` with a Let's Encrypt wildcard (Cloudflare DNS-01, nothing exposed to the internet) — via `./bootstrap-homelab.sh <node>`.
 - New `pihole` component: installs Pi-hole via its official unattended installer and applies base config (Cloudflare upstreams, listen-on-all).
-- New `homelab` component (depends on `docker` + `sops`): decrypts the node's SOPS host config to `~/homelab/.env`, deploys the Caddy stack, frees Pi-hole's port 443, points `*.<domain>` at the node's Tailscale IP, and brings the stack up.
-- Per-node secrets via SOPS: encrypted host configs at `ctdev/component/configs/homelab/hosts/<node>.sops.env` (age recipient in `.sops.yaml`), decrypted on the node with the age key at `~/.config/sops/age/keys.txt`.
+- New `ctdev configure pihole` category: pick upstream resolvers, listening mode, and blocking on/off (shown only on nodes where Pi-hole is installed).
+- New `caddy` component (depends on `docker`): deploys a Caddy reverse-proxy stack to `~/caddy/` serving `https://*.<domain>` with a Let's Encrypt wildcard (Cloudflare DNS-01, nothing exposed to the internet) and brings it up.
+- New `ctdev configure caddy`: sets the domain, ACME email, and Cloudflare token (`~/caddy/.env`) and, when Pi-hole is present, frees port 443 and points `*.<domain>` at the node's Tailscale IP. Optional per-node SOPS host configs live at `ctdev/component/configs/caddy/hosts/<node>.sops.env`.
+
+### Changed
+- `ctdev configure remote` is split into focused categories — `ssh`, `ufw`, `locale`, `sleep`, `linger`, and `tunnel` — so each system concern is configured on its own rather than as one bundle. WiFi power-save moved under `ctdev configure network`.
+- `ctdev install <component>` now runs that component's configuration step afterward when it has one (e.g. `install pihole` → `configure pihole`, `install caddy` → `configure caddy`). Re-running `install` on an already-installed component says so and goes straight to configuration. `ctdev configure <component>` still configures without installing. Declared prerequisites (component `Dependencies`, e.g. caddy → docker) are installed first.
+
+### Removed
+- `bootstrap-homelab.sh` and the `homelab` umbrella component. Compose a node from the individual `pihole` and `caddy` components plus the relevant `configure` categories instead.
 
 ## [10.0.0] - 2026-06-03
 

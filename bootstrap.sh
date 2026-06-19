@@ -4,7 +4,7 @@ set -euo pipefail
 # bootstrap.sh — set up a fresh Linux Mint (Ubuntu 24.04 base) machine.
 #
 # Thin orchestrator: installs base apt packages, gets the ctdev binary, then
-# delegates everything else to ctdev (components + `configure remote`).
+# delegates everything else to ctdev (components + `configure <category>`).
 #
 # Run on a fresh machine:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/bootstrap.sh)
@@ -102,10 +102,12 @@ install_components() {
     success "Components installed"
 }
 
-configure_remote() {
-    info "Configuring remote access (ctdev configure remote)..."
-    ctdev configure remote --batch
-    success "Remote access configured"
+configure_system() {
+    info "Applying system settings (ssh, ufw, locale, sleep, lingering, tunnel)..."
+    for category in ssh ufw locale sleep linger tunnel; do
+        ctdev configure "$category" --batch || true
+    done
+    success "System settings applied"
 }
 
 print_manual_steps() {
@@ -114,9 +116,9 @@ print_manual_steps() {
 ────────────────────────────────────────────────────────────
   Bootstrap complete. Remaining manual steps:
 ────────────────────────────────────────────────────────────
-  1. Add your iPad's SSH public key, then re-run configure:
+  1. Add your iPad's SSH public key, then re-run ssh config:
        echo 'ssh-ed25519 AAAA... your-ipad' >> ~/.ssh/authorized_keys
-       ctdev configure remote --batch
+       ctdev configure ssh --batch
      (password auth is only disabled once a key is present)
 
   2. VS Code on iPad (Safari → vscode.dev):
@@ -142,7 +144,7 @@ main() {
     enable_sshd
     install_ctdev
     install_components
-    configure_remote
+    configure_system
     print_manual_steps
 }
 

@@ -28,7 +28,7 @@ idempotent and safe to re-run.
   Node (nodenv), Go (official tarball), Docker (official repo + Compose), Tailscale,
   VS Code (Microsoft repo), Claude Code, tmux, jq, and the Dev Containers CLI (`@devcontainers/cli` + the `dx` wrapper)
 
-**What it configures** (`ctdev configure remote`)
+**What it configures** (via `ctdev configure ssh / ufw / locale / sleep / linger / tunnel --batch`)
 
 - SSH server enabled; key-based auth hardened (password auth disabled only once an authorized key exists)
 - UFW allowing SSH (22/tcp) + Mosh (60000:61000/udp) from private LAN ranges
@@ -40,51 +40,49 @@ idempotent and safe to re-run.
 
 **Manual steps after the script runs**
 
-- Add your client's SSH public key: `echo 'ssh-ed25519 ...' >> ~/.ssh/authorized_keys`, then re-run `ctdev configure remote --batch`
+- Add your client's SSH public key: `echo 'ssh-ed25519 ...' >> ~/.ssh/authorized_keys`, then re-run `ctdev configure ssh --batch`
 - Authenticate the VS Code tunnel once: `code tunnel user login`
 - `gh auth login` · `ctdev configure git` · (optional) `sudo tailscale up`
 - Reboot (or log out/in) to apply docker group membership, suspend masking, and WiFi power-save
 - Verify everything: `ctdev verify`
 
-## Homelab Node Setup
+## Pi-hole / Homelab Node
 
-Turn a freshly flashed **Raspberry Pi OS Lite** (or Ubuntu/Debian) box into a
-homelab node — Docker, Tailscale, Pi-hole, and a Caddy reverse proxy serving
+There's no "homelab mode" — you compose a node from individual components and
+`configure` categories. To turn a freshly flashed **Raspberry Pi OS Lite** (or
+Ubuntu/Debian) box into a Pi-hole node behind a Caddy reverse proxy serving
 `https://*.<your-domain>` with a Let's Encrypt **wildcard** cert (Cloudflare
-DNS-01, so nothing is exposed to the internet). After flashing and SSHing in,
-from a clone:
+DNS-01, nothing exposed to the internet):
 
 ```bash
-./bootstrap-homelab.sh ctpi01
+# after SSHing in and installing ctdev (see "Install" below):
+ctdev install zsh git tailscale          # whatever base tools you want
+sudo tailscale up                        # join the tailnet
+ctdev install pihole                     # network-wide DNS ad blocker
+ctdev configure pihole                   # upstreams, listening mode, blocking
+ctdev install docker sops                # caddy needs docker
+ctdev configure caddy --domain example.com --acme-email you@example.com --cf-token <token>
+ctdev install caddy                      # deploy the proxy stack + bring it up
 ```
 
-The node name must match an encrypted host config at
-`ctdev/component/configs/homelab/hosts/<node>.sops.env`. The script installs the
-server components, sets the hostname, configures remote access, and brings up
-the proxy stack.
+`ctdev configure caddy` writes `~/caddy/.env` (mode 600) and, when Pi-hole is
+present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
+set that Tailscale IP as a Global Nameserver (Override on) in the Tailscale admin
+console, and `sudo pihole setpassword` for the admin UI.
 
-**Per-node config & secrets (SOPS).** Each node's domain, ACME email, and
-Cloudflare API token live in a SOPS-encrypted dotenv, decrypted on the node into
-`~/homelab/.env` (mode 600). To add a node:
+**Skip `ctdev configure ufw` on a DNS/proxy host** — UFW's default-deny blocks
+DNS (53) and the proxy (80/443) unless you open those ports first.
 
-```bash
-# 1. put the homelab age PRIVATE key on the node (out-of-band; never commit it)
-mkdir -p ~/.config/sops/age && cp keys.txt ~/.config/sops/age/keys.txt
+**Adding a service:** add the container to `~/caddy/docker-compose.yml` and a
+route snippet in `~/caddy/sites/<svc>.caddy`, then `ctdev install caddy` (or
+`sudo docker compose -f ~/caddy/docker-compose.yml up -d`). The wildcard DNS +
+cert already cover it.
 
-# 2. create/edit the encrypted host config (uses the age recipient in .sops.yaml)
-sops ctdev/component/configs/homelab/hosts/<node>.sops.env
-#    keys: HOSTNAME, HOMELAB_DOMAIN, HOMELAB_ACME_EMAIL, CF_API_TOKEN
-```
-
-**Manual steps after the script:** `sudo tailscale up`, then finish DNS wiring
-with `CTDEV_HOMELAB_HOST=<node> ctdev install homelab --force`; set the node's
-Tailscale IP as a Global Nameserver (Override on) in the Tailscale admin console;
-`sudo pihole setpassword`.
-
-**Adding a service** to a node: add the container to `~/homelab/docker-compose.yml`
-and a route snippet in `~/homelab/sites/<svc>.caddy`, then
-`sudo docker compose -f ~/homelab/docker-compose.yml up -d && ... restart caddy`.
-The wildcard DNS + cert already cover it — no DNS or cert changes needed.
+**Secrets via SOPS (optional).** If you'd rather keep a node's `.env` encrypted
+in the repo than type it into the wizard, store it at
+`ctdev/component/configs/caddy/hosts/<node>.sops.env` (age recipient in
+`.sops.yaml`) and decrypt it on the node into `~/caddy/.env` with `sops`. **Never
+commit a plaintext host config or an age private key.**
 
 ## Install (ctdev only)
 
@@ -116,7 +114,10 @@ ctdev configure <category>      # Configure a single category (gpu, boot, power,
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
-ctdev configure remote          # Configure SSH/Mosh/UFW/tunnel for remote access
+ctdev configure ssh             # SSH server + key-based auth hardening
+ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
+ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
+ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
 ctdev cleanup                   # Run all cleanup tasks
