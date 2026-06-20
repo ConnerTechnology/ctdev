@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [10.3.0] - 2026-06-20
 
 ### Added
 - `ctdev pihole export` / `ctdev pihole import` to version-control Pi-hole's configuration. Export writes the adlists, allow/deny lists, and allow/deny regex filters as plain-text files under `ctdev/component/configs/pihole/` (diffable in git); import applies them back and rebuilds gravity, so a node's lists are reproducible. Custom DNS records (internal hostnames → private IPs) are SOPS-encrypted to `hosts/<node>.sops.json` instead of committed in the clear.
