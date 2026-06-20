@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.7.0] - 2026-06-20
+
+### Added
+- New **portainer** component: Portainer CE as a Docker container (deployed to `~/portainer/`, users/settings persist in the `portainer_data` volume) giving a web UI to view and manage the host's containers, images, volumes, and compose stacks. Depends on `docker`; serves plain HTTP on `9000` (reverse-proxied by Caddy at `https://portainer.<domain>`) and its own self-signed HTTPS on `9443` for direct LAN/Tailscale access. The Caddyfile gains a `@portainer` route alongside `@pihole`. No `configure` step — create the admin user on first web login.
+
 ## [10.6.0] - 2026-06-20
 
 ### Changed
