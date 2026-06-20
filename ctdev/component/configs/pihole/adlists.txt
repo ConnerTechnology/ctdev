@@ -1,0 +1,23 @@
+# Pi-hole adlists (block-list URLs) — one per line. Managed by `ctdev pihole`.
+# Apply with `ctdev pihole import`.
+https://adaway.org/hosts.txt
+https://adguardteam.github.io/HostlistsRegistry/assets/filter_50.txt
+https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt
+https://big.oisd.nl
+https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/gambling.txt
+https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/pro.plus.txt
+https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/spam-tlds-adblock.txt
+https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.txt
+https://gitlab.com/hagezi/mirror/-/raw/main/dns-blocklists/adblock/hoster.txt
+https://hostfiles.frogeye.fr/firstparty-trackers-hosts.txt
+https://raw.githubusercontent.com/RPiList/specials/master/Blocklisten/easylist
+https://raw.githubusercontent.com/RPiList/specials/master/Blocklisten/malware
+https://raw.githubusercontent.com/StevenBlack/hosts/master/extensions/fakenews/hosts
+https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+https://raw.githubusercontent.com/blocklistproject/Lists/master/crypto.txt
+https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/whitelist-referral-native.txt
+https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+https://s3.amazonaws.com/lists.disconnect.me/simple_malvertising.txt
+https://threatfox.abuse.ch/downloads/hostfile/
+https://urlhaus.abuse.ch/downloads/hostfile/
+https://v.firebog.net/hosts/Prigent-Crypto.txt
