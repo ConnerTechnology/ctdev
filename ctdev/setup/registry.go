@@ -558,6 +558,7 @@ var Registry = []Setting{
 			{Value: "cloudflare", Description: "Cloudflare (1.1.1.1, 1.0.0.1)"},
 			{Value: "quad9", Description: "Quad9 (9.9.9.9, 149.112.112.112)"},
 			{Value: "google", Description: "Google (8.8.8.8, 8.8.4.4)"},
+			{Value: "unbound", Description: "Local recursive (Unbound, 127.0.0.1#5335)"},
 		},
 		DetectFunc: detectPiholeUpstreams,
 		ApplyFunc:  applyPiholeUpstreams,
