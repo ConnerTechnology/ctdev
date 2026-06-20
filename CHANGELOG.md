@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [10.5.0] - 2026-06-20
 
 ### Added
 - Optional **Unbound** recursive resolver in the Pi-hole stack: an `unbound` sidecar (klutchell/unbound) bound to host loopback `127.0.0.1:5335`, plus a "Local recursive (Unbound)" upstream choice in `ctdev configure pihole` that points Pi-hole at `127.0.0.1#5335` for recursive, DNSSEC-validating resolution from the root servers (no third-party upstream sees your queries).
