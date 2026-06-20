@@ -1,0 +1,24 @@
+# Pi-hole network-wide DNS ad blocker, run as a container with host networking
+# so it owns the host's :53 (DNS) and :80 (web, reverse-proxied by Caddy on 443).
+# Lists and config persist in ./etc-pihole; reproduce them with
+# `ctdev pihole import` and `ctdev configure pihole`. Optional per-node values
+# (TZ, admin password) come from ./.env.
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    network_mode: host
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+      - FTLCONF_dns_upstreams=1.1.1.1;1.0.0.1
+      - FTLCONF_dns_listeningMode=ALL
+      - FTLCONF_webserver_port=80o,[::]:80o
+      - FTLCONF_misc_etc_dnsmasq_d=true
+      - FTLCONF_webserver_api_password=${PIHOLE_PASSWORD:-}
+    volumes:
+      - ./etc-pihole:/etc/pihole
+      - ./etc-dnsmasq.d:/etc/dnsmasq.d
+    cap_add:
+      - SYS_NICE
+      - NET_ADMIN
+    restart: unless-stopped
