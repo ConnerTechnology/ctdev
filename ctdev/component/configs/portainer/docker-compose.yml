@@ -1,0 +1,25 @@
+# Portainer CE — web UI to view and manage this host's Docker containers,
+# images, volumes, networks, and compose stacks. Deployed to ~/portainer/;
+# users/settings persist in the portainer_data volume. Reverse-proxied by Caddy
+# at https://portainer.<domain> (port 9000) and reachable directly on the LAN /
+# Tailscale at https://<node>:9443 (self-signed).
+#
+# Mounting the Docker socket gives Portainer root-equivalent control of the
+# host — expected for this kind of tool, but keep it off any public network.
+services:
+  portainer:
+    container_name: portainer
+    image: portainer/portainer-ce:latest
+    # --http-enabled serves plain HTTP on 9000 for Caddy to reverse-proxy; 9443
+    # keeps Portainer's own self-signed HTTPS for direct access.
+    command: --http-enabled
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: unless-stopped
+
+volumes:
+  portainer_data:

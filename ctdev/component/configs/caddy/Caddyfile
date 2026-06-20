@@ -17,6 +17,13 @@
 		reverse_proxy host.docker.internal:80
 	}
 
+	# Portainer Docker UI, when the 'portainer' component is installed. Serves
+	# plain HTTP on 9000 (published to the host) behind this TLS terminator.
+	@portainer host portainer.{$HOMELAB_DOMAIN}
+	handle @portainer {
+		reverse_proxy host.docker.internal:9000
+	}
+
 	# Per-node extra services: drop a *.caddy snippet in ~/caddy/sites/.
 	import sites/*.caddy
 

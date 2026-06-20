@@ -51,9 +51,9 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-39 components:
+40 components:
 
-1password, age, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, portainer, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
 
 ## Homelab / Pi-hole nodes
 
@@ -78,6 +78,12 @@ running Pi-hole behind a Caddy reverse proxy:
 - `ctdev configure caddy` — writes `~/caddy/.env` (domain / ACME email / CF token)
   and, when Pi-hole is present, wires it (frees port 443, points `*.<domain>` at
   this node's Tailscale IP). Run this before `ctdev install caddy`.
+- `ctdev install portainer` — Portainer CE Docker management web UI as a
+  container deployed to `~/portainer/` (users/settings persist in the
+  portainer_data volume). The Caddy stack reverse-proxies it at
+  `https://portainer.<domain>` (port 9000); it is also reachable directly at
+  `https://<node>:9443`. No `configure` step — create the admin user on first
+  web login. The Docker socket is mounted, so keep it off any public network.
 
 Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
 default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.

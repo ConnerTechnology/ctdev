@@ -51,7 +51,14 @@ ctdev configure pihole                   # upstreams, listening mode, blocking
 ctdev install docker sops                # caddy needs docker
 ctdev configure caddy --domain example.com --acme-email you@example.com --cf-token <token>
 ctdev install caddy                      # deploy the proxy stack + bring it up
+ctdev install portainer                  # optional: Docker management web UI
 ```
+
+`ctdev install portainer` brings up Portainer CE (a web UI to view and manage
+the host's containers, images, volumes, and compose stacks). Caddy serves it at
+`https://portainer.<domain>`; it's also reachable directly at `https://<node>:9443`.
+Create the admin user on first login. It mounts the Docker socket, so keep it
+off any public network.
 
 `ctdev configure caddy` writes `~/caddy/.env` (mode 600) and, when Pi-hole is
 present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
@@ -118,7 +125,7 @@ Run `ctdev install` (no args) for an interactive component picker.
 
 ## Components
 
-39 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
+40 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
 
 ## DevContainers
 
