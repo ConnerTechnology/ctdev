@@ -31,6 +31,8 @@ ctdev configure tunnel          # VS Code tunnel service
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
+ctdev pihole export             # Snapshot Pi-hole lists to text files (for version control)
+ctdev pihole import             # Apply version-controlled Pi-hole lists, then rebuild gravity
 ctdev gpu info                  # Show GPU hardware info and signing status
 ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
 ctdev cleanup                   # Run all cleanup tasks (with prompts)
@@ -61,6 +63,11 @@ running Pi-hole behind a Caddy reverse proxy:
 
 - `ctdev install pihole` — official unattended Pi-hole install + base config.
 - `ctdev configure pihole` — upstream resolvers, listening mode, blocking on/off.
+- `ctdev pihole export` / `ctdev pihole import` — version-control the lists. Export
+  snapshots adlists, allow/deny lists, and regex filters to plain-text files under
+  `component/configs/pihole/` (embedded; diffable in git); import applies them and
+  rebuilds gravity (additive). Custom DNS records are SOPS-encrypted to
+  `component/configs/pihole/hosts/<node>.sops.json` (rule in `.sops.yaml`).
 - `ctdev install caddy` — deploys the Caddy stack from `component/configs/caddy/`
   to `~/caddy/` and runs `docker compose up`. The stack is generic; the domain,
   ACME email, and Cloudflare token come from `~/caddy/.env`.

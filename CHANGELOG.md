@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- `ctdev pihole export` / `ctdev pihole import` to version-control Pi-hole's configuration. Export writes the adlists, allow/deny lists, and allow/deny regex filters as plain-text files under `ctdev/component/configs/pihole/` (diffable in git); import applies them back and rebuilds gravity, so a node's lists are reproducible. Custom DNS records (internal hostnames → private IPs) are SOPS-encrypted to `hosts/<node>.sops.json` instead of committed in the clear.
+
+### Fixed
+- `.sops.yaml` now points at the `caddy` host-config path (it was left at the old `homelab` path after the component was renamed).
+
 ## [10.2.0] - 2026-06-19
 
 ### Added
