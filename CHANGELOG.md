@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Trimmed the bundled Pi-hole adlists (21 → 10): HaGeZi Pro++ stays the primary all-round list, plus unique-category lists (gambling, spam-TLDs, smart-TV, fakenews, first-party trackers) and authoritative threat feeds (HaGeZi TIF + Hoster, ThreatFox, URLhaus). Dropped overlapping general lists (StevenBlack, oisd, AdAway, Disconnect, EasyList, redundant crypto/malware mirrors) per HaGeZi's "don't stack" guidance, and removed HaGeZi's referral *allowlist* that was mistakenly loaded as a blocklist.
+
 ## [10.5.0] - 2026-06-20
 
 ### Added
