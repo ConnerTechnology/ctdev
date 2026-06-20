@@ -98,14 +98,14 @@ func importCustomDNS(ctx context.Context, o sysutil.Opts) error {
 		fmt.Printf("  [dry-run] set %d custom DNS + %d CNAME records\n", len(dns.Hosts), len(dns.CnameRecords))
 		return nil
 	}
-	if err := sysutil.SudoRun(ctx, o, "pihole-FTL", "--config", "dns.hosts", jsonArray(dns.Hosts)); err != nil {
+	if err := sysutil.PiholeRun(ctx, o, "pihole-FTL", "--config", "dns.hosts", jsonArray(dns.Hosts)); err != nil {
 		return err
 	}
-	if err := sysutil.SudoRun(ctx, o, "pihole-FTL", "--config", "dns.cnameRecords", jsonArray(dns.CnameRecords)); err != nil {
+	if err := sysutil.PiholeRun(ctx, o, "pihole-FTL", "--config", "dns.cnameRecords", jsonArray(dns.CnameRecords)); err != nil {
 		return err
 	}
 	fmt.Printf("  custom DNS       %d records\n", len(dns.Hosts)+len(dns.CnameRecords))
-	return sysutil.SudoRun(ctx, o, "systemctl", "restart", "pihole-FTL")
+	return sysutil.PiholeReload(ctx, o)
 }
 
 // readCustomDNSCipher returns the encrypted custom-DNS file from --from DIR when
@@ -124,17 +124,13 @@ func readCustomDNSCipher() ([]byte, bool) {
 	return nil, false
 }
 
-// piholeConfig reads a pihole-FTL config key with sudo (falling back to an
-// interactive sudo if the non-interactive one fails).
+// piholeConfig reads a pihole-FTL config key from the container or host install.
 func piholeConfig(ctx context.Context, key string) string {
-	if out, err := exec.CommandContext(ctx, "sudo", "-n", "pihole-FTL", "--config", key).Output(); err == nil {
-		return strings.TrimSpace(string(out))
-	}
-	out, err := exec.CommandContext(ctx, "sudo", "pihole-FTL", "--config", key).Output()
+	out, err := sysutil.PiholeCapture(ctx, "pihole-FTL", "--config", key)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // parsePiholeArray turns pihole-FTL's "[ a, b, c ]" array rendering into a slice
