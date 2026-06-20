@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -78,8 +77,8 @@ func init() {
 }
 
 func runPiholeExport(cmd *cobra.Command, args []string) error {
-	if !sysutil.CommandExists("pihole") {
-		return fmt.Errorf("pihole is not installed on this host")
+	if !sysutil.PiholeAvailable() {
+		return fmt.Errorf("pihole is not installed (host or container) on this node")
 	}
 	ctx := cmdContext(cmd)
 	if err := os.MkdirAll(flagPiholeOut, 0o755); err != nil {
@@ -117,8 +116,8 @@ func runPiholeExport(cmd *cobra.Command, args []string) error {
 }
 
 func runPiholeImport(cmd *cobra.Command, args []string) error {
-	if !sysutil.CommandExists("pihole") {
-		return fmt.Errorf("pihole is not installed on this host")
+	if !sysutil.PiholeAvailable() {
+		return fmt.Errorf("pihole is not installed (host or container) on this node")
 	}
 	ctx := cmdContext(cmd)
 	if !flagDryRun {
@@ -145,7 +144,7 @@ func runPiholeImport(cmd *cobra.Command, args []string) error {
 			cliArgs = append(cliArgs, entries...)
 			if o.DryRun {
 				fmt.Printf("  [dry-run] pihole %s (%d entries)\n", strings.Join(l.applyCLI, " "), len(entries))
-			} else if err := sysutil.SudoRun(ctx, o, "pihole", cliArgs...); err != nil {
+			} else if err := sysutil.PiholeRun(ctx, o, append([]string{"pihole"}, cliArgs...)...); err != nil {
 				return fmt.Errorf("apply %s: %w", l.file, err)
 			}
 		}
@@ -162,7 +161,7 @@ func runPiholeImport(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	fmt.Println("\n  Rebuilding gravity (pihole -g)...")
-	return sysutil.SudoRun(ctx, o, "pihole", "-g")
+	return sysutil.PiholeRun(ctx, o, "pihole", "-g")
 }
 
 // importAdlists inserts adlist URLs into gravity.db (idempotently) and links
@@ -178,21 +177,13 @@ func importAdlists(ctx context.Context, o sysutil.Opts, urls []string) error {
 		fmt.Printf("  [dry-run] insert %d adlists into gravity.db\n", len(urls))
 		return nil
 	}
-	return sysutil.SudoRun(ctx, o, "pihole-FTL", "sqlite3", gravityDB, sb.String())
+	return sysutil.PiholeRun(ctx, o, "pihole-FTL", "sqlite3", gravityDB, sb.String())
 }
 
-// gravityQuery runs a read-only query against gravity.db with sudo and returns
-// stdout. Sudo is primed by the configure path; export primes it too.
+// gravityQuery runs a read-only query against gravity.db (container or host
+// install) and returns stdout.
 func gravityQuery(ctx context.Context, query string) (string, error) {
-	out, err := exec.CommandContext(ctx, "sudo", "-n", "pihole-FTL", "sqlite3", gravityDB, query).Output()
-	if err != nil {
-		// Fall back to a sudo prompt if the non-interactive one failed.
-		out, err = exec.CommandContext(ctx, "sudo", "pihole-FTL", "sqlite3", gravityDB, query).Output()
-		if err != nil {
-			return "", err
-		}
-	}
-	return string(out), nil
+	return sysutil.PiholeCapture(ctx, "pihole-FTL", "sqlite3", gravityDB, query)
 }
 
 // writeListFile writes a managed list file with a header comment.

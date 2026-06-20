@@ -129,10 +129,10 @@ func CaddyWriteEnv(domain, email, token string) error {
 // LAN and remotely. Skips the DNS record (with a note) until Tailscale is up.
 func CaddyWirePihole(ctx context.Context, o sysutil.Opts, domain string) error {
 	// Pi-hole keeps plain HTTP on 80; Caddy terminates TLS on 443.
-	if err := sysutil.SudoRun(ctx, o, "pihole-FTL", "--config", "webserver.port", "80o,[::]:80o"); err != nil {
+	if err := sysutil.PiholeRun(ctx, o, "pihole-FTL", "--config", "webserver.port", "80o,[::]:80o"); err != nil {
 		return err
 	}
-	if err := sysutil.SudoRun(ctx, o, "pihole-FTL", "--config", "misc.etc_dnsmasq_d", "true"); err != nil {
+	if err := sysutil.PiholeRun(ctx, o, "pihole-FTL", "--config", "misc.etc_dnsmasq_d", "true"); err != nil {
 		return err
 	}
 
@@ -141,13 +141,28 @@ func CaddyWirePihole(ctx context.Context, o sysutil.Opts, domain string) error {
 		fmt.Fprintln(o.Stdout, "Tailscale IP not available yet — skipping wildcard DNS record (run 'sudo tailscale up', then re-run 'ctdev configure caddy')")
 	} else {
 		record := fmt.Sprintf("address=/%s/%s\n", domain, tsIP)
-		if err := sysutil.SudoWriteFile(ctx, o, record, "/etc/dnsmasq.d/02-homelab.conf"); err != nil {
+		if err := writeDnsmasqRecord(ctx, o, record); err != nil {
 			return err
 		}
 		fmt.Fprintf(o.Stdout, "Pi-hole resolves *.%s → %s\n", domain, tsIP)
 	}
 
-	return sysutil.SudoRun(ctx, o, "systemctl", "restart", "pihole-FTL")
+	return sysutil.PiholeReload(ctx, o)
+}
+
+// writeDnsmasqRecord writes Pi-hole's dnsmasq drop-in. For a containerized
+// Pi-hole it lands in the bind-mounted ~/pihole/etc-dnsmasq.d (no sudo); for a
+// host install, in /etc/dnsmasq.d (sudo).
+func writeDnsmasqRecord(ctx context.Context, o sysutil.Opts, record string) error {
+	if sysutil.PiholeContainerized() {
+		home, _ := os.UserHomeDir()
+		dir := filepath.Join(home, "pihole", "etc-dnsmasq.d")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dir, "02-homelab.conf"), []byte(record), 0o644)
+	}
+	return sysutil.SudoWriteFile(ctx, o, record, "/etc/dnsmasq.d/02-homelab.conf")
 }
 
 func caddyTailscaleIP(ctx context.Context) string {

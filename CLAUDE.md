@@ -61,8 +61,10 @@ ctdev has no "homelab mode" — you compose a node from individual components an
 `configure` categories, the same way you would a desktop. For a Raspberry Pi
 running Pi-hole behind a Caddy reverse proxy:
 
-- `ctdev install pihole` — official unattended Pi-hole install + base config.
-- `ctdev configure pihole` — upstream resolvers, listening mode, blocking on/off.
+- `ctdev install pihole` — Pi-hole as a Docker container (official image, host
+  networking) deployed to `~/pihole/`; config/lists persist in `./etc-pihole`.
+- `ctdev configure pihole` — upstream resolvers, listening mode, blocking on/off
+  (runs against the container via `docker exec`, or a native install if present).
 - `ctdev pihole export` / `ctdev pihole import` — version-control the lists. Export
   snapshots adlists, allow/deny lists, and regex filters to plain-text files under
   `component/configs/pihole/` (embedded; diffable in git); import applies them and

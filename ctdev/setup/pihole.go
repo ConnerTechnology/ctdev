@@ -2,7 +2,6 @@ package setup
 
 import (
 	"context"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -26,24 +25,20 @@ var piholeUpstreamPresets = map[string][]string{
 
 var ipv4Re = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}`)
 
-// piholeInstalled reports whether the pihole CLI is present; used as a
-// HardwareFn so the Pi-hole settings only show on a node that runs Pi-hole.
+// piholeInstalled reports whether Pi-hole is present (container or host); used
+// as a HardwareFn so the Pi-hole settings only show on a node that runs Pi-hole.
 func piholeInstalled() bool {
-	_, err := exec.LookPath("pihole")
-	return err == nil
+	return sysutil.PiholeAvailable()
 }
 
-// piholeConfigRead returns the current value of a pihole-FTL config key,
-// preferring a privileged read and falling back to an unprivileged one.
+// piholeConfigRead returns the current value of a pihole-FTL config key, read
+// from the container or host install via the shared Pi-hole runtime helper.
 func piholeConfigRead(key string) string {
-	if out, err := exec.Command("sudo", "-n", "pihole-FTL", "--config", key).Output(); err == nil {
-		return strings.TrimSpace(string(out))
-	}
-	out, err := exec.Command("pihole-FTL", "--config", key).Output()
+	out, err := sysutil.PiholeCapture(context.Background(), "pihole-FTL", "--config", key)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // detectPiholeUpstreams returns the preset key matching the configured
@@ -84,7 +79,7 @@ func applyPiholeUpstreams(ctx context.Context, o sysutil.Opts, value string) err
 	if !ok {
 		return nil // "custom"/unknown: leave the user's resolvers untouched
 	}
-	return sysutil.SudoRun(ctx, o, "pihole-FTL", "--config", "dns.upstreams",
+	return sysutil.PiholeRun(ctx, o, "pihole-FTL", "--config", "dns.upstreams",
 		`["`+strings.Join(ips, `","`)+`"]`)
 }
 
@@ -97,7 +92,7 @@ func detectPiholeListenMode() string {
 // applyPiholeListenMode sets Pi-hole's listening mode. The pihole-FTL restart
 // happens once via the "pihole-ftl" post-apply hook.
 func applyPiholeListenMode(ctx context.Context, o sysutil.Opts, value string) error {
-	return sysutil.SudoRun(ctx, o, "pihole-FTL", "--config", "dns.listeningMode", value)
+	return sysutil.PiholeRun(ctx, o, "pihole-FTL", "--config", "dns.listeningMode", value)
 }
 
 // detectPiholeBlocking reports whether Pi-hole blocking is active.
@@ -112,14 +107,14 @@ func detectPiholeBlocking() string {
 // which applies the change live (no restart needed).
 func applyPiholeBlocking(ctx context.Context, o sysutil.Opts, value string) error {
 	if value == "disabled" {
-		return sysutil.SudoRun(ctx, o, "pihole", "disable")
+		return sysutil.PiholeRun(ctx, o, "pihole", "disable")
 	}
-	return sysutil.SudoRun(ctx, o, "pihole", "enable")
+	return sysutil.PiholeRun(ctx, o, "pihole", "enable")
 }
 
 // applyPiholeRestart restarts pihole-FTL so config changes (upstreams, listen
 // mode) take effect. Registered as the post-apply hook for the "pihole-ftl"
 // group so it runs at most once per configure run.
 func applyPiholeRestart(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoRun(ctx, o, "systemctl", "restart", "pihole-FTL")
+	return sysutil.PiholeReload(ctx, o)
 }

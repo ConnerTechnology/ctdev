@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- The `pihole` component now runs Pi-hole as a **Docker container** (official `pihole/pihole` image, host networking) instead of the native unattended installer — matching the `caddy` model, with `docker` as a prerequisite. The stack lives in `~/pihole/`; gravity.db and config persist in `./etc-pihole`. `ctdev configure pihole`, `ctdev pihole import`/`export`, and the Caddy Pi-hole wiring all detect a containerized Pi-hole and run against it via `docker exec`, falling back to a native host install when present.
+
 ## [10.3.0] - 2026-06-20
 
 ### Added
