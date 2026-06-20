@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Optional **Unbound** recursive resolver in the Pi-hole stack: an `unbound` sidecar (klutchell/unbound) bound to host loopback `127.0.0.1:5335`, plus a "Local recursive (Unbound)" upstream choice in `ctdev configure pihole` that points Pi-hole at `127.0.0.1#5335` for recursive, DNSSEC-validating resolution from the root servers (no third-party upstream sees your queries).
+
+### Changed
+- The Pi-hole container no longer pins `dns.upstreams`/`dns.listeningMode` via `FTLCONF_` env vars — `ctdev configure pihole` owns them and the choices now persist across container restarts (Pi-hole v6 reverts an env-set value to default once the env var is removed, so these are written to `./etc-pihole` instead).
+
 ## [10.4.0] - 2026-06-20
 
 ### Changed

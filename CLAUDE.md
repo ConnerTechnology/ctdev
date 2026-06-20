@@ -65,6 +65,8 @@ running Pi-hole behind a Caddy reverse proxy:
   networking) deployed to `~/pihole/`; config/lists persist in `./etc-pihole`.
 - `ctdev configure pihole` — upstream resolvers, listening mode, blocking on/off
   (runs against the container via `docker exec`, or a native install if present).
+  The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
+  served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
 - `ctdev pihole export` / `ctdev pihole import` — version-control the lists. Export
   snapshots adlists, allow/deny lists, and regex filters to plain-text files under
   `component/configs/pihole/` (embedded; diffable in git); import applies them and

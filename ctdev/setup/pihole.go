@@ -2,7 +2,6 @@ package setup
 
 import (
 	"context"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -21,9 +20,8 @@ var piholeUpstreamPresets = map[string][]string{
 	"cloudflare": {"1.1.1.1", "1.0.0.1"},
 	"quad9":      {"9.9.9.9", "149.112.112.112"},
 	"google":     {"8.8.8.8", "8.8.4.4"},
+	"unbound":    {"127.0.0.1#5335"},
 }
-
-var ipv4Re = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}`)
 
 // piholeInstalled reports whether Pi-hole is present (container or host); used
 // as a HardwareFn so the Pi-hole settings only show on a node that runs Pi-hole.
@@ -41,15 +39,30 @@ func piholeConfigRead(key string) string {
 	return strings.TrimSpace(out)
 }
 
+// parseUpstreams turns pihole-FTL's "[ a, b ]" upstreams rendering into a slice
+// of entries (each may carry a #port, e.g. 127.0.0.1#5335).
+func parseUpstreams(s string) []string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimSuffix(s, "]")
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // detectPiholeUpstreams returns the preset key matching the configured
 // upstreams, or "custom" when the set doesn't match a known preset.
 func detectPiholeUpstreams() string {
-	got := ipv4Re.FindAllString(piholeConfigRead("dns.upstreams"), -1)
+	got := parseUpstreams(piholeConfigRead("dns.upstreams"))
 	if len(got) == 0 {
 		return ""
 	}
-	for key, ips := range piholeUpstreamPresets {
-		if sameIPSet(got, ips) {
+	for key, want := range piholeUpstreamPresets {
+		if sameIPSet(got, want) {
 			return key
 		}
 	}
