@@ -21,8 +21,10 @@ if [ ! -r "$ENV_FILE" ]; then
 	echo "!!! $ENV_FILE not readable — run as root and configure restic first" >&2
 	exit 1
 fi
+set -a
 # shellcheck source=/dev/null
 source "$ENV_FILE"
+set +a
 
 usage() { sed -n '2,18p' "$0" >&2; exit 2; }
 

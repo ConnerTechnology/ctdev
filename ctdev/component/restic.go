@@ -30,13 +30,11 @@ func resticDeploy(ctx context.Context, o sysutil.Opts, src, dest, mode string) e
 	return sysutil.SudoRun(ctx, o, "chmod", mode, dest)
 }
 
-// resticConfigured reports whether /etc/restic holds both the env file and the
-// password (checked via sudo, since /etc/restic is root-only 0700).
+// resticConfigured reports whether /etc/restic/restic.env exists (checked via
+// sudo, since /etc/restic is root-only 0700). That file holds RESTIC_PASSWORD,
+// the B2 credentials, and the repo locations.
 func resticConfigured(ctx context.Context, o sysutil.Opts) bool {
-	if err := sysutil.SudoRun(ctx, o, "test", "-f", "/etc/restic/restic.env"); err != nil {
-		return false
-	}
-	return sysutil.SudoRun(ctx, o, "test", "-f", "/etc/restic/password") == nil
+	return sysutil.SudoRun(ctx, o, "test", "-f", "/etc/restic/restic.env") == nil
 }
 
 func resticInstall(ctx context.Context, opts ExecOpts) error {
@@ -90,11 +88,12 @@ func resticInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	fmt.Fprintln(opts.Stdout, "restic installed. Finish setup to enable backups (see RECOVERY.md):")
-	fmt.Fprintln(opts.Stdout, "  1. Write a strong random password to /etc/restic/password (sudo, chmod 600)")
-	fmt.Fprintln(opts.Stdout, "     and save a copy in your password manager — losing it makes the backups unrecoverable.")
-	fmt.Fprintln(opts.Stdout, "  2. Create /etc/restic/restic.env (0600) with RESTIC_PASSWORD_FILE, B2_ACCOUNT_ID, B2_ACCOUNT_KEY, RESTIC_REPO_B2, RESTIC_REPO_LOCAL")
-	fmt.Fprintln(opts.Stdout, "  3. sudo bash -c 'source /etc/restic/restic.env; restic -r \"$RESTIC_REPO_B2\" init'")
-	fmt.Fprintln(opts.Stdout, "  4. sudo systemctl enable --now restic-backup.timer")
+	fmt.Fprintln(opts.Stdout, "  Existing node (have the age key): decrypt the committed secrets into place —")
+	fmt.Fprintln(opts.Stdout, "    sops -d ctdev/component/configs/restic/hosts/$(hostname).sops.env | sudo install -m600 /dev/stdin /etc/restic/restic.env")
+	fmt.Fprintln(opts.Stdout, "  New node: create /etc/restic/restic.env (0600) with RESTIC_PASSWORD, B2_ACCOUNT_ID,")
+	fmt.Fprintln(opts.Stdout, "    B2_ACCOUNT_KEY, RESTIC_REPO_B2, RESTIC_REPO_LOCAL, then:")
+	fmt.Fprintln(opts.Stdout, "    sudo bash -c 'set -a; source /etc/restic/restic.env; restic -r \"$RESTIC_REPO_B2\" init'")
+	fmt.Fprintln(opts.Stdout, "  Then: sudo systemctl enable --now restic-backup.timer  (or re-run 'ctdev install restic')")
 	return nil
 }
 

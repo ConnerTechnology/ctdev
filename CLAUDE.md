@@ -105,10 +105,14 @@ running Pi-hole behind a Caddy reverse proxy:
 Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
 default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.
 
-`component/configs/caddy/hosts/<node>.sops.env` holds optional SOPS-encrypted
-per-node secrets (age recipient in `.sops.yaml`); decrypt one into `~/caddy/.env`
-manually with `sops` if you prefer that over the `configure caddy` wizard.
+Per-node secrets are SOPS-encrypted under `component/configs/<svc>/hosts/<node>.sops.env`
+(age recipient in `.sops.yaml`): **caddy** (CF token), **restic** (repo password +
+B2 keys → `/etc/restic/restic.env`), **beszel** (agent KEY/TOKEN), **pihole**
+(admin password). Decrypt with `sops -d <file>` into the target path. The age
+private key (`~/.config/sops/age/keys.txt`) is the only thing that can decrypt
+them — keep it in 1Password; it is never committed or backed up.
 **Never commit a plaintext host config or an age private key.**
+See `SECRETS.md` (encryption workflow) and `RECOVERY.md` (disaster recovery).
 
 ## Directory structure
 

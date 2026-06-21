@@ -17,19 +17,34 @@ jump to the scenario you need.
 
 ## 0. What you MUST have before you can recover
 
-Backups are encrypted. Without these you cannot read them — keep them in your
-password manager (1Password), **not** only on the Pi:
+There is now **one master secret** to protect off-device: the **age private
+key**. Everything else — the restic repository password, the B2 keys, the
+Cloudflare token, the Pi-hole password, the Beszel KEY/TOKEN — is stored
+**encrypted in the dotfiles repo** (`*.sops.env` files) and is recoverable with
+that key. So you only need two things:
 
-| Item | Where it normally lives | Why it's needed |
+| Item | Where it lives | Why it's needed |
 |---|---|---|
-| **restic repository password** | `/etc/restic/password` (lost with the Pi) | Decrypts every snapshot. **No password = no recovery. Ever.** |
-| **B2 application key** (keyID + key) | `/etc/restic/restic.env` + Backblaze console | Read the offsite repo |
-| **B2 bucket name** | `ctpi01-backups` | The offsite repo location |
-| GitHub access to `ConnerTechnology/dotfiles` | — | Reinstall ctdev + stacks |
-| Cloudflare API token (for Caddy wildcard TLS) | restored from backup in `~/caddy/.env` | Re-issue/keep certs (also recoverable from backup) |
+| **age private key** | `~/.config/sops/age/keys.txt` (lost with the Pi) → **also in 1Password** | Decrypts every `*.sops.env` secret in the repo — including the restic repo password and B2 keys. **No age key = no recovery.** |
+| GitHub access to `ConnerTechnology/dotfiles` | your account | Reinstall ctdev + decrypt the committed secrets |
 
-> 🔐 **Do this now, before you ever need it:** copy `/etc/restic/password` into
-> 1Password. `sudo cat /etc/restic/password`
+> 🔐 **Do this now, before you ever need it:** copy the age private key into
+> 1Password.
+> ```bash
+> cat ~/.config/sops/age/keys.txt        # save the whole file (incl. the "# public key:" line) in 1Password
+> ```
+> The age key is **not** in any backup or in git (by design). If you lose it
+> *and* the Pi, the encrypted secrets are gone — so the 1Password copy is the
+> safety net.
+
+Encrypted secrets in the repo (decrypt with `sops -d <file>`):
+
+| File | Decrypts to | Holds |
+|---|---|---|
+| `ctdev/component/configs/restic/hosts/ctpi01.sops.env` | `/etc/restic/restic.env` | restic password, B2 keyID/key, repo paths |
+| `ctdev/component/configs/caddy/hosts/ctpi01.sops.env` | `~/caddy/.env` | domain, ACME email, Cloudflare token |
+| `ctdev/component/configs/beszel/hosts/ctpi01.sops.env` | `~/beszel/.env` | Beszel agent KEY/TOKEN |
+| `ctdev/component/configs/pihole/hosts/ctpi01.sops.env` | `~/pihole/.env` | Pi-hole admin password, TZ |
 
 ### What's in a backup
 Each snapshot (host `ctpi01`, tag `homelab`) contains:
@@ -77,7 +92,7 @@ sudo rm -rf /tmp/restore
 To restore only specific paths instead of everything, use restic directly:
 
 ```bash
-source <(sudo cat /etc/restic/restic.env)    # loads repo + creds into THIS shell
+set -a; source <(sudo cat /etc/restic/restic.env); set +a   # loads + exports repo/creds into THIS shell
 sudo -E restic -r "$RESTIC_REPO_B2" restore latest \
   --target /tmp/restore \
   --include /home/ctadmin/pihole/etc-pihole
@@ -94,7 +109,7 @@ Example: Pi-hole's database got corrupted but the OS is fine.
 docker compose -f ~/pihole/docker-compose.yml down
 
 # 2. Restore that stack's data in place from the latest snapshot
-source <(sudo cat /etc/restic/restic.env)
+set -a; source <(sudo cat /etc/restic/restic.env); set +a
 sudo -E restic -r "$RESTIC_REPO_B2" restore latest --target / \
   --include /home/ctadmin/pihole
 
@@ -110,7 +125,7 @@ For a Docker volume (e.g. Portainer's data):
 
 ```bash
 docker compose -f ~/portainer/docker-compose.yml down
-source <(sudo cat /etc/restic/restic.env)
+set -a; source <(sudo cat /etc/restic/restic.env); set +a
 sudo -E restic -r "$RESTIC_REPO_B2" restore latest --target / \
   --include /var/lib/docker/volumes/portainer_portainer_data/_data
 docker compose -f ~/portainer/docker-compose.yml up -d
@@ -156,31 +171,38 @@ Log out and back in once (so your user picks up the `docker` group), then verify
 docker ps
 ```
 
-### Step 4 — Recreate the restic config (from your password manager)
+### Step 4 — Restore the restic config from the encrypted repo
+The restic password + B2 keys are committed (encrypted) in the repo. Restore the
+**age private key** first (from 1Password), then decrypt them into place.
+
 ```bash
+# 1. Put the age private key back (paste the value saved in 1Password):
+mkdir -p ~/.config/sops/age
+nano ~/.config/sops/age/keys.txt          # paste, save; must include the AGE-SECRET-KEY line
+chmod 600 ~/.config/sops/age/keys.txt
+
+# 2. Get the dotfiles repo (for the encrypted secrets + sops):
+ctdev install sops
+git clone https://github.com/ConnerTechnology/dotfiles.git ~/src/dotfiles
+
+# 3. Decrypt the restic secrets straight into /etc/restic/restic.env:
 sudo install -d -m 700 /etc/restic
-
-# the repository password (paste the value saved in 1Password):
-sudo tee /etc/restic/password >/dev/null    # paste, then Ctrl-D
-sudo chmod 600 /etc/restic/password
-
-# the environment (fill in the B2 keyID/key from 1Password / Backblaze console):
-sudo tee /etc/restic/restic.env >/dev/null <<'EOF'
-export RESTIC_PASSWORD_FILE=/etc/restic/password
-export B2_ACCOUNT_ID=<B2_keyID>
-export B2_ACCOUNT_KEY=<B2_applicationKey>
-export RESTIC_REPO_B2=b2:ctpi01-backups:ctpi01
-export RESTIC_REPO_LOCAL=/mnt/backup/restic/ctpi01
-EOF
-sudo chmod 600 /etc/restic/restic.env
+sops -d ~/src/dotfiles/ctdev/component/configs/restic/hosts/$(hostname).sops.env \
+  | sudo install -m 600 /dev/stdin /etc/restic/restic.env
 ```
 
 Install restic + the backup/restore tooling and confirm you can read the repo:
 ```bash
-ctdev install restic
-source <(sudo cat /etc/restic/restic.env)
+ctdev install restic                               # auto-enables the timer now that config exists
+set -a; source <(sudo cat /etc/restic/restic.env); set +a
 sudo -E restic -r "$RESTIC_REPO_B2" snapshots      # should list your snapshots
 ```
+
+> While you have the age key + repo, decrypt the other node secrets too (Caddy
+> token, Pi-hole password, Beszel KEY/TOKEN) — see **[SECRETS.md](SECRETS.md)**.
+> The stack `.env` files are also included in the restic backup, so Step 5 below
+> restores them as well; decrypt manually only if you're rebuilding a stack
+> before restoring its data.
 
 ### Step 5 — Restore all data in place
 ```bash
@@ -293,7 +315,7 @@ journalctl -u restic-backup.service -n 50                    # last run's log
 
 Raw restic (when the helper isn't available, e.g. mid-rebuild):
 ```bash
-source <(sudo cat /etc/restic/restic.env)
+set -a; source <(sudo cat /etc/restic/restic.env); set +a
 sudo -E restic -r "$RESTIC_REPO_B2" snapshots
 sudo -E restic -r "$RESTIC_REPO_B2" restore latest --target /tmp/restore
 ```

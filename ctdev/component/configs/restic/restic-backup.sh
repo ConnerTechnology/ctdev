@@ -13,8 +13,10 @@ if [ ! -r "$ENV_FILE" ]; then
 	echo "!!! $ENV_FILE not readable — run as root and configure restic first" >&2
 	exit 1
 fi
+set -a
 # shellcheck source=/dev/null
 source "$ENV_FILE"
+set +a
 
 USER_HOME=${RESTIC_USER_HOME:-/home/ctadmin}
 

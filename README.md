@@ -78,6 +78,11 @@ monthly. Repo locations, B2 credentials, and the repository password go in
 Restore with `sudo restic-restore.sh` — **see [RECOVERY.md](RECOVERY.md) for the
 complete disaster-recovery runbook.**
 
+Per-node secrets (Cloudflare token, restic repo password + B2 keys, Beszel
+KEY/TOKEN, Pi-hole password) are stored **SOPS-encrypted** in the repo under
+`ctdev/component/configs/<svc>/hosts/<node>.sops.env` and decrypted with an age
+key kept in your password manager — see **[SECRETS.md](SECRETS.md)**.
+
 `ctdev configure caddy` writes `~/caddy/.env` (mode 600) and, when Pi-hole is
 present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
 set that Tailscale IP as a Global Nameserver (Override on) in the Tailscale admin
