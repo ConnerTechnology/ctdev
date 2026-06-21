@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.9.0] - 2026-06-21
+
+### Changed
+- The **pihole** component now deploys a dnsmasq tuning drop-in (`~/pihole/etc-dnsmasq.d/01-ctdev.conf`) that raises `dns-forward-max` to `500` (dnsmasq default: 150). With a recursive Unbound upstream, each in-flight query holds a forward slot longer, so a burst can transiently exhaust the default and log "Maximum number of concurrent DNS queries reached"; 500 gives headroom at negligible cost. Applied when the Pi-hole container (re)starts.
+
 ## [10.8.0] - 2026-06-20
 
 ### Added
