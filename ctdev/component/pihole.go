@@ -47,6 +47,12 @@ func piholeInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
+	// dnsmasq tuning drop-in (e.g. dns-forward-max). Read by FTL on container
+	// (re)start; harmless to redeploy.
+	if err := sysutil.DeployFileFromFS(Configs, "configs/pihole/dnsmasq.d/01-ctdev.conf", filepath.Join(dir, "etc-dnsmasq.d", "01-ctdev.conf")); err != nil {
+		return fmt.Errorf("deploy dnsmasq tuning: %w", err)
+	}
+
 	compose := filepath.Join(dir, "docker-compose.yml")
 	if err := sysutil.Run(ctx, o, "docker", "compose", "-f", compose, "up", "-d"); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)
