@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.8.0] - 2026-06-20
+
+### Added
+- New **beszel** component: Beszel server/container monitoring (hub + agent) as Docker containers deployed to `~/beszel/`. Depends on `docker`; the hub (web UI + data) is published on `8090` and reverse-proxied by Caddy at `https://beszel.<domain>` (new `@beszel` route alongside `@portainer`), and the agent monitors the host over a shared unix socket (no extra TCP port). `ctdev install beszel` brings the hub up first; create the admin user, click "Add System", put the issued `BESZEL_KEY`/`BESZEL_TOKEN` in `~/beszel/.env`, then re-run to start the agent. Keep it off any public network (Tailscale only). Per-container memory stats require the kernel memory cgroup, which is off on some customized Pi boot images (`cgroup_disable=memory` in the device-tree bootargs).
+
+### Changed
+- Added container **healthchecks** to the stacks whose images support one: `caddy` (admin API on `127.0.0.1:2019`), and `beszel`/`beszel-agent` (the binaries' built-in `health` subcommand). Pi-hole already ships its own; Portainer and Unbound are distroless (no shell/health tool) so they rely on the `restart: unless-stopped` policy.
+
 ## [10.7.0] - 2026-06-20
 
 ### Added
