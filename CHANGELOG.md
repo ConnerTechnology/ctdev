@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.11.0] - 2026-06-21
+
+### Added
+- **SECRETS.md**: documents the SOPS + age encryption workflow — what's encrypted, where the age key lives, and how to view/edit/deploy/rotate secrets (including the special case of rotating the restic repo password via `restic key`).
+- SOPS-encrypted per-node secrets for **restic** (`/etc/restic/restic.env`: repo password, B2 keys, repo paths), **beszel** (`~/beszel/.env`: agent KEY/TOKEN), and **pihole** (`~/pihole/.env`: admin password, TZ) under `component/configs/<svc>/hosts/<node>.sops.env`, with matching `.sops.yaml` rules. Caddy's host secret was already encrypted; now every node secret is recoverable from the repo with just the age key.
+
+### Changed
+- restic now keeps its password **in** `/etc/restic/restic.env` as `RESTIC_PASSWORD` (single SOPS-encryptable file) instead of a separate `/etc/restic/password` file; the backup/restore scripts `set -a` before sourcing so the values export to restic. `RECOVERY.md` updated so a rebuild restores the age key and decrypts the committed secrets rather than recreating them by hand.
+
 ## [10.10.0] - 2026-06-21
 
 ### Added
