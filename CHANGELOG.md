@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.10.0] - 2026-06-21
+
+### Added
+- New **restic** component: encrypted backups with a daily systemd timer. Installs restic and deploys `/usr/local/bin/restic-backup.sh` (snapshots the stack dirs under `$HOME` plus the Docker named-volume data dirs to an offsite Backblaze **B2** repo, and to a **local USB** repo at `/mnt/backup` when mounted, then prunes to 7 daily / 4 weekly / 6 monthly), a `restic-restore.sh` helper (`snapshots`/`ls`/`restore`/`restore-in-place`/`check`), and `restic-backup.{service,timer}`. Repo locations, B2 credentials, and the repository password live in `/etc/restic/` (root-only, **never committed**); the timer is enabled only once that config exists.
+- **RECOVERY.md**: a detailed, copy-paste disaster-recovery runbook — single-file/folder restores, per-service restores, and a full bare-metal rebuild (flash OS → ctdev → restore `/etc/restic` → `restic-restore.sh restore-in-place` → bring stacks up), plus backup-verification steps and a command cheat sheet.
+
 ## [10.9.0] - 2026-06-21
 
 ### Changed
