@@ -51,9 +51,9 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-41 components:
+42 components:
 
-1password, age, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, portainer, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, portainer, restic, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
 
 ## Homelab / Pi-hole nodes
 
@@ -93,6 +93,14 @@ running Pi-hole behind a Caddy reverse proxy:
   agent. Keep it off any public network (Tailscale only). Note: per-container
   memory stats need the kernel memory cgroup, which is off on some customized
   Pi boot images (`cgroup_disable=memory` baked into the device-tree bootargs).
+- `ctdev install restic` — restic backups with a daily systemd timer. Installs
+  restic and deploys `/usr/local/bin/restic-backup.sh` (snapshots the stack dirs
+  under `$HOME` + Docker named-volume data dirs to an offsite B2 repo and a local
+  USB repo at `/mnt/backup` when mounted, then prunes 7d/4w/6m),
+  `/usr/local/bin/restic-restore.sh` (a restore helper), and
+  `restic-backup.{service,timer}`. Repo locations, B2 creds, and the repo
+  password live in `/etc/restic/` (root-only, **never committed**); the timer is
+  enabled only once that config exists. **Full restore runbook: `RECOVERY.md`.**
 
 Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
 default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.

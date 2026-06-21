@@ -53,6 +53,7 @@ ctdev configure caddy --domain example.com --acme-email you@example.com --cf-tok
 ctdev install caddy                      # deploy the proxy stack + bring it up
 ctdev install portainer                  # optional: Docker management web UI
 ctdev install beszel                      # optional: server/container monitoring
+ctdev install restic                      # optional: daily backups to B2 + USB
 ```
 
 `ctdev install portainer` brings up Portainer CE (a web UI to view and manage
@@ -68,6 +69,14 @@ hub at `https://beszel.<domain>`. The install starts the hub first; create the
 admin user, click "Add System", put the issued KEY/TOKEN in `~/beszel/.env`,
 then re-run `ctdev install beszel` to start the agent. Keep it off any public
 network (Tailscale only).
+
+`ctdev install restic` installs restic and a daily backup timer that snapshots
+the stack dirs and Docker volumes to an offsite Backblaze B2 repo and a local
+USB repo (`/mnt/backup`, when mounted), pruning to 7 daily / 4 weekly / 6
+monthly. Repo locations, B2 credentials, and the repository password go in
+`/etc/restic/` (root-only, never committed); the timer enables once that's set.
+Restore with `sudo restic-restore.sh` — **see [RECOVERY.md](RECOVERY.md) for the
+complete disaster-recovery runbook.**
 
 `ctdev configure caddy` writes `~/caddy/.env` (mode 600) and, when Pi-hole is
 present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
@@ -134,7 +143,7 @@ Run `ctdev install` (no args) for an interactive component picker.
 
 ## Components
 
-41 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
+42 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
 
 ## DevContainers
 

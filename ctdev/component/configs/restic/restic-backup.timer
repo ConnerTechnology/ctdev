@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily restic homelab backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# Run on next boot if the machine was off at the scheduled time.
+Persistent=true
+# Spread load if several machines share a schedule.
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

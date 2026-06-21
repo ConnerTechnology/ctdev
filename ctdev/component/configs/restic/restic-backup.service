@@ -1,0 +1,13 @@
+[Unit]
+Description=restic homelab backup (offsite B2 + local USB when mounted)
+Documentation=https://restic.readthedocs.io
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/restic-backup.sh
+# Be gentle on the Pi / SD card while backing up.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=2h
