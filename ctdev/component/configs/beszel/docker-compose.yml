@@ -1,0 +1,56 @@
+# Beszel — lightweight server/container monitoring (host + Docker stats, alerts).
+# Deployed to ~/beszel/. Two services:
+#   * beszel        — the hub (web UI + embedded data store). Reverse-proxied by
+#                     Caddy at https://beszel.<domain> and reachable directly on
+#                     the LAN / Tailscale at http://<node>:8090.
+#   * beszel-agent  — collects THIS host's metrics. Uses host networking for
+#                     accurate network/disk stats and reads the Docker socket
+#                     (read-only) for per-container stats. It talks to the hub
+#                     over a shared unix socket (./beszel_socket), so no extra
+#                     TCP port is published.
+#
+# Bootstrap (one-time): the agent needs KEY + TOKEN issued by the hub. `ctdev
+# install beszel` brings the hub up; then create the admin account, click "Add
+# System", put the shown KEY/TOKEN in ~/beszel/.env, and re-run the install (or
+# `docker compose up -d`) to start the agent.
+#
+# Note: per-container MEMORY stats require the kernel memory cgroup; some nodes
+# (e.g. a customized Raspberry Pi image booting with cgroup_disable=memory in the
+# device-tree bootargs) ship with it off, so container memory shows blank while
+# host memory and all other stats work.
+services:
+  beszel:
+    image: henrygd/beszel:latest
+    container_name: beszel
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./beszel_data:/beszel_data
+      - ./beszel_socket:/beszel_socket
+    healthcheck:
+      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./beszel_socket:/beszel_socket
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LISTEN: /beszel_socket/beszel.sock
+      HUB_URL: http://localhost:8090
+      KEY: ${BESZEL_KEY}
+      TOKEN: ${BESZEL_TOKEN}
+    healthcheck:
+      test: ["CMD", "/agent", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

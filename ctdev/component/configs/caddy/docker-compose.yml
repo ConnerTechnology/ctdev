@@ -22,6 +22,13 @@ services:
     # host.docker.internal.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Liveness via Caddy's local admin API (127.0.0.1:2019, on by default).
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   caddy_data:

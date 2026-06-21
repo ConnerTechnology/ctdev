@@ -24,6 +24,13 @@
 		reverse_proxy host.docker.internal:9000
 	}
 
+	# Beszel monitoring hub, when the 'beszel' component is installed. Serves
+	# plain HTTP on 8090 (published to the host) behind this TLS terminator.
+	@beszel host beszel.{$HOMELAB_DOMAIN}
+	handle @beszel {
+		reverse_proxy host.docker.internal:8090
+	}
+
 	# Per-node extra services: drop a *.caddy snippet in ~/caddy/sites/.
 	import sites/*.caddy
 

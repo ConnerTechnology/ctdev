@@ -51,9 +51,9 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-40 components:
+41 components:
 
-1password, age, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, portainer, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, portainer, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
 
 ## Homelab / Pi-hole nodes
 
@@ -84,6 +84,15 @@ running Pi-hole behind a Caddy reverse proxy:
   `https://portainer.<domain>` (port 9000); it is also reachable directly at
   `https://<node>:9443`. No `configure` step — create the admin user on first
   web login. The Docker socket is mounted, so keep it off any public network.
+- `ctdev install beszel` — Beszel server/container monitoring (hub + agent) as
+  containers deployed to `~/beszel/`. The hub (web UI + data, port 8090) is
+  reverse-proxied by Caddy at `https://beszel.<domain>` via a `@beszel` route;
+  the agent monitors this host over a shared unix socket. The install brings the
+  hub up first; create the admin user, click "Add System", put the issued
+  KEY/TOKEN in `~/beszel/.env`, then re-run `ctdev install beszel` to start the
+  agent. Keep it off any public network (Tailscale only). Note: per-container
+  memory stats need the kernel memory cgroup, which is off on some customized
+  Pi boot images (`cgroup_disable=memory` baked into the device-tree bootargs).
 
 Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
 default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.
