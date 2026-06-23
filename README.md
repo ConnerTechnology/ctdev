@@ -148,7 +148,7 @@ Run `ctdev install` (no args) for an interactive component picker.
 
 ## Components
 
-42 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
+43 components across CLI tools, desktop apps, runtimes, security, infrastructure, and system utilities. Run `ctdev install` to browse interactively.
 
 ## DevContainers
 

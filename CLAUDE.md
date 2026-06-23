@@ -51,9 +51,9 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-42 components:
+43 components:
 
-1password, age, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, pihole, portainer, restic, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, nomachine, pihole, portainer, restic, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
 
 ## Homelab / Pi-hole nodes
 
