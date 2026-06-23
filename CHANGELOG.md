@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.12.0] - 2026-06-23
+
+### Added
+- New `nomachine` component (Linux/amd64): installs the NoMachine remote desktop server from the pinned NoMachine `.deb`, then scopes its NX port (4000) to the `tailscale0` interface via UFW so the desktop is reachable across the tailnet but never exposed to the LAN or internet. Uninstall removes the rule and the package. The version is pinned in `component/nomachine.go` (no apt repo / working "latest" URL upstream); bump the constants to upgrade.
+
 ## [10.11.0] - 2026-06-21
 
 ### Added
