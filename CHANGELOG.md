@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.13.0] - 2026-06-25
+
+### Changed
+- Pi-hole stack: ship a ctdev-managed Unbound tuning drop-in (`num-threads: 2`, `so-reuseport: yes`, `incoming-num-tcp: 100`, `outgoing-num-tcp: 100`), single-file bind-mounted into the image's `custom.conf.d/` so the baked-in `private-domains.conf` is preserved. Stock Unbound runs single-threaded with `incoming-num-tcp: 10`, so a burst of concurrent TCP fall-back queries (answers exceeding `edns-buffer-size` 1232, retried over TCP) could overflow the cap and get dropped, surfacing as FTL `CONNECTION_ERROR` / "Connection prematurely closed by remote server" warnings against `127.0.0.1#5335`. More threads plus a larger TCP backlog absorb the bursts.
+
 ## [10.12.0] - 2026-06-23
 
 ### Added
