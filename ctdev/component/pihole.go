@@ -53,6 +53,13 @@ func piholeInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("deploy dnsmasq tuning: %w", err)
 	}
 
+	// Unbound tuning drop-in (more threads + larger TCP backlog). Single-file
+	// bind mount into the image's custom.conf.d (see docker-compose.yml), read
+	// on Unbound (re)start; harmless to redeploy.
+	if err := sysutil.DeployFileFromFS(Configs, "configs/pihole/unbound.conf.d/tuning.conf", filepath.Join(dir, "unbound.conf.d", "tuning.conf")); err != nil {
+		return fmt.Errorf("deploy unbound tuning: %w", err)
+	}
+
 	compose := filepath.Join(dir, "docker-compose.yml")
 	if err := sysutil.Run(ctx, o, "docker", "compose", "-f", compose, "up", "-d"); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)

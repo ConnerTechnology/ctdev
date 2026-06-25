@@ -15,6 +15,11 @@ services:
     ports:
       - "127.0.0.1:5335:53/udp"
       - "127.0.0.1:5335:53/tcp"
+    volumes:
+      # ctdev tuning drop-in (more threads + larger TCP backlog so bursts of
+      # TCP fall-back queries don't get dropped). Single-file mount so the
+      # image's baked custom.conf.d/private-domains.conf is preserved.
+      - ./unbound.conf.d/tuning.conf:/etc/unbound/custom.conf.d/zz-ctdev-tuning.conf:ro
     restart: unless-stopped
 
   pihole:
