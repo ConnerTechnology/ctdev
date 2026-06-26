@@ -1,237 +1,88 @@
 package picker
 
 import (
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 )
 
 func testComponents() []component.Component {
 	return []component.Component{
 		{Name: "docker", Description: "Container runtime", Category: component.CategoryCLI, SupportedOS: []component.OS{component.OSAny}},
-		{Name: "btop", Description: "Resource monitor", Category: component.CategoryCLI, SupportedOS: []component.OS{component.OSAny}},
+		{Name: "btop", Description: "Resource monitor", Category: component.CategoryCLI, SupportedOS: []component.OS{component.OSAny}, Tags: []string{"monitor"}},
 		{Name: "chrome", Description: "Browser", Category: component.CategoryDesktop, SupportedOS: []component.OS{component.OSAny}},
 	}
 }
 
-func TestPickerSelectToggle(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-	m.moveCursor(1) // skip category header to first component
-	m.toggleSelected()
-
-	if len(m.selected) != 1 {
-		t.Errorf("expected 1 selected, got %d", len(m.selected))
+func send(m *Model, msgs ...tea.Msg) {
+	for _, msg := range msgs {
+		m.Update(msg)
 	}
 }
 
-func TestPickerQuitReturnsNoSelection(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-	m.quitting = true
+func key(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Text: string(r)} }
 
-	result := m.GetResult()
-	if !result.Quit {
+func selectAllConfirm(m *Model) Result {
+	send(m, key('a'), tea.KeyPressMsg{Code: tea.KeyEnter})
+	return m.GetResult()
+}
+
+func TestSelectAllInstallExcludesInstalled(t *testing.T) {
+	m := New(testComponents(), map[string]bool{"docker": true}, component.OSLinux, ModeInstall)
+	got := selectAllConfirm(&m).Selected
+	if contains(got, "docker") {
+		t.Error("installed docker must not be selected by select-all in install mode")
+	}
+	if !contains(got, "btop") || !contains(got, "chrome") {
+		t.Errorf("btop and chrome should be selected, got %v", got)
+	}
+}
+
+func TestGetResultDeterministicOrder(t *testing.T) {
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	// Display order: CLI (docker, btop) then Desktop (chrome).
+	want := []string{"docker", "btop", "chrome"}
+	got := selectAllConfirm(&m).Selected
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("order = %v, want %v", got, want)
+	}
+}
+
+func TestUninstallSelectsInstalled(t *testing.T) {
+	installed := map[string]bool{"docker": true, "btop": true, "chrome": true}
+	m := New(testComponents(), installed, component.OSLinux, ModeUninstall)
+	got := selectAllConfirm(&m).Selected
+	if len(got) != 3 {
+		t.Errorf("uninstall select-all should pick all installed, got %v", got)
+	}
+}
+
+func TestQuitReturnsNoSelection(t *testing.T) {
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	send(&m, key('q'))
+	if !m.GetResult().Quit {
 		t.Error("expected quit result")
 	}
 }
 
-func TestMatchTags(t *testing.T) {
-	tests := []struct {
-		name   string
-		tags   []string
-		filter string
-		want   bool
-	}{
-		{"match found", []string{"json", "parser"}, "json", true},
-		{"no match", []string{"json", "parser"}, "xml", false},
-		{"nil tags", nil, "anything", false},
-		{"case insensitive", []string{"JSON"}, "json", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := matchTags(tt.tags, tt.filter)
-			if got != tt.want {
-				t.Errorf("matchTags(%v, %q) = %v, want %v", tt.tags, tt.filter, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestMatchesFilter(t *testing.T) {
+// Filtering then select-all must scope to the visible match only.
+func TestFilterScopesSelectAll(t *testing.T) {
 	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-	docker := component.Component{Name: "docker", Description: "Container runtime"}
-
-	// Empty filter matches everything
-	if !m.matchesFilter(docker) {
-		t.Error("empty filter should match any component")
-	}
-
-	// Partial name match
-	m.filter = "dock"
-	if !m.matchesFilter(docker) {
-		t.Error("filter 'dock' should match 'docker'")
-	}
-
-	// No match
-	m.filter = "xyz"
-	if m.matchesFilter(docker) {
-		t.Error("filter 'xyz' should not match 'docker'")
+	send(&m, key('/'), key('c'), key('h'), key('r'), key('o'), key('m'), key('e'),
+		tea.KeyPressMsg{Code: tea.KeyEnter}) // apply filter "chrome"
+	got := selectAllConfirm(&m).Selected
+	if len(got) != 1 || got[0] != "chrome" {
+		t.Errorf("filtered select-all should pick only chrome, got %v", got)
 	}
 }
 
-func TestSelectAllInstallMode(t *testing.T) {
-	installed := map[string]bool{"docker": true}
-	m := New(testComponents(), installed, component.OSLinux, ModeInstall)
-
-	m.selectAll()
-
-	if m.selected["docker"] {
-		t.Error("docker is already installed and should not be selected in install mode")
-	}
-	if !m.selected["btop"] {
-		t.Error("btop should be selected")
-	}
-	if !m.selected["chrome"] {
-		t.Error("chrome should be selected")
-	}
-}
-
-func TestSelectNone(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-
-	// Select some items first
-	m.selected["docker"] = true
-	m.selected["btop"] = true
-
-	m.selectNone()
-
-	if len(m.selected) != 0 {
-		t.Errorf("expected 0 selected after selectNone, got %d", len(m.selected))
-	}
-}
-
-func TestToggleCategory(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-
-	// Move cursor to the first category header (index 0)
-	m.cursor = 0
-	if !m.items[0].isCategory {
-		t.Fatal("expected item 0 to be a category header")
-	}
-
-	m.toggleCategory()
-
-	if !m.items[0].collapsed {
-		t.Error("category should be collapsed after toggle")
-	}
-
-	m.toggleCategory()
-
-	if m.items[0].collapsed {
-		t.Error("category should be expanded after second toggle")
-	}
-}
-
-func TestCountInCategory(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-
-	count := m.countInCategory(component.CategoryCLI)
-	if count != 2 {
-		t.Errorf("expected 2 components in CategoryCLI, got %d", count)
-	}
-}
-
-func TestCountInstalled(t *testing.T) {
-	installed := map[string]bool{"docker": true}
-	m := New(testComponents(), installed, component.OSLinux, ModeInstall)
-
-	count := m.countInstalled()
-	if count != 1 {
-		t.Errorf("expected 1 installed, got %d", count)
-	}
-}
-
-func TestGetResult_DeterministicOrder(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-	m.selected["chrome"] = true
-	m.selected["docker"] = true
-	m.selected["btop"] = true
-	m.confirmed = true
-
-	// Expected order follows the display order:
-	// CLI category: btop, docker (registry order), then Desktop: chrome.
-	want := []string{"docker", "btop", "chrome"}
-	got := m.GetResult().Selected
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("index %d: got %q, want %q (full %v)", i, got[i], want[i], got)
+func contains(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
 		}
 	}
-
-	// Re-run the same selection a second time — order must not drift.
-	got2 := m.GetResult().Selected
-	for i := range got {
-		if got[i] != got2[i] {
-			t.Errorf("non-deterministic GetResult: run1=%v run2=%v", got, got2)
-			break
-		}
-	}
-}
-
-// After filtering to a single match, the cursor must land on that visible
-// match — never on a filtered-out row, which previously left the highlight on
-// an invisible item and toggled the wrong component.
-func TestFilter_CursorSnapsToVisibleMatch(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-	m.filter = "chrome"
-	m.onFilterChanged()
-
-	if !m.landable(m.cursor) {
-		t.Fatalf("cursor %d not landable after filtering", m.cursor)
-	}
-	it := m.items[m.cursor]
-	if it.isCategory || it.component.Name != "chrome" {
-		t.Errorf("cursor should rest on 'chrome', got category=%v name=%q", it.isCategory, it.component.Name)
-	}
-
-	// Toggling now must select the visible match, not a hidden row.
-	m.toggleSelected()
-	if !m.selected["chrome"] {
-		t.Errorf("expected 'chrome' selected, got %v", m.selected)
-	}
-}
-
-// windowFor must keep the cursor inside the rendered slice on a short terminal.
-func TestWindow_KeepsCursorVisible(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-	m.height = 8 // small enough to force scrolling given chrome + indicators
-
-	// Move to the last component and confirm it is within the window.
-	for i := 0; i < len(m.items); i++ {
-		m.moveCursor(1)
-	}
-	window, _, _ := m.windowFor(m.visibleIndices())
-	found := false
-	for _, idx := range window {
-		if idx == m.cursor {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("cursor %d not in rendered window %v", m.cursor, window)
-	}
-}
-
-func TestGetResult_SkipsUnselected(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
-	m.selected["docker"] = true
-	m.confirmed = true
-
-	got := m.GetResult().Selected
-	if len(got) != 1 || got[0] != "docker" {
-		t.Errorf("expected [docker], got %v", got)
-	}
+	return false
 }

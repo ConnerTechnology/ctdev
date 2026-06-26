@@ -25,6 +25,11 @@ var (
 	Unselected = lipgloss.NewStyle().Foreground(Subtle).SetString("○")
 	Cursor     = lipgloss.NewStyle().Background(lipgloss.Color("#161b22"))
 
+	// Severity badges. The uppercase label stays inside the colored block so the
+	// meaning survives without color (accessibility); contrast is tuned per bg.
+	BadgeWarn   = lipgloss.NewStyle().Foreground(lipgloss.Color("#0d1117")).Background(Yellow).Bold(true).Padding(0, 1)
+	BadgeDanger = lipgloss.NewStyle().Foreground(Bright).Background(Red).Bold(true).Padding(0, 1)
+
 	// Header is the bold-orange accent shared by section and category headers.
 	Header = lipgloss.NewStyle().Bold(true).Foreground(Orange)
 	// CategoryHeader is an alias kept for the picker/progress call sites.

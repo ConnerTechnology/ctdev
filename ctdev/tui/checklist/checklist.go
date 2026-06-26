@@ -1,16 +1,21 @@
+// Package checklist is the interactive "Available Updates" screen. It is a thin
+// adapter over tui/multiselect: it groups update items by source, renders the
+// version transition and severity badges, and maps the selection back to the
+// concrete UpdateItems the caller passes in.
 package checklist
 
 import (
 	"fmt"
-	"strings"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/multiselect"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 )
 
 type UpdateItem struct {
 	Name       string
-	Source     string // "apt", "flatpak", "git", "runtime", "brew"
+	Source     string // "apt", "flatpak", "git", "runtime", "brew", "docker", ...
 	CurrentVer string
 	NewVer     string
 	IsMajor    bool
@@ -18,13 +23,8 @@ type UpdateItem struct {
 }
 
 type Model struct {
-	items     []UpdateItem
-	cursor    int
-	selected  map[int]bool
-	quitting  bool
-	confirmed bool
-	width     int
-	height    int
+	ms    *multiselect.Model
+	items []UpdateItem
 }
 
 type Result struct {
@@ -33,116 +33,75 @@ type Result struct {
 }
 
 func New(items []UpdateItem) Model {
-	sel := make(map[int]bool)
-	for i := range items {
-		sel[i] = true // all selected by default
+	// Group by source, preserving first-seen order (matches scanAll's sort).
+	var order []string
+	groups := map[string][]int{}
+	for i, it := range items {
+		if _, ok := groups[it.Source]; !ok {
+			order = append(order, it.Source)
+		}
+		groups[it.Source] = append(groups[it.Source], i)
 	}
-	return Model{
-		items:    items,
-		selected: sel,
+
+	// Width of the current-version column, for aligned "cur → new" transitions.
+	curW := 0
+	for _, it := range items {
+		if w := len(it.CurrentVer); w > curW {
+			curW = w
+		}
 	}
+
+	var gs []multiselect.Group
+	for _, src := range order {
+		var mItems []multiselect.Item
+		for _, idx := range groups[src] {
+			it := items[idx]
+			var badges []multiselect.Badge
+			if it.IsMajor {
+				badges = append(badges, multiselect.Badge{Text: "MAJOR", Style: styles.BadgeWarn})
+			}
+			if it.IsKernel {
+				badges = append(badges, multiselect.Badge{Text: "KERNEL", Style: styles.BadgeDanger})
+			}
+			mItems = append(mItems, multiselect.Item{
+				ID:         strconv.Itoa(idx),
+				Primary:    it.Name,
+				Secondary:  fmt.Sprintf("%-*s → %s", curW, it.CurrentVer, it.NewVer),
+				Badges:     badges,
+				Selectable: true,
+				Bulk:       true,
+			})
+		}
+		gs = append(gs, multiselect.Group{Key: src, Title: sourceLabel(src), Items: mItems})
+	}
+
+	ms := multiselect.New(gs, multiselect.Options{
+		Title:        "Available Updates",
+		PreselectAll: true,
+	})
+	return Model{ms: ms, items: items}
 }
 
-func (inst *Model) Init() tea.Cmd {
-	return nil
-}
+func (inst *Model) Init() tea.Cmd { return inst.ms.Init() }
 
 func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		inst.width = msg.Width
-		inst.height = msg.Height
-		return inst, nil
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			inst.quitting = true
-			return inst, tea.Quit
-		case "enter":
-			inst.confirmed = true
-			return inst, tea.Quit
-		case "up", "k":
-			if inst.cursor > 0 {
-				inst.cursor--
-			}
-		case "down", "j":
-			if inst.cursor < len(inst.items)-1 {
-				inst.cursor++
-			}
-		case "space":
-			if inst.selected[inst.cursor] {
-				delete(inst.selected, inst.cursor)
-			} else {
-				inst.selected[inst.cursor] = true
-			}
-		case "a":
-			for i := range inst.items {
-				inst.selected[i] = true
-			}
-		case "n":
-			inst.selected = make(map[int]bool)
-		}
-	}
-	return inst, nil
+	return inst, inst.ms.Update(msg)
 }
 
-func (inst *Model) View() tea.View {
-	var b strings.Builder
-
-	b.WriteString(styles.Title.Render("Available Updates"))
-	b.WriteString("\n")
-	b.WriteString(styles.Help.Render("Space toggle · a all · n none · Enter install · q quit"))
-	b.WriteString("\n\n")
-
-	currentSource := ""
-	for i, item := range inst.items {
-		if item.Source != currentSource {
-			currentSource = item.Source
-			b.WriteString(styles.CategoryHeader.Render(sourceLabel(currentSource)))
-			b.WriteString("\n")
-		}
-
-		indicator := styles.Unselected.String()
-		if inst.selected[i] {
-			indicator = styles.Selected.String()
-		}
-
-		version := styles.Dimmed.Render(fmt.Sprintf("%s → %s", item.CurrentVer, item.NewVer))
-		line := fmt.Sprintf("  %s %-30s %s", indicator, item.Name, version)
-
-		if item.IsMajor {
-			line += " " + styles.Warning.Render("MAJOR")
-		}
-		if item.IsKernel {
-			line += " " + styles.Warning.Render("KERNEL")
-		}
-
-		if i == inst.cursor {
-			line = styles.Cursor.Render(line)
-		}
-		b.WriteString(line + "\n")
-	}
-
-	selectedCount := len(inst.selected)
-	status := fmt.Sprintf("%d of %d selected", selectedCount, len(inst.items))
-	b.WriteString(styles.StatusBar.Render(status))
-
-	v := tea.NewView(b.String())
-	v.AltScreen = true
-	return v
-}
+func (inst *Model) View() tea.View { return inst.ms.View() }
 
 func (inst *Model) GetResult() Result {
-	if inst.quitting && !inst.confirmed {
+	r := inst.ms.Result()
+	if r.Quit {
 		return Result{Quit: true}
 	}
-	var selected []UpdateItem
-	for i, item := range inst.items {
-		if inst.selected[i] {
-			selected = append(selected, item)
+	var out []UpdateItem
+	for _, id := range r.Selected {
+		if idx, err := strconv.Atoi(id); err == nil && idx >= 0 && idx < len(inst.items) {
+			out = append(out, inst.items[idx])
 		}
 	}
-	return Result{Selected: selected}
+	return Result{Selected: out}
 }
 
 func sourceLabel(source string) string {
@@ -151,6 +110,10 @@ func sourceLabel(source string) string {
 		return "System Packages (apt)"
 	case "brew":
 		return "System Packages (brew)"
+	case "brew-cask":
+		return "Desktop Apps (brew cask)"
+	case "mintupdate":
+		return "System Packages (Mint)"
 	case "flatpak":
 		return "Flatpak"
 	case "git":
@@ -163,6 +126,8 @@ func sourceLabel(source string) string {
 		return "ctdev"
 	case "cli":
 		return "CLI Tools"
+	case "docker":
+		return "Docker (containers)"
 	default:
 		return source
 	}
