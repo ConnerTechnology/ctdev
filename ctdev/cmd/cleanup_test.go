@@ -2,38 +2,42 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/cleanup"
 )
 
-func TestFindDuplicateAPTSources(t *testing.T) {
-	files := map[string]string{
-		"github-cli.list":     "deb [arch=amd64] https://cli.github.com/packages stable main\n",
-		"github-cli-dup.list": "deb [arch=amd64] https://cli.github.com/packages stable main\n",
-		"vscode.list":         "deb [arch=amd64] https://packages.microsoft.com/repos/code stable main\n",
+func TestHasWork(t *testing.T) {
+	cases := []struct {
+		name string
+		in   cleanup.ScanResult
+		want bool
+	}{
+		{"has bytes", cleanup.ScanResult{Bytes: 1024}, true},
+		{"zero bytes", cleanup.ScanResult{Bytes: 0}, false},
+		{"zero with none note", cleanup.ScanResult{Bytes: 0, Note: "none"}, false},
+		{"unknown with note", cleanup.ScanResult{Bytes: -1, Note: "3 packages"}, true},
+		{"unknown but none", cleanup.ScanResult{Bytes: -1, Note: "none"}, false},
 	}
-	dups := findDuplicateSourceLines(files)
-	if len(dups) != 1 {
-		t.Errorf("expected 1 duplicate, got %d", len(dups))
-	}
-}
-
-func TestFindDuplicateAPTSourcesNoDups(t *testing.T) {
-	files := map[string]string{
-		"github-cli.list": "deb [arch=amd64] https://cli.github.com/packages stable main\n",
-		"vscode.list":     "deb [arch=amd64] https://packages.microsoft.com/repos/code stable main\n",
-	}
-	dups := findDuplicateSourceLines(files)
-	if len(dups) != 0 {
-		t.Errorf("expected 0 duplicates, got %d", len(dups))
+	for _, c := range cases {
+		if got := hasWork(c.in); got != c.want {
+			t.Errorf("%s: hasWork=%v want %v", c.name, got, c.want)
+		}
 	}
 }
 
-func TestFindDuplicateAPTSourcesIgnoresComments(t *testing.T) {
-	files := map[string]string{
-		"a.list": "# comment\ndeb http://example.com stable main\n",
-		"b.list": "# comment\ndeb http://other.com stable main\n",
+func TestSizeLabel(t *testing.T) {
+	cases := []struct {
+		in   cleanup.ScanResult
+		want string
+	}{
+		{cleanup.ScanResult{Bytes: 1536}, "1.5 KB"},
+		{cleanup.ScanResult{Bytes: 1536, Note: "2 revisions"}, "1.5 KB · 2 revisions"},
+		{cleanup.ScanResult{Bytes: -1, Note: "3 packages"}, "3 packages"},
+		{cleanup.ScanResult{Bytes: 0}, "—"},
 	}
-	dups := findDuplicateSourceLines(files)
-	if len(dups) != 0 {
-		t.Errorf("expected 0 duplicates (comments ignored), got %d", len(dups))
+	for _, c := range cases {
+		if got := sizeLabel(c.in); got != c.want {
+			t.Errorf("sizeLabel(%+v)=%q want %q", c.in, got, c.want)
+		}
 	}
 }

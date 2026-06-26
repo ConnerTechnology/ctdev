@@ -141,7 +141,7 @@ ctdev backup [service...]       # Export service config to version control (defa
 ctdev restore [service...]      # Re-apply version-controlled service config
 ctdev backup now                # Run a restic data snapshot now
 ctdev backup snapshots          # List restic snapshots
-ctdev cleanup                   # Run all cleanup tasks
+ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev verify                    # Verify the bootstrap installation
 ```
 

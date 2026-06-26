@@ -36,7 +36,7 @@ ctdev backup [service...]       # Export service config to version control (defa
 ctdev restore [service...]      # Re-apply version-controlled service config (inverse of backup)
 ctdev backup now                # Run a restic data snapshot now (restic-backup.sh)
 ctdev backup snapshots [b2|local]  # List restic snapshots
-ctdev cleanup                   # Run all cleanup tasks (with prompts)
+ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev verify                    # Verify the bootstrap installation
 ```
 
@@ -129,6 +129,7 @@ See `SECRETS.md` (encryption workflow) and `RECOVERY.md` (disaster recovery).
 ```
 ctdev/                 Go module root
   cmd/                 Cobra command handlers
+  cleanup/             Disk-reclaim task catalog (Linux + macOS), scan/run
   component/           Component registry, installers, and embedded config files
     configs/           Config files deployed by installers (go:embed)
   gpu/                 GPU/NVIDIA signing management

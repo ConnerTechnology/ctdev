@@ -3,65 +3,24 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/ConnerTechnology/dotfiles/ctdev/cleanup"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/multiselect"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
-type duplicateSource struct {
-	Line  string
-	Files []string
-}
-
-func findDuplicateSourceLines(fileContents map[string]string) []duplicateSource {
-	seen := make(map[string][]string)
-	for filename, content := range fileContents {
-		for _, line := range strings.Split(content, "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			seen[line] = append(seen[line], filename)
-		}
-	}
-	var dups []duplicateSource
-	for line, files := range seen {
-		if len(files) > 1 {
-			dups = append(dups, duplicateSource{Line: line, Files: files})
-		}
-	}
-	return dups
-}
-
-func readAPTSourceFiles() map[string]string {
-	dir := "/etc/apt/sources.list.d"
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	files := make(map[string]string)
-	for _, e := range entries {
-		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".list") && !strings.HasSuffix(e.Name(), ".sources")) {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		files[e.Name()] = string(data)
-	}
-	return files
-}
-
 var cleanupCmd = &cobra.Command{
 	Use:   "cleanup",
-	Short: "Run system cleanup tasks",
-	Long:  "Remove old kernels, audit APT repositories, and clean package cache.",
-	RunE:  runCleanup,
+	Short: "Reclaim disk space (caches, logs, package junk, trash)",
+	Long: "Scan for reclaimable disk space and clean it up — package caches and orphans, " +
+		"logs, snap/flatpak leftovers, Docker junk on Linux; Homebrew, Xcode, caches and " +
+		"trash on macOS. Safe tasks are preselected; riskier ones are shown unchecked, and " +
+		"user data (device backups) is only reported, never deleted.",
+	RunE: runCleanup,
 }
 
 func init() {
@@ -70,99 +29,197 @@ func init() {
 
 func runCleanup(cmd *cobra.Command, args []string) error {
 	info := platform.Detect()
-	if info.OS != platform.Linux {
-		return fmt.Errorf("cleanup is only supported on Linux")
+	tasks := cleanup.Catalog(info)
+	if len(tasks) == 0 {
+		return fmt.Errorf("cleanup is not supported on %s", info.OS)
 	}
+	ctx := cmdContext(cmd)
 
-	tasks := []struct {
-		name    string
-		check   func() string
-		execute func() error
-	}{
-		{
-			name: "Remove old kernels",
-			check: func() string {
-				out, err := exec.Command("bash", "-c", `dpkg --list 'linux-image-[0-9]*' 2>/dev/null | grep '^ii' | grep -v "$(uname -r)" | wc -l`).Output()
-				if err != nil {
-					return "unable to check"
-				}
-				count := strings.TrimSpace(string(out))
-				return fmt.Sprintf("%s old kernels found", count)
-			},
-			execute: func() error {
-				return exec.Command("bash", "-c",
-					`dpkg --list 'linux-image-[0-9]*' 2>/dev/null | grep '^ii' | grep -v "$(uname -r)" | awk '{print $2}' | xargs sudo apt remove -y`).Run()
-			},
-		},
-		{
-			name: "Audit APT repositories",
-			check: func() string {
-				out, err := exec.Command("bash", "-c", "find /etc/apt/sources.list.d -name '*.list' 2>/dev/null | wc -l").Output()
-				if err != nil {
-					return "unable to check"
-				}
-				return fmt.Sprintf("%s repository files", strings.TrimSpace(string(out)))
-			},
-			execute: func() error {
-				files := readAPTSourceFiles()
-				dups := findDuplicateSourceLines(files)
-				if len(dups) == 0 {
-					fmt.Println("  No duplicate repositories found.")
-					return nil
-				}
-				for _, d := range dups {
-					fmt.Printf("  Duplicate: %s\n    In: %s\n", d.Line, strings.Join(d.Files, ", "))
-				}
-				return nil
-			},
-		},
-		{
-			name: "Clean package cache",
-			check: func() string {
-				out, err := exec.Command("du", "-sh", "/var/cache/apt/archives/").Output()
-				if err != nil {
-					return "unable to check"
-				}
-				fields := strings.Fields(string(out))
-				if len(fields) > 0 {
-					return fmt.Sprintf("%s cache size", fields[0])
-				}
-				return "unknown size"
-			},
-			execute: func() error {
-				return exec.Command("sudo", "apt", "clean").Run()
-			},
-		},
+	fmt.Println(styles.Dimmed.Render("Scanning for reclaimable space…"))
+	results := cleanup.ScanAll(ctx, tasks)
+
+	// Surface report-only findings (user data we never delete).
+	printReportOnly(tasks, results)
+
+	// Partition the actionable tasks that actually have something to do.
+	var actionable []cleanup.Task
+	for _, t := range tasks {
+		if t.Risk != cleanup.ReportOnly && t.Run != nil && hasWork(results[t.ID]) {
+			actionable = append(actionable, t)
+		}
 	}
-
-	labelStyle := styles.Label(30)
-	valueStyle := styles.Value
-
-	for _, task := range tasks {
-		info := task.check()
-		fmt.Printf("  %s %s\n", labelStyle.Render(task.name), valueStyle.Render(info))
+	if len(actionable) == 0 {
+		fmt.Println(styles.Success.Render("\nNothing to clean — you're tidy."))
+		return nil
 	}
 
 	if flagDryRun {
+		printActionable(actionable, results)
 		fmt.Println(styles.Dimmed.Render("\n  [dry-run] No changes made."))
 		return nil
 	}
 
-	if !isBatchMode() {
-		fmt.Print("\nProceed with cleanup? [y/N] ")
-		answer := promptLine()
-		if strings.ToLower(answer) != "y" {
+	// Select what to run: safe tier in batch, the picker interactively.
+	var selectedIDs []string
+	if isBatchMode() {
+		for _, t := range actionable {
+			if t.Risk == cleanup.Safe {
+				selectedIDs = append(selectedIDs, t.ID)
+			}
+		}
+		printActionable(actionable, results)
+	} else {
+		ids, quit, err := pickCleanupTasks(actionable, results)
+		if err != nil {
+			return err
+		}
+		if quit {
 			return nil
 		}
+		selectedIDs = ids
 	}
 
-	for _, task := range tasks {
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Running: %s...", task.name)))
-		if err := task.execute(); err != nil {
-			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("Warning: %v", err)))
+	if len(selectedIDs) == 0 {
+		fmt.Println("Nothing selected.")
+		return nil
+	}
+
+	if err := ensureSudo(); err != nil {
+		return fmt.Errorf("sudo required for cleanup: %w", err)
+	}
+
+	selected := map[string]bool{}
+	for _, id := range selectedIDs {
+		selected[id] = true
+	}
+
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	var reclaimed int64
+	for _, t := range actionable {
+		if !selected[t.ID] {
+			continue
+		}
+		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Cleaning: %s…", t.Name)))
+		if err := t.Run(ctx, o); err != nil {
+			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("warning: %v", err)))
+			continue
+		}
+		if b := results[t.ID].Bytes; b > 0 {
+			reclaimed += b
 		}
 	}
 
-	fmt.Println(styles.Success.Render("Cleanup complete."))
+	fmt.Println(styles.Success.Render(fmt.Sprintf("\nCleanup complete — reclaimed ≈ %s.", cleanup.Humanize(reclaimed))))
 	return nil
 }
+
+// hasWork reports whether a scan found anything worth offering.
+func hasWork(r cleanup.ScanResult) bool {
+	if r.Bytes > 0 {
+		return true
+	}
+	if r.Bytes < 0 { // unknown size — offer unless explicitly "none"
+		return r.Note != "none"
+	}
+	return false
+}
+
+// sizeLabel renders a scan result as the dimmed detail next to a task.
+func sizeLabel(r cleanup.ScanResult) string {
+	switch {
+	case r.Bytes > 0 && r.Note != "":
+		return cleanup.Humanize(r.Bytes) + " · " + r.Note
+	case r.Bytes > 0:
+		return cleanup.Humanize(r.Bytes)
+	case r.Note != "":
+		return r.Note
+	default:
+		return "—"
+	}
+}
+
+func printReportOnly(tasks []cleanup.Task, results map[string]cleanup.ScanResult) {
+	var found []cleanup.Task
+	for _, t := range tasks {
+		if t.Risk == cleanup.ReportOnly && hasWork(results[t.ID]) {
+			found = append(found, t)
+		}
+	}
+	if len(found) == 0 {
+		return
+	}
+	fmt.Println(styles.Header.Render("\nFound (not cleaned):"))
+	for _, t := range found {
+		fmt.Printf("  %s %s %s\n",
+			styles.Warning.Render("•"),
+			styles.Value.Render(t.Name),
+			styles.Dimmed.Render(sizeLabel(results[t.ID])))
+		if t.Detail != "" {
+			fmt.Printf("    %s\n", styles.Dimmed.Render(t.Detail))
+		}
+	}
+}
+
+func printActionable(tasks []cleanup.Task, results map[string]cleanup.ScanResult) {
+	var total int64
+	fmt.Println()
+	for _, t := range tasks {
+		fmt.Printf("  %s %s\n",
+			styles.Label(38).Render(t.Name),
+			styles.Value.Render(sizeLabel(results[t.ID])))
+		if b := results[t.ID].Bytes; b > 0 {
+			total += b
+		}
+	}
+	fmt.Printf("\n  %s ≈ %s\n", styles.Header.Render("Reclaimable"), cleanup.Humanize(total))
+}
+
+// pickCleanupTasks shows the grouped multi-select picker and returns the chosen
+// task IDs. Safe tasks start checked; opt-in tasks start unchecked.
+func pickCleanupTasks(tasks []cleanup.Task, results map[string]cleanup.ScanResult) (ids []string, quit bool, err error) {
+	var order []string
+	byGroup := map[string][]multiselect.Item{}
+	for _, t := range tasks {
+		if _, ok := byGroup[t.Group]; !ok {
+			order = append(order, t.Group)
+		}
+		byGroup[t.Group] = append(byGroup[t.Group], multiselect.Item{
+			ID:          t.ID,
+			Primary:     t.Name,
+			Secondary:   sizeLabel(results[t.ID]),
+			Note:        t.Detail,
+			Selectable:  true,
+			Bulk:        true,
+			NoPreselect: t.Risk == cleanup.OptIn,
+		})
+	}
+	var groups []multiselect.Group
+	for _, g := range order {
+		groups = append(groups, multiselect.Group{Key: g, Title: g, Items: byGroup[g]})
+	}
+
+	m := multiselect.New(groups, multiselect.Options{
+		Title:        "Reclaim disk space",
+		StatusSuffix: "· space to toggle · enter to clean",
+		PreselectAll: true,
+	})
+	wrapped := &cleanupPicker{ms: m}
+	res, runErr := tea.NewProgram(wrapped).Run()
+	resetTerminal()
+	if runErr != nil {
+		return nil, false, runErr
+	}
+	result := res.(*cleanupPicker).ms.Result()
+	if result.Quit {
+		return nil, true, nil
+	}
+	return result.Selected, false, nil
+}
+
+// cleanupPicker adapts multiselect.Model (whose Update returns only a Cmd) to
+// the tea.Model interface for standalone use.
+type cleanupPicker struct{ ms *multiselect.Model }
+
+func (p *cleanupPicker) Init() tea.Cmd                           { return p.ms.Init() }
+func (p *cleanupPicker) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return p, p.ms.Update(msg) }
+func (p *cleanupPicker) View() tea.View                          { return p.ms.View() }
