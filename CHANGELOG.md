@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.16.0] - 2026-06-26
+
+### Added
+- The TUIs now **adapt to a light terminal background**. Secondary (dimmed) and primary (bright) text colors flip between dark- and light-theme values so near-white labels and washed-out gray detail stay legible on a light terminal; brand accent colors (green/red/etc.) stay fixed since they read on both. The interactive lists (`tui/multiselect`) and the install progress screen detect the background asynchronously via Bubble Tea's `BackgroundColorMsg`, so startup never blocks — important over Mosh and other layers that may not answer the query; the standalone `ctdev info` renderer detects synchronously (2s-bounded, dark default on no reply). The selection cursor bar keeps a fixed light-on-dark chip so it reads as a solid highlight on either theme.
+- **Accessibility**: setting the `ACCESSIBLE` environment variable drops the live TUIs in favor of the plain, line-by-line path (the Charm-ecosystem convention) for screen-reader users — `ctdev update` applies non-interactively and `ctdev install`/`uninstall` take explicit component arguments.
+
+### Changed
+- The `ctdev update` checklist no longer pre-selects **MAJOR** version bumps or **KERNEL** updates — they start unchecked and you opt into them, so hitting Enter on the defaults can't apply a kernel/major upgrade. Batch/`-y` "update everything" is unchanged.
+- The install/uninstall progress bar now **resizes to the terminal width** (clamped) instead of a fixed 40 columns, and long list rows are clipped to the terminal width so they can't wrap and desync the scroll on narrow terminals.
+- `ctdev info` now honors `NO_COLOR`: it skips the background-color query and strips all color escapes from its output (the interactive TUIs already respect `NO_COLOR` via Bubble Tea's renderer).
+
 ## [10.15.0] - 2026-06-26
 
 ### Changed
