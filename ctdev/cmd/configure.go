@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -93,6 +94,22 @@ func init() {
 }
 
 func runConfigureAll(cmd *cobra.Command, args []string) error {
+	// An unknown category (e.g. `ctdev configure restic`) is not a subcommand, so
+	// cobra falls through to this parent RunE. Reject it instead of silently
+	// walking every category — only a bare `ctdev configure` runs the full sweep.
+	if len(args) > 0 {
+		var names []string
+		if cmd != nil {
+			for _, c := range cmd.Commands() {
+				if c.Name() != "help" {
+					names = append(names, c.Name())
+				}
+			}
+		}
+		sort.Strings(names)
+		return fmt.Errorf("unknown configure category %q (available: %s)", args[0], strings.Join(names, ", "))
+	}
+
 	if !flagDryRun && !flagConfigShow {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
