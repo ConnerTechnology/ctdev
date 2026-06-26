@@ -65,8 +65,8 @@ func exportCustomDNS(ctx context.Context, dir string) (int, error) {
 
 // importCustomDNS decrypts dir/hosts/<hostname>.sops.json (if present) and
 // applies the records to Pi-hole, restarting FTL. A no-op when no file exists.
-func importCustomDNS(ctx context.Context, o sysutil.Opts) error {
-	enc, ok := readCustomDNSCipher()
+func importCustomDNS(ctx context.Context, o sysutil.Opts, fromDir string) error {
+	enc, ok := readCustomDNSCipher(fromDir)
 	if !ok {
 		return nil
 	}
@@ -108,12 +108,12 @@ func importCustomDNS(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.PiholeReload(ctx, o)
 }
 
-// readCustomDNSCipher returns the encrypted custom-DNS file from --from DIR when
+// readCustomDNSCipher returns the encrypted custom-DNS file from fromDir when
 // set, else from the embedded copy. ok is false when no file exists.
-func readCustomDNSCipher() ([]byte, bool) {
+func readCustomDNSCipher(fromDir string) ([]byte, bool) {
 	rel := customDNSRelPath()
-	if flagPiholeFrom != "" {
-		if b, err := os.ReadFile(filepath.Join(flagPiholeFrom, rel)); err == nil {
+	if fromDir != "" {
+		if b, err := os.ReadFile(filepath.Join(fromDir, rel)); err == nil {
 			return b, true
 		}
 		return nil, false

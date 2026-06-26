@@ -59,8 +59,13 @@ func init() {
 	configureAWSCmd.Flags().StringVar(&flagAWSProfile, "profile", "", "AWS profile name")
 	configureCmd.AddCommand(configureAWSCmd)
 
-	// Register system configuration category subcommands.
+	// Register system configuration category subcommands. gpu is handled by a
+	// dedicated subcommand (configure_gpu.go) that also runs driver signing, so
+	// skip the generic registration for it here.
 	for _, slug := range slugOrder {
+		if slug == "gpu" {
+			continue
+		}
 		slug := slug // capture
 		cmd := &cobra.Command{
 			Use:   slug,

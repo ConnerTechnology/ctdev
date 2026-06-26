@@ -8,36 +8,15 @@ import (
 	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
-	"github.com/spf13/cobra"
 )
 
-var flagGPURecover bool
+// GPU/NVIDIA driver signing lives under `ctdev configure gpu` (see
+// configure_gpu.go) alongside the gpu settings category. These helpers carry the
+// hardware/signing logic from the gpu package up to the command layer.
 
-var gpuCmd = &cobra.Command{
-	Use:   "gpu",
-	Short: "GPU management commands",
-}
-
-var gpuInfoCmd = &cobra.Command{
-	Use:   "info",
-	Short: "Show GPU hardware info and signing status",
-	RunE:  runGPUInfo,
-}
-
-var gpuSetupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Configure NVIDIA drivers and Secure Boot signing",
-	RunE:  runGPUSetup,
-}
-
-func init() {
-	gpuSetupCmd.Flags().BoolVar(&flagGPURecover, "recover", false, "re-enroll MOK after CMOS reset")
-	gpuCmd.AddCommand(gpuInfoCmd)
-	gpuCmd.AddCommand(gpuSetupCmd)
-	rootCmd.AddCommand(gpuCmd)
-}
-
-func runGPUInfo(cmd *cobra.Command, args []string) error {
+// showGPUStatus prints GPU hardware info and Secure Boot signing status — the
+// read-only `ctdev configure gpu --show` view.
+func showGPUStatus() error {
 	info := platform.Detect()
 	if info.OS != platform.Linux {
 		return fmt.Errorf("GPU info is only supported on Linux")
@@ -71,7 +50,9 @@ func runGPUInfo(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runGPUSetup(cmd *cobra.Command, args []string) error {
+// runGPUSigning configures NVIDIA drivers and Secure Boot (MOK) signing. When
+// recover is set it re-enrolls the MOK after a CMOS reset instead.
+func runGPUSigning(ctx context.Context, recover bool) error {
 	info := platform.Detect()
 	if info.OS != platform.Linux {
 		return fmt.Errorf("GPU setup is only supported on Linux")
@@ -84,12 +65,10 @@ func runGPUSetup(cmd *cobra.Command, args []string) error {
 		Force:   flagForce,
 		Verbose: flagVerbose,
 	}
-
-	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if flagGPURecover {
+	if recover {
 		return gpu.RunRecover(ctx, opts)
 	}
 	return gpu.RunSetup(ctx, opts)

@@ -13,7 +13,7 @@ import (
 // Pi-hole runs as a container (official pihole/pihole image) with host
 // networking so it owns the host's :53 (DNS) and :80 (web, behind Caddy). The
 // stack lives in ~/pihole/; gravity.db and config persist in ./etc-pihole.
-// Reproduce the lists and settings with `ctdev pihole import` and
+// Reproduce the lists and settings with `ctdev restore pihole` and
 // `ctdev configure pihole`.
 
 func piholeDir() string {
@@ -67,7 +67,7 @@ func piholeInstall(ctx context.Context, opts ExecOpts) error {
 
 	fmt.Fprintln(opts.Stdout, "Pi-hole container up.")
 	fmt.Fprintln(opts.Stdout, "  Set an admin password: docker exec -it pihole pihole setpassword")
-	fmt.Fprintln(opts.Stdout, "  Reproduce lists/config: ctdev pihole import && ctdev configure pihole --batch")
+	fmt.Fprintln(opts.Stdout, "  Reproduce lists/config: ctdev restore pihole && ctdev configure pihole --batch")
 	return nil
 }
 

@@ -9,16 +9,17 @@ import (
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/spf13/cobra"
 )
 
 // Pi-hole's lists are version-controlled as plain-text files (one entry per
 // line) under ctdev/component/configs/pihole/, embedded in the binary. Custom
-// DNS records map internal hostnames to private IPs, so they're SOPS-encrypted
-// (see .sops.yaml) into hosts/<hostname>.sops.json rather than committed plain.
+// DNS records map internal names to private IPs, so they're SOPS-encrypted (see
+// .sops.yaml) into hosts/<hostname>.sops.json rather than committed plain.
 //
-//   ctdev pihole export   # current Pi-hole state → text files (to commit)
-//   ctdev pihole import    # text files → Pi-hole, then rebuild gravity
+// These helpers back the pihole service of `ctdev backup` / `ctdev restore`:
+//
+//   ctdev backup pihole    # current Pi-hole state → text files (to commit)
+//   ctdev restore pihole   # text files → Pi-hole, then rebuild gravity
 
 const (
 	gravityDB          = "/etc/pihole/gravity.db"
@@ -44,44 +45,14 @@ var piholeLists = []piholeList{
 	{"regex-deny.txt", "Pi-hole deny regex filters", 3, []string{"--regex"}},
 }
 
-var (
-	flagPiholeOut  string
-	flagPiholeFrom string
-)
-
-var piholeCmd = &cobra.Command{
-	Use:   "pihole",
-	Short: "Version-control Pi-hole lists (export/import)",
-	Long:  "Capture Pi-hole's adlists, allow/deny lists, and regex filters as text files for version control, and apply them back to reproduce the setup.",
-}
-
-var piholeExportCmd = &cobra.Command{
-	Use:   "export",
-	Short: "Export Pi-hole lists to text files",
-	Long:  "Read the current adlists, allow/deny lists, and regex filters from Pi-hole and write them as text files (default: " + defaultPiholeOut + "). Custom DNS records, if any, are SOPS-encrypted.",
-	RunE:  runPiholeExport,
-}
-
-var piholeImportCmd = &cobra.Command{
-	Use:   "import",
-	Short: "Apply Pi-hole lists from text files, then rebuild gravity",
-	Long:  "Apply the version-controlled adlists, allow/deny lists, and regex filters to Pi-hole and rebuild gravity. Additive: it adds entries, it does not remove ones absent from the files. Reads built-in lists unless --from is given.",
-	RunE:  runPiholeImport,
-}
-
-func init() {
-	piholeExportCmd.Flags().StringVar(&flagPiholeOut, "out", defaultPiholeOut, "directory to write list files to")
-	piholeImportCmd.Flags().StringVar(&flagPiholeFrom, "from", "", "directory to read list files from (default: built-in)")
-	piholeCmd.AddCommand(piholeExportCmd, piholeImportCmd)
-	rootCmd.AddCommand(piholeCmd)
-}
-
-func runPiholeExport(cmd *cobra.Command, args []string) error {
+// exportPihole reads the current adlists, allow/deny lists, and regex filters
+// from Pi-hole and writes them as text files under outDir; custom DNS records,
+// if any, are SOPS-encrypted alongside them.
+func exportPihole(ctx context.Context, outDir string) error {
 	if !sysutil.PiholeAvailable() {
 		return fmt.Errorf("pihole is not installed (host or container) on this node")
 	}
-	ctx := cmdContext(cmd)
-	if err := os.MkdirAll(flagPiholeOut, 0o755); err != nil {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
 
@@ -97,13 +68,13 @@ func runPiholeExport(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("read %s: %w", l.file, err)
 		}
 		entries := nonEmptyLines(out)
-		if err := writeListFile(filepath.Join(flagPiholeOut, l.file), l.header, entries); err != nil {
+		if err := writeListFile(filepath.Join(outDir, l.file), l.header, entries); err != nil {
 			return err
 		}
 		fmt.Printf("  %-16s %d entries\n", l.file, len(entries))
 	}
 
-	n, err := exportCustomDNS(ctx, flagPiholeOut)
+	n, err := exportCustomDNS(ctx, outDir)
 	if err != nil {
 		return fmt.Errorf("export custom DNS: %w", err)
 	}
@@ -111,24 +82,26 @@ func runPiholeExport(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %-16s %d records (SOPS-encrypted)\n", "custom DNS", n)
 	}
 
-	fmt.Printf("\n  Exported Pi-hole lists to %s\n", flagPiholeOut)
+	fmt.Printf("\n  Exported Pi-hole lists to %s\n", outDir)
 	return nil
 }
 
-func runPiholeImport(cmd *cobra.Command, args []string) error {
+// importPihole applies the version-controlled lists to Pi-hole and rebuilds
+// gravity. Reads built-in (embedded) lists unless fromDir is set. Additive: it
+// adds entries, it does not remove ones absent from the files.
+func importPihole(ctx context.Context, fromDir string, dryRun bool) error {
 	if !sysutil.PiholeAvailable() {
 		return fmt.Errorf("pihole is not installed (host or container) on this node")
 	}
-	ctx := cmdContext(cmd)
-	if !flagDryRun {
+	if !dryRun {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}
-	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: dryRun}
 
 	for _, l := range piholeLists {
-		entries, err := readListFile(l.file)
+		entries, err := readListFile(l.file, fromDir)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", l.file, err)
 		}
@@ -151,7 +124,7 @@ func runPiholeImport(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %-16s %d entries\n", l.file, len(entries))
 	}
 
-	if err := importCustomDNS(ctx, o); err != nil {
+	if err := importCustomDNS(ctx, o, fromDir); err != nil {
 		return fmt.Errorf("import custom DNS: %w", err)
 	}
 
@@ -189,8 +162,8 @@ func gravityQuery(ctx context.Context, query string) (string, error) {
 // writeListFile writes a managed list file with a header comment.
 func writeListFile(path, header string, entries []string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s — one per line. Managed by `ctdev pihole`.\n", header)
-	b.WriteString("# Apply with `ctdev pihole import`.\n")
+	fmt.Fprintf(&b, "# %s — one per line. Managed by `ctdev backup`.\n", header)
+	b.WriteString("# Apply with `ctdev restore pihole`.\n")
 	for _, e := range entries {
 		b.WriteString(e)
 		b.WriteByte('\n')
@@ -198,13 +171,13 @@ func writeListFile(path, header string, entries []string) error {
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
-// readListFile reads a list's entries from --from DIR when set, else from the
+// readListFile reads a list's entries from fromDir when set, else from the
 // binary's embedded copy. A missing file yields an empty list.
-func readListFile(name string) ([]string, error) {
+func readListFile(name, fromDir string) ([]string, error) {
 	var data []byte
 	var err error
-	if flagPiholeFrom != "" {
-		data, err = os.ReadFile(filepath.Join(flagPiholeFrom, name))
+	if fromDir != "" {
+		data, err = os.ReadFile(filepath.Join(fromDir, name))
 		if os.IsNotExist(err) {
 			return nil, nil
 		}

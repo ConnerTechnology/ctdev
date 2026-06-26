@@ -86,9 +86,9 @@ sudo reboot
 - NVIDIA suspend/resume/hibernate systemd services (`ctdev configure gpu`)
 - GRUB kernel parameters for video memory preservation (`ctdev configure boot`)
 
-To check current status: `ctdev gpu info`
+To check current status: `ctdev configure gpu --show`
 
-To re-run GPU signing setup: `ctdev gpu setup`
+To re-run GPU signing setup: `ctdev configure gpu`
 
 **Monitoring:**
 ```bash

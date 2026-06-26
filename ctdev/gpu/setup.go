@@ -175,7 +175,7 @@ func SignNvidiaModules(ctx context.Context, opts Opts) error {
 	signFile := fmt.Sprintf("/lib/modules/%s/build/scripts/sign-file", kernel)
 
 	if !MOKKeyExists() {
-		return fmt.Errorf("MOK keys not found — run 'ctdev gpu setup' first")
+		return fmt.Errorf("MOK keys not found — run 'ctdev configure gpu' first")
 	}
 
 	modules := FindNvidiaModules()
@@ -394,7 +394,7 @@ func RunRecover(ctx context.Context, opts Opts) error {
 	if !MOKKeyExists() {
 		fmt.Fprintf(opts.Stdout, "No MOK keys found at %s\n", MOKDir)
 		fmt.Fprintln(opts.Stdout, "Cannot recover - keys do not exist on disk.")
-		fmt.Fprintln(opts.Stdout, "Run 'ctdev gpu setup' instead to create new keys.")
+		fmt.Fprintln(opts.Stdout, "Run 'ctdev configure gpu' instead to create new keys.")
 		return fmt.Errorf("MOK keys not found")
 	}
 
@@ -491,7 +491,7 @@ func printRebootInstructions(w io.Writer, isCMOSRecovery bool) {
 	fmt.Fprintln(w, "   6. Enter the password you just set")
 	fmt.Fprintln(w, "   7. Select 'Reboot'")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "   After reboot, run 'ctdev gpu info' to verify.")
+	fmt.Fprintln(w, "   After reboot, run 'ctdev configure gpu --show' to verify.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "═══════════════════════════════════════════════════════════════")
 	fmt.Fprintln(w)

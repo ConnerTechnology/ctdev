@@ -30,11 +30,12 @@ ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
+ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
-ctdev pihole export             # Snapshot Pi-hole lists to text files (for version control)
-ctdev pihole import             # Apply version-controlled Pi-hole lists, then rebuild gravity
-ctdev gpu info                  # Show GPU hardware info and signing status
-ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
+ctdev backup [service...]       # Export service config to version control (default: all)
+ctdev restore [service...]      # Re-apply version-controlled service config (inverse of backup)
+ctdev backup now                # Run a restic data snapshot now (restic-backup.sh)
+ctdev backup snapshots [b2|local]  # List restic snapshots
 ctdev cleanup                   # Run all cleanup tasks (with prompts)
 ctdev verify                    # Verify the bootstrap installation
 ```
@@ -67,11 +68,12 @@ running Pi-hole behind a Caddy reverse proxy:
   (runs against the container via `docker exec`, or a native install if present).
   The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
   served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
-- `ctdev pihole export` / `ctdev pihole import` — version-control the lists. Export
+- `ctdev backup pihole` / `ctdev restore pihole` — version-control the lists. Backup
   snapshots adlists, allow/deny lists, and regex filters to plain-text files under
-  `component/configs/pihole/` (embedded; diffable in git); import applies them and
+  `component/configs/pihole/` (embedded; diffable in git); restore applies them and
   rebuilds gravity (additive). Custom DNS records are SOPS-encrypted to
-  `component/configs/pihole/hosts/<node>.sops.json` (rule in `.sops.yaml`).
+  `component/configs/pihole/hosts/<node>.sops.json` (rule in `.sops.yaml`). `ctdev
+  backup` with no service backs up every backup-capable service (just Pi-hole today).
 - `ctdev install caddy` — deploys the Caddy stack from `component/configs/caddy/`
   to `~/caddy/` and runs `docker compose up`. The stack is generic; the domain,
   ACME email, and Cloudflare token come from `~/caddy/.env`.
@@ -100,7 +102,9 @@ running Pi-hole behind a Caddy reverse proxy:
   `/usr/local/bin/restic-restore.sh` (a restore helper), and
   `restic-backup.{service,timer}`. Repo locations, B2 creds, and the repo
   password live in `/etc/restic/` (root-only, **never committed**); the timer is
-  enabled only once that config exists. **Full restore runbook: `RECOVERY.md`.**
+  enabled only once that config exists. Outside the timer, `ctdev backup now`
+  runs a snapshot immediately and `ctdev backup snapshots [b2|local]` lists them
+  (both shell out to these scripts via sudo). **Full restore runbook: `RECOVERY.md`.**
 
 Keeping a node current: `ctdev update` refreshes these compose stacks along with
 system packages. It checks each managed stack (pihole, caddy, beszel, portainer)

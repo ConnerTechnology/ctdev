@@ -136,8 +136,11 @@ ctdev configure ssh             # SSH server + key-based auth hardening
 ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
-ctdev gpu info                  # Show GPU hardware info and signing status
-ctdev gpu setup                 # Configure MOK signing for NVIDIA drivers
+ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
+ctdev backup [service...]       # Export service config to version control (default: all)
+ctdev restore [service...]      # Re-apply version-controlled service config
+ctdev backup now                # Run a restic data snapshot now
+ctdev backup snapshots          # List restic snapshots
 ctdev cleanup                   # Run all cleanup tasks
 ctdev verify                    # Verify the bootstrap installation
 ```
