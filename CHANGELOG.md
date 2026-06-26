@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [11.0.0] - 2026-06-26
+
+### Changed (breaking)
+- **`ctdev pihole export` / `ctdev pihole import` are gone**, replaced by general `ctdev backup` / `ctdev restore` verbs. `ctdev backup [service...]` exports a service's version-controllable state to text files you can commit (defaults to every backup-capable service — just Pi-hole today); `ctdev restore [service...]` re-applies them. For Pi-hole that's the same list/custom-DNS export and additive gravity rebuild as before — `ctdev backup pihole` / `ctdev restore pihole`. The `--out`/`--from` directory flags carry over to `backup`/`restore`.
+- **`ctdev gpu` is gone**, folded into `ctdev configure gpu` (which already existed as a settings category). `ctdev configure gpu` now applies the GPU settings category **and** runs the NVIDIA/Secure Boot (MOK) driver-signing setup; `ctdev configure gpu --show` replaces `ctdev gpu info` (hardware + signing status), and `ctdev configure gpu --recover` replaces `ctdev gpu setup --recover`. The signing flow only runs on an explicit `configure gpu`, never in the full `ctdev configure` sweep.
+
+### Added
+- `ctdev backup` also fronts the restic data backups: `ctdev backup now` runs a snapshot immediately (`restic-backup.sh`) and `ctdev backup snapshots [b2|local]` lists snapshots (`restic-restore.sh snapshots`). Both shell out via sudo and report an actionable error when the restic component isn't installed.
+
 ## [10.16.0] - 2026-06-26
 
 ### Added
