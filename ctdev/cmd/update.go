@@ -147,6 +147,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"nodenv", scanNodeEnv},
 		{"npm", scanNPMGlobals},
 		{"ctdev", scanCtdev},
+		{"docker", scanDocker},
 		{"go", scanGo},
 		{"ruby", scanRuby},
 		{"helm", scanHelm},
@@ -224,7 +225,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	sourceOrder := map[string]int{
 		"apt": 0, "mintupdate": 1, "brew": 2, "brew-cask": 3, "flatpak": 4,
 		"git": 5, "runtime": 6, "npm": 7,
-		"cli": 8, "ctdev": 9,
+		"cli": 8, "ctdev": 9, "docker": 10,
 	}
 	sort.Slice(allItems, func(i, j int) bool {
 		oi, oj := sourceOrder[allItems[i].Source], sourceOrder[allItems[j].Source]
@@ -1199,6 +1200,11 @@ func executeUpdates(ctx context.Context, allItems, items []checklist.UpdateItem)
 				fmt.Printf("  terraform update warning: %v\n", err)
 			}
 		}
+	}
+
+	// Docker compose stacks (pihole, caddy, beszel, portainer, ...)
+	if stacks := bySource["docker"]; len(stacks) > 0 {
+		updateDockerStacks(ctx, o, stacks)
 	}
 
 	fmt.Println(styles.Success.Render("Updates complete."))
