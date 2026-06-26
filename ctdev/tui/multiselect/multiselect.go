@@ -30,16 +30,17 @@ type Badge struct {
 
 // Item is one selectable row.
 type Item struct {
-	ID         string // stable selection key, unique across the whole list
-	Primary    string // main label (component / package name)
-	Secondary  string // dimmed detail (version transition or description)
-	Note       string // dimmed trailing note (e.g. "(linux only)")
-	Search     string // extra text folded into filter matching (e.g. tags)
-	Badges     []Badge
-	Group      string // owning group key (set by New)
-	Selectable bool   // cursor may land on it and Space toggles it
-	Bulk       bool   // included by select-all / none / invert / group toggle
-	Marked     bool   // pre-existing state (e.g. already installed) → ● glyph
+	ID          string // stable selection key, unique across the whole list
+	Primary     string // main label (component / package name)
+	Secondary   string // dimmed detail (version transition or description)
+	Note        string // dimmed trailing note (e.g. "(linux only)")
+	Search      string // extra text folded into filter matching (e.g. tags)
+	Badges      []Badge
+	Group       string // owning group key (set by New)
+	Selectable  bool   // cursor may land on it and Space toggles it
+	Bulk        bool   // included by select-all / none / invert / group toggle
+	Marked      bool   // pre-existing state (e.g. already installed) → ● glyph
+	NoPreselect bool   // excluded from Options.PreselectAll (e.g. a risky default)
 }
 
 // Group is an ordered section of items with a display title.
@@ -101,7 +102,7 @@ func New(groups []Group, opts Options) *Model {
 		for _, it := range g.Items {
 			it.Group = g.Key
 			rows = append(rows, row{group: g.Key, item: it})
-			if opts.PreselectAll && it.Bulk {
+			if opts.PreselectAll && it.Bulk && !it.NoPreselect {
 				selected[it.ID] = true
 			}
 		}
@@ -120,7 +121,10 @@ func New(groups []Group, opts Options) *Model {
 	return m
 }
 
-func (m *Model) Init() tea.Cmd { return nil }
+// Init asks the terminal for its background color so the palette can adapt to a
+// light theme. The reply arrives asynchronously as a tea.BackgroundColorMsg, so
+// this never blocks startup (unlike a synchronous query over e.g. Mosh).
+func (m *Model) Init() tea.Cmd { return tea.RequestBackgroundColor }
 
 // Update mutates the model in place and returns any command. Wrappers call this
 // from their own tea.Model.Update and return their outer pointer.
@@ -130,6 +134,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.help.SetWidth(msg.Width)
+	case tea.BackgroundColorMsg:
+		styles.SetDarkBackground(msg.IsDark())
 	case tea.KeyPressMsg:
 		if m.filtering {
 			m.updateFilter(msg)
@@ -422,6 +428,10 @@ func (m *Model) View() tea.View {
 		line := m.renderItem(r)
 		if i == m.cursor {
 			line = m.highlight(line)
+		} else if m.width > 0 {
+			// Clip to the terminal width so a long detail/badge row can't wrap and
+			// throw off the one-line-per-row scroll math.
+			line = ansi.Truncate(line, m.width, "…")
 		}
 		lines = append(lines, line)
 	}
@@ -525,7 +535,7 @@ func (m *Model) highlight(content string) string {
 	if w <= 0 {
 		w = lipgloss.Width(content)
 	}
-	return styles.Cursor.Foreground(styles.Bright).
+	return styles.Cursor.
 		Width(w).Inline(true).MaxWidth(w).
 		Render(ansi.Strip(content))
 }

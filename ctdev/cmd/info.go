@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"sync"
 
+	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	tuiinfo "github.com/ConnerTechnology/dotfiles/ctdev/tui/info"
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
@@ -67,9 +69,16 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	}
 
 	width, isTTY := infoTerminalSize()
+	noColor := os.Getenv("NO_COLOR") != ""
+	// info renders directly (not via Bubble Tea), so adapt the palette to the
+	// terminal background here. Only query a real terminal when we'll actually use
+	// color; the query has a 2s timeout and falls back to the dark default.
+	if isTTY && !noColor {
+		styles.SetDarkBackground(lipgloss.HasDarkBackground(os.Stdin, os.Stdout))
+	}
 	output := tuiinfo.Render(sysInfo, version, components, width)
-	// Piped/redirected output shouldn't carry color escapes.
-	if !isTTY {
+	// Strip color when piped/redirected, or when NO_COLOR is set (no-color.org).
+	if !isTTY || noColor {
 		output = ansi.Strip(output)
 	}
 	fmt.Print(output)

@@ -4,7 +4,28 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
+
+func TestProgressBarResizesToWidth(t *testing.T) {
+	val := New([]string{"docker"}, ModeInstall)
+	m := &val
+
+	// Narrow terminal clamps to the floor; wide terminal clamps to the ceiling.
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 24})
+	if got := updated.(*Model).progressBar.Width(); got != 10 {
+		t.Errorf("width 20: expected bar clamped to 10, got %d", got)
+	}
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 300, Height: 24})
+	if got := updated.(*Model).progressBar.Width(); got != 80 {
+		t.Errorf("width 300: expected bar clamped to 80, got %d", got)
+	}
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
+	if got := updated.(*Model).progressBar.Width(); got != 44 {
+		t.Errorf("width 60: expected bar 44 (60-16), got %d", got)
+	}
+}
 
 func TestProgressModelInit(t *testing.T) {
 	m := New([]string{"docker", "btop"}, ModeInstall)

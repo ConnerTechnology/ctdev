@@ -70,6 +70,9 @@ func New(items []UpdateItem) Model {
 				Badges:     badges,
 				Selectable: true,
 				Bulk:       true,
+				// Major version bumps and kernel updates are consequential, so the
+				// user opts into them rather than having Enter apply them by default.
+				NoPreselect: it.IsMajor || it.IsKernel,
 			})
 		}
 		gs = append(gs, multiselect.Group{Key: src, Title: sourceLabel(src), Items: mItems})

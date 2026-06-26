@@ -5,7 +5,25 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
+
+func TestViewClipsRowsToWidth(t *testing.T) {
+	groups := []Group{
+		{Key: "g", Title: "Group", Items: []Item{
+			{ID: "1", Primary: "short", Selectable: true, Bulk: true},
+			{ID: "2", Primary: "verylongcomponentname", Secondary: strings.Repeat("detail ", 20), Selectable: true, Bulk: true},
+		}},
+	}
+	m := New(groups, Options{Title: "T"})
+	const width = 30
+	m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
+	for _, line := range strings.Split(m.View().Content, "\n") {
+		if w := lipgloss.Width(line); w > width {
+			t.Errorf("rendered line exceeds width %d (got %d): %q", width, w, line)
+		}
+	}
+}
 
 func sample() []Group {
 	return []Group{
@@ -34,6 +52,28 @@ func TestPreselectAllOnlyBulk(t *testing.T) {
 	}
 	if m.selected["i1"] || m.selected["i2"] {
 		t.Errorf("non-bulk/unselectable items must not be preselected: %v", m.selected)
+	}
+}
+
+func TestPreselectAllSkipsNoPreselect(t *testing.T) {
+	groups := []Group{
+		{Key: "apt", Title: "System Packages (apt)", Items: []Item{
+			{ID: "a1", Primary: "curl", Selectable: true, Bulk: true, NoPreselect: true}, // risky default
+			{ID: "a2", Primary: "git", Selectable: true, Bulk: true},
+		}},
+	}
+	m := New(groups, Options{PreselectAll: true})
+	if m.selected["a1"] {
+		t.Error("NoPreselect item must not be pre-selected")
+	}
+	if !m.selected["a2"] {
+		t.Error("ordinary bulk item should still be pre-selected")
+	}
+	// It is still selectable on demand.
+	m.moveCursor(1) // header -> a1
+	m.toggle()
+	if !m.selected["a1"] {
+		t.Error("NoPreselect item should still be toggleable on")
 	}
 }
 

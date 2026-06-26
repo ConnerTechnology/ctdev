@@ -14,33 +14,43 @@ func testItems() []UpdateItem {
 	}
 }
 
-func TestChecklistAllSelectedByDefault(t *testing.T) {
+func TestChecklistPreselectsNonRiskyByDefault(t *testing.T) {
+	// curl is a major bump, so it must NOT be pre-selected; the other two are.
 	m := New(testItems())
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm
 	result := m.GetResult()
 	if result.Quit {
 		t.Fatal("expected confirm, not quit")
 	}
-	if len(result.Selected) != 3 {
-		t.Errorf("expected all 3 selected by default, got %d", len(result.Selected))
-	}
-}
-
-func TestChecklistToggleThenConfirm(t *testing.T) {
-	m := New(testItems())
-	// Cursor starts on the apt header; down lands on the first item (curl).
-	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m.Update(tea.KeyPressMsg{Code: tea.KeySpace}) // deselect curl
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm
-
-	result := m.GetResult()
 	if len(result.Selected) != 2 {
-		t.Fatalf("expected 2 selected after deselecting curl, got %d (%v)", len(result.Selected), result.Selected)
+		t.Errorf("expected 2 non-risky updates selected by default, got %d (%v)", len(result.Selected), result.Selected)
 	}
 	for _, it := range result.Selected {
 		if it.Name == "curl" {
-			t.Error("curl should have been deselected")
+			t.Error("major update curl should not be pre-selected")
 		}
+	}
+}
+
+func TestChecklistOptInToMajor(t *testing.T) {
+	m := New(testItems())
+	// Cursor starts on the apt header; down lands on the first item (curl).
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace}) // opt in to the major curl bump
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm
+
+	result := m.GetResult()
+	if len(result.Selected) != 3 {
+		t.Fatalf("expected 3 selected after opting into curl, got %d (%v)", len(result.Selected), result.Selected)
+	}
+	var hasCurl bool
+	for _, it := range result.Selected {
+		if it.Name == "curl" {
+			hasCurl = true
+		}
+	}
+	if !hasCurl {
+		t.Error("curl should have been selected after toggling it on")
 	}
 }
 

@@ -96,13 +96,21 @@ func New(names []string, mode Mode) Model {
 }
 
 func (inst *Model) Init() tea.Cmd {
-	return tea.Batch(inst.spinner.Tick, tickEvery())
+	// RequestBackgroundColor lets the palette adapt to a light terminal; the reply
+	// arrives async as a tea.BackgroundColorMsg, so it never blocks startup.
+	return tea.Batch(inst.spinner.Tick, tickEvery(), tea.RequestBackgroundColor)
 }
 
 func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		inst.width = msg.Width
+		// Size the bar to the terminal, leaving room for the "N of M" suffix and
+		// indent; clamp so it stays sane on very narrow or very wide terminals.
+		inst.progressBar.SetWidth(clamp(msg.Width-16, 10, 80))
+		return inst, nil
+	case tea.BackgroundColorMsg:
+		styles.SetDarkBackground(msg.IsDark())
 		return inst, nil
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
@@ -313,6 +321,16 @@ func (inst *Model) countDone() int {
 		}
 	}
 	return count
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func appendTail(lines []string, line string, max int) []string {

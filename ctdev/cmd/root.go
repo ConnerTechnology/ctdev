@@ -101,6 +101,11 @@ func isBatchMode() bool {
 	if flagBatch {
 		return true
 	}
+	// Screen-reader users set ACCESSIBLE to drop the live TUIs in favor of the
+	// plain, line-by-line path (the Charm-ecosystem convention).
+	if os.Getenv("ACCESSIBLE") != "" {
+		return true
+	}
 	fi, err := os.Stdin.Stat()
 	if err != nil {
 		return true
