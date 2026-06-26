@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.15.0] - 2026-06-26
+
+### Changed
+- The interactive `ctdev update` checklist and the `ctdev install`/`uninstall` picker now share a single grouped multi-select widget (`tui/multiselect`), so they look and behave identically. The big fix: long lists (e.g. a 30-package apt run) now **scroll** — a sticky title/header and footer with a scrollable middle and `↑ N more` / `↓ N more` indicators, instead of overflowing off-screen. Other improvements both screens gain: a full-width cursor highlight bar; incremental `/` filtering; `a` all · `A`/`n` none · `i` invert (scoped to the filtered subset); `space` to toggle an item or tri-state-select a whole group from its header, `tab` to collapse/expand a group; `g`/`G` jump to top/bottom; per-group counts (`· N ✓` / `· n/N`); aligned name/version columns with ellipsis truncation; and a discoverable help bar (`?` toggles compact↔full) built from the keymap. Update severity now renders as `KERNEL`/`MAJOR` badges (colored block with the label inside, so it reads without color), and the update screen labels every source (including `docker`, `mintupdate`, `brew-cask`).
+
 ## [10.14.0] - 2026-06-25
 
 ### Added
