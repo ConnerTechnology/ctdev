@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [11.1.0] - 2026-06-26
+
+### Changed
+- **`ctdev cleanup` is now a cross-platform disk reclaimer** (Linux + macOS), modeled on CleanMyMac but built in. It scans for reclaimable space without changing anything, shows the size next to each task and a total, then lets you pick what to clean in the grouped multi-select TUI — safe tasks preselected, riskier ones shown unchecked, and user data (e.g. iOS device backups) only reported, never deleted. `--dry-run` previews sizes and stops; `--batch` runs the safe tier non-interactively. Tasks are gated to the tools actually present on the machine.
+  - **Linux:** apt autoremove --purge (orphans + old kernels, keeping a fallback), apt cache, `rc`-package config purge, journal vacuum (7d), coredumps/crash dumps, rotated logs, old snap revisions, unused flatpak runtimes, thumbnail cache, `~/.cache`, Docker prune, trash.
+  - **macOS:** brew cleanup + autoremove, `~/Library/Caches`, `~/Library/Logs`, dev caches (npm/yarn/pip/go-build), Xcode (DerivedData, device support, simulator caches, `simctl delete unavailable`), Docker prune, trash, `.DS_Store` sweep, system caches, Time Machine local snapshots.
+- Fixed the duplicate-APT-repository audit, which previously flagged false positives on modern deb822 `.sources` files (every stanza repeats `Types:`/`Components:`); it now compares repository identity (URI + suite) and understands both `.list` and `.sources`. The audit is report-only — it surfaces duplicates without editing your sources.
+
+### Fixed
+- `ctdev configure <unknown>` (e.g. `configure restic`) no longer silently runs the entire configuration sweep; it errors with the list of valid categories. Only a bare `ctdev configure` runs everything.
+
 ## [11.0.0] - 2026-06-26
 
 ### Changed (breaking)
