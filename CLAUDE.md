@@ -13,7 +13,7 @@ already installed says so and jumps straight to configuration. `ctdev configure
 ```bash
 ctdev install <component...>    # Install components (then configure them)
 ctdev uninstall <component...>  # Remove specific components
-ctdev update [-y]               # Update system packages and components
+ctdev update [-y]               # Update system packages, components, and Docker stacks
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
 ctdev info                      # Show system information
@@ -101,6 +101,12 @@ running Pi-hole behind a Caddy reverse proxy:
   `restic-backup.{service,timer}`. Repo locations, B2 creds, and the repo
   password live in `/etc/restic/` (root-only, **never committed**); the timer is
   enabled only once that config exists. **Full restore runbook: `RECOVERY.md`.**
+
+Keeping a node current: `ctdev update` refreshes these compose stacks along with
+system packages. It checks each managed stack (pihole, caddy, beszel, portainer)
+for a newer image by digest — without pulling — and updates the ones you select
+(`docker compose pull && up -d`, or a `build --pull` rebuild for the locally-built
+caddy image). `ctdev update --check` lists what's available read-only.
 
 Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
 default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [10.14.0] - 2026-06-25
+
+### Added
+- `ctdev update` now updates the Docker compose stacks it manages (pihole, caddy, beszel, portainer) alongside system packages, via a new `docker` update source. It discovers installed stacks from the registry (any component whose `DetectPath` is a `docker-compose.yml`) and checks each for a newer image **without pulling**: registry images compare the local `RepoDigests` index digest against the registry's current index digest (`docker buildx imagetools inspect`), and locally-built images (caddy) are tracked through their Dockerfile base images — the remote base digests are recorded in a `~/<stack>/.ctdev-base-digests` marker (seeded on first sight, flagged when a base moves, refreshed after a rebuild) so the stack isn't flagged on every run. Selected stacks update through the same checklist as everything else: `docker compose pull && up -d` for registry stacks, `docker compose build --pull && up -d` for built ones. `ctdev update --check` lists container updates read-only (no pulls, no marker writes). Note: for caddy this tracks base-image bumps, not new versions of the xcaddy-built `caddy-dns/cloudflare` plugin.
+
 ## [10.13.0] - 2026-06-25
 
 ### Changed
