@@ -115,8 +115,6 @@ func sourceLabel(source string) string {
 		return "System Packages (brew)"
 	case "brew-cask":
 		return "Desktop Apps (brew cask)"
-	case "mintupdate":
-		return "System Packages (Mint)"
 	case "flatpak":
 		return "Flatpak"
 	case "git":

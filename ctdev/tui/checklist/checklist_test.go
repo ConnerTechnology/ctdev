@@ -79,7 +79,6 @@ func TestSourceLabel(t *testing.T) {
 		{"apt", "System Packages (apt)"},
 		{"brew", "System Packages (brew)"},
 		{"brew-cask", "Desktop Apps (brew cask)"},
-		{"mintupdate", "System Packages (Mint)"},
 		{"flatpak", "Flatpak"},
 		{"git", "Git Repositories"},
 		{"runtime", "Runtimes"},

@@ -102,7 +102,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return executeUpdates(ctx, items, selected)
+	return executeUpdates(ctx, selected)
 }
 
 // refreshAptIndex runs `apt-get update` before scanning so the upgradable list
@@ -138,7 +138,6 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 	}
 	scanners := []namedScanner{
 		{"apt", scanAPT},
-		{"mintupdate", scanMintUpdate},
 		{"flatpak", scanFlatpak},
 		{"brew", scanBrew},
 		{"brew-cask", scanBrewCask},
@@ -223,7 +222,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 
 	// Sort by source for grouped display
 	sourceOrder := map[string]int{
-		"apt": 0, "mintupdate": 1, "brew": 2, "brew-cask": 3, "flatpak": 4,
+		"apt": 0, "brew": 2, "brew-cask": 3, "flatpak": 4,
 		"git": 5, "runtime": 6, "npm": 7,
 		"cli": 8, "ctdev": 9, "docker": 10,
 	}
@@ -281,43 +280,6 @@ func scanAPT(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, err
 	}
 	return parseAPTUpgradable(string(out)), nil
-}
-
-func scanMintUpdate(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("mintupdate-cli"); err != nil {
-		return nil, nil
-	}
-	out, err := exec.CommandContext(ctx, "mintupdate-cli", "list").Output()
-	if err != nil {
-		return nil, err
-	}
-	return parseMintUpdateList(string(out)), nil
-}
-
-func parseMintUpdateList(output string) []checklist.UpdateItem {
-	var items []checklist.UpdateItem
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 3 {
-			continue
-		}
-		updateType := fields[0]
-		name := fields[1]
-		newVer := fields[2]
-		item := checklist.UpdateItem{
-			Name:   name,
-			Source: "mintupdate",
-			NewVer: newVer,
-		}
-		if updateType == "kernel" {
-			item.IsKernel = true
-		}
-		items = append(items, item)
-	}
-	return items
 }
 
 func parseFlatpakUpdates(output string) []checklist.UpdateItem {
@@ -1032,17 +994,13 @@ func printUpdateList(items []checklist.UpdateItem) {
 	fmt.Printf("\n%s\n", styles.Success.Render(fmt.Sprintf("%d updates available", len(items))))
 }
 
-func executeUpdates(ctx context.Context, allItems, items []checklist.UpdateItem) error {
+func executeUpdates(ctx context.Context, items []checklist.UpdateItem) error {
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 
 	// Group items by source
 	bySource := make(map[string][]checklist.UpdateItem)
 	for _, item := range items {
 		bySource[item.Source] = append(bySource[item.Source], item)
-	}
-	allBySource := make(map[string][]checklist.UpdateItem)
-	for _, item := range allItems {
-		allBySource[item.Source] = append(allBySource[item.Source], item)
 	}
 
 	// APT
@@ -1055,28 +1013,6 @@ func executeUpdates(ctx context.Context, allItems, items []checklist.UpdateItem)
 			// doesn't strand the brew/flatpak/runtime/cli/npm updates the user
 			// also selected.
 			fmt.Printf("  apt upgrade warning: %v\n", err)
-		}
-	}
-
-	// Mint Update Manager (kernel and other mintupdate-managed packages)
-	if pkgs := bySource["mintupdate"]; len(pkgs) > 0 {
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d mintupdate packages...", len(pkgs))))
-		selectedNames := make(map[string]bool)
-		for _, p := range pkgs {
-			selectedNames[p.Name] = true
-		}
-		var ignoreNames []string
-		for _, p := range allBySource["mintupdate"] {
-			if !selectedNames[p.Name] {
-				ignoreNames = append(ignoreNames, p.Name)
-			}
-		}
-		args := []string{"mintupdate-cli", "upgrade", "-r", "-y"}
-		if len(ignoreNames) > 0 {
-			args = append(args, "-i", strings.Join(ignoreNames, ","))
-		}
-		if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
-			fmt.Printf("  mintupdate upgrade warning: %v\n", err)
 		}
 	}
 
