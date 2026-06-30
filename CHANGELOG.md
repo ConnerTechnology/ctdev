@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [11.1.1] - 2026-06-30
+
+### Fixed
+- `ctdev update` no longer lists every system package twice on Linux Mint. Both `apt list --upgradable` and `mintupdate-cli list` enumerate the same APT database — once by binary name (`libnss3`, `libsqlite3-0`) and once by source name (`nss`, `sqlite3`) — so each pending update showed up under both "System Packages (apt)" and "System Packages (Mint)" (and would be upgraded twice). apt is now the sole system-package source; the mintupdate scanner is removed. apt already flags `linux-*` as `KERNEL` and upgrades kernels via `apt install --only-upgrade`, so kernel updates still surface — under the single apt group with the full current → new version display.
+- `ctdev cleanup`'s "Orphaned packages & old kernels" task now pins the running kernel (`apt-mark manual linux-image-$(uname -r)` plus headers, when installed) before `apt-get autoremove --purge`. Mint omits apt's `apt-auto-removal` hook, so the protect-list that normally shields the booted kernel isn't generated; pinning guarantees `--purge` can't remove the kernel you're running even if you clean up before rebooting into a freshly-installed one.
+
 ## [11.1.0] - 2026-06-26
 
 ### Changed
