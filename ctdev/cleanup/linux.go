@@ -22,6 +22,13 @@ func linuxTasks(info platform.Info) []Task {
 					return ScanResult{Bytes: parseAptFreed(captureOut(ctx, "apt-get", "-s", "autoremove", "--purge"))}
 				},
 				Run: func(ctx context.Context, o sysutil.Opts) error {
+					// Mint omits apt's apt-auto-removal hook, so the protect-list
+					// that normally shields the running kernel from autoremove
+					// isn't generated. Pin it manually first so --purge can never
+					// pull the kernel we're booted on out from under us.
+					if err := pinRunningKernel(ctx, o); err != nil {
+						return err
+					}
 					return sysutil.SudoRun(ctx, o, "apt-get", "autoremove", "--purge", "-y")
 				},
 			},
@@ -218,6 +225,26 @@ func disabledSnaps(ctx context.Context) []snapRev {
 		}
 	}
 	return revs
+}
+
+// pinRunningKernel marks the running kernel's image/header packages as manually
+// installed so `apt-get autoremove --purge` won't remove the kernel we're booted
+// on. Only installed packages are pinned — apt-mark errors on absent ones, and
+// the headers aren't always present.
+func pinRunningKernel(ctx context.Context, o sysutil.Opts) error {
+	rel := captureOut(ctx, "uname", "-r")
+	if rel == "" {
+		return nil
+	}
+	for _, pkg := range []string{"linux-image-" + rel, "linux-headers-" + rel} {
+		if !sysutil.IsPackageInstalled(pkg) {
+			continue
+		}
+		if err := sysutil.SudoRun(ctx, o, "apt-mark", "manual", pkg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // rcPackages lists packages in the "rc" state (removed, config files remain).
