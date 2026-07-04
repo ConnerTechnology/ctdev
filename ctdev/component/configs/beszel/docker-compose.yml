@@ -1,8 +1,8 @@
 # Beszel — lightweight server/container monitoring (host + Docker stats, alerts).
 # Deployed to ~/beszel/. Two services:
 #   * beszel        — the hub (web UI + embedded data store). Reverse-proxied by
-#                     Caddy at https://beszel.<domain> and reachable directly on
-#                     the LAN / Tailscale at http://<node>:8090.
+#                     Caddy at https://beszel.<domain>; the plain-HTTP port 8090
+#                     is bound to loopback + the docker bridge only (see ports).
 #   * beszel-agent  — collects THIS host's metrics. Uses host networking for
 #                     accurate network/disk stats and reads the Docker socket
 #                     (read-only) for per-container stats. It talks to the hub
@@ -23,8 +23,15 @@ services:
     image: henrygd/beszel:latest
     container_name: beszel
     restart: unless-stopped
+    # Plain HTTP with the admin login — keep it off the LAN (Docker's iptables
+    # rules bypass UFW). Loopback serves the host-networked agent's HUB_URL;
+    # 172.17.0.1 (the docker0 gateway) is where Caddy's host.docker.internal
+    # traffic arrives. Use https://beszel.<domain> via Caddy for the UI.
+    # (If your Docker daemon uses a custom default bridge subnet, adjust the
+    # gateway IP to match.)
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
+      - "172.17.0.1:8090:8090"
     volumes:
       - ./beszel_data:/beszel_data
       - ./beszel_socket:/beszel_socket

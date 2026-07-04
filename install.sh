@@ -106,24 +106,32 @@ if ! download "$BINARY_URL" "$TMP"; then
     error "Download failed. Check that a release exists for $PLATFORM at:\n  https://github.com/${REPO}/releases/tag/${VERSION}"
 fi
 
-# Verify checksum against the release's SHA256SUMS (skipped only if the release
-# predates checksum publishing or sha256sum is unavailable).
+# Verify checksum against the release's SHA256SUMS. Fail closed: a missing
+# SUMS file or sha256sum binary aborts the install — anyone who can tamper
+# with the download path could otherwise just break the SUMS fetch to skip
+# verification. CTDEV_SKIP_VERIFY=1 is the explicit escape hatch for old
+# releases that predate checksum publishing.
 SUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/SHA256SUMS"
 SUMS_TMP=$(mktemp)
 trap 'rm -f "$TMP" "$SUMS_TMP"' EXIT
-if command -v sha256sum >/dev/null 2>&1 && download "$SUMS_URL" "$SUMS_TMP" 2>/dev/null; then
-    expected=$(grep "ctdev-${PLATFORM}\$" "$SUMS_TMP" | awk '{print $1}')
-    if [[ -n "$expected" ]]; then
-        actual=$(sha256sum "$TMP" | awk '{print $1}')
-        if [[ "$expected" != "$actual" ]]; then
-            error "Checksum mismatch for ctdev-${PLATFORM}.\n  expected: $expected\n  actual:   $actual"
-        fi
-        info "Checksum verified"
-    else
-        warn "No checksum entry for ctdev-${PLATFORM}; skipping verification"
-    fi
+if [[ "${CTDEV_SKIP_VERIFY:-}" == "1" ]]; then
+    warn "CTDEV_SKIP_VERIFY=1 — skipping checksum verification"
 else
-    warn "Could not fetch SHA256SUMS; skipping checksum verification"
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        error "sha256sum is required to verify the download (or set CTDEV_SKIP_VERIFY=1 to skip)"
+    fi
+    if ! download "$SUMS_URL" "$SUMS_TMP" 2>/dev/null; then
+        error "Could not fetch SHA256SUMS for ${VERSION} — refusing to install an unverified binary.\n  Retry, or set CTDEV_SKIP_VERIFY=1 if this release predates checksums."
+    fi
+    expected=$(grep "ctdev-${PLATFORM}\$" "$SUMS_TMP" | awk '{print $1}')
+    if [[ -z "$expected" ]]; then
+        error "No checksum entry for ctdev-${PLATFORM} in SHA256SUMS — refusing to install (or set CTDEV_SKIP_VERIFY=1)"
+    fi
+    actual=$(sha256sum "$TMP" | awk '{print $1}')
+    if [[ "$expected" != "$actual" ]]; then
+        error "Checksum mismatch for ctdev-${PLATFORM}.\n  expected: $expected\n  actual:   $actual"
+    fi
+    info "Checksum verified"
 fi
 
 # Install
