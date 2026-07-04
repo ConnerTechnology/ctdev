@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
-# restic-backup.sh — snapshot the homelab stacks and Docker volumes to the
-# configured restic repos, then prune. Backs up offsite (B2) always and to the
-# local USB repo whenever /mnt/backup is mounted (3-2-1). Run as root via the
-# restic-backup.service systemd unit (needs to read Docker volume dirs).
+# restic-backup.sh — snapshot this machine's configured paths to its restic repo,
+# then prune. Backs up to the primary repo (RESTIC_REPOSITORY) always, and to an
+# optional second repo (RESTIC_REPOSITORY_LOCAL) whenever it's reachable (3-2-1).
+# Run as root via the restic-backup.service systemd unit (needs to read Docker
+# volume dirs and other root-owned paths).
 #
-# Reads /etc/restic/restic.env (root-only; NOT in the dotfiles repo) for the
-# repo locations, B2 credentials, and RESTIC_PASSWORD_FILE.
+# Config (all root-only, NONE in the dotfiles repo):
+#   /etc/restic/restic.env       repo locations, credentials, RESTIC_PASSWORD
+#   /etc/restic/backup-paths     one path per line to snapshot ('#' comments)
+#   /etc/restic/backup-excludes  optional restic --exclude patterns, one per line
+# Seed these with `ctdev configure restic`.
 set -uo pipefail
 
 ENV_FILE=${RESTIC_ENV_FILE:-/etc/restic/restic.env}
+PATHS_FILE=${RESTIC_PATHS_FILE:-/etc/restic/backup-paths}
+EXCLUDES_FILE=${RESTIC_EXCLUDES_FILE:-/etc/restic/backup-excludes}
+
 if [ ! -r "$ENV_FILE" ]; then
-	echo "!!! $ENV_FILE not readable — run as root and configure restic first" >&2
+	echo "!!! $ENV_FILE not readable — run as root and configure restic first (ctdev configure restic)" >&2
 	exit 1
 fi
 set -a
@@ -18,25 +25,45 @@ set -a
 source "$ENV_FILE"
 set +a
 
-USER_HOME=${RESTIC_USER_HOME:-/home/ctadmin}
+if [ -z "${RESTIC_REPOSITORY:-}" ]; then
+	echo "!!! RESTIC_REPOSITORY not set in $ENV_FILE — run: ctdev configure restic" >&2
+	exit 1
+fi
 
-# Stack dirs under $HOME plus Docker named-volume data dirs that exist.
-BACKUP_PATHS=(
-	"$USER_HOME/caddy"
-	"$USER_HOME/pihole"
-	"$USER_HOME/portainer"
-	"$USER_HOME/beszel"
-)
-for v in caddy_caddy_data caddy_caddy_config portainer_portainer_data; do
-	d="/var/lib/docker/volumes/$v/_data"
-	if [ -d "$d" ]; then BACKUP_PATHS+=("$d"); fi
-done
+# Read the snapshot paths (skip blanks and '#' comments). Only existing paths are
+# kept, so a host that lists a stack dir it doesn't have doesn't fail the run.
+BACKUP_PATHS=()
+if [ -r "$PATHS_FILE" ]; then
+	while IFS= read -r line; do
+		line=${line%%#*}
+		line=$(echo "$line" | xargs)
+		[ -z "$line" ] && continue
+		if [ -e "$line" ]; then
+			BACKUP_PATHS+=("$line")
+		else
+			echo ">>> skipping missing path: $line"
+		fi
+	done <"$PATHS_FILE"
+fi
+if [ "${#BACKUP_PATHS[@]}" -eq 0 ]; then
+	# Backups are opt-in: with nothing selected there's simply nothing to do.
+	# Exit cleanly so the nightly timer doesn't log a failure before you pick.
+	echo ">>> nothing to back up yet — choose folders with 'ctdev backup paths'"
+	exit 0
+fi
 
-EXCLUDES=(
-	--exclude "$USER_HOME/beszel/beszel_socket"
-	--exclude "*.sock"
-)
+EXCLUDES=(--exclude-caches --exclude "*.sock")
+if [ -r "$EXCLUDES_FILE" ]; then
+	while IFS= read -r line; do
+		line=${line%%#*}
+		line=$(echo "$line" | xargs)
+		[ -z "$line" ] && continue
+		EXCLUDES+=(--exclude "$line")
+	done <"$EXCLUDES_FILE"
+fi
+
 RETENTION=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6)
+HOSTTAG=$(hostname)
 
 overall=0
 
@@ -44,7 +71,7 @@ backup_to() {
 	local repo="$1" label="$2" rc=0
 	echo ">>> [$label] backup → $repo"
 	restic -r "$repo" backup "${BACKUP_PATHS[@]}" "${EXCLUDES[@]}" \
-		--host ctpi01 --tag homelab
+		--host "$HOSTTAG" --tag ctdev
 	rc=$?
 	# 0 = ok, 3 = completed but some source files were unreadable (non-fatal).
 	if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then
@@ -55,19 +82,31 @@ backup_to() {
 	echo ">>> [$label] ok"
 }
 
-# Offsite (always).
-backup_to "$RESTIC_REPO_B2" b2 || overall=1
+# Primary repo (always).
+backup_to "$RESTIC_REPOSITORY" primary || overall=1
 
-# Local USB (only when the drive is mounted; auto-init on first run).
-if mountpoint -q /mnt/backup; then
-	mkdir -p "$RESTIC_REPO_LOCAL"
-	if [ ! -f "$RESTIC_REPO_LOCAL/config" ]; then
-		echo ">>> initializing local repo at $RESTIC_REPO_LOCAL"
-		restic -r "$RESTIC_REPO_LOCAL" init || overall=1
-	fi
-	backup_to "$RESTIC_REPO_LOCAL" local || overall=1
-else
-	echo ">>> /mnt/backup not mounted — skipping local repo"
+# Optional second copy. For a local-filesystem repo, only run when its parent is a
+# mountpoint (the external drive is attached); auto-init on first use. For remote
+# repos (sftp:, s3:, b2:) just attempt it.
+if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+	case "$RESTIC_REPOSITORY_LOCAL" in
+	/*)
+		parent=$(dirname "$RESTIC_REPOSITORY_LOCAL")
+		if mountpoint -q "$parent" || mountpoint -q "$RESTIC_REPOSITORY_LOCAL"; then
+			mkdir -p "$RESTIC_REPOSITORY_LOCAL"
+			if [ ! -f "$RESTIC_REPOSITORY_LOCAL/config" ]; then
+				echo ">>> initializing local repo at $RESTIC_REPOSITORY_LOCAL"
+				restic -r "$RESTIC_REPOSITORY_LOCAL" init || overall=1
+			fi
+			backup_to "$RESTIC_REPOSITORY_LOCAL" local || overall=1
+		else
+			echo ">>> $parent not mounted — skipping local repo"
+		fi
+		;;
+	*)
+		backup_to "$RESTIC_REPOSITORY_LOCAL" local || overall=1
+		;;
+	esac
 fi
 
 exit "$overall"

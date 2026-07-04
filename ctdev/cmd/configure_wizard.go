@@ -6,7 +6,6 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -101,7 +100,7 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 
 	var changed []int
 	for i := range states {
-		wasChanged, err := promptSetting(&states[i])
+		wasChanged, err := promptSetting(ctx, &states[i])
 		if err != nil {
 			return err
 		}
@@ -128,9 +127,11 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 	fmt.Println()
 
 	if !flagDryRun {
-		fmt.Printf("  Apply? [Y/n]: ")
-		input := promptLine()
-		if input != "" && strings.ToLower(input) != "y" && strings.ToLower(input) != "yes" {
+		yes, err := promptYesNoCtx(ctx, "Apply?", true)
+		if err != nil {
+			return err
+		}
+		if !yes {
 			fmt.Println(styles.Dimmed.Render("  Skipped."))
 			fmt.Println()
 			return nil
@@ -155,22 +156,32 @@ func showSetting(state *setup.SettingState) {
 
 // promptSetting interactively prompts the user for a setting value.
 // Returns true if the value was changed from the current value.
-func promptSetting(state *setup.SettingState) (bool, error) {
+func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error) {
 	s := state.Setting
 
 	fmt.Printf("  %s\n", wizardValueStyle.Render(s.Name))
 	fmt.Printf("  %s\n", styles.Dimmed.Render(s.Description))
-	fmt.Printf("  %s %s\n", styles.Dimmed.Render("Current:"), state.CurrentValue)
+	current := state.CurrentValue
+	if s.Default != "" && s.Default != current {
+		fmt.Printf("  %s %s %s\n", styles.Dimmed.Render("Current:"), current,
+			styles.Dimmed.Render(fmt.Sprintf("(default: %s)", s.Default)))
+	} else {
+		fmt.Printf("  %s %s\n", styles.Dimmed.Render("Current:"), current)
+	}
 
 	var newValue string
+	var err error
 
 	switch s.Control {
 	case setup.ControlToggle:
-		newValue = promptToggle(state)
+		newValue, err = promptToggle(ctx, state)
 	case setup.ControlPicker:
-		newValue = promptPicker(state)
+		newValue, err = promptPicker(ctx, state)
 	case setup.ControlSlider:
-		newValue = promptSlider(state)
+		newValue, err = promptSlider(ctx, state)
+	}
+	if err != nil {
+		return false, err
 	}
 
 	fmt.Println()
@@ -186,7 +197,7 @@ func promptSetting(state *setup.SettingState) (bool, error) {
 }
 
 // promptToggle prompts for a toggle setting (true/false, enabled/disabled, etc).
-func promptToggle(state *setup.SettingState) string {
+func promptToggle(ctx context.Context, state *setup.SettingState) (string, error) {
 	s := state.Setting
 
 	// Determine the toggle pair from the default value.
@@ -224,23 +235,27 @@ func promptToggle(state *setup.SettingState) string {
 	fmt.Printf("    2) %s\n", offVal)
 	fmt.Printf("  Select [%s]: ", defaultChoice)
 
-	input := promptLine()
+	input, ok := readLineCtx(ctx)
+	if !ok {
+		return "", errPromptCancelled
+	}
 	if input == "" {
-		return state.CurrentValue // keep current
+		return state.CurrentValue, nil // keep current
 	}
 
 	switch input {
 	case "1":
-		return onVal
+		return onVal, nil
 	case "2":
-		return offVal
+		return offVal, nil
 	default:
-		return state.CurrentValue
+		fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
+		return state.CurrentValue, nil
 	}
 }
 
 // promptPicker prompts for a picker setting with multiple choices.
-func promptPicker(state *setup.SettingState) string {
+func promptPicker(ctx context.Context, state *setup.SettingState) (string, error) {
 	s := state.Setting
 
 	defaultIdx := 1
@@ -254,24 +269,28 @@ func promptPicker(state *setup.SettingState) string {
 	}
 	fmt.Printf("  Select [%d]: ", defaultIdx)
 
-	input := promptLine()
+	input, ok := readLineCtx(ctx)
+	if !ok {
+		return "", errPromptCancelled
+	}
 	if input == "" {
-		return state.CurrentValue
+		return state.CurrentValue, nil
 	}
 
 	n, err := strconv.Atoi(input)
 	if err != nil || n < 1 || n > len(s.Choices) {
-		return state.CurrentValue
+		fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
+		return state.CurrentValue, nil
 	}
-	return s.Choices[n-1].Value
+	return s.Choices[n-1].Value, nil
 }
 
 // promptSlider prompts for a numeric slider setting.
-func promptSlider(state *setup.SettingState) string {
+func promptSlider(ctx context.Context, state *setup.SettingState) (string, error) {
 	s := state.Setting
 	r := s.Slider
 	if r == nil {
-		return state.CurrentValue
+		return state.CurrentValue, nil
 	}
 
 	unit := ""
@@ -285,15 +304,18 @@ func promptSlider(state *setup.SettingState) string {
 		formatSliderVal(r.Step, r.Step))
 	fmt.Printf("  %s [%s]: ", styles.Dimmed.Render("Value"), state.CurrentValue)
 
-	input := promptLine()
+	input, ok := readLineCtx(ctx)
+	if !ok {
+		return "", errPromptCancelled
+	}
 	if input == "" {
-		return state.CurrentValue
+		return state.CurrentValue, nil
 	}
 
 	val, err := strconv.ParseFloat(input, 64)
 	if err != nil {
 		fmt.Printf("  %s\n", styles.Dimmed.Render("Invalid number, keeping current value."))
-		return state.CurrentValue
+		return state.CurrentValue, nil
 	}
 
 	// Clamp to range
@@ -306,7 +328,7 @@ func promptSlider(state *setup.SettingState) string {
 	// Snap to nearest step
 	val = math.Round(val/r.Step) * r.Step
 
-	return formatSliderVal(val, r.Step)
+	return formatSliderVal(val, r.Step), nil
 }
 
 // formatSliderVal formats a float value, using integer format when the step is >= 1.

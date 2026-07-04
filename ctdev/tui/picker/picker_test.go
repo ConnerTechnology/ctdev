@@ -30,7 +30,7 @@ func selectAllConfirm(m *Model) Result {
 }
 
 func TestSelectAllInstallExcludesInstalled(t *testing.T) {
-	m := New(testComponents(), map[string]bool{"docker": true}, component.OSLinux, ModeInstall)
+	m := New(testComponents(), map[string]bool{"docker": true}, component.OSLinux, ModeInstall, false)
 	got := selectAllConfirm(&m).Selected
 	if contains(got, "docker") {
 		t.Error("installed docker must not be selected by select-all in install mode")
@@ -41,7 +41,7 @@ func TestSelectAllInstallExcludesInstalled(t *testing.T) {
 }
 
 func TestGetResultDeterministicOrder(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall, false)
 	// Display order: CLI (docker, btop) then Desktop (chrome).
 	want := []string{"docker", "btop", "chrome"}
 	got := selectAllConfirm(&m).Selected
@@ -52,7 +52,7 @@ func TestGetResultDeterministicOrder(t *testing.T) {
 
 func TestUninstallSelectsInstalled(t *testing.T) {
 	installed := map[string]bool{"docker": true, "btop": true, "chrome": true}
-	m := New(testComponents(), installed, component.OSLinux, ModeUninstall)
+	m := New(testComponents(), installed, component.OSLinux, ModeUninstall, false)
 	got := selectAllConfirm(&m).Selected
 	if len(got) != 3 {
 		t.Errorf("uninstall select-all should pick all installed, got %v", got)
@@ -60,7 +60,7 @@ func TestUninstallSelectsInstalled(t *testing.T) {
 }
 
 func TestQuitReturnsNoSelection(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall, false)
 	send(&m, key('q'))
 	if !m.GetResult().Quit {
 		t.Error("expected quit result")
@@ -69,7 +69,7 @@ func TestQuitReturnsNoSelection(t *testing.T) {
 
 // Filtering then select-all must scope to the visible match only.
 func TestFilterScopesSelectAll(t *testing.T) {
-	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall)
+	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall, false)
 	send(&m, key('/'), key('c'), key('h'), key('r'), key('o'), key('m'), key('e'),
 		tea.KeyPressMsg{Code: tea.KeyEnter}) // apply filter "chrome"
 	got := selectAllConfirm(&m).Selected

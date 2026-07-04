@@ -62,6 +62,18 @@ var (
 
 func init() { rebuild() }
 
+// noColor drops every color from the palette (see Disable). Structure survives
+// through bold/reverse, which NO_COLOR (no-color.org) explicitly allows.
+var noColor bool
+
+// Disable rebuilds every style without color — for NO_COLOR and for output
+// that isn't a terminal, where raw ANSI codes would litter logs and pipes.
+// Call it once at startup, before any rendering.
+func Disable() {
+	noColor = true
+	rebuild()
+}
+
 // SetDarkBackground tunes the theme-dependent colors to the terminal background.
 // Call it once at startup (see cmd.Execute) after detecting the background;
 // isDark=true keeps the dark defaults.
@@ -75,6 +87,10 @@ func SetDarkBackground(isDark bool) {
 // rebuild reconstructs every style from the current palette. Call sites read
 // these package vars live, so reassigning them before rendering takes effect.
 func rebuild() {
+	if noColor {
+		rebuildPlain()
+		return
+	}
 	Title = lipgloss.NewStyle().Bold(true).Foreground(Blue)
 	Subtitle = lipgloss.NewStyle().Foreground(Subtle)
 	Success = lipgloss.NewStyle().Foreground(Green)
@@ -109,7 +125,42 @@ func rebuild() {
 	Help = lipgloss.NewStyle().Foreground(Subtle)
 }
 
+// rebuildPlain is the colorless twin of rebuild. Selection and badges keep
+// their meaning through glyphs, bold, and reverse video instead of hue.
+func rebuildPlain() {
+	plain := lipgloss.NewStyle()
+	Title = plain.Bold(true)
+	Subtitle = plain
+	Success = plain
+	Error = plain.Bold(true)
+	Warning = plain
+	Dimmed = plain
+
+	Selected = plain.SetString("◉")
+	Unselected = plain.SetString("○")
+	Cursor = plain.Reverse(true)
+
+	BadgeWarn = plain.Bold(true).Padding(0, 1).Reverse(true)
+	BadgeDanger = BadgeWarn
+
+	Header = plain.Bold(true)
+	CategoryHeader = Header
+
+	Value = plain
+
+	StatusBar = plain.
+		BorderTop(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		MarginTop(1).
+		PaddingTop(1)
+
+	Help = plain
+}
+
 // Label styles the label half of a label/value pair at the given column width.
 func Label(width int) lipgloss.Style {
+	if noColor {
+		return lipgloss.NewStyle().Width(width)
+	}
 	return lipgloss.NewStyle().Foreground(Subtle).Width(width)
 }

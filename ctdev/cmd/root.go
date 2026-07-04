@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -40,6 +42,12 @@ var rootCmd = &cobra.Command{
 
 func Execute() error {
 	rootCmd.Version = version
+	// Strip ANSI styling globally when the user asks (NO_COLOR, no-color.org)
+	// or when stdout isn't a terminal — logs and pipes shouldn't collect
+	// escape codes.
+	if os.Getenv("NO_COLOR") != "" || !term.IsTerminal(os.Stdout.Fd()) {
+		styles.Disable()
+	}
 	// Bind SIGINT/SIGTERM to a context so Ctrl-C cancels in-flight installs,
 	// updates, and other long-running shell-outs via the ctx threaded through
 	// sysutil. A second signal aborts hard (signal.NotifyContext stops trapping
@@ -104,6 +112,11 @@ func isBatchMode() bool {
 	// Screen-reader users set ACCESSIBLE to drop the live TUIs in favor of the
 	// plain, line-by-line path (the Charm-ecosystem convention).
 	if os.Getenv("ACCESSIBLE") != "" {
+		return true
+	}
+	// A TUI needs a terminal on both ends: prompts read stdin, and alt-screen
+	// escape sequences would garble a piped/redirected stdout (`ctdev … | tee`).
+	if !term.IsTerminal(os.Stdout.Fd()) {
 		return true
 	}
 	fi, err := os.Stdin.Stat()

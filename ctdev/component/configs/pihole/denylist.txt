@@ -1,2 +1,0 @@
-# Pi-hole exact deny domains — one per line. Managed by `ctdev pihole`.
-# Apply with `ctdev pihole import`.

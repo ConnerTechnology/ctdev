@@ -75,20 +75,37 @@ func TestRunCategoryWizardOn_EmptySettingsPrintsNotice(t *testing.T) {
 	}
 }
 
-func TestPromptLine_ReadsFromStdinScanner(t *testing.T) {
+func TestReadLineCtx_ReadsFromStdinScanner(t *testing.T) {
 	orig := stdinScanner
 	t.Cleanup(func() { stdinScanner = orig })
 
 	stdinScanner = bufio.NewScanner(strings.NewReader("  hello world  \nnext line\n"))
+	ctx := context.Background()
 
-	if got := promptLine(); got != "hello world" {
-		t.Errorf("first call = %q, want %q (whitespace trimmed)", got, "hello world")
+	if got, ok := readLineCtx(ctx); !ok || got != "hello world" {
+		t.Errorf("first call = %q, %v; want %q, true (whitespace trimmed)", got, ok, "hello world")
 	}
-	if got := promptLine(); got != "next line" {
-		t.Errorf("second call = %q, want %q", got, "next line")
+	if got, ok := readLineCtx(ctx); !ok || got != "next line" {
+		t.Errorf("second call = %q, %v; want %q, true", got, ok, "next line")
 	}
-	if got := promptLine(); got != "" {
-		t.Errorf("eof call = %q, want empty string", got)
+	if got, ok := readLineCtx(ctx); ok || got != "" {
+		t.Errorf("eof call = %q, %v; want empty string, false", got, ok)
+	}
+}
+
+func TestReadLineCtx_CancelledContextReturnsNotOK(t *testing.T) {
+	orig := stdinScanner
+	t.Cleanup(func() { stdinScanner = orig })
+
+	// A reader that never delivers a line, so only cancellation can end the read.
+	r, w := io.Pipe()
+	t.Cleanup(func() { w.Close() })
+	stdinScanner = bufio.NewScanner(r)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got, ok := readLineCtx(ctx); ok || got != "" {
+		t.Errorf("cancelled read = %q, %v; want empty string, false", got, ok)
 	}
 }
 

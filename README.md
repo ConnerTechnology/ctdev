@@ -48,12 +48,13 @@ ctdev install zsh git tailscale          # whatever base tools you want
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker
 ctdev configure pihole                   # upstreams, listening mode, blocking
-ctdev install docker sops                # caddy needs docker
+ctdev install docker                     # caddy needs docker
 ctdev configure caddy --domain example.com --acme-email you@example.com --cf-token <token>
 ctdev install caddy                      # deploy the proxy stack + bring it up
 ctdev install portainer                  # optional: Docker management web UI
 ctdev install beszel                      # optional: server/container monitoring
-ctdev install restic                      # optional: daily backups to B2 + USB
+ctdev install restic                      # optional: daily restic backups
+ctdev configure restic                    # set repo + credentials, init, enable timer
 ```
 
 `ctdev install portainer` brings up Portainer CE (a web UI to view and manage
@@ -70,18 +71,24 @@ admin user, click "Add System", put the issued KEY/TOKEN in `~/beszel/.env`,
 then re-run `ctdev install beszel` to start the agent. Keep it off any public
 network (Tailscale only).
 
-`ctdev install restic` installs restic and a daily backup timer that snapshots
-the stack dirs and Docker volumes to an offsite Backblaze B2 repo and a local
-USB repo (`/mnt/backup`, when mounted), pruning to 7 daily / 4 weekly / 6
-monthly. Repo locations, B2 credentials, and the repository password go in
-`/etc/restic/` (root-only, never committed); the timer enables once that's set.
-Restore with `sudo restic-restore.sh` — **see [RECOVERY.md](RECOVERY.md) for the
-complete disaster-recovery runbook.**
+`ctdev install restic` installs restic, a daily backup timer, and the backup/restore
+helper scripts. Then `ctdev configure restic` prompts for the repository (any restic
+backend — Backblaze B2, S3, SFTP, or a local/USB path), backend credentials, and a
+repository password (it can generate one), writes `/etc/restic/restic.env` (root-only,
+never committed), seeds default exclude patterns, runs `restic init`, and enables the
+timer. Snapshots are tagged with the hostname, so each machine backs up to its own repo
+and sees only its own snapshots. Backups are **opt-in** — nothing is snapshotted until you
+choose what to include with `ctdev backup paths`, a local web UI that browses the
+filesystem with folder sizes and include/exclude buttons. (Includes are the trees to back
+up; excludes carve junk out of them, e.g. include `~/Repos`, exclude `**/node_modules`.) `ctdev backup now` snapshots immediately; `ctdev backup
+snapshots` lists them; `ctdev restore …` restores — **see [RECOVERY.md](RECOVERY.md)
+for the complete disaster-recovery runbook.**
 
-Per-node secrets (Cloudflare token, restic repo password + B2 keys, Beszel
-KEY/TOKEN, Pi-hole password) are stored **SOPS-encrypted** in the repo under
-`ctdev/component/configs/<svc>/hosts/<node>.sops.env` and decrypted with an age
-key kept in your password manager — see **[SECRETS.md](SECRETS.md)**.
+Secrets are **never stored in the repo**. Each (Cloudflare token, restic repo password
++ backend keys, Beszel KEY/TOKEN, Pi-hole password) is entered at its `configure` step
+and stored only on the host; if lost, you reconfigure. restic backs up the rendered
+`~/<svc>/.env` files, so a restore brings them back — keep the restic repo password
+itself in your password manager, since restic can't restore its own credentials.
 
 `ctdev configure caddy` writes `~/caddy/.env` (mode 600) and, when Pi-hole is
 present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
@@ -96,11 +103,10 @@ route snippet in `~/caddy/sites/<svc>.caddy`, then `ctdev install caddy` (or
 `sudo docker compose -f ~/caddy/docker-compose.yml up -d`). The wildcard DNS +
 cert already cover it.
 
-**Secrets via SOPS (optional).** If you'd rather keep a node's `.env` encrypted
-in the repo than type it into the wizard, store it at
-`ctdev/component/configs/caddy/hosts/<node>.sops.env` (age recipient in
-`.sops.yaml`) and decrypt it on the node into `~/caddy/.env` with `sops`. **Never
-commit a plaintext host config or an age private key.**
+**Secrets.** A node's secrets are entered into its `configure` wizard (or `.env`) and
+live only on that host — nothing secret is committed to the repo. Restoring a node from
+its restic backup brings the `.env` files back; standing up a brand-new node means
+re-entering them from your password manager. **Never commit a secret.**
 
 ## Install (ctdev only)
 
@@ -136,11 +142,12 @@ ctdev configure ssh             # SSH server + key-based auth hardening
 ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
+ctdev configure restic          # restic backups (repo, credentials, paths) — --show
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
-ctdev backup [service...]       # Export service config to version control (default: all)
-ctdev restore [service...]      # Re-apply version-controlled service config
-ctdev backup now                # Run a restic data snapshot now
-ctdev backup snapshots          # List restic snapshots
+ctdev backup now                # Run a restic snapshot of this machine now
+ctdev backup snapshots          # List this machine's restic snapshots
+ctdev backup paths              # Pick what to back up in a local web UI
+ctdev restore ls|files|in-place|check  # Inspect/restore from restic
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev verify                    # Verify the bootstrap installation
 ```

@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 )
 
@@ -32,7 +33,7 @@ func runWithProgress(parent context.Context, op progressOperation) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 
-	progressModel := progress.New(op.names, op.mode)
+	progressModel := progress.New(op.names, op.mode, flagDryRun)
 	p := tea.NewProgram(&progressModel)
 
 	// workerDone lets us block on the install loop after the TUI exits so we
@@ -54,28 +55,32 @@ func runWithProgress(parent context.Context, op progressOperation) error {
 	cancel()
 	<-workerDone
 	resetTerminal()
-	return err
+	if err != nil {
+		return err
+	}
+
+	// The summary screen already showed the details; make the exit code match.
+	_, failed, _, notRun := progressModel.Counts()
+	if notRun > 0 {
+		fmt.Printf("Cancelled — %d of %d not run.\n", notRun, len(op.names))
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d component(s) failed", failed)
+	}
+	return nil
 }
 
-// runOneComponent runs install/uninstall for a single named component and
-// streams its output through `send`. Pipe fds are cleaned up via defer so a
-// panic in the install func can't leak file descriptors.
-func runOneComponent(ctx context.Context, send msgSender, op progressOperation, name string) {
-	c := comp.FindByName(name)
-	if c == nil {
-		return
-	}
-
-	send.Send(progress.InstallStartMsg{Name: name})
-	start := time.Now()
-
+// streamThrough runs fn with a pipe writer whose lines are forwarded to send as
+// InstallOutputMsg for name, waiting for the scanner to drain before returning.
+// Pipe fds are cleaned up via defer so a panic in fn can't leak file
+// descriptors.
+func streamThrough(send msgSender, name string, fn func(pw *os.File)) error {
 	pr, pw, err := os.Pipe()
 	if err != nil {
-		send.Send(progress.InstallFailMsg{Name: name, Error: err.Error(), Duration: time.Since(start)})
-		return
+		return err
 	}
-	// pr is closed after the scanner goroutine returns; pw is closed once the
-	// install function has finished so the scanner can drain and exit.
+	// pr is closed after the scanner goroutine returns; pw is closed once fn
+	// has finished so the scanner can drain and exit.
 	defer pr.Close()
 
 	var wg sync.WaitGroup
@@ -88,22 +93,41 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 		}
 	}()
 
-	opts := comp.ExecOpts{
-		Force:   flagForce,
-		DryRun:  flagDryRun,
-		Verbose: flagVerbose,
-		Stdout:  pw,
-		Stderr:  pw,
-	}
-
-	var result comp.ExecResult
-	if op.mode == progress.ModeUninstall {
-		result = comp.Uninstall(ctx, c, opts)
-	} else {
-		result = comp.Install(ctx, c, opts)
-	}
+	fn(pw)
 	pw.Close()
 	wg.Wait()
+	return nil
+}
+
+// runOneComponent runs install/uninstall for a single named component and
+// streams its output through `send`.
+func runOneComponent(ctx context.Context, send msgSender, op progressOperation, name string) {
+	c := comp.FindByName(name)
+	if c == nil {
+		return
+	}
+
+	send.Send(progress.InstallStartMsg{Name: name})
+	start := time.Now()
+
+	var result comp.ExecResult
+	if err := streamThrough(send, name, func(pw *os.File) {
+		opts := comp.ExecOpts{
+			Force:   flagForce,
+			DryRun:  flagDryRun,
+			Verbose: flagVerbose,
+			Stdout:  pw,
+			Stderr:  pw,
+		}
+		if op.mode == progress.ModeUninstall {
+			result = comp.Uninstall(ctx, c, opts)
+		} else {
+			result = comp.Install(ctx, c, opts)
+		}
+	}); err != nil {
+		send.Send(progress.InstallFailMsg{Name: name, Error: err.Error(), Duration: time.Since(start)})
+		return
+	}
 
 	duration := time.Since(start)
 
@@ -115,6 +139,96 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 	default:
 		send.Send(progress.InstallDoneMsg{Name: name, Duration: duration})
 	}
+}
+
+// runOneStep runs a single update step, streaming its output through `send`.
+func runOneStep(ctx context.Context, send msgSender, step updateStep) {
+	send.Send(progress.InstallStartMsg{Name: step.name})
+	start := time.Now()
+
+	var runErr error
+	err := streamThrough(send, step.name, func(pw *os.File) {
+		runErr = step.run(ctx, sysutil.Opts{Stdout: pw, DryRun: flagDryRun})
+	})
+	if err == nil {
+		err = runErr
+	}
+	duration := time.Since(start)
+	if err != nil {
+		send.Send(progress.InstallFailMsg{Name: step.name, Error: err.Error(), Duration: duration})
+		return
+	}
+	send.Send(progress.InstallDoneMsg{Name: step.name, Duration: duration})
+}
+
+// runUpdateSteps drives the update apply phase through the same progress TUI
+// (and batch fallback) that install/uninstall use, so failures are visible and
+// the exit code reflects them.
+func runUpdateSteps(parent context.Context, steps []updateStep) error {
+	if isBatchMode() {
+		return runUpdateStepsBatch(parent, steps)
+	}
+
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	names := make([]string, len(steps))
+	for i, s := range steps {
+		names[i] = s.name
+	}
+	progressModel := progress.New(names, progress.ModeUpdate, flagDryRun)
+	p := tea.NewProgram(&progressModel)
+
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		defer p.Send(progress.AllDoneMsg{})
+		for _, s := range steps {
+			if ctx.Err() != nil {
+				return
+			}
+			runOneStep(ctx, p, s)
+		}
+	}()
+
+	_, err := p.Run()
+	cancel()
+	<-workerDone
+	resetTerminal()
+	if err != nil {
+		return err
+	}
+
+	_, failed, _, notRun := progressModel.Counts()
+	if notRun > 0 {
+		fmt.Printf("Cancelled — %d of %d not run.\n", notRun, len(steps))
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d update step(s) failed", failed)
+	}
+	return nil
+}
+
+// runUpdateStepsBatch applies update steps without a TUI (for CI/pipes),
+// continuing past failures but reporting them in the exit code.
+func runUpdateStepsBatch(ctx context.Context, steps []updateStep) error {
+	var failed int
+	for _, s := range steps {
+		// Ctrl-C should stop cleanly, not cascade a failure per remaining step.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		fmt.Fprintf(os.Stdout, "Updating %s...\n", s.name)
+		o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+		if err := s.run(ctx, o); err != nil {
+			fmt.Fprintf(os.Stderr, "  %s failed: %v\n", s.name, err)
+			failed++
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d update step(s) failed", failed)
+	}
+	return nil
 }
 
 // runWithProgressBatch runs install/uninstall without a TUI (for CI/pipes).

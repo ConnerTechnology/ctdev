@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ctdev — pick backup paths</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
+    --dim: #8b949e; --accent: #2f81f7; --green: #3fb950; --red: #f85149;
+    --inc: rgba(63,185,80,.14); --exc: rgba(248,81,73,.14); --inh: rgba(63,185,80,.06);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+         background: var(--bg); color: var(--fg); }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+           border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .spacer { flex: 1; }
+  #status { color: var(--dim); font-size: 13px; }
+  button { font: inherit; background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+           border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.mini { padding: 1px 7px; font-size: 12px; }
+  button.inc:hover { border-color: var(--green); color: var(--green); }
+  button.exc:hover { border-color: var(--red); color: var(--red); }
+  .layout { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 57px); }
+  #tree { overflow: auto; padding: 8px 4px 40px; }
+  aside { border-left: 1px solid var(--border); overflow: auto; padding: 12px 14px; background: var(--panel); }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 16px 0 6px; }
+  .roots { display: flex; gap: 6px; padding: 4px 12px 10px; }
+  .row { display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 5px; white-space: nowrap; }
+  .row.included { background: var(--inc); }
+  .row.excluded { background: var(--exc); }
+  .row.inherited { background: var(--inh); }
+  /* hover comes last so it highlights the whole row over any state tint */
+  .row:hover { background: rgba(56,139,253,.18); box-shadow: inset 2px 0 0 var(--accent); }
+  .info { cursor: help; margin-left: 4px; color: var(--accent); font-size: 12px; user-select: none; }
+  .twist { width: 14px; text-align: center; color: var(--dim); cursor: pointer; user-select: none; }
+  .twist.leaf { visibility: hidden; }
+  .name { cursor: default; }
+  .name.dir { cursor: pointer; }
+  .locked { color: var(--dim); font-size: 12px; }
+  .size { color: var(--dim); font-size: 12px; min-width: 66px; text-align: right; }
+  .date { color: var(--dim); font-size: 12px; min-width: 96px; text-align: right; }
+  .sortbar { display: flex; align-items: center; gap: 6px; padding: 0 12px 10px; color: var(--dim); font-size: 13px; }
+  .sortbar button.active { border-color: var(--accent); color: var(--fg); }
+  .grow { flex: 1; min-width: 8px; }
+  .actions { display: none; gap: 4px; }
+  .row:hover .actions { display: flex; }
+  .badge { font-size: 11px; padding: 0 6px; border-radius: 10px; }
+  .badge.included { color: var(--green); border: 1px solid var(--green); }
+  .badge.excluded { color: var(--red); border: 1px solid var(--red); }
+  .chip { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid var(--border);
+          border-radius: 6px; margin: 4px 0; font-size: 12px; word-break: break-all; }
+  .chip .x { cursor: pointer; color: var(--dim); }
+  .chip .x:hover { color: var(--red); }
+  .addbox { display: flex; gap: 6px; margin-top: 6px; }
+  .addbox input { flex: 1; background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+                  border-radius: 6px; padding: 4px 8px; font: inherit; }
+  .empty { color: var(--dim); font-size: 12px; padding: 4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pick what to back up</h1>
+  <span id="status"></span>
+  <span class="spacer"></span>
+  <button class="primary" id="save">Save &amp; Close</button>
+</header>
+<div class="roots" id="roots"></div>
+<div class="sortbar" id="sortbar"></div>
+<div class="layout">
+  <div id="tree"></div>
+  <aside>
+    <h2>Included (<span id="incCount">0</span>)</h2>
+    <div id="includes"></div>
+    <h2>Excluded (<span id="excCount">0</span>)</h2>
+    <div id="excludes"></div>
+    <div class="addbox">
+      <input id="addExc" placeholder="add pattern e.g. **/node_modules">
+      <button id="addExcBtn">Add</button>
+    </div>
+  </aside>
+</div>
+<script>
+// Guidance for common folders — shown as an ⓘ tooltip. Phrasing is neutral about
+// how you achieve it (include only what you want; skip = don't include, or exclude
+// it from a folder you did include).
+const HINTS = {
+  ".cache": "Regenerable app caches. Safe to skip.",
+  ".local": "Mixed: .local/share holds real app data (worth keeping); .local/state and caches are regenerable. Consider including ~/.local/share and skipping the rest.",
+  ".config": "Application settings and configuration. Usually worth backing up.",
+  ".vscode": "Per-project VS Code settings. Small; keep if you customize. Extensions themselves reinstall.",
+  ".vscode-server": "Remote VS Code server + extensions. Reinstalls automatically — safe to skip.",
+  ".mozilla": "Firefox profiles: bookmarks, history, saved logins. Worth backing up.",
+  ".thunderbird": "Thunderbird mail profiles. Worth backing up.",
+  ".ssh": "SSH keys and config. Sensitive — back up securely.",
+  ".gnupg": "GPG/PGP keys. Sensitive — back up securely.",
+  ".aws": "AWS credentials and config. Sensitive.",
+  ".kube": "Kubernetes cluster configs/credentials.",
+  ".docker": "Docker CLI config; may hold registry credentials.",
+  ".password-store": "pass password store. Back up.",
+  ".npm": "npm download cache. Regenerable — skip.",
+  ".cargo": "Rust cargo registry + build cache. Mostly regenerable — skip (keep credentials if any).",
+  ".rustup": "Rust toolchains. Reinstallable — skip.",
+  ".nvm": "Node versions via nvm. Reinstallable — skip.",
+  ".gradle": "Gradle build cache. Regenerable — skip.",
+  ".m2": "Maven repository cache. Regenerable — skip.",
+  ".android": "Android SDK/emulator. Large and reinstallable — skip.",
+  ".steam": "Steam client data. Games are redownloadable; saves often sync to cloud. Large — usually skip.",
+  ".var": "Flatpak app data (~/.var/app). App-specific; can be large.",
+  "go": "Go workspace: go/pkg and go/bin are regenerable; go/src may hold code.",
+  "node_modules": "Reinstallable dependencies (npm install). Skip — add exclude **/node_modules.",
+  "__pycache__": "Python bytecode cache. Skip.",
+  ".venv": "Python virtualenv. Recreate from requirements — skip.",
+  "venv": "Python virtualenv. Recreate from requirements — skip.",
+  "target": "Build output (Rust/Java). Regenerable — skip.",
+  "Downloads": "Transient downloads. Optional.",
+  "Documents": "Personal documents. Worth backing up.",
+  "Pictures": "Photos. Worth backing up.",
+  "Desktop": "Desktop files. Worth backing up.",
+  "Music": "Music library. Large — your call.",
+  "Videos": "Video library. Large — your call.",
+  "snap": "Snap app data. Can be large; mostly regenerable.",
+};
+const ABS_HINTS = {
+  "/etc": "System configuration. Worth backing up on a server.",
+  "/home": "All user home directories.",
+  "/root": "root's home directory.",
+  "/boot": "Kernel/bootloader. Reinstallable; optional.",
+  "/tmp": "Temporary files. Never back up.",
+  "/proc": "Virtual kernel filesystem. Never back up.",
+  "/sys": "Virtual kernel filesystem. Never back up.",
+  "/dev": "Device nodes. Never back up.",
+  "/run": "Runtime state. Never back up.",
+  "/var/log": "System logs. Optional.",
+  "/var/cache": "Package/app caches. Skip.",
+  "/var/lib/docker": "Docker images/containers/overlays are rebuildable; named volumes under volumes/ hold real data — back those up instead.",
+  "/usr": "Package-managed system files. Reinstallable — skip.",
+  "/mnt": "Mounted drives. Depends what's mounted.",
+  "/media": "Removable media mounts. Optional.",
+};
+function hintFor(e) { return ABS_HINTS[e.path] || HINTS[e.name] || ""; }
+const listings = {};   // path -> entries
+const expanded = new Set();
+const sizes = {};      // path -> bytes (-1 unknown)
+let state = { home: "/", roots: ["/"], includes: [], excludes: [] };
+let root = "/";
+let sortKey = "name";   // name | size | created
+let sortDir = 1;        // 1 asc, -1 desc
+
+// Auth rides on the HttpOnly session cookie set by the boot-token exchange;
+// same-origin fetches send it automatically.
+function api(path, opts = {}) {
+  return fetch(path, opts).then(r => r.json());
+}
+function fmtSize(b) {
+  if (b == null || b < 0) return "";
+  const u = ["B","K","M","G","T"]; let i = 0, n = b;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (n < 10 && i > 0 ? n.toFixed(1) : Math.round(n)) + u[i];
+}
+function setStatus(t) { document.getElementById("status").textContent = t; }
+function fmtDate(sec) {
+  if (!sec) return "";
+  const d = new Date(sec * 1000);
+  return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+}
+function sizeOf(e) {
+  if (!e.isDir) return e.size == null ? -1 : e.size;
+  const s = sizes[e.path];
+  return (s == null || s < 0) ? -1 : s;
+}
+function sortEntries(list) {
+  const arr = list.slice();
+  arr.sort((a, b) => {
+    if (sortKey === "name") {
+      const x = a.name.toLowerCase(), y = b.name.toLowerCase();
+      return sortDir * (x < y ? -1 : x > y ? 1 : 0);
+    }
+    if (sortKey === "created") return sortDir * ((a.created || 0) - (b.created || 0));
+    // size: unknown (still-loading / unsizeable) always sinks to the bottom
+    const au = sizeOf(a), bu = sizeOf(b);
+    if (au < 0 && bu < 0) return 0;
+    if (au < 0) return 1;
+    if (bu < 0) return -1;
+    return sortDir * (au - bu);
+  });
+  return arr;
+}
+function renderSortbar() {
+  const bar = document.getElementById("sortbar"); bar.innerHTML = "";
+  bar.appendChild(Object.assign(document.createElement("span"), { textContent: "Sort:" }));
+  for (const [k, txt] of [["name", "Name"], ["size", "Size"], ["created", "Created"]]) {
+    const b = document.createElement("button");
+    b.className = "mini" + (sortKey === k ? " active" : "");
+    b.textContent = txt + (sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : "");
+    b.onclick = () => {
+      if (sortKey === k) sortDir = -sortDir;
+      else { sortKey = k; sortDir = (k === "name") ? 1 : -1; } // biggest/newest first
+      render();
+    };
+    bar.appendChild(b);
+  }
+}
+
+async function listPath(path) {
+  if (listings[path]) return listings[path];
+  const res = await api("/api/list?path=" + encodeURIComponent(path));
+  listings[path] = res.entries || [];
+  return listings[path];
+}
+async function refreshListings() {
+  await Promise.all(Object.keys(listings).map(async p => {
+    const res = await api("/api/list?path=" + encodeURIComponent(p));
+    listings[p] = res.entries || [];
+  }));
+}
+async function mutate(op, value) {
+  const res = await api("/api/mutate", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ op, value }),
+  });
+  state.includes = res.includes || []; state.excludes = res.excludes || [];
+  await refreshListings();
+  render();
+}
+async function toggleExpand(path) {
+  if (expanded.has(path)) { expanded.delete(path); }
+  else { expanded.add(path); await listPath(path); }
+  render();
+}
+function fetchSize(path) {
+  if (path in sizes) return;
+  sizes[path] = null;
+  api("/api/size?path=" + encodeURIComponent(path)).then(r => {
+    sizes[path] = r.size; render();
+  });
+}
+
+function rowEl(e, depth) {
+  const row = document.createElement("div");
+  row.className = "row " + (e.state || "neutral");
+  row.style.paddingLeft = (6 + depth * 16) + "px";
+
+  const tw = document.createElement("span");
+  tw.className = "twist" + (e.isDir && e.readable ? "" : " leaf");
+  tw.textContent = expanded.has(e.path) ? "▾" : "▸";
+  if (e.isDir && e.readable) tw.onclick = () => toggleExpand(e.path);
+  row.appendChild(tw);
+
+  const name = document.createElement("span");
+  name.className = "name" + (e.isDir && e.readable ? " dir" : "");
+  name.textContent = (e.isDir ? "📁 " : "📄 ") + e.name + (e.hidden ? "" : "");
+  if (e.isDir && e.readable) name.onclick = () => toggleExpand(e.path);
+  row.appendChild(name);
+
+  if (e.isDir && !e.readable) {
+    const lk = document.createElement("span"); lk.className = "locked"; lk.textContent = "🔒 root";
+    row.appendChild(lk);
+  }
+
+  const tip = hintFor(e);
+  if (tip) {
+    const info = document.createElement("span");
+    info.className = "info"; info.textContent = "ⓘ"; info.title = tip;
+    row.appendChild(info);
+  }
+
+  row.appendChild(Object.assign(document.createElement("span"), { className: "grow" }));
+
+  if (e.state === "included") row.appendChild(badge("included", "✓ include"));
+  if (e.state === "excluded") row.appendChild(badge("excluded", "✕ exclude"));
+
+  const date = document.createElement("span");
+  date.className = "date";
+  date.textContent = fmtDate(e.created);
+  row.appendChild(date);
+
+  const size = document.createElement("span");
+  size.className = "size";
+  if (e.isDir) {
+    if (e.path in sizes) size.textContent = fmtSize(sizes[e.path]);
+    else { size.textContent = "…"; fetchSize(e.path); }
+  } else {
+    size.textContent = fmtSize(e.size);
+  }
+  row.appendChild(size);
+
+  const act = document.createElement("span"); act.className = "actions";
+  if (e.isDir) {
+    act.appendChild(mkBtn("inc", "Include", () => mutate("include", e.path)));
+    act.appendChild(mkBtn("exc", "Exclude", () => mutate("exclude", e.path)));
+  } else {
+    act.appendChild(mkBtn("exc", "Exclude", () => mutate("exclude", e.path)));
+    const ext = e.name.includes(".") ? "*." + e.name.split(".").pop() : null;
+    if (ext) act.appendChild(mkBtn("exc", "Exclude " + ext, () => mutate("exclude-glob", ext)));
+  }
+  row.appendChild(act);
+  return row;
+}
+function badge(cls, text) {
+  const b = document.createElement("span"); b.className = "badge " + cls; b.textContent = text; return b;
+}
+function mkBtn(cls, text, fn) {
+  const b = document.createElement("button"); b.className = "mini " + cls; b.textContent = text; b.onclick = fn; return b;
+}
+
+function renderInto(container, path, depth) {
+  const entries = sortEntries(listings[path] || []);
+  for (const e of entries) {
+    container.appendChild(rowEl(e, depth));
+    if (e.isDir && expanded.has(e.path)) renderInto(container, e.path, depth + 1);
+  }
+}
+function render() {
+  renderSortbar();
+  // roots bar
+  const rb = document.getElementById("roots"); rb.innerHTML = "";
+  for (const r of state.roots) {
+    const b = document.createElement("button"); b.textContent = r === state.home ? "🏠 Home" : r;
+    if (r === root) b.classList.add("primary");
+    b.onclick = () => { root = r; expanded.add(r); listPath(r).then(render); };
+    rb.appendChild(b);
+  }
+  // tree
+  const tree = document.getElementById("tree"); tree.innerHTML = "";
+  renderInto(tree, root, 0);
+  // chips
+  document.getElementById("incCount").textContent = state.includes.length;
+  document.getElementById("excCount").textContent = state.excludes.length;
+  chips("includes", state.includes, v => mutate("remove-include", v),
+    "Nothing is backed up yet — click Include on a folder.");
+  chips("excludes", state.excludes, v => mutate("remove-exclude", v), "none");
+}
+function chips(id, list, onRemove, emptyMsg) {
+  const el = document.getElementById(id); el.innerHTML = "";
+  if (!list.length) { el.innerHTML = '<div class="empty">' + (emptyMsg || "none") + '</div>'; return; }
+  for (const v of list) {
+    const c = document.createElement("div"); c.className = "chip";
+    const x = document.createElement("span"); x.className = "x"; x.textContent = "✕"; x.onclick = () => onRemove(v);
+    const s = document.createElement("span"); s.textContent = v;
+    c.appendChild(x); c.appendChild(s); el.appendChild(c);
+  }
+}
+
+document.getElementById("save").onclick = async () => {
+  setStatus("saving…");
+  const res = await api("/api/save", { method: "POST" });
+  if (res.ok) {
+    document.body.innerHTML = '<div style="padding:40px;font:16px ui-monospace">Saved ' +
+      res.includes + ' include path(s) and ' + res.excludes +
+      ' exclude(s). You can close this tab.</div>';
+  } else { setStatus("save failed: " + (res.error || "?")); }
+};
+document.getElementById("addExcBtn").onclick = () => {
+  const inp = document.getElementById("addExc"); const v = inp.value.trim();
+  if (v) { mutate("exclude-glob", v); inp.value = ""; }
+};
+document.getElementById("addExc").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("addExcBtn").click();
+});
+
+(async function init() {
+  state = await api("/api/state");
+  root = state.home;
+  expanded.add(state.home);
+  await listPath(state.home);
+  render();
+})();
+</script>
+</body>
+</html>

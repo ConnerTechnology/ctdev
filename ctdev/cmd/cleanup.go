@@ -84,13 +84,39 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if err := ensureSudo(); err != nil {
-		return fmt.Errorf("sudo required for cleanup: %w", err)
-	}
-
 	selected := map[string]bool{}
 	for _, id := range selectedIDs {
 		selected[id] = true
+	}
+
+	// Enter in the picker lands here — deletion needs one explicit confirmation,
+	// like the configure wizard's Apply step, so a reflexive Enter can't clean.
+	if !isBatchMode() {
+		var total int64
+		fmt.Println()
+		fmt.Println(styles.Dimmed.Render("  Will clean:"))
+		for _, t := range actionable {
+			if !selected[t.ID] {
+				continue
+			}
+			fmt.Printf("    %s %s\n", styles.Value.Render(t.Name), styles.Dimmed.Render(sizeLabel(results[t.ID])))
+			if b := results[t.ID].Bytes; b > 0 {
+				total += b
+			}
+		}
+		fmt.Printf("\n  Reclaims ≈ %s\n", cleanup.Humanize(total))
+		yes, err := promptYesNoCtx(ctx, "Clean these?", true)
+		if err != nil {
+			return cancelToClean(err)
+		}
+		if !yes {
+			fmt.Println(styles.Dimmed.Render("  Skipped — nothing was cleaned."))
+			return nil
+		}
+	}
+
+	if err := ensureSudo(); err != nil {
+		return fmt.Errorf("sudo required for cleanup: %w", err)
 	}
 
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
@@ -200,7 +226,7 @@ func pickCleanupTasks(tasks []cleanup.Task, results map[string]cleanup.ScanResul
 
 	m := multiselect.New(groups, multiselect.Options{
 		Title:        "Reclaim disk space",
-		StatusSuffix: "· space to toggle · enter to clean",
+		StatusSuffix: "· space to toggle · enter to review & clean",
 		PreselectAll: true,
 	})
 	wrapped := &cleanupPicker{ms: m}

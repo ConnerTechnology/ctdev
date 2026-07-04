@@ -58,7 +58,19 @@ type Mode int
 const (
 	ModeInstall Mode = iota
 	ModeUninstall
+	ModeUpdate
 )
+
+// outputTailMax is how many output lines are retained per component — enough
+// that a failure's explanation (the apt/dpkg error, not just "exit status 1")
+// survives into the summary. The live view shows only the last few.
+const outputTailMax = 30
+
+// liveTailLines is how many of the retained lines show under the running item.
+const liveTailLines = 3
+
+// failTailLines caps the output replayed under a failed item in the summary.
+const failTailLines = 15
 
 type Model struct {
 	components  []ComponentState
@@ -68,10 +80,12 @@ type Model struct {
 	done        bool
 	startTime   time.Time
 	width       int
+	height      int
 	mode        Mode
+	dryRun      bool
 }
 
-func New(names []string, mode Mode) Model {
+func New(names []string, mode Mode, dryRun bool) Model {
 	s := spinner.New(
 		spinner.WithSpinner(spinner.Dot),
 		spinner.WithStyle(lipgloss.NewStyle().Foreground(styles.Orange)),
@@ -92,7 +106,27 @@ func New(names []string, mode Mode) Model {
 		progressBar: p,
 		startTime:   time.Now(),
 		mode:        mode,
+		dryRun:      dryRun,
 	}
+}
+
+// Counts reports how many components ended in each terminal state and how many
+// never ran (still waiting/running when the program exited — e.g. after a
+// Ctrl-C). Callers use it to derive an honest exit code after Run returns.
+func (inst *Model) Counts() (done, failed, skipped, notRun int) {
+	for _, c := range inst.components {
+		switch c.Status {
+		case StatusDone:
+			done++
+		case StatusFailed:
+			failed++
+		case StatusSkipped:
+			skipped++
+		default:
+			notRun++
+		}
+	}
+	return done, failed, skipped, notRun
 }
 
 func (inst *Model) Init() tea.Cmd {
@@ -105,6 +139,7 @@ func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		inst.width = msg.Width
+		inst.height = msg.Height
 		// Size the bar to the terminal, leaving room for the "N of M" suffix and
 		// indent; clamp so it stays sane on very narrow or very wide terminals.
 		inst.progressBar.SetWidth(clamp(msg.Width-16, 10, 80))
@@ -128,7 +163,7 @@ func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case InstallOutputMsg:
 		for i := range inst.components {
 			if inst.components[i].Name == msg.Name {
-				inst.components[i].Output = appendTail(inst.components[i].Output, msg.Line, 3)
+				inst.components[i].Output = appendTail(inst.components[i].Output, msg.Line, outputTailMax)
 				break
 			}
 		}
@@ -193,19 +228,43 @@ func (inst *Model) View() tea.View {
 	return tea.NewView(b.String())
 }
 
+// action returns the in-progress verb for the mode.
+func (inst *Model) action() string {
+	switch inst.mode {
+	case ModeUninstall:
+		return "Uninstalling"
+	case ModeUpdate:
+		return "Updating"
+	default:
+		return "Installing"
+	}
+}
+
+// dryRunSuffix labels the screen when nothing will actually change.
+func (inst *Model) dryRunSuffix() string {
+	if inst.dryRun {
+		return " " + styles.Warning.Render("(dry run)")
+	}
+	return ""
+}
+
 func (inst *Model) viewProgress() string {
 	var b strings.Builder
 
 	doneCount := inst.countDone()
 	total := len(inst.components)
-	action := "Installing"
-	if inst.mode == ModeUninstall {
-		action = "Uninstalling"
+	noun := "components"
+	if inst.mode == ModeUpdate {
+		noun = "updates"
 	}
-	b.WriteString(fmt.Sprintf("%s %d components\n\n", action, total))
+	b.WriteString(fmt.Sprintf("%s %d %s%s\n\n", inst.action(), total, noun, inst.dryRunSuffix()))
 	b.WriteString(fmt.Sprintf("  %s  %d of %d\n\n", inst.progressBar.View(), doneCount, total))
 
-	for _, c := range inst.components {
+	start, end, above, below := inst.componentWindow()
+	if above > 0 {
+		b.WriteString(fmt.Sprintf("  %s\n", styles.Dimmed.Render(fmt.Sprintf("↑ %d more", above))))
+	}
+	for _, c := range inst.components[start:end] {
 		switch c.Status {
 		case StatusDone:
 			b.WriteString(fmt.Sprintf("  %s %s %s\n",
@@ -220,7 +279,7 @@ func (inst *Model) viewProgress() string {
 				lipgloss.NewStyle().Bold(true).Foreground(styles.Bright).Render(c.Name),
 				styles.Dimmed.Render(fmt.Sprintf("(%s)", elapsed)),
 			))
-			for _, line := range c.Output {
+			for _, line := range tail(c.Output, liveTailLines) {
 				b.WriteString(fmt.Sprintf("    %s\n", styles.Dimmed.Render(line)))
 			}
 		case StatusFailed:
@@ -242,40 +301,76 @@ func (inst *Model) viewProgress() string {
 			))
 		}
 	}
+	if below > 0 {
+		b.WriteString(fmt.Sprintf("  %s\n", styles.Dimmed.Render(fmt.Sprintf("↓ %d more", below))))
+	}
 
 	elapsed := time.Since(inst.startTime)
 	b.WriteString(fmt.Sprintf("\n  Elapsed: %.1fs  ·  Ctrl+C to cancel\n", elapsed.Seconds()))
 	return b.String()
 }
 
+// componentWindow slices the component list to what fits the terminal, keeping
+// the running item in view — the view renders inline, so exceeding the screen
+// height would garble the display on long lists.
+func (inst *Model) componentWindow() (start, end, above, below int) {
+	n := len(inst.components)
+	// Chrome around the list: title+bar block (4 lines), footer (2), the running
+	// item's output tail, and one line for each ↑/↓ indicator.
+	capacity := inst.height - 6 - liveTailLines - 2
+	if inst.height <= 0 || capacity >= n {
+		return 0, n, 0, 0
+	}
+	if capacity < 3 {
+		capacity = 3
+	}
+	start = inst.current - capacity/2
+	if start > n-capacity {
+		start = n - capacity
+	}
+	if start < 0 {
+		start = 0
+	}
+	end = start + capacity
+	if end > n {
+		end = n
+	}
+	return start, end, start, n - end
+}
+
 func (inst *Model) viewSummary() string {
 	var b strings.Builder
-	succeeded, failed, skipped := 0, 0, 0
 	var failedNames []string
+	succeeded, failed, skipped, _ := inst.Counts()
 
-	completeMsg := "✓ Installation complete"
-	if inst.mode == ModeUninstall {
-		completeMsg = "✓ Uninstall complete"
+	// Don't claim success when something failed — the header is the one line
+	// people read.
+	noun := map[Mode]string{ModeInstall: "Installation", ModeUninstall: "Uninstall", ModeUpdate: "Update"}[inst.mode]
+	if failed > 0 {
+		b.WriteString(styles.Error.Render(fmt.Sprintf("✗ %s finished with %d failure(s)", noun, failed)) + inst.dryRunSuffix() + "\n\n")
+	} else {
+		b.WriteString(styles.Success.Render("✓ "+noun+" complete") + inst.dryRunSuffix() + "\n\n")
 	}
-	b.WriteString(styles.Success.Render(completeMsg) + "\n\n")
 
 	for _, c := range inst.components {
 		switch c.Status {
 		case StatusDone:
-			succeeded++
 			b.WriteString(fmt.Sprintf("  %s %s %s\n",
 				styles.Success.Render("✓"), c.Name,
 				styles.Dimmed.Render(fmt.Sprintf("%.1fs", c.Duration.Seconds())),
 			))
 		case StatusFailed:
-			failed++
 			failedNames = append(failedNames, c.Name)
 			b.WriteString(fmt.Sprintf("  %s %s %s\n",
 				styles.Error.Render("✗"), c.Name,
 				styles.Error.Render(c.Error),
 			))
+			// Replay the failure's output — "exit status 1" alone isn't actionable;
+			// the apt/dpkg/compose lines that explain it are in the tail.
+			for _, line := range tail(c.Output, failTailLines) {
+				b.WriteString(fmt.Sprintf("      %s\n", styles.Dimmed.Render(line)))
+			}
 		case StatusSkipped:
-			skipped++
 			b.WriteString(fmt.Sprintf("  %s %s %s\n",
 				styles.Warning.Render("–"), c.Name,
 				styles.Dimmed.Render("skipped (unsupported OS)"),
@@ -294,7 +389,8 @@ func (inst *Model) viewSummary() string {
 	}
 	b.WriteString("\n  " + strings.Join(segments, " · ") + "\n")
 
-	if len(failedNames) > 0 {
+	// The retry hint only makes sense where the names are CLI arguments.
+	if len(failedNames) > 0 && inst.mode != ModeUpdate {
 		retryCmd := "install"
 		if inst.mode == ModeUninstall {
 			retryCmd = "uninstall"
@@ -337,6 +433,14 @@ func appendTail(lines []string, line string, max int) []string {
 	lines = append(lines, line)
 	if len(lines) > max {
 		lines = lines[len(lines)-max:]
+	}
+	return lines
+}
+
+// tail returns the last max lines of lines.
+func tail(lines []string, max int) []string {
+	if len(lines) > max {
+		return lines[len(lines)-max:]
 	}
 	return lines
 }

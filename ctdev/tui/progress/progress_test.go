@@ -9,7 +9,7 @@ import (
 )
 
 func TestProgressBarResizesToWidth(t *testing.T) {
-	val := New([]string{"docker"}, ModeInstall)
+	val := New([]string{"docker"}, ModeInstall, false)
 	m := &val
 
 	// Narrow terminal clamps to the floor; wide terminal clamps to the ceiling.
@@ -28,7 +28,7 @@ func TestProgressBarResizesToWidth(t *testing.T) {
 }
 
 func TestProgressModelInit(t *testing.T) {
-	m := New([]string{"docker", "btop"}, ModeInstall)
+	m := New([]string{"docker", "btop"}, ModeInstall, false)
 	if len(m.components) != 2 {
 		t.Errorf("expected 2 components, got %d", len(m.components))
 	}
@@ -38,7 +38,7 @@ func TestProgressModelInit(t *testing.T) {
 }
 
 func TestProgressModelInstallDone(t *testing.T) {
-	val := New([]string{"docker", "btop"}, ModeInstall)
+	val := New([]string{"docker", "btop"}, ModeInstall, false)
 	m := &val
 
 	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
@@ -58,7 +58,7 @@ func TestProgressModelInstallDone(t *testing.T) {
 }
 
 func TestProgressModelInstallFail(t *testing.T) {
-	val := New([]string{"docker"}, ModeInstall)
+	val := New([]string{"docker"}, ModeInstall, false)
 	m := &val
 
 	updated, _ := m.Update(InstallFailMsg{Name: "docker", Error: "apt lock", Duration: time.Second})
@@ -85,7 +85,7 @@ func TestProgressOutputTail(t *testing.T) {
 }
 
 func TestProgressModelInstallSkip(t *testing.T) {
-	val := New([]string{"docker"}, ModeInstall)
+	val := New([]string{"docker"}, ModeInstall, false)
 	m := &val
 
 	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
@@ -108,7 +108,7 @@ func TestProgressModelInstallSkip(t *testing.T) {
 }
 
 func TestProgressModelMixedDoneAndSkip(t *testing.T) {
-	val := New([]string{"a", "b", "c"}, ModeInstall)
+	val := New([]string{"a", "b", "c"}, ModeInstall, false)
 	m := &val
 
 	updated, _ := m.Update(InstallDoneMsg{Name: "a", Duration: time.Second})
@@ -127,7 +127,7 @@ func TestProgressModelMixedDoneAndSkip(t *testing.T) {
 }
 
 func TestProgressModelInstallOutput(t *testing.T) {
-	val := New([]string{"docker"}, ModeInstall)
+	val := New([]string{"docker"}, ModeInstall, false)
 	m := &val
 
 	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
@@ -149,8 +149,41 @@ func TestProgressModelInstallOutput(t *testing.T) {
 	}
 }
 
+func TestSummaryReplaysFailureOutput(t *testing.T) {
+	val := New([]string{"docker", "btop"}, ModeInstall, false)
+	m := &val
+
+	updated, _ := m.Update(InstallStartMsg{Name: "docker"})
+	m = updated.(*Model)
+	updated, _ = m.Update(InstallOutputMsg{Name: "docker", Line: "E: Unable to locate package docker-ce"})
+	m = updated.(*Model)
+	updated, _ = m.Update(InstallFailMsg{Name: "docker", Error: "exit status 100", Duration: time.Second})
+	m = updated.(*Model)
+
+	summary := m.viewSummary()
+	if !strings.Contains(summary, "Unable to locate package") {
+		t.Errorf("expected the failure's output replayed in the summary, got:\n%s", summary)
+	}
+	if !strings.Contains(summary, "finished with 1 failure") {
+		t.Errorf("expected an honest failure header, got:\n%s", summary)
+	}
+
+	done, failed, skipped, notRun := m.Counts()
+	if done != 0 || failed != 1 || skipped != 0 || notRun != 1 {
+		t.Errorf("Counts() = %d,%d,%d,%d; want 0,1,0,1", done, failed, skipped, notRun)
+	}
+}
+
+func TestProgressDryRunLabelled(t *testing.T) {
+	val := New([]string{"docker"}, ModeInstall, true)
+	m := &val
+	if view := m.viewProgress(); !strings.Contains(view, "(dry run)") {
+		t.Errorf("expected '(dry run)' in progress view, got: %s", view)
+	}
+}
+
 func TestProgressModelUninstallMode(t *testing.T) {
-	val := New([]string{"docker"}, ModeUninstall)
+	val := New([]string{"docker"}, ModeUninstall, false)
 	m := &val
 
 	view := m.viewProgress()

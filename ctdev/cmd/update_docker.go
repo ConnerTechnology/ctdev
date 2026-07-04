@@ -14,7 +14,6 @@ import (
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 )
 
 // baseDigestMarker is written into a built stack's directory recording the
@@ -202,43 +201,34 @@ func remoteIndexDigest(ctx context.Context, img string) (string, error) {
 	return parseBuildxDigest(string(out)), nil
 }
 
-// updateDockerStacks updates each selected compose stack. Registry-image stacks
+// updateDockerStack updates one selected compose stack. Registry-image stacks
 // are pulled and recreated; built stacks (those with a Dockerfile) are rebuilt
 // from a freshly-pulled base, then their base-digest marker is refreshed.
-func updateDockerStacks(ctx context.Context, o sysutil.Opts, items []checklist.UpdateItem) {
-	for _, item := range items {
-		s, ok := stackByName(item.Name)
-		if !ok {
-			fmt.Printf("  docker: unknown stack %q\n", item.Name)
-			continue
-		}
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating containers: %s...", s.Name)))
-
-		if stackIsBuilt(s) {
-			// caddy and friends: rebuild against a newly-pulled base, then restart.
-			// Mirrors the sudo path the caddy installer uses for this stack.
-			if err := sysutil.SudoRun(ctx, o, "docker", "compose", "-f", s.Compose, "build", "--pull"); err != nil {
-				fmt.Printf("  %s build warning: %v\n", s.Name, err)
-				continue
-			}
-			if err := sysutil.SudoRun(ctx, o, "docker", "compose", "-f", s.Compose, "up", "-d"); err != nil {
-				fmt.Printf("  %s up warning: %v\n", s.Name, err)
-				continue
-			}
-			if !o.DryRun {
-				refreshBaseDigestMarker(ctx, s)
-			}
-			continue
-		}
-
-		if err := sysutil.Run(ctx, o, "docker", "compose", "-f", s.Compose, "pull"); err != nil {
-			fmt.Printf("  %s pull warning: %v\n", s.Name, err)
-			continue
-		}
-		if err := sysutil.Run(ctx, o, "docker", "compose", "-f", s.Compose, "up", "-d"); err != nil {
-			fmt.Printf("  %s up warning: %v\n", s.Name, err)
-		}
+func updateDockerStack(ctx context.Context, o sysutil.Opts, item checklist.UpdateItem) error {
+	s, ok := stackByName(item.Name)
+	if !ok {
+		return fmt.Errorf("unknown stack %q", item.Name)
 	}
+
+	if stackIsBuilt(s) {
+		// caddy and friends: rebuild against a newly-pulled base, then restart.
+		// Mirrors the sudo path the caddy installer uses for this stack.
+		if err := sysutil.SudoRun(ctx, o, "docker", "compose", "-f", s.Compose, "build", "--pull"); err != nil {
+			return fmt.Errorf("build: %w", err)
+		}
+		if err := sysutil.SudoRun(ctx, o, "docker", "compose", "-f", s.Compose, "up", "-d"); err != nil {
+			return fmt.Errorf("up: %w", err)
+		}
+		if !o.DryRun {
+			refreshBaseDigestMarker(ctx, s)
+		}
+		return nil
+	}
+
+	if err := sysutil.Run(ctx, o, "docker", "compose", "-f", s.Compose, "pull"); err != nil {
+		return fmt.Errorf("pull: %w", err)
+	}
+	return sysutil.Run(ctx, o, "docker", "compose", "-f", s.Compose, "up", "-d")
 }
 
 // stackByName resolves a stack name (an UpdateItem.Name) back to its stack.

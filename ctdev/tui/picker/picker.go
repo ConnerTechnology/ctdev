@@ -39,7 +39,7 @@ type Result struct {
 	Quit     bool
 }
 
-func New(components []component.Component, installed map[string]bool, os component.OS, mode Mode) Model {
+func New(components []component.Component, installed map[string]bool, os component.OS, mode Mode, dryRun bool) Model {
 	groups := component.GroupByCategory(components)
 
 	installedCount := 0
@@ -79,6 +79,9 @@ func New(components []component.Component, installed map[string]bool, os compone
 	title := "Select components to install"
 	if mode == ModeUninstall {
 		title = "Select components to uninstall"
+	}
+	if dryRun {
+		title += " (dry run)"
 	}
 	ms := multiselect.New(gs, multiselect.Options{
 		Title:        title,

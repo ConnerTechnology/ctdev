@@ -1,5 +1,5 @@
 [Unit]
-Description=restic homelab backup (offsite B2 + local USB when mounted)
+Description=restic backup of this machine (primary repo + optional second copy)
 Documentation=https://restic.readthedocs.io
 Wants=network-online.target
 After=network-online.target docker.service

@@ -1,14 +1,12 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -84,7 +82,7 @@ func init() {
 				if isBatchMode() {
 					return runCategoryBatch(cmdContext(cmd), slug)
 				}
-				return runCategoryWizard(cmdContext(cmd), slug, false)
+				return cancelToClean(runCategoryWizard(cmdContext(cmd), slug, false))
 			},
 		}
 		configureCmd.AddCommand(cmd)
@@ -119,7 +117,7 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 	ctx := cmdContext(cmd)
 	for _, slug := range slugOrder {
 		if err := runCategoryWizard(ctx, slug, flagConfigShow); err != nil {
-			return err
+			return cancelToClean(err)
 		}
 	}
 	return nil
@@ -136,31 +134,11 @@ func cmdContext(cmd *cobra.Command) context.Context {
 	return context.Background()
 }
 
-var stdinScanner = bufio.NewScanner(os.Stdin)
-
-// promptLine reads a single line of input, returning empty string on EOF.
-func promptLine() string {
-	if stdinScanner.Scan() {
-		return strings.TrimSpace(stdinScanner.Text())
-	}
-	return ""
-}
-
-// promptChoice shows a numbered prompt and returns the 1-based selection.
-// Returns defaultVal if input is empty.
-func promptChoice(defaultVal int) int {
-	input := promptLine()
-	if input == "" {
-		return defaultVal
-	}
-	n, err := strconv.Atoi(input)
-	if err != nil {
-		return defaultVal
-	}
-	return n
-}
-
 func runConfigureGit(cmd *cobra.Command, args []string) error {
+	return cancelToClean(configureGit(cmdContext(cmd)))
+}
+
+func configureGit(ctx context.Context) error {
 	if flagConfigShow {
 		return showGitConfig()
 	}
@@ -195,7 +173,10 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 			fmt.Println("    1) Global (all repos)")
 			fmt.Println("    2) This repo only")
 			fmt.Printf("  Select [1]: ")
-			choice := promptChoice(1)
+			choice, err := promptChoiceCtx(ctx, 1)
+			if err != nil {
+				return err
+			}
 			if choice == 2 {
 				local = true
 			}
@@ -213,32 +194,30 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  %s %s\n\n", labelStyle.Render("Scope:"), valueStyle.Render(scope))
 
 	// Step 2: Name prompt
-	currentName := getGitConfig("user.name", local)
-	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Name [%s]:", currentName)))
-	name := promptLine()
-	if name == "" {
-		name = currentName
+	name, err := promptWithDefaultCtx(ctx, "Name", getGitConfig("user.name", local))
+	if err != nil {
+		return err
 	}
 
 	// Step 3: Email prompt
-	currentEmail := getGitConfig("user.email", local)
-	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Email [%s]:", currentEmail)))
-	email := promptLine()
-	if email == "" {
-		email = currentEmail
+	email, err := promptWithDefaultCtx(ctx, "Email", getGitConfig("user.email", local))
+	if err != nil {
+		return err
 	}
 
 	fmt.Println()
 
 	// Step 4: SSH signing key picker
-	keyPath, err := promptSSHSigningKey(email)
+	keyPath, err := promptSSHSigningKey(ctx, email)
 	if err != nil {
 		return err
 	}
 
 	// Step 5: GitHub upload (if key selected)
 	if keyPath != "" {
-		promptGitHubKeyUpload(keyPath)
+		if err := promptGitHubKeyUpload(ctx, keyPath); err != nil {
+			return err
+		}
 	}
 
 	// Step 6: Apply settings
@@ -254,7 +233,7 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func promptSSHSigningKey(email string) (string, error) {
+func promptSSHSigningKey(ctx context.Context, email string) (string, error) {
 	keys := sysutil.FindSSHPublicKeys()
 
 	fmt.Println("  SSH Signing Key:")
@@ -285,7 +264,10 @@ func promptSSHSigningKey(email string) (string, error) {
 		defaultChoice = generateIdx
 	}
 	fmt.Printf("  Select [%d]: ", defaultChoice)
-	choice := promptChoice(defaultChoice)
+	choice, err := promptChoiceCtx(ctx, defaultChoice)
+	if err != nil {
+		return "", err
+	}
 
 	fmt.Println()
 
@@ -308,8 +290,10 @@ func promptSSHSigningKey(email string) (string, error) {
 
 	// Custom path
 	if choice == customIdx {
-		fmt.Printf("  Key path: ")
-		path := promptLine()
+		path, err := promptWithDefaultCtx(ctx, "Key path", "")
+		if err != nil {
+			return "", err
+		}
 		if path == "" {
 			return "", nil
 		}
@@ -367,19 +351,20 @@ func generateSSHKey(email string) (string, error) {
 	return pubKeyPath, nil
 }
 
-func promptGitHubKeyUpload(keyPath string) {
+func promptGitHubKeyUpload(ctx context.Context, keyPath string) error {
 	// Check if gh is available and authenticated
 	if err := exec.Command("gh", "auth", "status").Run(); err != nil {
 		printManualGitHubInstructions(keyPath)
-		return
+		return nil
 	}
 
-	fmt.Printf("  Add this key to GitHub? [Y/n]: ")
-	input := promptLine()
+	yes, err := promptYesNoCtx(ctx, "Add this key to GitHub?", true)
+	if err != nil {
+		return err
+	}
 	fmt.Println()
-
-	if input != "" && strings.ToLower(input) != "y" && strings.ToLower(input) != "yes" {
-		return
+	if !yes {
+		return nil
 	}
 
 	hostname, _ := os.Hostname()
@@ -402,6 +387,7 @@ func promptGitHubKeyUpload(keyPath string) {
 		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added SSH signing key to GitHub as %q", title+"-signing")))
 	}
 	fmt.Println()
+	return nil
 }
 
 func printManualGitHubInstructions(keyPath string) {
@@ -522,6 +508,10 @@ func setGitConfig(name, email string, local bool) error {
 }
 
 func runConfigureAWS(cmd *cobra.Command, args []string) error {
+	return cancelToClean(configureAWS(cmdContext(cmd)))
+}
+
+func configureAWS(ctx context.Context) error {
 	selected := flagAWSProfile
 
 	if selected == "" {
@@ -536,7 +526,10 @@ func runConfigureAWS(cmd *cobra.Command, args []string) error {
 			fmt.Printf("  %d) %s\n", i+1, p)
 		}
 		fmt.Printf("Select: ")
-		choice := promptChoice(1)
+		choice, err := promptChoiceCtx(ctx, 1)
+		if err != nil {
+			return err
+		}
 
 		if choice < 1 || choice > len(profiles) {
 			return fmt.Errorf("invalid selection: %d", choice)

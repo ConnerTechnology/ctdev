@@ -22,14 +22,16 @@ type keyMap struct {
 
 func defaultKeys() keyMap {
 	return keyMap{
-		Up:      key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		Down:    key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		Home:    key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
-		End:     key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
-		Group:   key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "collapse group")),
-		All:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all")),
-		None:    key.NewBinding(key.WithKeys("A", "n"), key.WithHelp("A", "none")),
+		Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+		Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+		Home:   key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
+		End:    key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
+		Toggle: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
+		Group:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "collapse group")),
+		All:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all")),
+		// No "n" alias here: users reflexively type n for "no" and would silently
+		// lose their whole preselection.
+		None:    key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "none")),
 		Invert:  key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "invert")),
 		Filter:  key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		Help:    key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),

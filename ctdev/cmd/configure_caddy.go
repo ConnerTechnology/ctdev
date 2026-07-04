@@ -34,7 +34,7 @@ func init() {
 }
 
 func runConfigureCaddy(cmd *cobra.Command, args []string) error {
-	return configureCaddy(cmdContext(cmd))
+	return cancelToClean(configureCaddy(cmdContext(cmd)))
 }
 
 // configureCaddy writes ~/caddy/.env (domain, ACME email, CF token), wires
@@ -54,9 +54,16 @@ func configureCaddy(ctx context.Context) error {
 	if !isBatchMode() {
 		fmt.Println(styles.Title.Render("Caddy reverse proxy"))
 		fmt.Println()
-		domain = promptWithDefault("Wildcard domain", domain)
-		email = promptWithDefault("ACME email", email)
-		token = promptSecretWithDefault("Cloudflare API token", token)
+		var err error
+		if domain, err = promptWithDefaultCtx(ctx, "Wildcard domain", domain); err != nil {
+			return err
+		}
+		if email, err = promptWithDefaultCtx(ctx, "ACME email", email); err != nil {
+			return err
+		}
+		if token, err = promptSecretCtx(ctx, "Cloudflare API token", token); err != nil {
+			return err
+		}
 		fmt.Println()
 	}
 
@@ -124,28 +131,4 @@ func orDash(s string) string {
 		return "—"
 	}
 	return s
-}
-
-// promptWithDefault prompts with the current value shown in brackets; an empty
-// reply keeps the default.
-func promptWithDefault(label, def string) string {
-	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("%s [%s]:", label, orDash(def))))
-	if in := promptLine(); in != "" {
-		return in
-	}
-	return def
-}
-
-// promptSecretWithDefault is like promptWithDefault but never echoes the
-// existing secret — it only signals whether one is already set.
-func promptSecretWithDefault(label, def string) string {
-	hint := ""
-	if def != "" {
-		hint = " [keep existing]"
-	}
-	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("%s%s:", label, hint)))
-	if in := promptLine(); in != "" {
-		return in
-	}
-	return def
 }

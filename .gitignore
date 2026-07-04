@@ -30,10 +30,9 @@ ctdev/dist/
 # Superpowers
 .superpowers/
 
-# Homelab secrets — never commit plaintext host configs or age private keys.
-# Only *.sops.env (SOPS-encrypted) belongs in hosts/.
+# Secrets are never committed. They're entered at `ctdev configure <svc>` time and
+# stored only on the host (e.g. /etc/restic/restic.env, ~/<svc>/.env).
+*.env
+!*.example.env
 keys.txt
 *.age.key
-ctdev/component/configs/homelab/hosts/*.plain.env
-ctdev/component/configs/homelab/hosts/*.dec.env
-ctdev/component/configs/homelab/.env

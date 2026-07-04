@@ -30,12 +30,13 @@ ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
+ctdev configure restic          # restic backups (repo, credentials, paths) — --show
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
-ctdev backup [service...]       # Export service config to version control (default: all)
-ctdev restore [service...]      # Re-apply version-controlled service config (inverse of backup)
-ctdev backup now                # Run a restic data snapshot now (restic-backup.sh)
-ctdev backup snapshots [b2|local]  # List restic snapshots
+ctdev backup now                # Run a restic snapshot of this machine now
+ctdev backup snapshots [primary|local]  # List this machine's restic snapshots
+ctdev backup paths              # Pick what to back up in a local web UI
+ctdev restore ls|files|in-place|check   # Inspect/restore from restic (see RECOVERY.md)
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev verify                    # Verify the bootstrap installation
 ```
@@ -68,12 +69,9 @@ running Pi-hole behind a Caddy reverse proxy:
   (runs against the container via `docker exec`, or a native install if present).
   The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
   served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
-- `ctdev backup pihole` / `ctdev restore pihole` — version-control the lists. Backup
-  snapshots adlists, allow/deny lists, and regex filters to plain-text files under
-  `component/configs/pihole/` (embedded; diffable in git); restore applies them and
-  rebuilds gravity (additive). Custom DNS records are SOPS-encrypted to
-  `component/configs/pihole/hosts/<node>.sops.json` (rule in `.sops.yaml`). `ctdev
-  backup` with no service backs up every backup-capable service (just Pi-hole today).
+  Pi-hole's lists, settings, and gravity.db persist in `~/pihole/etc-pihole`, which
+  restic backs up — there is no separate per-service config export. Set the admin
+  password with `docker exec -it pihole pihole setpassword`.
 - `ctdev install caddy` — deploys the Caddy stack from `component/configs/caddy/`
   to `~/caddy/` and runs `docker compose up`. The stack is generic; the domain,
   ACME email, and Cloudflare token come from `~/caddy/.env`.
@@ -96,15 +94,21 @@ running Pi-hole behind a Caddy reverse proxy:
   memory stats need the kernel memory cgroup, which is off on some customized
   Pi boot images (`cgroup_disable=memory` baked into the device-tree bootargs).
 - `ctdev install restic` — restic backups with a daily systemd timer. Installs
-  restic and deploys `/usr/local/bin/restic-backup.sh` (snapshots the stack dirs
-  under `$HOME` + Docker named-volume data dirs to an offsite B2 repo and a local
-  USB repo at `/mnt/backup` when mounted, then prunes 7d/4w/6m),
-  `/usr/local/bin/restic-restore.sh` (a restore helper), and
-  `restic-backup.{service,timer}`. Repo locations, B2 creds, and the repo
-  password live in `/etc/restic/` (root-only, **never committed**); the timer is
-  enabled only once that config exists. Outside the timer, `ctdev backup now`
-  runs a snapshot immediately and `ctdev backup snapshots [b2|local]` lists them
-  (both shell out to these scripts via sudo). **Full restore runbook: `RECOVERY.md`.**
+  restic and deploys `/usr/local/bin/restic-backup.sh` (snapshots the paths listed
+  in `/etc/restic/backup-paths` to the configured repo, optionally a second repo,
+  then prunes 7d/4w/6m), `/usr/local/bin/restic-restore.sh` (a restore helper), and
+  `restic-backup.{service,timer}`. Then run **`ctdev configure restic`** — it prompts
+  for the repository (any backend: B2/S3/SFTP/local), credentials, and password,
+  writes `/etc/restic/restic.env` (root-only, **never committed**), seeds default
+  exclude patterns, runs `restic init`, and enables the timer. Backups are **opt-in**:
+  nothing is snapshotted until you choose what to include with **`ctdev backup paths`** —
+  a local web UI (localhost only) that browses the filesystem with folder sizes and
+  include/exclude buttons, writing `/etc/restic/backup-paths` and `/etc/restic/backup-excludes`.
+  (An `include` is a tree to back up; `exclude` globs/paths carve junk out of an included
+  tree — e.g. include `~/Repos`, exclude `**/node_modules`.) Outside the timer,
+  `ctdev backup now` snapshots immediately and
+  `ctdev backup snapshots [primary|local]` lists this machine's snapshots (tagged by
+  hostname); `ctdev restore …` inspects/restores. **Full restore runbook: `RECOVERY.md`.**
 
 Keeping a node current: `ctdev update` refreshes these compose stacks along with
 system packages. It checks each managed stack (pihole, caddy, beszel, portainer)
@@ -115,14 +119,18 @@ caddy image). `ctdev update --check` lists what's available read-only.
 Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
 default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.
 
-Per-node secrets are SOPS-encrypted under `component/configs/<svc>/hosts/<node>.sops.env`
-(age recipient in `.sops.yaml`): **caddy** (CF token), **restic** (repo password +
-B2 keys → `/etc/restic/restic.env`), **beszel** (agent KEY/TOKEN), **pihole**
-(admin password). Decrypt with `sops -d <file>` into the target path. The age
-private key (`~/.config/sops/age/keys.txt`) is the only thing that can decrypt
-them — keep it in 1Password; it is never committed or backed up.
-**Never commit a plaintext host config or an age private key.**
-See `SECRETS.md` (encryption workflow) and `RECOVERY.md` (disaster recovery).
+Secrets are **never stored in the repo**. Each is entered at `configure` time and
+stored only on the host that needs it; if lost, just reconfigure:
+- **restic** (repo + credentials + password) → `/etc/restic/restic.env`, written by
+  `ctdev configure restic`. restic itself can't restore its own credentials, so they
+  live only here — keep a copy in your password manager.
+- **caddy** (domain/ACME email/CF token) → `~/caddy/.env`, written by `ctdev configure caddy`.
+- **pihole** (admin password) → set with `docker exec -it pihole pihole setpassword`.
+- **beszel** (agent KEY/TOKEN) → `~/beszel/.env`, pasted from the hub's "Add System" dialog.
+
+restic snapshots the rendered `~/<svc>/.env` files (they're under the backed-up paths),
+so a restore brings them back; a brand-new node re-enters them from your password manager.
+**Never commit a secret.** See `RECOVERY.md` (disaster recovery).
 
 ## Directory structure
 

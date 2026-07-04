@@ -49,7 +49,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		osType := comp.OS(platform.Detect().OS)
-		m := picker.New(installedComps, installed, osType, picker.ModeUninstall)
+		m := picker.New(installedComps, installed, osType, picker.ModeUninstall, flagDryRun)
 		p := tea.NewProgram(&m)
 		result, err := p.Run()
 		resetTerminal()

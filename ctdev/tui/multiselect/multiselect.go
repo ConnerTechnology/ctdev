@@ -9,6 +9,7 @@ package multiselect
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -384,13 +385,20 @@ func (m *Model) updateFilter(msg tea.KeyPressMsg) {
 		m.filter = ""
 		m.snapCursor()
 	case "backspace":
-		if len(m.filter) > 0 {
-			m.filter = m.filter[:len(m.filter)-1]
+		if r := []rune(m.filter); len(r) > 0 {
+			m.filter = string(r[:len(r)-1]) // rune-safe: never split a multi-byte char
 			m.onFilterChanged()
 		}
+	case "space":
+		// The space key stringifies as "space", not " " — map it back so
+		// multi-word filters work.
+		m.filter += " "
+		m.onFilterChanged()
 	default:
-		if s := msg.String(); len(s) == 1 {
-			m.filter += s
+		// Accept any single printable rune (including non-ASCII); longer
+		// strings are named keys ("tab", "ctrl+a", ...) and are ignored.
+		if r := []rune(msg.String()); len(r) == 1 && unicode.IsPrint(r[0]) {
+			m.filter += string(r)
 			m.onFilterChanged()
 		}
 	}

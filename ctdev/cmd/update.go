@@ -994,157 +994,192 @@ func printUpdateList(items []checklist.UpdateItem) {
 	fmt.Printf("\n%s\n", styles.Success.Render(fmt.Sprintf("%d updates available", len(items))))
 }
 
-func executeUpdates(ctx context.Context, items []checklist.UpdateItem) error {
-	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+// updateStep is one unit of the update apply phase — a labeled action run
+// under the shared progress TUI (or the batch fallback). Steps write progress
+// to o.Stdout only; anything printed elsewhere would corrupt the TUI.
+type updateStep struct {
+	name string
+	run  func(ctx context.Context, o sysutil.Opts) error
+}
 
-	// Group items by source
+func executeUpdates(ctx context.Context, items []checklist.UpdateItem) error {
+	return runUpdateSteps(ctx, buildUpdateSteps(items))
+}
+
+// buildUpdateSteps translates the selected update items into ordered steps.
+// Package managers batch into one step per manager; runtimes, CLI tools, and
+// docker stacks update independently, so each gets its own step and a failure
+// in one never blocks the rest.
+func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 	bySource := make(map[string][]checklist.UpdateItem)
 	for _, item := range items {
 		bySource[item.Source] = append(bySource[item.Source], item)
 	}
 
-	// APT
+	var steps []updateStep
+
 	if pkgs := bySource["apt"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d apt packages...", len(names))))
-		args := append([]string{"apt", "install", "--only-upgrade", "-y"}, names...)
-		if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
-			// Warn and continue like every other source, so one failing manager
-			// doesn't strand the brew/flatpak/runtime/cli/npm updates the user
-			// also selected.
-			fmt.Printf("  apt upgrade warning: %v\n", err)
-		}
+		steps = append(steps, updateStep{
+			name: fmt.Sprintf("apt (%d packages)", len(names)),
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				args := append([]string{"install", "--only-upgrade", "-y"}, names...)
+				return sysutil.SudoRun(ctx, o, "apt", args...)
+			},
+		})
 	}
 
-	// Flatpak
 	for _, item := range bySource["flatpak"] {
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating flatpak: %s...", item.Name)))
-		if err := sysutil.Run(ctx, o, "flatpak", "update", "-y", item.Name); err != nil {
-			fmt.Printf("  flatpak update warning (%s): %v\n", item.Name, err)
-		}
+		steps = append(steps, updateStep{
+			name: "flatpak: " + item.Name,
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				return sysutil.Run(ctx, o, "flatpak", "update", "-y", item.Name)
+			},
+		})
 	}
 
-	// Brew
 	if pkgs := bySource["brew"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d brew packages...", len(names))))
-		args := append([]string{"upgrade"}, names...)
-		if err := sysutil.Run(ctx, o, "brew", args...); err != nil {
-			fmt.Printf("  brew upgrade warning: %v\n", err)
-		}
+		steps = append(steps, updateStep{
+			name: fmt.Sprintf("brew (%d packages)", len(names)),
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				return sysutil.Run(ctx, o, "brew", append([]string{"upgrade"}, names...)...)
+			},
+		})
 	}
 
-	// Brew Cask
 	if pkgs := bySource["brew-cask"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d brew cask apps...", len(names))))
-		args := append([]string{"upgrade", "--cask"}, names...)
-		if err := sysutil.Run(ctx, o, "brew", args...); err != nil {
-			fmt.Printf("  brew cask upgrade warning: %v\n", err)
-		}
+		steps = append(steps, updateStep{
+			name: fmt.Sprintf("brew casks (%d)", len(names)),
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				return sysutil.Run(ctx, o, "brew", append([]string{"upgrade", "--cask"}, names...)...)
+			},
+		})
 	}
 
-	// Oh My Zsh
-	for range bySource["git"] {
-		fmt.Println(styles.Dimmed.Render("Updating Oh My Zsh..."))
-		omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
-		if err := sysutil.Run(ctx, o, "git", "-C", omzDir, "pull", "--rebase", "--quiet"); err != nil {
-			fmt.Printf("  oh-my-zsh update warning: %v\n", err)
-		}
-		break // only one oh-my-zsh
+	if len(bySource["git"]) > 0 { // only one oh-my-zsh
+		steps = append(steps, updateStep{
+			name: "oh-my-zsh",
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
+				return sysutil.Run(ctx, o, "git", "-C", omzDir, "pull", "--rebase", "--quiet")
+			},
+		})
 	}
 
-	// Runtimes (bun / node / go / ruby)
 	for _, item := range bySource["runtime"] {
-		switch item.Name {
-		case "bun":
-			fmt.Println(styles.Dimmed.Render("Updating bun..."))
-			if err := sysutil.Run(ctx, o, "bun", "upgrade"); err != nil {
-				fmt.Printf("  bun upgrade warning: %v\n", err)
-			}
-		case "node (nodenv)":
-			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating node to %s via nodenv...", item.NewVer)))
-			if err := sysutil.Run(ctx, o, "nodenv", "install", "--skip-existing", item.NewVer); err != nil {
-				fmt.Printf("  nodenv install warning: %v\n", err)
-				continue
-			}
-			if err := sysutil.Run(ctx, o, "nodenv", "global", item.NewVer); err != nil {
-				fmt.Printf("  nodenv global warning: %v\n", err)
-			}
-		case "go":
-			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating Go %s → %s...", item.CurrentVer, item.NewVer)))
-			if o.DryRun {
-				fmt.Fprintf(o.Stdout, "  [dry-run] download and install go%s\n", item.NewVer)
-			} else if err := updateGo(ctx, o, item.NewVer); err != nil {
-				fmt.Printf("  go update warning: %v\n", err)
-			}
-		case "ruby":
-			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Ruby %s available (current: %s)", item.NewVer, item.CurrentVer)))
-			if _, err := exec.LookPath("rbenv"); err != nil {
-				fmt.Println(styles.Help.Render("  Install manually or via rbenv"))
-				continue
-			}
-			if err := sysutil.Run(ctx, o, "rbenv", "install", "--skip-existing", item.NewVer); err != nil {
-				fmt.Printf("  rbenv install warning: %v\n", err)
-				continue
-			}
-			if err := sysutil.Run(ctx, o, "rbenv", "global", item.NewVer); err != nil {
-				fmt.Printf("  rbenv global warning: %v\n", err)
-			}
+		if step, ok := runtimeUpdateStep(item); ok {
+			steps = append(steps, step)
 		}
 	}
 
-	// NPM globals
 	if pkgs := bySource["npm"]; len(pkgs) > 0 {
 		names := itemNames(pkgs)
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %d npm global packages...", len(names))))
-		args := append([]string{"update", "-g"}, names...)
-		if err := sysutil.Run(ctx, o, "npm", args...); err != nil {
-			fmt.Printf("  npm update -g warning: %v\n", err)
-		}
+		steps = append(steps, updateStep{
+			name: fmt.Sprintf("npm globals (%d)", len(names)),
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				return sysutil.Run(ctx, o, "npm", append([]string{"update", "-g"}, names...)...)
+			},
+		})
 	}
 
-	// ctdev self-update
 	for _, item := range bySource["ctdev"] {
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating ctdev %s → %s...", item.CurrentVer, item.NewVer)))
-		if err := sysutil.Run(ctx, o, "bash", "-c",
-			"curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash"); err != nil {
-			fmt.Printf("  ctdev update warning: %v\n", err)
-		}
+		steps = append(steps, updateStep{
+			name: fmt.Sprintf("ctdev %s → %s", item.CurrentVer, item.NewVer),
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				return sysutil.Run(ctx, o, "bash", "-c",
+					"curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash")
+			},
+		})
 	}
 
-	// CLI tools (helm, kubectl, terraform)
 	for _, item := range bySource["cli"] {
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Updating %s %s → %s...", item.Name, item.CurrentVer, item.NewVer)))
-		switch item.Name {
-		case "helm":
-			if o.DryRun {
-				fmt.Fprintf(o.Stdout, "  [dry-run] download helm v%s and install to /usr/local/bin\n", item.NewVer)
-			} else if err := updateHelm(ctx, o, item.NewVer); err != nil {
-				fmt.Printf("  helm update warning: %v\n", err)
-			}
-		case "kubectl":
-			if o.DryRun {
-				fmt.Fprintf(o.Stdout, "  [dry-run] download kubectl v%s and install to /usr/local/bin\n", item.NewVer)
-			} else if err := updateKubectl(ctx, o, item.NewVer); err != nil {
-				fmt.Printf("  kubectl update warning: %v\n", err)
-			}
-		case "terraform":
-			if o.DryRun {
-				fmt.Fprintf(o.Stdout, "  [dry-run] download terraform %s and install\n", item.NewVer)
-			} else if err := updateTerraform(ctx, o, item.NewVer); err != nil {
-				fmt.Printf("  terraform update warning: %v\n", err)
-			}
+		if step, ok := cliUpdateStep(item); ok {
+			steps = append(steps, step)
 		}
 	}
 
 	// Docker compose stacks (pihole, caddy, beszel, portainer, ...)
-	if stacks := bySource["docker"]; len(stacks) > 0 {
-		updateDockerStacks(ctx, o, stacks)
+	for _, item := range bySource["docker"] {
+		steps = append(steps, updateStep{
+			name: "docker: " + item.Name,
+			run: func(ctx context.Context, o sysutil.Opts) error {
+				return updateDockerStack(ctx, o, item)
+			},
+		})
 	}
 
-	fmt.Println(styles.Success.Render("Updates complete."))
-	return nil
+	return steps
+}
+
+// runtimeUpdateStep builds the step for a runtime update (bun/node/go/ruby).
+func runtimeUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
+	name := fmt.Sprintf("%s %s → %s", item.Name, item.CurrentVer, item.NewVer)
+	switch item.Name {
+	case "bun":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			return sysutil.Run(ctx, o, "bun", "upgrade")
+		}}, true
+	case "node (nodenv)":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			if err := sysutil.Run(ctx, o, "nodenv", "install", "--skip-existing", item.NewVer); err != nil {
+				return fmt.Errorf("nodenv install: %w", err)
+			}
+			return sysutil.Run(ctx, o, "nodenv", "global", item.NewVer)
+		}}, true
+	case "go":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download and install go%s\n", item.NewVer)
+				return nil
+			}
+			return updateGo(ctx, o, item.NewVer)
+		}}, true
+	case "ruby":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			if _, err := exec.LookPath("rbenv"); err != nil {
+				return fmt.Errorf("rbenv not found — install ruby %s manually", item.NewVer)
+			}
+			if err := sysutil.Run(ctx, o, "rbenv", "install", "--skip-existing", item.NewVer); err != nil {
+				return fmt.Errorf("rbenv install: %w", err)
+			}
+			return sysutil.Run(ctx, o, "rbenv", "global", item.NewVer)
+		}}, true
+	}
+	return updateStep{}, false
+}
+
+// cliUpdateStep builds the step for a CLI-tool update (helm/kubectl/terraform).
+func cliUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
+	name := fmt.Sprintf("%s %s → %s", item.Name, item.CurrentVer, item.NewVer)
+	switch item.Name {
+	case "helm":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download helm v%s and install to /usr/local/bin\n", item.NewVer)
+				return nil
+			}
+			return updateHelm(ctx, o, item.NewVer)
+		}}, true
+	case "kubectl":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download kubectl v%s and install to /usr/local/bin\n", item.NewVer)
+				return nil
+			}
+			return updateKubectl(ctx, o, item.NewVer)
+		}}, true
+	case "terraform":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "  [dry-run] download terraform %s and install\n", item.NewVer)
+				return nil
+			}
+			return updateTerraform(ctx, o, item.NewVer)
+		}}, true
+	}
+	return updateStep{}, false
 }
 
 // resolveInstallDest returns the existing install path for bin (from `which`)

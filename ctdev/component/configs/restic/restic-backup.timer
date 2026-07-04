@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily restic homelab backup
+Description=Daily restic backup of this machine
 
 [Timer]
 OnCalendar=*-*-* 03:30:00

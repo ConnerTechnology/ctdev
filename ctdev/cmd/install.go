@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
@@ -39,7 +40,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	} else {
 		installed := comp.InstalledSet()
 		osType := comp.OS(platform.Detect().OS)
-		m := picker.New(comp.Registry, installed, osType, picker.ModeInstall)
+		m := picker.New(comp.Registry, installed, osType, picker.ModeInstall, flagDryRun)
 		p := tea.NewProgram(&m)
 		result, err := p.Run()
 		resetTerminal()
@@ -63,6 +64,24 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	installedBefore := comp.InstalledSet()
 
 	resolved := comp.ResolveDependencies(comp.Registry, selected)
+
+	// Say up front what dependency resolution added, so the first time the user
+	// learns docker is coming isn't when it appears in the progress list.
+	requestedSet := map[string]bool{}
+	for _, name := range requested {
+		requestedSet[name] = true
+	}
+	var deps []string
+	for _, name := range resolved {
+		if !requestedSet[name] {
+			deps = append(deps, name)
+		}
+	}
+	if len(deps) > 0 {
+		fmt.Printf("Installing %d selected + %d dependencies: %s\n",
+			len(requested), len(deps), strings.Join(deps, ", "))
+	}
+
 	if !flagDryRun {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required for install: %w", err)

@@ -1,32 +1,11 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
-
-func TestResolveBackupServices(t *testing.T) {
-	all, err := resolveBackupServices(nil)
-	if err != nil {
-		t.Fatalf("no args: unexpected error: %v", err)
-	}
-	if len(all) == 0 {
-		t.Fatal("no args should resolve to all providers")
-	}
-
-	one, err := resolveBackupServices([]string{"pihole"})
-	if err != nil {
-		t.Fatalf("pihole: unexpected error: %v", err)
-	}
-	if len(one) != 1 || one[0].name != "pihole" {
-		t.Fatalf("expected [pihole], got %v", one)
-	}
-
-	if _, err := resolveBackupServices([]string{"bogus"}); err == nil {
-		t.Error("unknown service should error")
-	}
-}
 
 func hasSubcommand(parent *cobra.Command, name string) bool {
 	for _, c := range parent.Commands() {
@@ -61,14 +40,26 @@ func TestCommandTreeShape(t *testing.T) {
 		t.Error("ctdev gpu should be removed (folded into configure gpu)")
 	}
 
+	// backup fronts restic snapshots only (no per-service export anymore).
 	backup := childCommand(t, rootCmd, "backup")
 	if !hasSubcommand(backup, "now") || !hasSubcommand(backup, "snapshots") {
 		t.Error("backup should front restic via now/snapshots")
 	}
 
+	// restore wraps the restic restore helper.
+	restore := childCommand(t, rootCmd, "restore")
+	for _, sub := range []string{"ls", "files", "in-place", "check"} {
+		if !hasSubcommand(restore, sub) {
+			t.Errorf("restore should have a %q subcommand", sub)
+		}
+	}
+
 	configure := childCommand(t, rootCmd, "configure")
 	if !hasSubcommand(configure, "gpu") {
 		t.Error("configure should have a gpu subcommand")
+	}
+	if !hasSubcommand(configure, "restic") {
+		t.Error("configure should have a restic subcommand")
 	}
 	// And exactly one gpu subcommand (no duplicate from the slugOrder auto-loop).
 	count := 0
@@ -79,5 +70,37 @@ func TestCommandTreeShape(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("expected exactly one configure gpu command, got %d", count)
+	}
+}
+
+func TestBackupRejectsServiceArg(t *testing.T) {
+	// The old `ctdev backup pihole` form is gone; a stray arg must error, not
+	// silently run a snapshot.
+	if err := backupCmd.RunE(backupCmd, []string{"pihole"}); err == nil {
+		t.Error("expected error when a service name is passed to backup")
+	}
+}
+
+func TestBackupPathsContent(t *testing.T) {
+	out := backupPathsContent([]string{"/home/x", "/etc"})
+	if !strings.Contains(out, "/home/x\n") || !strings.Contains(out, "/etc\n") {
+		t.Errorf("paths missing from rendered file:\n%s", out)
+	}
+	if !strings.HasPrefix(out, "#") {
+		t.Error("expected a leading comment header")
+	}
+}
+
+func TestGeneratePassword(t *testing.T) {
+	a, err := generatePassword(32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := generatePassword(32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == "" || a == b {
+		t.Errorf("expected two distinct non-empty passwords, got %q and %q", a, b)
 	}
 }
