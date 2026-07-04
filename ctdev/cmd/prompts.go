@@ -46,10 +46,14 @@ func readLineCtx(ctx context.Context) (line string, ok bool) {
 		line string
 		ok   bool
 	}
+	// Snapshot the scanner on the caller's goroutine: a cancel-leaked reader
+	// must not touch the package var concurrently with anyone reassigning it
+	// (the race detector flags exactly that in tests that swap stdinScanner).
+	scanner := stdinScanner
 	ch := make(chan res, 1)
 	go func() {
-		if stdinScanner.Scan() {
-			ch <- res{strings.TrimSpace(stdinScanner.Text()), true}
+		if scanner.Scan() {
+			ch <- res{strings.TrimSpace(scanner.Text()), true}
 			return
 		}
 		ch <- res{"", false}
