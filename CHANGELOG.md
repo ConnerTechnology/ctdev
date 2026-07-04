@@ -2,6 +2,98 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.0.0] - 2026-07-04
+
+### Changed (breaking)
+- **`ctdev backup` is now a per-machine restic flow, not a repo config exporter.** The
+  old `ctdev backup <service>` / `ctdev restore <service>` (which exported Pi-hole lists
+  to committed text files and SOPS-encrypted custom DNS) is **removed** — it duplicated
+  what restic already captures (Pi-hole's `etc-pihole`/gravity.db lives under a backed-up
+  path). `ctdev backup now` snapshots whatever machine you're on to its own restic repo;
+  `ctdev backup snapshots [primary|local]` lists that machine's snapshots (tagged by
+  hostname); `ctdev restore ls|files|in-place|check` wraps the restore helper. The
+  `restic-backup.sh`/`restic-restore.sh` scripts are no longer hardcoded to the `ctpi01`
+  homelab — they read paths from `/etc/restic/backup-paths`, work with any restic backend
+  via `RESTIC_REPOSITORY` (+ optional `RESTIC_REPOSITORY_LOCAL`), and tag by `$(hostname)`.
+- **Secrets are no longer stored in the repo.** All `*.sops.env` host secrets, the
+  `*.sops.json` custom-DNS export, `.sops.yaml`, and `SECRETS.md` are deleted, along with
+  the SOPS+age secret workflow. Each secret is now entered at its `configure` step and
+  stored only on the host that needs it (`/etc/restic/restic.env`, `~/<svc>/.env`); if
+  lost, you reconfigure. restic backs up the rendered `.env` files, so a restore brings
+  them back. The `sops`/`age` *tool installers* remain available as components.
+
+### Added
+- **`ctdev backup paths`** — a local web UI (bound to `127.0.0.1`, token-guarded) to pick
+  what restic backs up. Browse the machine's folders with lazily-computed sizes and
+  Include/Exclude a folder (and its contents), exclude a single file, or exclude files
+  like it (`*.ext`); saving writes `/etc/restic/backup-paths` and `backup-excludes`. Sort
+  entries by name, size, or creation time (real `statx` birth time on Linux), ascending or
+  descending. Runs as your user (browses `$HOME` fully); root-only dirs are shown locked
+  but still sizeable and includable. Prints the URL for SSH port-forwarding on headless hosts.
+- **`ctdev configure restic`** — interactive setup for restic backups: prompts for the
+  repository (Backblaze B2 / S3 / SFTP / local), backend credentials, and a repository
+  password (can generate one), writes `/etc/restic/restic.env` (0600), seeds default
+  `backup-excludes`, runs `restic init`, and enables the daily timer. `--show` prints the
+  current config (secrets redacted). Backups are **opt-in** — `configure restic` no longer
+  auto-includes `$HOME`; nothing is snapshotted until you pick folders with `ctdev backup
+  paths`, and the nightly job exits cleanly (not an error) while nothing is selected.
+- `ctdev backup now` / `backup snapshots` now pre-check that restic is installed **and
+  configured**, returning a clean "run `ctdev configure restic`" message instead of
+  failing inside the shell script.
+
+### Changed
+- **Every configure wizard now cancels cleanly on the first Ctrl-C.** git, aws, caddy, and
+  the category wizards moved onto the same context-aware prompt layer as `configure restic`
+  (a bare stdin read used to swallow the first SIGINT and appear to hang). Invalid
+  toggle/picker input now says "Invalid choice, keeping current value" instead of silently
+  keeping it, and prompts show the default alongside the current value.
+- **`ctdev update`'s apply phase runs in the progress TUI.** Each source (apt, per-flatpak,
+  brew, runtimes, CLI tools, per-docker-stack, ctdev itself) is a step with a spinner,
+  streamed output, and a summary — replacing the raw scrolled output that always ended in a
+  green "Updates complete." banner. Failures now produce a non-zero exit, and Ctrl-C stops
+  cleanly instead of cascading a warning per remaining source.
+- **`ctdev cleanup` confirms before deleting**: after the picker it lists the selected tasks
+  with the total size estimate and asks `Clean these? [Y/n]`.
+- **`NO_COLOR` and piped output are honored everywhere** (previously only `ctdev info`):
+  styling is disabled globally when `NO_COLOR` is set or stdout isn't a terminal, and a
+  piped stdout now routes to the plain batch path instead of launching the alt-screen TUI
+  into the pipe.
+- TUI polish: the picker filter accepts spaces and non-ASCII (rune-safe backspace); `n` is
+  no longer a surprise alias for select-none; `ctdev install` prints what dependency
+  resolution added before installing; pickers and progress screens are labelled `(dry run)`;
+  the progress list windows to the terminal height on long runs.
+
+### Fixed
+- **Interactive `ctdev install`/`uninstall`/`update` exit non-zero when something failed**
+  (the TUI showed the failure but the process exited 0). The summary header is honest
+  (`✗ Installation finished with N failure(s)`), and each failed component replays the last
+  lines of its output so the reason (the apt/dpkg/compose error) survives — not just
+  `exit status 1`. Quitting mid-run reports how many components never ran.
+
+### Security
+- **Secrets are read with masked input** (`term.ReadPassword`): the restic repository
+  password, B2/S3 credentials, and Cloudflare token no longer echo to the terminal or land
+  in scrollback/tmux capture. New restic passwords are confirmed with a second entry, and
+  the terminal state is restored if you Ctrl-C mid-prompt.
+- **`install.sh` fails closed on checksum verification**: a missing `SHA256SUMS`, missing
+  `sha256sum`, or absent entry now aborts instead of warning-and-installing.
+  `CTDEV_SKIP_VERIFY=1` is the explicit escape hatch for pre-checksum releases.
+- **Portainer's and Beszel's plain-HTTP admin ports are no longer LAN-reachable.** Docker's
+  iptables rules bypass UFW, so `9000:9000`/`8090:8090` listened network-wide even on
+  firewalled hosts; they now bind to `127.0.0.1` and the docker bridge gateway (which is
+  how Caddy reaches them). Portainer's TLS `9443` stays published for direct access.
+  Re-run `ctdev install portainer` / `beszel` on existing nodes to apply.
+- **`ctdev backup paths` no longer carries its session token in the URL.** The launch URL
+  holds a single-use boot token that is exchanged for an `HttpOnly`, `SameSite=Strict`
+  cookie and redirected away, so nothing sensitive lingers in browser history or `ps`
+  argv; replaying the link gets a 403. The loopback-Origin check now parses the Origin and
+  matches the hostname exactly (`localhost.attacker.com` no longer passes).
+
+### Removed
+- `ctdev backup <service>` / `ctdev restore <service>` (the repo config export/import).
+- `component/configs/pihole/*.txt` list files; all `component/configs/*/hosts/*.sops.env`;
+  `.sops.yaml`; `SECRETS.md`.
+
 ## [11.1.1] - 2026-06-30
 
 ### Fixed
