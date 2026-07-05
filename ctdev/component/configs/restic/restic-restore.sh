@@ -6,7 +6,7 @@
 #   restic-restore.sh snapshots [primary|local]            List this host's snapshots (newest last)
 #   restic-restore.sh ls <snap|latest> [primary|local]     List files in a snapshot
 #   restic-restore.sh restore <snap|latest> <dir> [repo]   Restore a snapshot INTO <dir> (safe)
-#   restic-restore.sh restore-in-place <snap|latest> [repo]
+#   restic-restore.sh restore-in-place [--yes] <snap|latest> [repo]
 #                                                          Restore to original paths (/). DANGER.
 #   restic-restore.sh check [primary|local]                Verify repository integrity
 #
@@ -57,16 +57,25 @@ restore)
 	exec restic -r "$repo" restore "$snap" --target "$target"
 	;;
 restore-in-place)
+	# --yes skips the prompt for callers that already confirmed (ctdev runs
+	# children without a stdin, so the read below would see EOF and abort).
+	assume_yes=0
+	if [ "${1:-}" = "--yes" ]; then
+		assume_yes=1
+		shift
+	fi
 	snap=${1:?snapshot id or 'latest' required}
 	repo=$(resolve_repo "${2:-primary}")
-	echo "Restoring '$snap' to ORIGINAL paths — overwrites live files at their"
-	echo "absolute locations. Stop any affected services/stacks first."
-	printf "Type YES to continue: "
-	read -r ans
-	[ "$ans" = "YES" ] || {
-		echo "aborted"
-		exit 1
-	}
+	if [ "$assume_yes" -ne 1 ]; then
+		echo "Restoring '$snap' to ORIGINAL paths — overwrites live files at their"
+		echo "absolute locations. Stop any affected services/stacks first."
+		printf "Type YES to continue: "
+		read -r ans
+		[ "$ans" = "YES" ] || {
+			echo "aborted"
+			exit 1
+		}
+	fi
 	exec restic -r "$repo" restore "$snap" --target /
 	;;
 check)

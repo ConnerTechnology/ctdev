@@ -43,7 +43,19 @@ var backupSnapshotsCmd = &cobra.Command{
 	Use:   "snapshots [primary|local]",
 	Short: "List this machine's restic snapshots",
 	Long:  "List restic snapshots for this machine (newest last) from the primary repo (default) or the optional second repo. Requires 'ctdev configure restic'.",
+	Args:  cobra.MatchAll(cobra.MaximumNArgs(1), repoArgAt(0)),
 	RunE:  runBackupSnapshots,
+}
+
+// repoArgAt validates the optional trailing [primary|local] argument at idx, so
+// a typo errors in ctdev instead of two layers down in the shell script.
+func repoArgAt(idx int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) > idx && args[idx] != "primary" && args[idx] != "local" {
+			return fmt.Errorf("unknown repo %q (use primary or local)", args[idx])
+		}
+		return nil
+	}
 }
 
 var restoreCmd = &cobra.Command{
@@ -55,13 +67,20 @@ var restoreCmd = &cobra.Command{
 		"  ctdev restore in-place <snap|latest> [primary|local]      restore to original paths (DANGER)\n" +
 		"  ctdev restore check [primary|local]                       verify repository integrity\n\n" +
 		"List snapshots with 'ctdev backup snapshots'. See RECOVERY.md for the full runbook.",
-	RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Unknown verbs fall through to this parent RunE; error instead of
+		// printing help with exit 0.
+		if len(args) > 0 {
+			return fmt.Errorf("unknown restore subcommand %q (use ls, files, in-place, check)", args[0])
+		}
+		return cmd.Help()
+	},
 }
 
 var restoreLsCmd = &cobra.Command{
 	Use:   "ls <snapshot|latest> [primary|local]",
 	Short: "List files in a snapshot",
-	Args:  cobra.RangeArgs(1, 2),
+	Args:  cobra.MatchAll(cobra.RangeArgs(1, 2), repoArgAt(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResticRestore(cmd, append([]string{"ls"}, args...))
 	},
@@ -70,7 +89,7 @@ var restoreLsCmd = &cobra.Command{
 var restoreFilesCmd = &cobra.Command{
 	Use:   "files <snapshot|latest> <dir> [primary|local]",
 	Short: "Restore a snapshot into a directory (safe)",
-	Args:  cobra.RangeArgs(2, 3),
+	Args:  cobra.MatchAll(cobra.RangeArgs(2, 3), repoArgAt(2)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResticRestore(cmd, append([]string{"restore"}, args...))
 	},
@@ -79,16 +98,32 @@ var restoreFilesCmd = &cobra.Command{
 var restoreInPlaceCmd = &cobra.Command{
 	Use:   "in-place <snapshot|latest> [primary|local]",
 	Short: "Restore to original paths (DANGER — overwrites live files)",
-	Args:  cobra.RangeArgs(1, 2),
+	Args:  cobra.MatchAll(cobra.RangeArgs(1, 2), repoArgAt(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runResticRestore(cmd, append([]string{"restore-in-place"}, args...))
+		// The overwrite confirmation must live HERE: sysutil runs children
+		// without stdin, so the script's own "Type YES" prompt reads EOF and
+		// aborts unconditionally. ctdev confirms, then passes --yes.
+		if !flagDryRun {
+			fmt.Println("Restoring to ORIGINAL paths — this overwrites live files at their")
+			fmt.Println("absolute locations. Stop any affected services/stacks first.")
+			fmt.Print("Type YES to continue: ")
+			line, ok := readLineCtx(cmdContext(cmd))
+			if !ok {
+				return cancelToClean(errPromptCancelled)
+			}
+			if line != "YES" {
+				fmt.Println("aborted — nothing restored")
+				return nil
+			}
+		}
+		return runResticRestore(cmd, append([]string{"restore-in-place", "--yes"}, args...))
 	},
 }
 
 var restoreCheckCmd = &cobra.Command{
 	Use:   "check [primary|local]",
 	Short: "Verify repository integrity",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.MatchAll(cobra.MaximumNArgs(1), repoArgAt(0)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResticRestore(cmd, append([]string{"check"}, args...))
 	},
@@ -123,7 +158,7 @@ func runBackupSnapshots(cmd *cobra.Command, args []string) error {
 // install + config prechecks.
 func runResticRestore(cmd *cobra.Command, scriptArgs []string) error {
 	ctx := cmdContext(cmd)
-	o := sysutil.Opts{Stdout: os.Stdout}
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 	if err := ensureResticReady(ctx, o, resticRestoreScript); err != nil {
 		return err
 	}
@@ -137,10 +172,14 @@ func ensureResticReady(ctx context.Context, o sysutil.Opts, scriptPath string) e
 	if _, err := os.Stat(scriptPath); err != nil {
 		return fmt.Errorf("restic is not installed on this machine (run: ctdev install restic)")
 	}
+	if flagDryRun {
+		// Nothing will execute — don't prompt for a sudo password to preview.
+		return nil
+	}
 	if err := ensureSudo(); err != nil {
 		return fmt.Errorf("sudo required: %w", err)
 	}
-	if !flagDryRun && !component.ResticConfigured(ctx, o) {
+	if !component.ResticConfigured(ctx, o) {
 		return fmt.Errorf("restic is not configured on this machine (run: ctdev configure restic)")
 	}
 	return nil
