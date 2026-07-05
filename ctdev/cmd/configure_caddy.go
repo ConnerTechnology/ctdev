@@ -73,12 +73,19 @@ func configureCaddy(ctx context.Context) error {
 		return fmt.Errorf("a domain is required (pass --domain, or set it in the wizard)")
 	}
 
-	if err := component.CaddyWriteEnv(domain, email, token); err != nil {
-		return fmt.Errorf("write %s: %w", component.CaddyEnvPath(), err)
+	if flagDryRun {
+		fmt.Printf("  [dry-run] would write %s (domain=%s)\n", component.CaddyEnvPath(), domain)
+	} else {
+		if err := component.CaddyWriteEnv(domain, email, token); err != nil {
+			return fmt.Errorf("write %s: %w", component.CaddyEnvPath(), err)
+		}
+		fmt.Printf("  Wrote %s\n", component.CaddyEnvPath())
 	}
-	fmt.Printf("  Wrote %s\n", component.CaddyEnvPath())
 
-	havePihole := sysutil.CommandExists("pihole")
+	// PiholeAvailable, not CommandExists: the pihole component is a container,
+	// which puts no `pihole` binary on the host PATH — checking for the binary
+	// silently skipped the whole wiring step on containerized nodes.
+	havePihole := sysutil.PiholeAvailable()
 	if !flagDryRun && (havePihole || component.CaddyStackDeployed()) {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required: %w", err)

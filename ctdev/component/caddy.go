@@ -140,11 +140,15 @@ func CaddyWirePihole(ctx context.Context, o sysutil.Opts, domain string) error {
 func writeDnsmasqRecord(ctx context.Context, o sysutil.Opts, record string) error {
 	if sysutil.PiholeContainerized() {
 		home, _ := os.UserHomeDir()
-		dir := filepath.Join(home, "pihole", "etc-dnsmasq.d")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		dest := filepath.Join(home, "pihole", "etc-dnsmasq.d", "02-homelab.conf")
+		if o.DryRun {
+			fmt.Fprintf(o.Stdout, "[dry-run] write dnsmasq record → %s\n", dest)
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
 		}
-		return os.WriteFile(filepath.Join(dir, "02-homelab.conf"), []byte(record), 0o644)
+		return os.WriteFile(dest, []byte(record), 0o644)
 	}
 	return sysutil.SudoWriteFile(ctx, o, record, "/etc/dnsmasq.d/02-homelab.conf")
 }
