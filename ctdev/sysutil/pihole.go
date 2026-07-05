@@ -9,17 +9,23 @@ import (
 // PiholeContainer is the docker container name used for a containerized Pi-hole.
 const PiholeContainer = "pihole"
 
-// PiholeContainerized reports whether Pi-hole runs as a docker container named
-// "pihole" (as opposed to a native host install).
-func PiholeContainerized() bool {
+// ContainerRunning reports whether a docker container with the given name is
+// currently running.
+func ContainerRunning(name string) bool {
 	if !CommandExists("docker") {
 		return false
 	}
-	out, err := exec.Command("docker", "ps", "--filter", "name=^/"+PiholeContainer+"$", "--format", "{{.Names}}").Output()
+	out, err := exec.Command("docker", "ps", "--filter", "name=^/"+name+"$", "--format", "{{.Names}}").Output()
 	if err != nil {
 		return false
 	}
-	return strings.TrimSpace(string(out)) == PiholeContainer
+	return strings.TrimSpace(string(out)) == name
+}
+
+// PiholeContainerized reports whether Pi-hole runs as a docker container named
+// "pihole" (as opposed to a native host install).
+func PiholeContainerized() bool {
+	return ContainerRunning(PiholeContainer)
 }
 
 // PiholeAvailable reports whether Pi-hole is present at all — either as the

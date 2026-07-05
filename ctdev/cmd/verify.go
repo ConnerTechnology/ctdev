@@ -10,14 +10,15 @@ import (
 	"strings"
 
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "Verify the bootstrap installation",
-	Long:  "Checks that expected tools, services, dotfiles, and remote-access settings are in place. Exits non-zero if anything is missing.",
+	Short: "Verify this machine's ctdev-managed setup",
+	Long:  "Checks that installed components, homelab containers, backup timers, dotfiles, and remote-access settings are in place. Exits non-zero if anything is missing.",
 	RunE:  runVerify,
 }
 
@@ -75,7 +76,6 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		{"claude", []string{"--version"}, "claude-code"},
 		{"gh", []string{"--version"}, "gh"},
 		{"devcontainer", []string{"--version"}, "devcontainer"},
-		{"pihole", []string{"-v"}, "pihole"},
 	}
 	for _, b := range bins {
 		// ctdev-managed but not installed here: skip silently.
@@ -114,7 +114,6 @@ func runVerify(cmd *cobra.Command, args []string) error {
 			{"ssh", ""}, // remote-access lifeline; checked only if the unit exists
 			{"tailscaled", "tailscale"},
 			{"docker", "docker"},
-			{"pihole-FTL", "pihole"},
 		}
 		for _, s := range svcs {
 			if s.owner != "" && !compInstalled(s.owner) {
@@ -125,6 +124,27 @@ func runVerify(cmd *cobra.Command, args []string) error {
 			}
 			add("service: "+s.unit, serviceActive(s.unit), serviceState(s.unit))
 		}
+
+		// Homelab compose stacks install as containers — no host binary, no
+		// systemd unit — so "container running" is the real health check.
+		for _, name := range []string{"pihole", "caddy", "portainer", "beszel"} {
+			if !compInstalled(name) {
+				continue
+			}
+			state := "running"
+			ok := sysutil.ContainerRunning(name)
+			if !ok {
+				state = "not running"
+			}
+			add("container: "+name, ok, state)
+		}
+
+		// restic backups: the timer being enabled is what makes them nightly.
+		if compInstalled("restic") {
+			add("restic binary", sysutil.CommandExists("restic"), "")
+			add("restic-backup.timer", unitEnabled("restic-backup.timer"), unitEnabledState("restic-backup.timer"))
+		}
+
 		// ufw / never-suspend are applied by `configure`, not a component, and a
 		// DNS/proxy node intentionally skips them — report, don't fail.
 		if _, err := exec.LookPath("ufw"); err == nil {
@@ -238,6 +258,15 @@ func serviceActive(name string) bool {
 
 func serviceState(name string) string {
 	out, _ := exec.Command("systemctl", "is-active", name).Output()
+	return strings.TrimSpace(string(out))
+}
+
+func unitEnabled(name string) bool {
+	return unitEnabledState(name) == "enabled"
+}
+
+func unitEnabledState(name string) string {
+	out, _ := exec.Command("systemctl", "is-enabled", name).Output()
 	return strings.TrimSpace(string(out))
 }
 
