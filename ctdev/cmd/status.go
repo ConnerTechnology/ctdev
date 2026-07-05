@@ -133,7 +133,7 @@ func timerStatusLine(unit string, maxAge time.Duration) string {
 	out := fmt.Sprintf("last run %s ago", humanAge(age))
 	switch {
 	case result != "success" && result != "":
-		out = styles.Error.Render(out + " — FAILED") + styles.Dimmed.Render(" (journalctl -u "+unit+")")
+		out = styles.Error.Render(out+" — FAILED") + styles.Dimmed.Render(" (journalctl -u "+unit+")")
 	case age > maxAge:
 		out = styles.Warning.Render(out + " — overdue")
 	default:
