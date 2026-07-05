@@ -2,6 +2,59 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.2.0] - 2026-07-05
+
+Fixes from a second full-tool review (every command walked end-to-end), plus
+internal restructuring (update.go split into scan/versions/apply files, a shared
+composeStack helper for the docker stacks, ctx threaded through settings
+detection so a wedged docker daemon can't hang `configure pihole`).
+
+### Fixed
+- **`ctdev restore in-place` never worked through ctdev** — the restore script's
+  "Type YES" prompt read EOF (children run without stdin) and aborted every time.
+  The confirmation now happens in ctdev itself (Ctrl-C-safe) and the script takes
+  `--yes` from callers that already confirmed. The documented disaster-recovery
+  path now functions.
+- **`configure caddy` now wires a containerized Pi-hole.** It checked for a host
+  `pihole` binary, which container installs don't have — so freeing port 443 and
+  writing the wildcard-DNS record silently never happened on new nodes.
+- **`ctdev verify` is container-aware**: it no longer demands a pihole binary and
+  pihole-FTL unit on container installs (every Pi-hole node false-failed), and it
+  now checks what matters on a homelab node — pihole/caddy/portainer/beszel
+  containers running and restic-backup.timer enabled.
+- **`--dry-run` violations**: `restore files|in-place --dry-run` really restored;
+  `configure caddy --dry-run` still wrote `~/caddy/.env`; interactive
+  `configure git --dry-run` really generated SSH keys and uploaded them to GitHub.
+  All now preview only.
+- `ctdev info` on a Raspberry Pi reported CPU "unknown" — arm64 kernels have no
+  per-core "model name"; the board Model line (and /proc/device-tree/model) are
+  now used ("Raspberry Pi 5 Model B Rev 1.1").
+- Errors print exactly once, without a usage dump after runtime failures.
+- git/tmux/zsh/btop/jq/shellcheck now skip cleanly on dnf/pacman systems instead
+  of reporting as failed (unsupported-package-manager errors map to Skipped).
+- Restore/backup repo args (`primary|local`) validate in ctdev with a clean
+  message; `ctdev restore <unknown-verb>` exits non-zero; a dry-run backup no
+  longer prompts for a sudo password.
+- The helm update scanner no longer emits two identically-named rows (same-major
+  first, then the major bump on a later scan); from-source "dev" builds no longer
+  self-flag a ctdev update on every run.
+- `configure git --signing-key` alone works non-interactively;
+  `configure aws --show` shows the current profile instead of running the picker;
+  the `backup paths` SSH port-forward hint is a valid `-L` spec; stale help text
+  (restic "seeds the backup path list", verify "bootstrap") updated.
+
+### Changed
+- **The configure wizard is honest about one-way settings.** 19 install/enable
+  actions (SSH server, UFW, audio stack, tunnel, TRIM, …) used to present a fake
+  "1) installed 2) not installed" choice where picking "off" still installed;
+  they now ask a single "Apply now (→ active)? [y/N]" or say "Already active —
+  nothing to do."
+- Wizard labels say **recommended** instead of "default" — matching what
+  `--batch` actually applies — and the batch header says so explicitly.
+- The full `ctdev configure` sweep **no longer springs the Secure Boot/MOK
+  driver-signing flow**; it points to `ctdev configure gpu` instead (as the docs
+  always claimed). `--show` still includes GPU status.
+
 ## [12.1.0] - 2026-07-05
 
 Cleans up the remaining low-priority items from the v12 security and code review.
