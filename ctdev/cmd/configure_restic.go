@@ -95,6 +95,19 @@ func configureRestic(ctx context.Context) error {
 		env["RESTIC_REPOSITORY_LOCAL"] = local
 	}
 
+	// Dead-man's-switch: the nightly backup pings this URL on success (or
+	// URL/fail on failure), so a backup that silently stops running gets
+	// noticed. healthchecks.io works well and is free for this.
+	fmt.Println(styles.Dimmed.Render("  Optionally, a healthcheck ping URL (e.g. https://hc-ping.com/<uuid>) lets you"))
+	fmt.Println(styles.Dimmed.Render("  get alerted when backups stop running or start failing."))
+	hc, err := promptWithDefaultCtx(ctx, "Healthcheck ping URL (blank for none)", current["HEALTHCHECK_URL"])
+	if err != nil {
+		return err
+	}
+	if hc != "" {
+		env["HEALTHCHECK_URL"] = hc
+	}
+
 	if err := component.ResticWriteEnv(ctx, o, env); err != nil {
 		return fmt.Errorf("write %s: %w", component.ResticEnvPath, err)
 	}
@@ -334,6 +347,7 @@ func showResticConfig(env map[string]string) error {
 	}
 	fmt.Printf("  %s %s\n", label.Render("Repository:"), styles.Value.Render(orDash(env["RESTIC_REPOSITORY"])))
 	fmt.Printf("  %s %s\n", label.Render("Second repo:"), styles.Value.Render(orDash(env["RESTIC_REPOSITORY_LOCAL"])))
+	fmt.Printf("  %s %s\n", label.Render("Healthcheck ping:"), styles.Value.Render(orDash(env["HEALTHCHECK_URL"])))
 	fmt.Printf("  %s %s\n", label.Render("Password:"), styles.Value.Render(set(env["RESTIC_PASSWORD"])))
 	for _, k := range []string{"B2_ACCOUNT_ID", "B2_ACCOUNT_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
 		if env[k] != "" {

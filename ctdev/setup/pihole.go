@@ -18,9 +18,13 @@ import (
 // The order within each list is the order written to Pi-hole.
 var piholeUpstreamPresets = map[string][]string{
 	"cloudflare": {"1.1.1.1", "1.0.0.1"},
-	"quad9":      {"9.9.9.9", "149.112.112.112"},
-	"google":     {"8.8.8.8", "8.8.4.4"},
-	"unbound":    {"127.0.0.1#5335"},
+	// Cloudflare for Families: same resolver, but answers for malware and
+	// adult-content domains are withheld — network-wide filtering for a
+	// household in one picker choice.
+	"cloudflare-family": {"1.1.1.3", "1.0.0.3"},
+	"quad9":             {"9.9.9.9", "149.112.112.112"},
+	"google":            {"8.8.8.8", "8.8.4.4"},
+	"unbound":           {"127.0.0.1#5335"},
 }
 
 // piholeInstalled reports whether Pi-hole is present (container or host); used

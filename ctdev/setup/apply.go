@@ -207,6 +207,38 @@ func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error
 	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
+// autoUpgradesConf enables the apt periodic jobs that unattended-upgrades
+// hooks into. The package's stock 50unattended-upgrades already restricts
+// upgrades to the security pocket, so this stays security-only by default.
+const autoUpgradesConf = `// Written by ctdev (configure autoupdate).
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+`
+
+const autoUpgradesConfPath = "/etc/apt/apt.conf.d/20auto-upgrades"
+
+// applyUnattendedUpgrades installs unattended-upgrades and turns on the
+// daily security-update run.
+func applyUnattendedUpgrades(ctx context.Context, o sysutil.Opts) error {
+	if err := applyPackages(ctx, o, []string{"unattended-upgrades"}); err != nil {
+		return err
+	}
+	return sysutil.SudoWriteFile(ctx, o, autoUpgradesConf, autoUpgradesConfPath)
+}
+
+// detectUnattendedUpgrades reports "enabled" only when both the package and
+// the periodic config that actually triggers it are present.
+func detectUnattendedUpgrades(ctx context.Context) string {
+	if !detectPackageInstalled(ctx, "unattended-upgrades") {
+		return "disabled"
+	}
+	b, err := os.ReadFile(autoUpgradesConfPath)
+	if err != nil || !strings.Contains(string(b), `Unattended-Upgrade "1"`) {
+		return "disabled"
+	}
+	return "enabled"
+}
+
 // applyNvidiaSigning runs the GPU signing setup via the gpu package.
 func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{

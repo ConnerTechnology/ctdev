@@ -515,6 +515,25 @@ var Registry = []Setting{
 		},
 	},
 
+	// ── Automatic updates ────────────────────────────────────────────────
+
+	{
+		Name:     "Automatic security updates",
+		Slug:     "autoupdate",
+		Category: "Automatic Updates",
+		Description: "Installs unattended-upgrades and enables a daily job that applies security " +
+			"updates automatically (security pocket only — normal updates stay manual via " +
+			"'ctdev update'). Recommended for always-on nodes and family machines that don't " +
+			"get regular hands-on attention.",
+		Control:    ControlToggle,
+		Default:    "enabled",
+		OneWay:     true,
+		DetectFunc: detectUnattendedUpgrades,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyUnattendedUpgrades(ctx, o)
+		},
+	},
+
 	// ── Locale ───────────────────────────────────────────────────────────
 
 	{
@@ -591,6 +610,7 @@ var Registry = []Setting{
 		Default:     "cloudflare",
 		Choices: []PickerChoice{
 			{Value: "cloudflare", Description: "Cloudflare (1.1.1.1, 1.0.0.1)"},
+			{Value: "cloudflare-family", Description: "Cloudflare for Families (1.1.1.3 — blocks malware + adult content network-wide)"},
 			{Value: "quad9", Description: "Quad9 (9.9.9.9, 149.112.112.112)"},
 			{Value: "google", Description: "Google (8.8.8.8, 8.8.4.4)"},
 			{Value: "unbound", Description: "Local recursive (Unbound, 127.0.0.1#5335)"},
