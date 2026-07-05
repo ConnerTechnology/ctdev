@@ -19,6 +19,7 @@ ctdev update [-y]               # Update system packages, components, and Docker
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
 ctdev info                      # Show system information
+ctdev status                    # Machine health: disk, containers, backup freshness, updates
 ctdev configure                 # Walk through all system configuration
 ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
