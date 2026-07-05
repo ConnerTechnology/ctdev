@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.3.1] - 2026-07-05
+
+### Fixed
+- **A backup killed mid-run (shutdown, suspend) no longer wedges every following
+  night's prune.** The killed restic process leaves a stale repo lock; backups
+  still succeed (shared lock) but `forget --prune` needs an exclusive lock and
+  fails forever after. `restic-backup.sh` now runs `restic unlock` (which only
+  removes locks whose owning process is gone) before each repo's run. Found in
+  the wild by `ctdev status` on the first day it existed.
+- **The restic systemd units now have a cache.** They run without `$HOME`, so
+  restic was re-downloading repository metadata from the backend (B2 API calls +
+  bandwidth) on every nightly run, logging "unable to locate cache directory".
+  Both units use systemd's `CacheDirectory=restic` and the scripts point
+  `RESTIC_CACHE_DIR` at it. Re-run `ctdev install restic` on existing nodes to
+  deploy the fixed script and units.
+
 ## [12.3.0] - 2026-07-05
 
 The fleet release: machine profiles, a health dashboard, and the additions a
