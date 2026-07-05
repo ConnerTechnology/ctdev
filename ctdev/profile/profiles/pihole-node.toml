@@ -1,0 +1,38 @@
+# Pi-hole homelab node (e.g. Raspberry Pi): network-wide DNS behind a Caddy
+# reverse proxy, with container management, monitoring, backups, and disk
+# health. Matches the README "Pi-hole / Homelab Node" flow.
+#
+# ufw is deliberately NOT configured — its default-deny blocks DNS (53) and the
+# proxy (80/443) unless those ports are opened first.
+
+description = "Pi-hole DNS node behind Caddy (Raspberry Pi / always-on box)"
+
+components = [
+  "zsh",
+  "git",
+  "mosh",
+  "tailscale",
+  "docker",
+  "pihole",
+  "caddy",
+  "portainer",
+  "beszel",
+  "restic",
+  "smartmontools",
+  "btop",
+]
+
+configure = ["ssh", "locale", "linger", "sleep", "autoupdate"]
+
+notes = """
+Next steps (interactive, in this order):
+  sudo tailscale up                join the tailnet
+  ctdev configure pihole           upstreams, listening mode, blocking
+  ctdev configure caddy            domain, ACME email, Cloudflare token
+  ctdev configure restic           backup repo, credentials, healthcheck URL
+  ctdev backup paths               pick what restic backs up
+Then set this node's Tailscale IP as a Global Nameserver in the Tailscale
+admin console, and set the Pi-hole admin password:
+  docker exec -it pihole pihole setpassword
+Verify with: ctdev verify
+"""

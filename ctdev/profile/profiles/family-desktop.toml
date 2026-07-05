@@ -1,0 +1,27 @@
+# Family / kids' desktop: browser, automatic security updates, disk health,
+# and remote reachability for the admin. Deliberately small — no dev tools.
+#
+# Pair with Pi-hole's "Cloudflare for Families" upstream (ctdev configure
+# pihole on the DNS node) for network-wide content filtering, and give kids a
+# non-administrator account.
+
+description = "Family desktop (browser, auto security updates, remotely manageable)"
+
+components = [
+  "zsh",
+  "git",
+  "chrome",
+  "tailscale",
+  "smartmontools",
+  "btop",
+]
+
+configure = ["ssh", "autoupdate"]
+
+notes = """
+Next steps:
+  sudo tailscale up                join the tailnet so you can manage it remotely
+  Create the kids' account WITHOUT sudo:  sudo adduser <name>
+On the Pi-hole node, consider the "Cloudflare for Families" upstream:
+  ctdev configure pihole
+"""

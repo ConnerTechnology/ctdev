@@ -4,14 +4,20 @@ Modular dotfiles for macOS and Linux. Managed via the `ctdev` CLI.
 
 ## Fresh Machine Setup
 
-There's no all-in-one bootstrap — install the `ctdev` binary, then compose the
-machine from the components and `configure` categories you want.
+Install the `ctdev` binary, then either apply a **machine profile** (the fast
+path) or compose the machine by hand from components and `configure` categories.
 
 ```bash
 # 1. install ctdev
 curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
 
-# 2. install the components you want (each runs its configure step afterward)
+# 2a. the fast path: apply a profile (built in — no repo clone needed)
+ctdev apply                      # list profiles: dev-workstation, pihole-node, family-desktop
+ctdev apply dev-workstation      # plan → confirm → install + batch-configure → next steps
+ctdev diff dev-workstation       # later: check the machine hasn't drifted (cron-able)
+# add your own: ~/.config/ctdev/profiles/<name>.toml
+
+# 2b. or by hand: install the components you want (each runs its configure step afterward)
 ctdev install zsh git gh node go docker tailscale vscode claude-code tmux
 
 # 3. apply the system settings you want
@@ -44,6 +50,9 @@ DNS-01, nothing exposed to the internet):
 
 ```bash
 # after SSHing in and installing ctdev (see "Install" below):
+ctdev apply pihole-node                  # ← the whole block below in one command,
+                                         #    then follow its printed next steps
+# — or step by step: —
 ctdev install zsh git tailscale          # whatever base tools you want
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker

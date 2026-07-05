@@ -1,0 +1,45 @@
+# Personal development workstation: shell, editors, runtimes, containers, the
+# modern-CLI toolset, backups, and disk health.
+
+description = "Development workstation (shell, runtimes, containers, CLI tools)"
+
+components = [
+  "zsh",
+  "git",
+  "gh",
+  "git-spice",
+  "mosh",
+  "tmux",
+  "fonts",
+  "ghostty",
+  "vscode",
+  "node",
+  "go",
+  "docker",
+  "tailscale",
+  "claude-code",
+  "jq",
+  "btop",
+  "shellcheck",
+  "ripgrep",
+  "fd",
+  "fzf",
+  "bat",
+  "zoxide",
+  "direnv",
+  "lazygit",
+  "restic",
+  "smartmontools",
+]
+
+configure = ["autoupdate"]
+
+notes = """
+Next steps (interactive):
+  gh auth login                    authenticate GitHub
+  ctdev configure git              name, email, SSH signing key
+  ctdev configure restic           backup repo, credentials, healthcheck URL
+  ctdev backup paths               pick what restic backs up
+  sudo tailscale up                join the tailnet
+Walk the OS settings when convenient: ctdev configure
+"""

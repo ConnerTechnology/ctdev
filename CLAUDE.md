@@ -11,6 +11,8 @@ already installed says so and jumps straight to configuration. `ctdev configure
 <name>` configures without installing. (Both skipped in `--batch`/`--dry-run`.)
 
 ```bash
+ctdev apply [profile]           # Apply a machine profile; no args lists profiles
+ctdev diff <profile>            # Show drift from a profile (non-zero exit on drift)
 ctdev install <component...>    # Install components (then configure them)
 ctdev uninstall <component...>  # Remove specific components
 ctdev update [-y]               # Update system packages, components, and Docker stacks
@@ -57,6 +59,19 @@ See README "Fresh Machine Setup".
 53 components:
 
 1password, age, bat, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, ghostty, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
+
+## Profiles
+
+Machine profiles are declarative TOML files (components + configure categories
+applied at recommended values). Built-ins — `pihole-node`, `dev-workstation`,
+`family-desktop` — are **embedded in the binary** (`ctdev/profile/profiles/`),
+so a fresh machine can `ctdev apply pihole-node` with nothing but the installed
+binary. Local files in `~/.config/ctdev/profiles/<name>.toml` add profiles or
+override built-ins by name. `apply` shows the plan and confirms, installs
+(deps resolve), batch-configures, then prints the profile's `notes` (its
+next-steps runbook — interactive wizards like restic/caddy are never run by
+apply, and the `gpu` category is rejected in profiles because MOK signing is
+interactive). `diff` exits non-zero on drift, so it works as a cron check.
 
 ## Homelab / Pi-hole nodes
 
@@ -143,6 +158,7 @@ ctdev/                 Go module root
     configs/           Config files deployed by installers (go:embed)
   gpu/                 GPU/NVIDIA signing management
   platform/            OS/arch detection
+  profile/             Machine profiles (embedded TOML + ~/.config/ctdev/profiles)
   setup/               System settings (Linux dconf/GRUB, macOS defaults)
     configs/           Setup config files (go:embed)
   state/               Install markers and XDG state
