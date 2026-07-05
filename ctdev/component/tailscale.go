@@ -59,8 +59,14 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 			return err
 		}
 
-		_ = sysutil.ServiceEnable(ctx, o, "tailscaled")
-		_ = sysutil.ServiceStart(ctx, o, "tailscaled")
+		// tailscaled must be running before 'tailscale up' can work; surface a
+		// broken daemon now instead of at authentication time.
+		if err := sysutil.ServiceEnable(ctx, o, "tailscaled"); err != nil {
+			return fmt.Errorf("enable tailscaled service: %w", err)
+		}
+		if err := sysutil.ServiceStart(ctx, o, "tailscaled"); err != nil {
+			return fmt.Errorf("start tailscaled service: %w", err)
+		}
 
 		fmt.Fprintln(opts.Stdout, "Run 'sudo tailscale up' to authenticate")
 		return nil

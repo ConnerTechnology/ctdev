@@ -36,11 +36,11 @@ type PostApplyHook func(ctx context.Context, o sysutil.Opts) error
 
 type Setting struct {
 	Name        string
-	Slug        string       // configure subcommand category: "gpu", "boot", "power", etc.
-	Category    string       // human-readable category for display grouping
-	Description string       // shown in wizard prompt
+	Slug        string // configure subcommand category: "gpu", "boot", "power", etc.
+	Category    string // human-readable category for display grouping
+	Description string // shown in wizard prompt
 	Control     ControlType
-	Default     string       // our recommended value as string
+	Default     string // our recommended value as string
 	Slider      *SliderRange
 	Choices     []PickerChoice
 	DetectFunc  func() string // reads current system value

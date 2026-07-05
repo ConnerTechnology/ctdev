@@ -3,10 +3,10 @@ package gpu
 import (
 	"fmt"
 	"io"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
-	"os/exec"
 )
 
 // StatusCheck holds the result of a single GPU signing status check.

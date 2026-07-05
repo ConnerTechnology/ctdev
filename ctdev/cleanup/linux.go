@@ -125,8 +125,6 @@ func linuxTasks(info platform.Info) []Task {
 			ID: "flatpak-unused", Name: "Unused Flatpak runtimes", Group: "Snap & Flatpak",
 			Detail: "flatpak uninstall --unused", Risk: Safe,
 			Scan: func(ctx context.Context) ScanResult {
-				n := countLines(captureOut(ctx, "flatpak", "list", "--runtime", "--columns=application"))
-				_ = n
 				return ScanResult{Bytes: -1, Note: "if any unused"}
 			},
 			Run: func(ctx context.Context, o sysutil.Opts) error {

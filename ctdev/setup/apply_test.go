@@ -70,15 +70,15 @@ func TestCpsToIntervalMs(t *testing.T) {
 		rate string
 		want string
 	}{
-		{"25", "40"},    // 1000/25 = 40ms
-		{"30", "33"},    // 1000/30 = 33ms (integer division)
-		{"1", "1000"},   // 1000/1 = 1000ms
-		{"50", "20"},    // 1000/50 = 20ms
-		{"0", "0"},      // zero rate — return as-is
-		{"-5", "-5"},    // negative — return as-is
-		{"abc", "abc"},  // non-numeric — return as-is
-		{"1000", "1"},   // 1000/1000 = 1ms
-		{"2000", "0"},   // 1000/2000 = 0ms (integer division)
+		{"25", "40"},   // 1000/25 = 40ms
+		{"30", "33"},   // 1000/30 = 33ms (integer division)
+		{"1", "1000"},  // 1000/1 = 1000ms
+		{"50", "20"},   // 1000/50 = 20ms
+		{"0", "0"},     // zero rate — return as-is
+		{"-5", "-5"},   // negative — return as-is
+		{"abc", "abc"}, // non-numeric — return as-is
+		{"1000", "1"},  // 1000/1000 = 1ms
+		{"2000", "0"},  // 1000/2000 = 0ms (integer division)
 	}
 	for _, tt := range tests {
 		t.Run(tt.rate, func(t *testing.T) {

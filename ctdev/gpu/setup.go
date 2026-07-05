@@ -123,7 +123,7 @@ func EnrollMOK(ctx context.Context, opts Opts) error {
 		return nil
 	}
 
-	cmd := exec.Command("sudo", "mokutil", "--import", MOKCert)
+	cmd := exec.CommandContext(ctx, "sudo", "mokutil", "--import", MOKCert)
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stdout
 	cmd.Stdin = opts.Stdin

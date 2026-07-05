@@ -67,8 +67,15 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 			return err
 		}
 
-		_ = sysutil.ServiceEnable(ctx, o, "docker")
-		_ = sysutil.ServiceStart(ctx, o, "docker")
+		// A docker that installed but won't start is a failed install — every
+		// compose-based component (pihole, caddy, beszel, portainer) would
+		// otherwise fail later with a much more confusing error.
+		if err := sysutil.ServiceEnable(ctx, o, "docker"); err != nil {
+			return fmt.Errorf("enable docker service: %w", err)
+		}
+		if err := sysutil.ServiceStart(ctx, o, "docker"); err != nil {
+			return fmt.Errorf("start docker service: %w", err)
+		}
 		addUserToDockerGroup(ctx, o, opts.Stdout)
 		return nil
 
