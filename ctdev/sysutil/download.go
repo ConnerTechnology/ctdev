@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,7 +17,31 @@ import (
 	"time"
 )
 
-var httpClient = &http.Client{Timeout: 60 * time.Second}
+var httpClient = &http.Client{
+	Timeout: 60 * time.Second,
+	// Every URL we fetch is https; refuse a redirect that downgrades to
+	// plaintext so a compromised endpoint can't bounce a download onto http.
+	// Loopback targets stay allowed for httptest-backed tests.
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		if req.URL.Scheme != "https" && !isLoopbackHost(req.URL.Hostname()) {
+			return fmt.Errorf("refusing redirect to non-https url %q", req.URL)
+		}
+		return nil
+	},
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
 
 // HTTPClient returns the shared HTTP client with a 60-second timeout.
 func HTTPClient() *http.Client { return httpClient }

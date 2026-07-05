@@ -11,3 +11,10 @@ ExecStart=/usr/local/bin/restic-backup.sh
 Nice=10
 IOSchedulingClass=idle
 TimeoutStartSec=2h
+# Least-privilege hardening compatible with what the job does (read the whole
+# filesystem, talk to the network, write the restic cache). It runs as root, so
+# keep it from escalating further or scribbling on kernel state.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes

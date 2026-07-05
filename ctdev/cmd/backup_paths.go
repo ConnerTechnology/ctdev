@@ -469,7 +469,9 @@ func writeRootFile(ctx context.Context, o sysutil.Opts, path, content string) er
 	if err := sysutil.SudoWriteFile(ctx, o, content, path); err != nil {
 		return err
 	}
-	return sysutil.SudoRun(ctx, o, "chmod", "0644", path)
+	// 0600 to match ResticSeedFile — everything under /etc/restic stays
+	// root-only (the dir is 0700 anyway; consistency beats a stray loose file).
+	return sysutil.SudoRun(ctx, o, "chmod", "0600", path)
 }
 
 func excludesContent(excludes []string) string {

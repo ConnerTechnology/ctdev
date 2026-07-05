@@ -60,6 +60,11 @@ func beszelInstall(ctx context.Context, opts ExecOpts) error {
 	// Start the agent only once its credentials are present in ~/beszel/.env.
 	env := map[string]string{}
 	if b, err := os.ReadFile(beszelEnvPath()); err == nil {
+		// The file is hand-pasted, so a default umask leaves the KEY/TOKEN
+		// world-readable; tighten it the way caddy's .env writer does.
+		if err := os.Chmod(beszelEnvPath(), 0o600); err != nil {
+			fmt.Fprintf(opts.Stdout, "warning: could not chmod %s to 0600: %v\n", beszelEnvPath(), err)
+		}
 		env = parseEnv(string(b))
 	}
 	if env["BESZEL_KEY"] != "" {

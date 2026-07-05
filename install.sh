@@ -88,8 +88,11 @@ if [[ -L "$INSTALL_DIR/ctdev" ]]; then
     fi
 fi
 if [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; then
+    # sudo -n only: a script running from a curl|bash pipe should never sit on a
+    # password prompt (and training people to type sudo passwords into piped
+    # scripts is its own problem).
     info "Removing old ctdev from /usr/local/bin..."
-    sudo rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev — run: sudo rm /usr/local/bin/ctdev"
+    sudo -n rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev (needs sudo) — run: sudo rm /usr/local/bin/ctdev"
 fi
 
 # Create install directory
@@ -99,7 +102,9 @@ mkdir -p "$INSTALL_DIR"
 BINARY_URL="https://github.com/${REPO}/releases/download/${VERSION}/ctdev-${PLATFORM}"
 info "Downloading ctdev-${PLATFORM}..."
 
-TMP=$(mktemp)
+# Download into INSTALL_DIR so the final mv is a same-filesystem rename —
+# atomic, so a crash mid-install can't leave a truncated binary in place.
+TMP=$(mktemp "$INSTALL_DIR/.ctdev-download.XXXXXX")
 trap 'rm -f "$TMP"' EXIT
 
 if ! download "$BINARY_URL" "$TMP"; then

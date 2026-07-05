@@ -49,7 +49,10 @@ sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker
 ctdev configure pihole                   # upstreams, listening mode, blocking
 ctdev install docker                     # caddy needs docker
-ctdev configure caddy --domain example.com --acme-email you@example.com --cf-token <token>
+ctdev configure caddy --domain example.com --acme-email you@example.com
+                                         # prompts for the Cloudflare token (masked); or pass it
+                                         # via env: CF_API_TOKEN=<token> ctdev configure caddy ...
+                                         # (avoid --cf-token — flags land in shell history and ps)
 ctdev install caddy                      # deploy the proxy stack + bring it up
 ctdev install portainer                  # optional: Docker management web UI
 ctdev install beszel                      # optional: server/container monitoring

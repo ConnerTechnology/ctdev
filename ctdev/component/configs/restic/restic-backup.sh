@@ -36,7 +36,10 @@ BACKUP_PATHS=()
 if [ -r "$PATHS_FILE" ]; then
 	while IFS= read -r line; do
 		line=${line%%#*}
-		line=$(echo "$line" | xargs)
+		# Trim whitespace in pure bash — `echo | xargs` chokes on quotes in
+		# paths (O'Brien/) and would silently drop that line.
+		line="${line#"${line%%[![:space:]]*}"}"
+		line="${line%"${line##*[![:space:]]}"}"
 		[ -z "$line" ] && continue
 		if [ -e "$line" ]; then
 			BACKUP_PATHS+=("$line")
@@ -56,7 +59,10 @@ EXCLUDES=(--exclude-caches --exclude "*.sock")
 if [ -r "$EXCLUDES_FILE" ]; then
 	while IFS= read -r line; do
 		line=${line%%#*}
-		line=$(echo "$line" | xargs)
+		# Trim whitespace in pure bash — `echo | xargs` chokes on quotes in
+		# paths (O'Brien/) and would silently drop that line.
+		line="${line#"${line%%[![:space:]]*}"}"
+		line="${line%"${line##*[![:space:]]}"}"
 		[ -z "$line" ] && continue
 		EXCLUDES+=(--exclude "$line")
 	done <"$EXCLUDES_FILE"

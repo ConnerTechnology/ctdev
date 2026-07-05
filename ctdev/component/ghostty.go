@@ -23,11 +23,33 @@ func ghosttyInstall(ctx context.Context, opts ExecOpts) error {
 				return err
 			}
 		case "apt":
-			// Pin to a tagged release of the third-party installer rather than
-			// HEAD so a push to the upstream default branch can't inject code on
-			// our machines. Bump this tag periodically to pick up new releases.
-			const ghosttyInstaller = "https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/1.3.1-0-ppa2/install.sh"
-			if err := sysutil.Run(ctx, o, "bash", "-c", "curl -fsSL "+ghosttyInstaller+" | bash"); err != nil {
+			// Ghostty has no official Ubuntu packages; this community installer
+			// picks the right .deb for the distro/version. It's a third-party
+			// personal repo, so pin by commit (tags can be force-pushed) and
+			// verify the script's hash before executing — neither a moved tag
+			// nor a compromised upstream can change what runs here. Bump both
+			// constants together when updating (commit for tag 1.3.1-0-ppa2).
+			const (
+				ghosttyInstallerURL    = "https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/3b2899e3bfb7f21c4ccdb4c038b042c52be18dce/install.sh"
+				ghosttyInstallerSHA256 = "7517776f6d862ec523e627840af4806e13385302f653ae9f7a86aa6d5af1cae5"
+			)
+			if o.DryRun {
+				fmt.Fprintf(o.Stdout, "[dry-run] download, verify, and run %s\n", ghosttyInstallerURL)
+				break
+			}
+			tmp, err := os.CreateTemp("", "ghostty-install-*.sh")
+			if err != nil {
+				return err
+			}
+			defer os.Remove(tmp.Name())
+			tmp.Close()
+			if err := sysutil.DownloadFile(ctx, ghosttyInstallerURL, tmp.Name()); err != nil {
+				return fmt.Errorf("download ghostty installer: %w", err)
+			}
+			if err := sysutil.VerifyChecksum(tmp.Name(), ghosttyInstallerSHA256); err != nil {
+				return fmt.Errorf("ghostty installer: %w", err)
+			}
+			if err := sysutil.Run(ctx, o, "bash", tmp.Name()); err != nil {
 				return fmt.Errorf("ghostty ubuntu installer: %w", err)
 			}
 		default:

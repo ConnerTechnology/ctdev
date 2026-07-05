@@ -29,7 +29,7 @@ var configureCaddyCmd = &cobra.Command{
 func init() {
 	configureCaddyCmd.Flags().StringVar(&flagCaddyDomain, "domain", "", "wildcard domain (e.g. example.com)")
 	configureCaddyCmd.Flags().StringVar(&flagCaddyEmail, "acme-email", "", "email for Let's Encrypt/ACME registration")
-	configureCaddyCmd.Flags().StringVar(&flagCaddyToken, "cf-token", "", "Cloudflare API token for the DNS-01 challenge")
+	configureCaddyCmd.Flags().StringVar(&flagCaddyToken, "cf-token", "", "Cloudflare API token for the DNS-01 challenge (prefer CF_API_TOKEN env or the wizard — flags land in shell history and ps)")
 	configureCmd.AddCommand(configureCaddyCmd)
 }
 
@@ -49,7 +49,9 @@ func configureCaddy(ctx context.Context) error {
 
 	domain := firstNonEmpty(flagCaddyDomain, current["HOMELAB_DOMAIN"])
 	email := firstNonEmpty(flagCaddyEmail, current["HOMELAB_ACME_EMAIL"])
-	token := firstNonEmpty(flagCaddyToken, current["CF_API_TOKEN"])
+	// The token can come from the CF_API_TOKEN env var so it never has to be
+	// typed on a command line (shell history, /proc/<pid>/cmdline).
+	token := firstNonEmpty(flagCaddyToken, os.Getenv("CF_API_TOKEN"), current["CF_API_TOKEN"])
 
 	if !isBatchMode() {
 		fmt.Println(styles.Title.Render("Caddy reverse proxy"))

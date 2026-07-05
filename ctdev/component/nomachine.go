@@ -17,6 +17,11 @@ import (
 const (
 	nomachineVersion = "9.7.3"
 	nomachineBuild   = "1"
+	// SHA256 of nomachine_<version>_<build>_amd64.deb. NoMachine publishes no
+	// checksums and dpkg verifies no signatures, so this recorded hash is the
+	// only integrity check between their CDN and a root-level install. Update
+	// it together with the version pin.
+	nomachineSHA256 = "81e0f8b48c7a4d3c16dac0401b9d188353e4a237498284d267a05c5176fd95fc"
 )
 
 // nomachinePort is the NX service port the server listens on. The installer
@@ -55,6 +60,9 @@ func nomachineInstall(ctx context.Context, opts ExecOpts) error {
 
 			if err := sysutil.DownloadFile(ctx, url, tmp.Name()); err != nil {
 				return fmt.Errorf("download nomachine: %w", err)
+			}
+			if err := sysutil.VerifyChecksum(tmp.Name(), nomachineSHA256); err != nil {
+				return fmt.Errorf("nomachine .deb: %w", err)
 			}
 			if err := installDebWithDepFix(ctx, o, tmp.Name(), "nomachine"); err != nil {
 				return err
