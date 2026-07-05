@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
 // Pi-hole runs as a container (official pihole/pihole image) with host
@@ -16,52 +13,32 @@ import (
 // which restic backs up (see `ctdev configure restic`). Tune settings with
 // `ctdev configure pihole`.
 
-func piholeDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "pihole")
+// The tuning drop-ins are read by FTL / Unbound on container (re)start (the
+// unbound one is a single-file bind mount into the image's custom.conf.d —
+// see docker-compose.yml); both are harmless to redeploy.
+var piholeStack = composeStack{
+	Name: "pihole",
+	Files: [][2]string{
+		{"docker-compose.yml", "docker-compose.yml"},
+		{"dnsmasq.d/01-ctdev.conf", "etc-dnsmasq.d/01-ctdev.conf"},
+		{"unbound.conf.d/tuning.conf", "unbound.conf.d/tuning.conf"},
+	},
 }
 
 func piholeInstall(ctx context.Context, opts ExecOpts) error {
-	p := platform.Detect()
 	o := execOpts(opts)
-
-	if p.PackageManager != "apt" {
-		return unsupportedPMError("pihole", p.PackageManager)
+	if done, err := piholeStack.preflight(o); done || err != nil {
+		return err
 	}
-	if !sysutil.CommandExists("docker") {
-		return fmt.Errorf("docker is required — install the 'docker' component first")
+	if err := piholeStack.deploy(); err != nil {
+		return err
 	}
-
-	dir := piholeDir()
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] deploy Pi-hole stack → %s and docker compose up\n", dir)
-		return nil
+	// etc-pihole holds gravity.db/config; the container mounts it, so it must
+	// exist (with sane ownership) before the first compose up.
+	if err := os.MkdirAll(filepath.Join(piholeStack.dir(), "etc-pihole"), 0o755); err != nil {
+		return err
 	}
-
-	if err := sysutil.DeployFileFromFS(Configs, "configs/pihole/docker-compose.yml", filepath.Join(dir, "docker-compose.yml")); err != nil {
-		return fmt.Errorf("deploy docker-compose.yml: %w", err)
-	}
-	for _, sub := range []string{"etc-pihole", "etc-dnsmasq.d"} {
-		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
-			return err
-		}
-	}
-
-	// dnsmasq tuning drop-in (e.g. dns-forward-max). Read by FTL on container
-	// (re)start; harmless to redeploy.
-	if err := sysutil.DeployFileFromFS(Configs, "configs/pihole/dnsmasq.d/01-ctdev.conf", filepath.Join(dir, "etc-dnsmasq.d", "01-ctdev.conf")); err != nil {
-		return fmt.Errorf("deploy dnsmasq tuning: %w", err)
-	}
-
-	// Unbound tuning drop-in (more threads + larger TCP backlog). Single-file
-	// bind mount into the image's custom.conf.d (see docker-compose.yml), read
-	// on Unbound (re)start; harmless to redeploy.
-	if err := sysutil.DeployFileFromFS(Configs, "configs/pihole/unbound.conf.d/tuning.conf", filepath.Join(dir, "unbound.conf.d", "tuning.conf")); err != nil {
-		return fmt.Errorf("deploy unbound tuning: %w", err)
-	}
-
-	compose := filepath.Join(dir, "docker-compose.yml")
-	if err := sysutil.Run(ctx, o, "docker", "compose", "-f", compose, "up", "-d"); err != nil {
+	if err := piholeStack.up(ctx, o); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)
 	}
 
@@ -72,11 +49,6 @@ func piholeInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func piholeUninstall(ctx context.Context, opts ExecOpts) error {
-	o := execOpts(opts)
-	compose := filepath.Join(piholeDir(), "docker-compose.yml")
-	if _, err := os.Stat(compose); err == nil {
-		_ = sysutil.Run(ctx, o, "docker", "compose", "-f", compose, "down")
-	}
-	fmt.Fprintln(opts.Stdout, "Pi-hole container stopped. ~/pihole/ kept (etc-pihole holds your lists/config).")
+	piholeStack.down(ctx, opts, "Pi-hole container stopped. ~/pihole/ kept (etc-pihole holds your lists/config).", false)
 	return nil
 }

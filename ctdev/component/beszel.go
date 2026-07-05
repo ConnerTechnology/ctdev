@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
@@ -17,39 +16,27 @@ import (
 // shared unix socket. The agent's KEY/TOKEN, issued by the hub's "Add System"
 // dialog, live in ~/beszel/.env; the hub comes up first so they can be obtained.
 
-func beszelDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "beszel")
+var beszelStack = composeStack{
+	Name:  "beszel",
+	Files: [][2]string{{"docker-compose.yml", "docker-compose.yml"}},
 }
 
 // beszelEnvPath is the dotenv holding the agent's BESZEL_KEY/BESZEL_TOKEN,
 // issued by the hub. Absent until the admin adds this system in the web UI.
 func beszelEnvPath() string {
-	return filepath.Join(beszelDir(), ".env")
+	return filepath.Join(beszelStack.dir(), ".env")
 }
 
 func beszelInstall(ctx context.Context, opts ExecOpts) error {
-	p := platform.Detect()
 	o := execOpts(opts)
-
-	if p.PackageManager != "apt" {
-		return unsupportedPMError("beszel", p.PackageManager)
+	if done, err := beszelStack.preflight(o); done || err != nil {
+		return err
 	}
-	if !sysutil.CommandExists("docker") {
-		return fmt.Errorf("docker is required — install the 'docker' component first")
-	}
-
-	dir := beszelDir()
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] deploy Beszel stack → %s and docker compose up\n", dir)
-		return nil
+	if err := beszelStack.deploy(); err != nil {
+		return err
 	}
 
-	if err := sysutil.DeployFileFromFS(Configs, "configs/beszel/docker-compose.yml", filepath.Join(dir, "docker-compose.yml")); err != nil {
-		return fmt.Errorf("deploy docker-compose.yml: %w", err)
-	}
-
-	compose := filepath.Join(dir, "docker-compose.yml")
+	compose := beszelStack.composePath()
 
 	// Bring the hub up first so the admin account can be created and a system
 	// added — that dialog issues the agent's KEY/TOKEN.
@@ -83,11 +70,6 @@ func beszelInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 func beszelUninstall(ctx context.Context, opts ExecOpts) error {
-	o := execOpts(opts)
-	compose := filepath.Join(beszelDir(), "docker-compose.yml")
-	if _, err := os.Stat(compose); err == nil {
-		_ = sysutil.Run(ctx, o, "docker", "compose", "-f", compose, "down")
-	}
-	fmt.Fprintln(opts.Stdout, "Beszel stopped. ~/beszel/ kept (the beszel_data volume holds the hub's users and history).")
+	beszelStack.down(ctx, opts, "Beszel stopped. ~/beszel/ kept (the beszel_data volume holds the hub's users and history).", false)
 	return nil
 }

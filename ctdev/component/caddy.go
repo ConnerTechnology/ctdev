@@ -9,24 +9,25 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
-// caddyFiles are the stack files deployed verbatim into ~/caddy/. They are
-// generic — the Caddyfile and compose file read the domain, ACME email, and
-// Cloudflare token from ~/caddy/.env, so the same files work on every node.
-var caddyFiles = []string{
-	"Dockerfile",
-	"Caddyfile",
-	"docker-compose.yml",
-	"sites/zz-placeholder.caddy",
+// The stack files are generic — the Caddyfile and compose file read the
+// domain, ACME email, and Cloudflare token from ~/caddy/.env, so the same
+// files work on every node.
+var caddyStack = composeStack{
+	Name: "caddy",
+	Files: [][2]string{
+		{"Dockerfile", "Dockerfile"},
+		{"Caddyfile", "Caddyfile"},
+		{"docker-compose.yml", "docker-compose.yml"},
+		{"sites/zz-placeholder.caddy", "sites/zz-placeholder.caddy"},
+	},
 }
 
 // CaddyDir is the on-disk location of the reverse-proxy stack.
 func CaddyDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "caddy")
+	return caddyStack.dir()
 }
 
 // CaddyEnvPath is the dotenv the Caddyfile and compose file read the domain,
@@ -38,24 +39,12 @@ func CaddyEnvPath() string {
 // caddyInstall deploys the Caddy reverse-proxy stack and brings it up. The
 // domain/token come from ~/caddy/.env, which `ctdev configure caddy` writes.
 func caddyInstall(ctx context.Context, opts ExecOpts) error {
-	p := platform.Detect()
 	o := execOpts(opts)
-
-	if p.PackageManager != "apt" {
-		return unsupportedPMError("caddy", p.PackageManager)
+	if done, err := caddyStack.preflight(o); done || err != nil {
+		return err
 	}
-	if !sysutil.CommandExists("docker") {
-		return fmt.Errorf("docker is required — install the 'docker' component first")
-	}
-	dir := CaddyDir()
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] deploy caddy stack → %s\n", dir)
-		return nil
-	}
-	for _, f := range caddyFiles {
-		if err := sysutil.DeployFileFromFS(Configs, "configs/caddy/"+f, filepath.Join(dir, f)); err != nil {
-			return fmt.Errorf("deploy %s: %w", f, err)
-		}
+	if err := caddyStack.deploy(); err != nil {
+		return err
 	}
 
 	// The proxy needs ~/caddy/.env (domain + Cloudflare token), written by
@@ -91,12 +80,7 @@ func CaddyComposeUp(ctx context.Context, o sysutil.Opts) error {
 
 // caddyUninstall stops the proxy stack but leaves ~/caddy/ in place.
 func caddyUninstall(ctx context.Context, opts ExecOpts) error {
-	o := execOpts(opts)
-	compose := filepath.Join(CaddyDir(), "docker-compose.yml")
-	if _, err := os.Stat(compose); err == nil {
-		_ = sysutil.SudoRun(ctx, o, "docker", "compose", "-f", compose, "down")
-	}
-	fmt.Fprintln(opts.Stdout, "Caddy proxy stopped. ~/caddy/ kept; restore Pi-hole port 443 manually if needed.")
+	caddyStack.down(ctx, opts, "Caddy proxy stopped. ~/caddy/ kept; restore Pi-hole port 443 manually if needed.", true)
 	return nil
 }
 
