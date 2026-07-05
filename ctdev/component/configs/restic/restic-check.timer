@@ -1,0 +1,11 @@
+[Unit]
+Description=Monthly restic repository integrity check
+
+[Timer]
+# Backups you never verify aren't backups — check the repo once a month.
+OnCalendar=monthly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

@@ -115,4 +115,13 @@ if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
 	esac
 fi
 
+# Optional dead-man's-switch: with HEALTHCHECK_URL set in restic.env (e.g. a
+# healthchecks.io check URL), ping success or /fail so a silently-broken backup
+# gets noticed instead of rotting for months. Never affects the exit code.
+if [ -n "${HEALTHCHECK_URL:-}" ]; then
+	ping_url="$HEALTHCHECK_URL"
+	[ "$overall" -ne 0 ] && ping_url="$HEALTHCHECK_URL/fail"
+	curl -fsS -m 10 --retry 3 -o /dev/null "$ping_url" || echo ">>> healthcheck ping failed (non-fatal)"
+fi
+
 exit "$overall"

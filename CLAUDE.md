@@ -28,6 +28,7 @@ ctdev configure sleep           # Never-suspend (mask sleep targets)
 ctdev configure locale          # UTF-8 locale (for Mosh)
 ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
+ctdev configure autoupdate      # Automatic security updates (unattended-upgrades)
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
@@ -53,9 +54,9 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-43 components:
+53 components:
 
-1password, age, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, docker, doctl, earlyoom, fonts, gh, ghostty, git, git-spice, go, helm, jq, kubectl, linear, logi-options, node, nomachine, pihole, portainer, restic, ruby, shellcheck, slack, solaar, sops, tailscale, terraform, tmux, vscode, zsh
+1password, age, bat, beszel, btop, bun, caddy, chatgpt, chrome, cleanmymac, claude-code, claude-desktop, codex, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, ghostty, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
 
 ## Homelab / Pi-hole nodes
 

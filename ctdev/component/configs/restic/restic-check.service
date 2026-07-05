@@ -1,0 +1,18 @@
+[Unit]
+Description=Monthly restic repository integrity check
+Documentation=https://restic.readthedocs.io
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/restic-restore.sh check
+# Be gentle — a check reads a lot of repository data.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=4h
+# Same least-privilege set as restic-backup.service.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes

@@ -127,9 +127,18 @@ func ResticInitIfNeeded(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.SudoRun(ctx, o, "bash", "-c", script)
 }
 
-// ResticEnableTimer enables and starts the daily backup timer.
+// ResticEnableTimer enables and starts the daily backup timer and the monthly
+// repository integrity check.
 func ResticEnableTimer(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "restic-backup.timer")
+	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "restic-backup.timer"); err != nil {
+		return err
+	}
+	// The check timer ships with newer installs; older nodes that haven't
+	// re-run `ctdev install restic` won't have the unit yet — not fatal.
+	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "restic-check.timer"); err != nil {
+		fmt.Fprintln(o.Stdout, "note: restic-check.timer not enabled (re-run 'ctdev install restic' to deploy it)")
+	}
+	return nil
 }
 
 // DefaultBackupExcludes returns conservative exclude patterns seeded alongside
@@ -171,6 +180,12 @@ func resticInstall(ctx context.Context, opts ExecOpts) error {
 	if err := resticDeploy(ctx, o, "configs/restic/restic-backup.timer", "/etc/systemd/system/restic-backup.timer", "0644"); err != nil {
 		return err
 	}
+	if err := resticDeploy(ctx, o, "configs/restic/restic-check.service", "/etc/systemd/system/restic-check.service", "0644"); err != nil {
+		return err
+	}
+	if err := resticDeploy(ctx, o, "configs/restic/restic-check.timer", "/etc/systemd/system/restic-check.timer", "0644"); err != nil {
+		return err
+	}
 	if err := sysutil.SudoRun(ctx, o, "systemctl", "daemon-reload"); err != nil {
 		return err
 	}
@@ -199,9 +214,12 @@ func resticInstall(ctx context.Context, opts ExecOpts) error {
 func resticUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-backup.timer")
+	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-check.timer")
 	for _, f := range []string{
 		"/etc/systemd/system/restic-backup.timer",
 		"/etc/systemd/system/restic-backup.service",
+		"/etc/systemd/system/restic-check.timer",
+		"/etc/systemd/system/restic-check.service",
 		"/usr/local/bin/restic-backup.sh",
 		"/usr/local/bin/restic-restore.sh",
 	} {
