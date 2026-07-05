@@ -56,15 +56,37 @@ func readCPUModel() string {
 		}
 		return strings.TrimSpace(string(out))
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "model name") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
-			}
+	if m := parseCPUModel(string(data)); m != "" {
+		return m
+	}
+	// Generic ARM fallback: the device-tree board name (NUL-terminated).
+	if b, err := os.ReadFile("/proc/device-tree/model"); err == nil {
+		if m := strings.TrimSpace(strings.Trim(string(b), "\x00")); m != "" {
+			return m
 		}
 	}
 	return "unknown"
+}
+
+// parseCPUModel extracts a CPU/board name from /proc/cpuinfo. x86 kernels give
+// a per-core "model name"; arm64 kernels don't, but Raspberry Pi kernels append
+// a board "Model" line (e.g. "Raspberry Pi 5 Model B Rev 1.0") — without this
+// fallback a Pi reports "unknown".
+func parseCPUModel(cpuinfo string) string {
+	boardModel := ""
+	for _, line := range strings.Split(cpuinfo, "\n") {
+		if strings.HasPrefix(line, "model name") {
+			if _, v, ok := strings.Cut(line, ":"); ok {
+				return strings.TrimSpace(v)
+			}
+		}
+		if strings.HasPrefix(line, "Model") {
+			if _, v, ok := strings.Cut(line, ":"); ok {
+				boardModel = strings.TrimSpace(v)
+			}
+		}
+	}
+	return boardModel
 }
 
 func readMemoryGB() int {

@@ -77,3 +77,20 @@ VLAN Configurations
 		t.Errorf("expected 0 adapters for fake interfaces, got %d", len(result))
 	}
 }
+
+func TestParseCPUModel(t *testing.T) {
+	x86 := "processor\t: 0\nvendor_id\t: AuthenticAMD\nmodel\t\t: 97\nmodel name\t: AMD Ryzen 9 9950X3D 16-Core Processor\n"
+	if got := parseCPUModel(x86); got != "AMD Ryzen 9 9950X3D 16-Core Processor" {
+		t.Errorf("x86 model = %q", got)
+	}
+
+	// arm64 Raspberry Pi: no per-core "model name", board "Model" at the end.
+	pi := "processor\t: 0\nBogoMIPS\t: 108.00\nCPU implementer\t: 0x41\n\nHardware\t: BCM2712\nModel\t\t: Raspberry Pi 5 Model B Rev 1.0\n"
+	if got := parseCPUModel(pi); got != "Raspberry Pi 5 Model B Rev 1.0" {
+		t.Errorf("pi model = %q", got)
+	}
+
+	if got := parseCPUModel("processor\t: 0\n"); got != "" {
+		t.Errorf("expected empty for cpuinfo without model lines, got %q", got)
+	}
+}
