@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.3.0] - 2026-07-05
+
+The fleet release: machine profiles, a health dashboard, and the additions a
+family fleet actually needs (auto security updates, family DNS filtering,
+backup alerting and verification, disk-health monitoring).
+
+### Added
+- **Machine profiles** — `ctdev apply <profile>` realizes a declarative machine
+  role: shows the plan against the actual machine (installed ✓ / to-install →,
+  dependencies resolved), confirms, installs, batch-configures categories at
+  recommended values, then prints the profile's own next-steps notes. `ctdev
+  diff <profile>` reports drift (missing components, settings off recommended)
+  with a non-zero exit, so it works as a cron check. Three built-ins ship
+  **embedded in the binary** — `pihole-node`, `dev-workstation`,
+  `family-desktop` — so a freshly flashed machine can `ctdev apply pihole-node`
+  with nothing but the installed binary; local files in
+  `~/.config/ctdev/profiles/<name>.toml` add or override by name. Interactive
+  wizards (restic/caddy/pihole/git) are never run by apply — each profile's
+  notes list them — and the `gpu` category is rejected in profiles because MOK
+  signing is interactive.
+- **`ctdev status`** — one screen of machine health, read entirely from local
+  sources (no network): uptime/load/disk, Tailscale connectivity, homelab
+  containers, backup freshness and last result straight from systemd (a daily
+  backup >26h old shows *overdue*, a failed run shows *FAILED* with the
+  journalctl pointer), the monthly integrity-check age, and pending apt
+  updates. Fast enough to run on every login.
+- **10 new components** (43 → 53): `mosh` (long configured-for, finally
+  installable), `ripgrep`, `fd`, `fzf`, `bat`, `zoxide`, `direnv`, `lazygit`,
+  `smartmontools`, `syncthing`. Debian's renamed binaries get `~/.local/bin`
+  symlinks (`fd`→fdfind, `bat`→batcat); lazygit installs the checksum-verified
+  GitHub binary on Linux (brew on macOS); smartmontools enables smartd so disk
+  pre-failure warnings hit the journal; syncthing prints its per-user start
+  command instead of auto-starting.
+- **`ctdev configure autoupdate`** — installs unattended-upgrades and enables
+  the daily security-only run (normal updates stay manual via `ctdev update`).
+  Recommended for always-on nodes and family machines.
+- **Pi-hole "Cloudflare for Families" upstream** (1.1.1.3) — network-wide
+  malware + adult-content filtering as a one-choice preset in
+  `ctdev configure pihole`.
+- **Backup alerting and verification**: `ctdev configure restic` offers an
+  optional healthcheck ping URL (success pings it, failure pings `/fail` —
+  healthchecks.io style) so a silently-broken backup gets noticed, and
+  `ctdev install restic` deploys a **monthly `restic check` timer**. Re-run
+  both on existing nodes to pick these up.
+
 ## [12.2.0] - 2026-07-05
 
 Fixes from a second full-tool review (every command walked end-to-end), plus
