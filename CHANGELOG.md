@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.1.0] - 2026-07-05
+
+Cleans up the remaining low-priority items from the v12 security and code review.
+
+### Security
+- **Third-party installers are pinned and verified.** The Ghostty Ubuntu installer
+  (a community repo) is pinned by commit — tags can be force-pushed — and its SHA256
+  is checked before the script runs; the NoMachine `.deb` (no vendor checksums, dpkg
+  verifies no signatures) is verified against a recorded SHA256 before installing as
+  root. Both hashes live next to the version pins and are bumped together.
+- **`configure caddy` reads `CF_API_TOKEN` from the environment**, so the Cloudflare
+  token never has to appear on a command line (shell history, `/proc/<pid>/cmdline`).
+  The `--cf-token` flag still works but its help text and the README now steer to the
+  env var or the masked wizard prompt.
+- **Downloads refuse redirects that downgrade to plain http** (10-redirect cap), and
+  `install.sh` downloads into the install directory so the final move is an atomic
+  rename — a crash mid-install can't leave a truncated binary. Its old-install cleanup
+  uses `sudo -n`, so a piped `curl | bash` never sits on a password prompt.
+- **Secret file permissions tightened**: `~/beszel/.env` (hand-pasted KEY/TOKEN) is
+  chmod'd 0600 on install, and the backup-paths/excludes files written by the web
+  picker are 0600 to match everything else under `/etc/restic`.
+- **`restic-backup.service` is sandboxed** with `NoNewPrivileges`, `PrivateTmp`,
+  `ProtectKernelTunables`, and `ProtectControlGroups` — re-run `ctdev install restic`
+  on existing nodes to redeploy the unit.
+
+### Fixed
+- The restic backup script's line trimming (`echo | xargs`) errored on paths
+  containing quotes (e.g. `O'Brien/`) and silently dropped that backup path; it now
+  trims in pure bash.
+- `ctdev install docker` / `tailscale` no longer report success when the service
+  fails to enable or start — a docker that won't run made every compose component
+  (pihole, caddy, beszel, portainer) fail later with a much more confusing error.
+- Shell-out failures name the command (`docker: exit status 1`, with the real
+  command named through sudo) instead of a bare exit status.
+- The MOK-enrollment `mokutil --import` now honors Ctrl-C (runs under the command
+  context like the rest of the GPU flow).
+
 ## [12.0.0] - 2026-07-04
 
 ### Changed (breaking)
