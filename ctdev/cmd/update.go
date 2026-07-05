@@ -22,10 +22,12 @@ var (
 )
 
 var updateCmd = &cobra.Command{
-	Use:   "update",
+	Use:   "update [component...]",
 	Short: "Update system packages and components",
-	Long:  "Check for and install available updates across system packages, components, and runtimes.",
-	RunE:  runUpdate,
+	Long: "Check for and install available updates across system packages, components, and runtimes.\n\n" +
+		"Positional component names only narrow which APT keys --refresh-keys refreshes " +
+		"(e.g. 'ctdev update --refresh-keys vscode'); they don't filter the update scan.",
+	RunE: runUpdate,
 }
 
 func init() {

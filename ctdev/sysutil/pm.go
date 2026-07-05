@@ -2,11 +2,19 @@ package sysutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 )
+
+// ErrUnsupportedPM marks package operations on a package manager we don't
+// drive (dnf, pacman, ...). The component executor maps it to a Skipped
+// result, the same way component-level ErrUnsupportedOS is handled — without
+// it, plain components like git/tmux report as *failed* on Fedora/Arch while
+// everything else politely skips.
+var ErrUnsupportedPM = errors.New("unsupported package manager")
 
 // InstallPackage installs packages using the detected system package manager.
 func InstallPackage(ctx context.Context, o Opts, names ...string) error {
@@ -17,7 +25,7 @@ func InstallPackage(ctx context.Context, o Opts, names ...string) error {
 	case "brew":
 		return Run(ctx, o, "brew", append([]string{"install"}, names...)...)
 	default:
-		return fmt.Errorf("unsupported package manager: %s", pm)
+		return fmt.Errorf("%w: %s", ErrUnsupportedPM, pm)
 	}
 }
 
@@ -30,7 +38,7 @@ func RemovePackage(ctx context.Context, o Opts, names ...string) error {
 	case "brew":
 		return Run(ctx, o, "brew", append([]string{"uninstall"}, names...)...)
 	default:
-		return fmt.Errorf("unsupported package manager: %s", pm)
+		return fmt.Errorf("%w: %s", ErrUnsupportedPM, pm)
 	}
 }
 

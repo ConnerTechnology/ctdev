@@ -38,6 +38,11 @@ var rootCmd = &cobra.Command{
 	Short:   "Development environment manager",
 	Long:    "ctdev manages your development environment — install components, update packages, and configure your system.",
 	Version: "",
+	// Runtime failures ("2 components failed") aren't usage errors — don't
+	// follow them with a page of flags, and let main print the error exactly
+	// once. Cobra still prints usage for genuine arg/flag parse errors.
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func Execute() error {

@@ -426,7 +426,9 @@ func parseNPMOutdatedJSON(content string) ([]checklist.UpdateItem, error) {
 }
 
 func scanCtdev(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if version == "" {
+	// "dev" (a from-source build) parses as 0.0.0 and would flag an update on
+	// every run.
+	if version == "" || version == "dev" {
 		return nil, nil
 	}
 	latest, err := sysutil.GitHubLatestVersion(ctx, "ConnerTechnology/dotfiles")
@@ -557,6 +559,10 @@ func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
 		}
 	}
 
+	// One "helm" row at a time: two identically-named rows collide in the
+	// checklist and both map to the same updater (last install would win).
+	// Offer the same-major update first; once taken, the next scan offers the
+	// major bump.
 	if versionNewer(latestSameMajor, current) {
 		items = append(items, checklist.UpdateItem{
 			Name:       "helm",
@@ -564,8 +570,7 @@ func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
 			CurrentVer: current,
 			NewVer:     latestSameMajor,
 		})
-	}
-	if latestNewMajor != "" {
+	} else if latestNewMajor != "" {
 		items = append(items, checklist.UpdateItem{
 			Name:       "helm",
 			Source:     "cli",

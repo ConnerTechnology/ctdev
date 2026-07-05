@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
@@ -116,6 +117,17 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 
 	ctx := cmdContext(cmd)
 	for _, slug := range slugOrder {
+		// The GPU category's driver-signing apply launches the interactive
+		// Secure Boot/MOK enrollment flow (one-time password, reboot steps) —
+		// never spring that mid-sweep. It stays behind an explicit
+		// `ctdev configure gpu`; --show remains safe to include.
+		if slug == "gpu" && !flagConfigShow {
+			if len(setup.FilterByHardware(setup.FilterBySlug(setup.Registry, slug))) > 0 {
+				fmt.Println(styles.Dimmed.Render("  Skipping GPU & NVIDIA — run 'ctdev configure gpu' (includes the Secure Boot driver-signing flow)."))
+				fmt.Println()
+			}
+			continue
+		}
 		if err := runCategoryWizard(ctx, slug, flagConfigShow); err != nil {
 			return cancelToClean(err)
 		}
@@ -143,11 +155,14 @@ func configureGit(ctx context.Context) error {
 		return showGitConfig()
 	}
 
-	// If flags provided, set directly (non-interactive)
-	if flagGitName != "" || flagGitEmail != "" {
+	// If flags provided, set directly (non-interactive). --signing-key counts
+	// too — it used to be silently ignored unless --name/--email came along.
+	if flagGitName != "" || flagGitEmail != "" || flagGitSigningKey != "" {
 		local := flagGitLocal
-		if err := setGitConfig(flagGitName, flagGitEmail, local); err != nil {
-			return err
+		if flagGitName != "" || flagGitEmail != "" {
+			if err := setGitConfig(flagGitName, flagGitEmail, local); err != nil {
+				return err
+			}
 		}
 		if flagGitSigningKey != "" {
 			return setGitSigningKey(flagGitSigningKey, local)
@@ -314,6 +329,10 @@ func promptSSHSigningKey(ctx context.Context, email string) (string, error) {
 }
 
 func generateSSHKey(email string) (string, error) {
+	if flagDryRun {
+		fmt.Println("  [dry-run] would run: ssh-keygen -t ed25519")
+		return "", nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
@@ -352,6 +371,11 @@ func generateSSHKey(email string) (string, error) {
 }
 
 func promptGitHubKeyUpload(ctx context.Context, keyPath string) error {
+	// Uploading a key is an outward-facing write — never do it in a preview.
+	if flagDryRun {
+		fmt.Println("  [dry-run] would offer to add the key to GitHub (gh ssh-key add)")
+		return nil
+	}
 	// Check if gh is available and authenticated
 	if err := exec.Command("gh", "auth", "status").Run(); err != nil {
 		printManualGitHubInstructions(keyPath)
@@ -512,6 +536,10 @@ func runConfigureAWS(cmd *cobra.Command, args []string) error {
 }
 
 func configureAWS(ctx context.Context) error {
+	if flagConfigShow {
+		return showAWSConfig()
+	}
+
 	selected := flagAWSProfile
 
 	if selected == "" {
@@ -548,6 +576,22 @@ func configureAWS(ctx context.Context) error {
 
 	fmt.Println(styles.Success.Render(fmt.Sprintf("AWS_PROFILE set to %s", selected)))
 	fmt.Println(styles.Dimmed.Render("Restart your shell or run: source " + sysutil.ExportsLocalPath()))
+	return nil
+}
+
+// showAWSConfig prints the AWS_PROFILE currently exported by the shell config.
+func showAWSConfig() error {
+	profile := "(not set)"
+	if b, err := os.ReadFile(sysutil.ExportsLocalPath()); err == nil {
+		for _, line := range strings.Split(string(b), "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "export AWS_PROFILE="); ok {
+				profile = v
+			}
+		}
+	}
+	fmt.Println(styles.Title.Render("AWS"))
+	fmt.Println()
+	fmt.Printf("  %s %s\n", styles.Label(20).Render("AWS_PROFILE:"), styles.Value.Render(profile))
 	return nil
 }
 

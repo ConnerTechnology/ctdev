@@ -111,7 +111,7 @@ func runBackupPaths(cmd *cobra.Command, args []string) error {
 		fmt.Println(styles.Dimmed.Render("  (couldn't open a browser automatically)"))
 	}
 	fmt.Println(styles.Dimmed.Render("  On a headless/remote host, forward the port from your laptop, e.g.:"))
-	fmt.Printf("    %s\n", styles.Dimmed.Render(fmt.Sprintf("ssh -L %[1]s:%[1]s %s", portOf(ln), hostLabel())))
+	fmt.Printf("    %s\n", styles.Dimmed.Render(fmt.Sprintf("ssh -L %[1]s:localhost:%[1]s %s", portOf(ln), hostLabel())))
 	fmt.Println(styles.Dimmed.Render("  Waiting for you to Save & Close (Ctrl-C to cancel)..."))
 
 	select {

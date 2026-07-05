@@ -24,8 +24,9 @@ var configureResticCmd = &cobra.Command{
 	Short: "Configure restic backups for this machine",
 	Long: "Walk through setting up restic backups for this machine: pick a backend " +
 		"(Backblaze B2, S3, SFTP, or a local/USB path), enter its credentials, and set a " +
-		"repository password. The config is written to /etc/restic/restic.env, the backup " +
-		"path list is seeded, the repository is initialized, and the daily timer is enabled. " +
+		"repository password. The config is written to /etc/restic/restic.env, default " +
+		"exclude patterns are seeded, the repository is initialized, and the daily timer is " +
+		"enabled. Backups are opt-in: pick what to include with 'ctdev backup paths'. " +
 		"Credentials are stored only on this host — if lost, just run this again.\n\n" +
 		"Run a snapshot with 'ctdev backup now' and list snapshots with 'ctdev backup snapshots'.",
 	RunE: runConfigureRestic,

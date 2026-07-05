@@ -191,7 +191,8 @@ func resticInstall(ctx context.Context, opts ExecOpts) error {
 	fmt.Fprintln(opts.Stdout, "restic installed. Configure backups with:")
 	fmt.Fprintln(opts.Stdout, "  ctdev configure restic")
 	fmt.Fprintln(opts.Stdout, "It prompts for the repo and credentials, writes /etc/restic/restic.env,")
-	fmt.Fprintln(opts.Stdout, "seeds the backup path list, runs `restic init`, and enables the daily timer.")
+	fmt.Fprintln(opts.Stdout, "seeds default excludes, runs `restic init`, and enables the daily timer.")
+	fmt.Fprintln(opts.Stdout, "Then pick what to back up with: ctdev backup paths")
 	return nil
 }
 

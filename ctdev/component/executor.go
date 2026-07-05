@@ -3,6 +3,8 @@ package component
 import (
 	"context"
 	"errors"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
 type ExecResult struct {
@@ -25,7 +27,10 @@ func Uninstall(ctx context.Context, c *Component, opts ExecOpts) ExecResult {
 func runComponent(c *Component, fn func(context.Context, ExecOpts) error, ctx context.Context, opts ExecOpts) ExecResult {
 	result := ExecResult{Component: c.Name}
 	result.Err = fn(ctx, opts)
-	if errors.Is(result.Err, ErrUnsupportedOS) {
+	// Both sentinels mean "not for this platform": ErrUnsupportedOS from
+	// component-level branches, ErrUnsupportedPM from sysutil package ops that
+	// hit a package manager we don't drive (dnf/pacman).
+	if errors.Is(result.Err, ErrUnsupportedOS) || errors.Is(result.Err, sysutil.ErrUnsupportedPM) {
 		result.Skipped = true
 		result.Err = nil
 	}
