@@ -68,7 +68,7 @@ func runCategoryBatch(ctx context.Context, slug string) error {
 		fmt.Printf("  %s\n", styles.Dimmed.Render(fmt.Sprintf("No applicable %s settings on this hardware.", slugDescription(slug))))
 		return nil
 	}
-	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug) + " (batch)"))
+	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug) + " (batch — applying recommended values)"))
 	states := setup.InitStates(ctx, settings)
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
@@ -149,7 +149,7 @@ func showSetting(state *setup.SettingState) {
 
 	marker := ""
 	if state.CurrentValue != s.Default {
-		marker = styles.Dimmed.Render(fmt.Sprintf(" (default: %s)", s.Default))
+		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", s.Default))
 	}
 	fmt.Printf("  %s %s%s\n", label, value, marker)
 }
@@ -163,10 +163,35 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 	fmt.Printf("  %s\n", styles.Dimmed.Render(s.Description))
 	current := state.CurrentValue
 	if s.Default != "" && s.Default != current {
+		// Default is documented as "our recommended value" — say so; --batch
+		// applies exactly these.
 		fmt.Printf("  %s %s %s\n", styles.Dimmed.Render("Current:"), current,
-			styles.Dimmed.Render(fmt.Sprintf("(default: %s)", s.Default)))
+			styles.Dimmed.Render(fmt.Sprintf("(recommended: %s)", s.Default)))
 	} else {
 		fmt.Printf("  %s %s\n", styles.Dimmed.Render("Current:"), current)
+	}
+
+	// One-way settings (install/enable actions with no off path) get a single
+	// honest question instead of an enable/disable choice the apply layer
+	// can't deliver on.
+	if s.OneWay {
+		if current == s.Default {
+			fmt.Printf("  %s\n\n", styles.Dimmed.Render("Already "+current+" — nothing to do."))
+			state.Enabled = false
+			return false, nil
+		}
+		yes, err := promptYesNoCtx(ctx, fmt.Sprintf("Apply now (→ %s)?", s.Default), false)
+		if err != nil {
+			return false, err
+		}
+		fmt.Println()
+		if !yes {
+			state.Enabled = false
+			return false, nil
+		}
+		state.DesiredValue = s.Default
+		state.Enabled = true
+		return true, nil
 	}
 
 	var newValue string

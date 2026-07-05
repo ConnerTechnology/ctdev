@@ -21,6 +21,7 @@ var Registry = []Setting{
 		Category:    "GPU",
 		Description: "Signs the NVIDIA kernel module with a Machine Owner Key so Secure Boot accepts it. Without this, the driver won't load on Secure-Boot-enabled systems.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "signed",
 		DetectFunc:  detectModuleSigned,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -34,6 +35,7 @@ var Registry = []Setting{
 		Category:    "GPU",
 		Description: "Enables systemd services that properly suspend and resume the NVIDIA GPU. Prevents black screens or freezes after waking from sleep.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "enabled",
 		DetectFunc:  detectNvidiaSuspendServices,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -226,6 +228,7 @@ var Registry = []Setting{
 		Category:    "Keyboard",
 		Description: "Ensures NumLock is turned on at login. Installs numlockx if needed.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(ctx context.Context) string {
 			if detectPackageInstalled(ctx, "numlockx") {
@@ -286,6 +289,7 @@ var Registry = []Setting{
 		Category:    "Mouse",
 		Description: "Installs xbindkeys and xdotool for custom mouse button mappings.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(ctx context.Context) string {
 			if detectPackageInstalled(ctx, "xbindkeys") && detectPackageInstalled(ctx, "xdotool") {
@@ -306,6 +310,7 @@ var Registry = []Setting{
 		Category:    "Audio",
 		Description: "Installs the core Bluetooth and audio stack: PipeWire, WirePlumber, Bluetooth codecs, and PulseAudio compatibility.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(ctx context.Context) string {
 			pkgs := []string{"pipewire-audio", "bluez", "blueman", "libspa-0.2-bluetooth", "pulseaudio-utils"}
@@ -329,6 +334,7 @@ var Registry = []Setting{
 		Category:    "Bluetooth",
 		Description: "Enables and starts the system Bluetooth daemon so devices can pair and connect.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "active",
 		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "bluetooth.service") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -341,6 +347,7 @@ var Registry = []Setting{
 		Category:    "Audio",
 		Description: "Copies a WirePlumber config that prioritizes LDAC codec for high-quality Bluetooth audio, then restarts the PipeWire stack.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(_ context.Context) string {
 			return detectFileExists("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf")
@@ -391,6 +398,7 @@ var Registry = []Setting{
 		Category:    "Desktop",
 		Description: "Hides Windows/secondary NVMe partitions from the file manager so they don't clutter the sidebar.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/udev/rules.d/99-hide-drives.rules") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -406,6 +414,7 @@ var Registry = []Setting{
 		Category:    "System",
 		Description: "Installs a udev rule and systemd user service that restarts Solaar when the Logi Bolt receiver reconnects after a KVM switch. Fixes middle-click not working.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(_ context.Context) string {
 			return detectFileExists("/etc/udev/rules.d/99-logitech-kvm-fix.rules")
@@ -424,6 +433,7 @@ var Registry = []Setting{
 		Category:    "Network",
 		Description: "Installs a systemd sleep hook that performs a PCIe-level reset of the MT7925E WiFi adapter around suspend. Fixes WiFi not reconnecting after wake.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc:  func(_ context.Context) string { return detectFileExists("/usr/lib/systemd/system-sleep/wifi-mt7925") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -437,6 +447,7 @@ var Registry = []Setting{
 		Category:    "Network",
 		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(_ context.Context) string {
 			return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
@@ -451,6 +462,7 @@ var Registry = []Setting{
 		Category:    "System",
 		Description: "Enables periodic TRIM for SSDs, which helps maintain write performance and longevity.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "active",
 		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "fstrim.timer") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -466,6 +478,7 @@ var Registry = []Setting{
 		Category:    "SSH",
 		Description: "Enables and starts the OpenSSH server so you can connect to this machine over SSH.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "active",
 		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ssh.service") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -478,6 +491,7 @@ var Registry = []Setting{
 		Category:    "SSH",
 		Description: "Hardens sshd for key-based login (pubkey on, keyboard-interactive off, keepalives). Password auth is disabled only once an authorized key exists, so you can't lock yourself out.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/ssh/sshd_config.d/99-ctdev.conf") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -493,6 +507,7 @@ var Registry = []Setting{
 		Category:    "Firewall",
 		Description: "Allows SSH (22/tcp) and Mosh (60000:61000/udp) from private LAN ranges and enables UFW. VLAN/subnet enforcement is left to your gateway firewall. Heads up: on a DNS or web host (Pi-hole, reverse proxy) UFW's default-deny will block those services unless you open their ports first.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "active",
 		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ufw.service") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -508,6 +523,7 @@ var Registry = []Setting{
 		Category:    "Locale",
 		Description: "Generates the en_US.UTF-8 locale. Mosh refuses to start without a UTF-8 locale.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc:  detectUTF8Locale,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -523,6 +539,7 @@ var Registry = []Setting{
 		Category:    "Sleep",
 		Description: "Masks the sleep, suspend, hibernate and hybrid-sleep systemd targets so an always-on machine stays reachable.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "enabled",
 		DetectFunc:  detectSuspendMasked,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -538,6 +555,7 @@ var Registry = []Setting{
 		Category:    "Service Lingering",
 		Description: "Enables systemd lingering for your user so user services (VS Code tunnel, tmux) keep running without an active login session.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "enabled",
 		DetectFunc:  detectLinger,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
@@ -553,6 +571,7 @@ var Registry = []Setting{
 		Category:    "VS Code Tunnel",
 		Description: "Installs the VS Code tunnel as a background service so you can open this machine from vscode.dev in a browser (e.g. iPad Safari). Requires VS Code; run 'code tunnel user login' once to authenticate.",
 		Control:     ControlToggle,
+		OneWay:      true,
 		Default:     "installed",
 		DetectFunc:  detectCodeTunnelService,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {

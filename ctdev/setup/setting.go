@@ -47,6 +47,10 @@ type Setting struct {
 	ApplyFunc   ApplyFunc                        // writes value to system
 	HardwareFn  func() bool                      // optional; setting hidden when returns false
 	ApplyGroup  string                           // settings sharing a group run one post-apply hook
+	// OneWay marks install/enable-style settings whose ApplyFunc has no off
+	// path (it ignores the value). The wizard offers these as a single
+	// "apply?" question instead of a fake enable/disable choice.
+	OneWay bool
 }
 
 // SettingState holds runtime state for a setting during TUI interaction.
