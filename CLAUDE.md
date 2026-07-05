@@ -20,7 +20,7 @@ ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
 ctdev info                      # Show system information
 ctdev status                    # Machine health: disk, containers, backup freshness, updates
-ctdev configure                 # Walk through all system configuration
+ctdev configure                 # Full-screen settings browser (all categories)
 ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
@@ -32,6 +32,7 @@ ctdev configure locale          # UTF-8 locale (for Mosh)
 ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
 ctdev configure autoupdate      # Automatic security updates (unattended-upgrades)
+ctdev configure macos           # macOS defaults (Dock/Finder/keyboard) — macOS only
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show

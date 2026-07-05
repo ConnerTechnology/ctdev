@@ -34,6 +34,7 @@ var slugDescriptions = map[string]string{
 	"autoupdate": "Automatic Updates",
 	"pihole":     "Pi-hole DNS",
 	"caddy":      "Caddy reverse proxy",
+	"macos":      "macOS Defaults",
 }
 
 // slugOrder is derived from setup.Registry so adding a setting with a brand
