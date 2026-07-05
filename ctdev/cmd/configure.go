@@ -109,13 +109,28 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown configure category %q (available: %s)", args[0], strings.Join(names, ", "))
 	}
 
+	ctx := cmdContext(cmd)
+
+	// Interactive full sweep → the full-screen settings browser. The line
+	// wizard remains for per-category runs (`ctdev configure ssh`), --show,
+	// and non-TTY/ACCESSIBLE sessions.
+	if !flagConfigShow && !isBatchMode() {
+		// Sudo up front: detection reads some root-only state (pihole), and
+		// the apply that follows the browser needs it anyway.
+		if !flagDryRun {
+			if err := ensureSudo(); err != nil {
+				return fmt.Errorf("sudo required: %w", err)
+			}
+		}
+		return cancelToClean(runSettingsBrowser(ctx))
+	}
+
 	if !flagDryRun && !flagConfigShow {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}
 
-	ctx := cmdContext(cmd)
 	for _, slug := range slugOrder {
 		// The GPU category's driver-signing apply launches the interactive
 		// Secure Boot/MOK enrollment flow (one-time password, reboot steps) —
