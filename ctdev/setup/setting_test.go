@@ -197,11 +197,11 @@ func TestLogitechKVMFixHasHardwareFn(t *testing.T) {
 	t.Fatal("Logitech KVM mouse fix not found in Registry")
 }
 
-func TestHideDrivesHasNoHardwareFn(t *testing.T) {
+func TestHideDrivesHasHardwareFn(t *testing.T) {
 	for _, s := range Registry {
 		if s.Name == "Hide drives" {
-			if s.HardwareFn != nil {
-				t.Error("Hide drives should not have HardwareFn (always visible)")
+			if s.HardwareFn == nil {
+				t.Error("Hide drives should have HardwareFn set (Cinnamon-only)")
 			}
 			if s.DetectFunc == nil {
 				t.Error("Hide drives should have DetectFunc set")
@@ -213,6 +213,16 @@ func TestHideDrivesHasNoHardwareFn(t *testing.T) {
 		}
 	}
 	t.Fatal("Hide drives not found in Registry")
+}
+
+func TestRegistryEverySettingHasHardwareFn(t *testing.T) {
+	// Every setting must declare where it applies (OS/desktop/hardware gate)
+	// so the wizard never offers inert settings on the wrong platform.
+	for _, s := range Registry {
+		if s.HardwareFn == nil {
+			t.Errorf("setting %q has no HardwareFn", s.Name)
+		}
+	}
 }
 
 func TestCategories(t *testing.T) {

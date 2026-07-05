@@ -60,6 +60,7 @@ var Registry = []Setting{
 			return applyGrubVar(ctx, o, "GRUB_TIMEOUT_STYLE", v)
 		},
 		ApplyGroup: "grub",
+		HardwareFn: gateGrub,
 	},
 	{
 		Name:        "GRUB timeout",
@@ -74,6 +75,7 @@ var Registry = []Setting{
 			return applyGrubVar(ctx, o, "GRUB_TIMEOUT", v)
 		},
 		ApplyGroup: "grub",
+		HardwareFn: gateGrub,
 	},
 	{
 		Name:        "OS prober",
@@ -91,6 +93,7 @@ var Registry = []Setting{
 			return applyGrubVar(ctx, o, "GRUB_DISABLE_OS_PROBER", grubVal)
 		},
 		ApplyGroup: "grub",
+		HardwareFn: gateGrub,
 	},
 
 	// ── Power ──────────────────────────────────────────────────────────
@@ -109,6 +112,7 @@ var Registry = []Setting{
 		},
 		DetectFunc: detectPowerProfile,
 		ApplyFunc:  applyPowerProfile,
+		HardwareFn: gatePowerProfiles,
 	},
 	{
 		Name:        "Display sleep",
@@ -124,6 +128,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v)
 		},
+		HardwareFn: gateCinnamon,
 	},
 	{
 		Name:        "Inactive sleep",
@@ -139,6 +144,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
 		},
+		HardwareFn: gateCinnamon,
 	},
 	{
 		Name:        "Lock on suspend",
@@ -153,6 +159,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v)
 		},
+		HardwareFn: gateCinnamon,
 	},
 	{
 		Name:        "Screensaver lock",
@@ -167,6 +174,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/screensaver/lock-enabled", v)
 		},
+		HardwareFn: gateCinnamon,
 	},
 	{
 		Name:        "Idle delay",
@@ -182,6 +190,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/session/idle-delay", v)
 		},
+		HardwareFn: gateCinnamon,
 	},
 
 	// ── Keyboard ───────────────────────────────────────────────────────
@@ -203,6 +212,8 @@ var Registry = []Setting{
 			}
 			return applyKeyRepeat(ctx, o, v, rate)
 		},
+		// applyKeyRepeat writes org.cinnamon gsettings, so Cinnamon only.
+		HardwareFn: gateCinnamon,
 	},
 	{
 		Name:        "Key repeat rate",
@@ -221,6 +232,8 @@ var Registry = []Setting{
 			}
 			return applyKeyRepeat(ctx, o, delay, v)
 		},
+		// applyKeyRepeat writes org.cinnamon gsettings, so Cinnamon only.
+		HardwareFn: gateCinnamon,
 	},
 	{
 		Name:        "NumLock on boot",
@@ -239,6 +252,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyPackages(ctx, o, []string{"numlockx"})
 		},
+		HardwareFn: gateDesktop,
 	},
 	{
 		Name:        "Mouse accel profile",
@@ -257,6 +271,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconfString(ctx, o, "/org/gnome/desktop/peripherals/mouse/accel-profile", v)
 		},
+		HardwareFn: gateDconfDesktop,
 	},
 	{
 		Name:        "Mouse speed",
@@ -270,6 +285,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/gnome/desktop/peripherals/mouse/speed", v)
 		},
+		HardwareFn: gateDconfDesktop,
 	},
 	{
 		Name:        "Natural scroll",
@@ -282,6 +298,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/gnome/desktop/peripherals/mouse/natural-scroll", v)
 		},
+		HardwareFn: gateDconfDesktop,
 	},
 	{
 		Name:        "Mouse bindings (xbindkeys)",
@@ -300,6 +317,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyXbindkeys(ctx, o)
 		},
+		HardwareFn: gateDesktop,
 	},
 
 	// ── Audio ──────────────────────────────────────────────────────────
@@ -327,6 +345,7 @@ var Registry = []Setting{
 				"libspa-0.2-bluetooth", "pulseaudio-utils",
 			})
 		},
+		HardwareFn: gateDesktop,
 	},
 	{
 		Name:        "Bluetooth service",
@@ -340,6 +359,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySystemdEnable(ctx, o, "bluetooth.service")
 		},
+		HardwareFn: gateLinux,
 	},
 	{
 		Name:        "WirePlumber LDAC config",
@@ -355,6 +375,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyWireplumberLDAC(ctx, o)
 		},
+		HardwareFn: gateDesktop,
 	},
 	{
 		Name:        "Event sounds",
@@ -369,6 +390,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/sound/event-sounds", v)
 		},
+		HardwareFn: gateCinnamon,
 	},
 
 	// ── Desktop ────────────────────────────────────────────────────────
@@ -390,6 +412,8 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconfString(ctx, o, "/org/nemo/preferences/default-folder-viewer", v)
 		},
+		// Nemo is Cinnamon's file manager.
+		HardwareFn: gateCinnamon,
 	},
 
 	{
@@ -404,6 +428,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyHideDrives(ctx, o)
 		},
+		HardwareFn: gateCinnamon,
 	},
 
 	// ── System ─────────────────────────────────────────────────────────
@@ -455,6 +480,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyWifiPowersaveOff(ctx, o)
 		},
+		HardwareFn: gateNetworkManager,
 	},
 	{
 		Name:        "SSD TRIM timer",
@@ -468,6 +494,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySSDTrim(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 
 	// ── SSH ──────────────────────────────────────────────────────────────
@@ -484,6 +511,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySSHServer(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 	{
 		Name:        "SSH key-based auth",
@@ -497,6 +525,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySSHKeyAuth(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 
 	// ── Firewall ─────────────────────────────────────────────────────────
@@ -513,6 +542,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyUFWRemote(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 
 	// ── Automatic updates ────────────────────────────────────────────────
@@ -532,6 +562,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyUnattendedUpgrades(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 
 	// ── Locale ───────────────────────────────────────────────────────────
@@ -548,6 +579,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyUTF8Locale(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 
 	// ── Sleep ────────────────────────────────────────────────────────────
@@ -564,6 +596,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySuspendMask(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 
 	// ── Service lingering ────────────────────────────────────────────────
@@ -580,6 +613,7 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyLinger(ctx, o)
 		},
+		HardwareFn: gateLinux,
 	},
 
 	// ── VS Code tunnel ───────────────────────────────────────────────────
@@ -596,6 +630,8 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyCodeTunnelService(ctx, o)
 		},
+		// The tunnel is installed as a systemd user service, so Linux only.
+		HardwareFn: gateLinux,
 	},
 
 	// ── Pi-hole DNS ──────────────────────────────────────────────────────
@@ -646,5 +682,25 @@ var Registry = []Setting{
 		DetectFunc:  detectPiholeBlocking,
 		ApplyFunc:   applyPiholeBlocking,
 		HardwareFn:  piholeInstalled,
+	},
+
+	// ── macOS ────────────────────────────────────────────────────────────
+
+	{
+		Name:     "macOS defaults",
+		Slug:     "macos",
+		Category: "macOS",
+		Description: "Applies opinionated macOS defaults: Dock auto-hide (no launch animation or recents), " +
+			"Finder path/status bars with list view and current-folder search, no .DS_Store on network/USB drives, " +
+			"smart quotes/dashes/autocorrect/auto-capitalize off, fast key repeat, expanded save/print dialogs, " +
+			"and password required immediately after screensaver. Restarts Dock and Finder.",
+		Control:    ControlToggle,
+		OneWay:     true,
+		Default:    "applied",
+		DetectFunc: detectMacOSDefaults,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return ApplyMacOSDefaults(ctx, o)
+		},
+		HardwareFn: gateMacOS,
 	},
 }

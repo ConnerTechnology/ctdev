@@ -2,15 +2,18 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
 func TestApplyMacOSDefaultsDryRun(t *testing.T) {
 	var buf bytes.Buffer
-	err := ApplyMacOSDefaults(&buf, true)
+	err := ApplyMacOSDefaults(context.Background(), sysutil.Opts{Stdout: &buf, DryRun: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -34,8 +37,9 @@ func TestDefaultsWrite_AccumulatesErrorsAndLogs(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	var errs []error
-	defaultsWrite(&buf, &errs, "com.example.test", "SomeKey", "-bool", "true")
-	defaultsWrite(&buf, &errs, "com.example.test", "OtherKey", "-int", "42")
+	ctx := context.Background()
+	defaultsWrite(ctx, &buf, &errs, "com.example.test", "SomeKey", "-bool", "true")
+	defaultsWrite(ctx, &buf, &errs, "com.example.test", "OtherKey", "-int", "42")
 
 	if len(errs) != 2 {
 		t.Fatalf("expected 2 accumulated errors, got %d", len(errs))
@@ -54,7 +58,7 @@ func TestApplyMacOSDefaults_ReturnsJoinedErrorWhenWritesFail(t *testing.T) {
 		t.Skip("real defaults command will succeed; test needs failure mode")
 	}
 	var buf bytes.Buffer
-	err := ApplyMacOSDefaults(&buf, false)
+	err := ApplyMacOSDefaults(context.Background(), sysutil.Opts{Stdout: &buf})
 	if err == nil {
 		t.Fatal("expected error when defaults command is unavailable")
 	}
@@ -67,5 +71,14 @@ func TestApplyMacOSDefaults_ReturnsJoinedErrorWhenWritesFail(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "applied with") {
 		t.Errorf("expected summary count of warnings; got:\n%s", buf.String())
+	}
+}
+
+func TestDetectMacOSDefaults_NotAppliedWithoutDefaultsCommand(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("real defaults command may report applied state")
+	}
+	if got := detectMacOSDefaults(context.Background()); got != "not applied" {
+		t.Errorf("expected \"not applied\" when defaults is unavailable, got %q", got)
 	}
 }
