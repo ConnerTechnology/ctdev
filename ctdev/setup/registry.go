@@ -116,7 +116,9 @@ var Registry = []Setting{
 		Control:     ControlSlider,
 		Default:     "3600",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
-		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac") },
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfInt(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v)
 		},
@@ -129,8 +131,8 @@ var Registry = []Setting{
 		Control:     ControlSlider,
 		Default:     "2700",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
-		DetectFunc: func() string {
-			return detectDconfInt("/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfInt(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
@@ -143,7 +145,9 @@ var Registry = []Setting{
 		Description: "Whether the screen locks automatically when the system suspends.",
 		Control:     ControlToggle,
 		Default:     "true",
-		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend") },
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfBool(ctx, "/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v)
 		},
@@ -155,7 +159,9 @@ var Registry = []Setting{
 		Description: "Whether the screensaver locks the screen when it activates.",
 		Control:     ControlToggle,
 		Default:     "false",
-		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/desktop/screensaver/lock-enabled") },
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfBool(ctx, "/org/cinnamon/desktop/screensaver/lock-enabled")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/screensaver/lock-enabled", v)
 		},
@@ -168,7 +174,9 @@ var Registry = []Setting{
 		Control:     ControlSlider,
 		Default:     "1800",
 		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
-		DetectFunc:  func() string { return detectDconfInt("/org/cinnamon/desktop/session/idle-delay") },
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfInt(ctx, "/org/cinnamon/desktop/session/idle-delay")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/session/idle-delay", v)
 		},
@@ -187,7 +195,7 @@ var Registry = []Setting{
 		DetectFunc:  detectKeyRepeatDelay,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			// applyKeyRepeat needs both delay and rate; detect current rate to preserve it.
-			rate := detectKeyRepeatRate()
+			rate := detectKeyRepeatRate(ctx)
 			if rate == "" {
 				rate = "50"
 			}
@@ -205,7 +213,7 @@ var Registry = []Setting{
 		DetectFunc:  detectKeyRepeatRate,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			// applyKeyRepeat needs both delay and rate; detect current delay to preserve it.
-			delay := detectKeyRepeatDelay()
+			delay := detectKeyRepeatDelay(ctx)
 			if delay == "" {
 				delay = "200"
 			}
@@ -219,8 +227,8 @@ var Registry = []Setting{
 		Description: "Ensures NumLock is turned on at login. Installs numlockx if needed.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc: func() string {
-			if detectPackageInstalled("numlockx") {
+		DetectFunc: func(ctx context.Context) string {
+			if detectPackageInstalled(ctx, "numlockx") {
 				return "installed"
 			}
 			return "not installed"
@@ -240,8 +248,8 @@ var Registry = []Setting{
 			{Value: "flat", Description: "No acceleration (1:1 input)"},
 			{Value: "adaptive", Description: "Speed-dependent acceleration"},
 		},
-		DetectFunc: func() string {
-			return detectDconfString("/org/gnome/desktop/peripherals/mouse/accel-profile")
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfString(ctx, "/org/gnome/desktop/peripherals/mouse/accel-profile")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconfString(ctx, o, "/org/gnome/desktop/peripherals/mouse/accel-profile", v)
@@ -279,8 +287,8 @@ var Registry = []Setting{
 		Description: "Installs xbindkeys and xdotool for custom mouse button mappings.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc: func() string {
-			if detectPackageInstalled("xbindkeys") && detectPackageInstalled("xdotool") {
+		DetectFunc: func(ctx context.Context) string {
+			if detectPackageInstalled(ctx, "xbindkeys") && detectPackageInstalled(ctx, "xdotool") {
 				return "installed"
 			}
 			return "not installed"
@@ -299,10 +307,10 @@ var Registry = []Setting{
 		Description: "Installs the core Bluetooth and audio stack: PipeWire, WirePlumber, Bluetooth codecs, and PulseAudio compatibility.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc: func() string {
+		DetectFunc: func(ctx context.Context) string {
 			pkgs := []string{"pipewire-audio", "bluez", "blueman", "libspa-0.2-bluetooth", "pulseaudio-utils"}
 			for _, p := range pkgs {
-				if !detectPackageInstalled(p) {
+				if !detectPackageInstalled(ctx, p) {
 					return "not installed"
 				}
 			}
@@ -322,7 +330,7 @@ var Registry = []Setting{
 		Description: "Enables and starts the system Bluetooth daemon so devices can pair and connect.",
 		Control:     ControlToggle,
 		Default:     "active",
-		DetectFunc:  func() string { return detectSystemdService("bluetooth.service") },
+		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "bluetooth.service") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySystemdEnable(ctx, o, "bluetooth.service")
 		},
@@ -334,7 +342,9 @@ var Registry = []Setting{
 		Description: "Copies a WirePlumber config that prioritizes LDAC codec for high-quality Bluetooth audio, then restarts the PipeWire stack.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc:  func() string { return detectFileExists("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf") },
+		DetectFunc: func(_ context.Context) string {
+			return detectFileExists("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyWireplumberLDAC(ctx, o)
 		},
@@ -346,7 +356,9 @@ var Registry = []Setting{
 		Description: "Controls whether desktop event sounds (alerts, notifications) play.",
 		Control:     ControlToggle,
 		Default:     "false",
-		DetectFunc:  func() string { return detectDconfBool("/org/cinnamon/desktop/sound/event-sounds") },
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfBool(ctx, "/org/cinnamon/desktop/sound/event-sounds")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/sound/event-sounds", v)
 		},
@@ -365,8 +377,8 @@ var Registry = []Setting{
 			{Value: "list-view", Description: "Show files in a detailed list"},
 			{Value: "icon-view", Description: "Show files as icons"},
 		},
-		DetectFunc: func() string {
-			return detectDconfString("/org/nemo/preferences/default-folder-viewer")
+		DetectFunc: func(ctx context.Context) string {
+			return detectDconfString(ctx, "/org/nemo/preferences/default-folder-viewer")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconfString(ctx, o, "/org/nemo/preferences/default-folder-viewer", v)
@@ -380,7 +392,7 @@ var Registry = []Setting{
 		Description: "Hides Windows/secondary NVMe partitions from the file manager so they don't clutter the sidebar.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc:  func() string { return detectFileExists("/etc/udev/rules.d/99-hide-drives.rules") },
+		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/udev/rules.d/99-hide-drives.rules") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyHideDrives(ctx, o)
 		},
@@ -395,7 +407,9 @@ var Registry = []Setting{
 		Description: "Installs a udev rule and systemd user service that restarts Solaar when the Logi Bolt receiver reconnects after a KVM switch. Fixes middle-click not working.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc:  func() string { return detectFileExists("/etc/udev/rules.d/99-logitech-kvm-fix.rules") },
+		DetectFunc: func(_ context.Context) string {
+			return detectFileExists("/etc/udev/rules.d/99-logitech-kvm-fix.rules")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyLogitechKVMFix(ctx, o)
 		},
@@ -411,7 +425,7 @@ var Registry = []Setting{
 		Description: "Installs a systemd sleep hook that performs a PCIe-level reset of the MT7925E WiFi adapter around suspend. Fixes WiFi not reconnecting after wake.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc:  func() string { return detectFileExists("/usr/lib/systemd/system-sleep/wifi-mt7925") },
+		DetectFunc:  func(_ context.Context) string { return detectFileExists("/usr/lib/systemd/system-sleep/wifi-mt7925") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyWifiSuspendFix(ctx, o)
 		},
@@ -424,7 +438,9 @@ var Registry = []Setting{
 		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc:  func() string { return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf") },
+		DetectFunc: func(_ context.Context) string {
+			return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
+		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyWifiPowersaveOff(ctx, o)
 		},
@@ -436,7 +452,7 @@ var Registry = []Setting{
 		Description: "Enables periodic TRIM for SSDs, which helps maintain write performance and longevity.",
 		Control:     ControlToggle,
 		Default:     "active",
-		DetectFunc:  func() string { return detectSystemdService("fstrim.timer") },
+		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "fstrim.timer") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySSDTrim(ctx, o)
 		},
@@ -451,7 +467,7 @@ var Registry = []Setting{
 		Description: "Enables and starts the OpenSSH server so you can connect to this machine over SSH.",
 		Control:     ControlToggle,
 		Default:     "active",
-		DetectFunc:  func() string { return detectSystemdService("ssh.service") },
+		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ssh.service") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySSHServer(ctx, o)
 		},
@@ -463,7 +479,7 @@ var Registry = []Setting{
 		Description: "Hardens sshd for key-based login (pubkey on, keyboard-interactive off, keepalives). Password auth is disabled only once an authorized key exists, so you can't lock yourself out.",
 		Control:     ControlToggle,
 		Default:     "installed",
-		DetectFunc:  func() string { return detectFileExists("/etc/ssh/sshd_config.d/99-ctdev.conf") },
+		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/ssh/sshd_config.d/99-ctdev.conf") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySSHKeyAuth(ctx, o)
 		},
@@ -478,7 +494,7 @@ var Registry = []Setting{
 		Description: "Allows SSH (22/tcp) and Mosh (60000:61000/udp) from private LAN ranges and enables UFW. VLAN/subnet enforcement is left to your gateway firewall. Heads up: on a DNS or web host (Pi-hole, reverse proxy) UFW's default-deny will block those services unless you open their ports first.",
 		Control:     ControlToggle,
 		Default:     "active",
-		DetectFunc:  func() string { return detectSystemdService("ufw.service") },
+		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ufw.service") },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyUFWRemote(ctx, o)
 		},

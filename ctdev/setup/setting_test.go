@@ -1,6 +1,9 @@
 package setup
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestNeedsApply(t *testing.T) {
 	tests := []struct {
@@ -75,15 +78,15 @@ func TestFilterByHardware(t *testing.T) {
 func TestInitStates(t *testing.T) {
 	t.Run("nil DetectFunc gives empty CurrentValue", func(t *testing.T) {
 		settings := []Setting{{Name: "a", Default: "def", DetectFunc: nil}}
-		states := InitStates(settings)
+		states := InitStates(context.Background(), settings)
 		if states[0].CurrentValue != "" {
 			t.Errorf("expected empty, got %q", states[0].CurrentValue)
 		}
 	})
 
 	t.Run("DetectFunc sets CurrentValue", func(t *testing.T) {
-		settings := []Setting{{Name: "a", Default: "def", DetectFunc: func() string { return "foo" }}}
-		states := InitStates(settings)
+		settings := []Setting{{Name: "a", Default: "def", DetectFunc: func(context.Context) string { return "foo" }}}
+		states := InitStates(context.Background(), settings)
 		if states[0].CurrentValue != "foo" {
 			t.Errorf("expected foo, got %q", states[0].CurrentValue)
 		}
@@ -91,7 +94,7 @@ func TestInitStates(t *testing.T) {
 
 	t.Run("DesiredValue set to Default", func(t *testing.T) {
 		settings := []Setting{{Name: "a", Default: "mydefault"}}
-		states := InitStates(settings)
+		states := InitStates(context.Background(), settings)
 		if states[0].DesiredValue != "mydefault" {
 			t.Errorf("expected mydefault, got %q", states[0].DesiredValue)
 		}
@@ -99,7 +102,7 @@ func TestInitStates(t *testing.T) {
 
 	t.Run("Enabled is true", func(t *testing.T) {
 		settings := []Setting{{Name: "a"}}
-		states := InitStates(settings)
+		states := InitStates(context.Background(), settings)
 		if !states[0].Enabled {
 			t.Error("expected Enabled=true")
 		}

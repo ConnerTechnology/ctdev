@@ -43,10 +43,10 @@ type Setting struct {
 	Default     string // our recommended value as string
 	Slider      *SliderRange
 	Choices     []PickerChoice
-	DetectFunc  func() string // reads current system value
-	ApplyFunc   ApplyFunc     // writes value to system
-	HardwareFn  func() bool   // optional; setting hidden when returns false
-	ApplyGroup  string        // settings sharing a group run one post-apply hook
+	DetectFunc  func(ctx context.Context) string // reads current system value
+	ApplyFunc   ApplyFunc                        // writes value to system
+	HardwareFn  func() bool                      // optional; setting hidden when returns false
+	ApplyGroup  string                           // settings sharing a group run one post-apply hook
 }
 
 // SettingState holds runtime state for a setting during TUI interaction.
@@ -83,12 +83,12 @@ func FilterByHardware(settings []Setting) []Setting {
 }
 
 // InitStates creates SettingState for each setting, detecting current values.
-func InitStates(settings []Setting) []SettingState {
+func InitStates(ctx context.Context, settings []Setting) []SettingState {
 	states := make([]SettingState, len(settings))
 	for i := range settings {
 		current := ""
 		if settings[i].DetectFunc != nil {
-			current = settings[i].DetectFunc()
+			current = settings[i].DetectFunc(ctx)
 		}
 		states[i] = SettingState{
 			Setting:      &settings[i],

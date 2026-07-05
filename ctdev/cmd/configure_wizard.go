@@ -69,7 +69,7 @@ func runCategoryBatch(ctx context.Context, slug string) error {
 		return nil
 	}
 	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug) + " (batch)"))
-	states := setup.InitStates(settings)
+	states := setup.InitStates(ctx, settings)
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
 
@@ -85,7 +85,7 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 		return nil
 	}
 
-	states := setup.InitStates(settings)
+	states := setup.InitStates(ctx, settings)
 
 	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug)))
 	fmt.Println()

@@ -31,8 +31,8 @@ func piholeInstalled() bool {
 
 // piholeConfigRead returns the current value of a pihole-FTL config key, read
 // from the container or host install via the shared Pi-hole runtime helper.
-func piholeConfigRead(key string) string {
-	out, err := sysutil.PiholeCapture(context.Background(), "pihole-FTL", "--config", key)
+func piholeConfigRead(ctx context.Context, key string) string {
+	out, err := sysutil.PiholeCapture(ctx, "pihole-FTL", "--config", key)
 	if err != nil {
 		return ""
 	}
@@ -56,8 +56,8 @@ func parseUpstreams(s string) []string {
 
 // detectPiholeUpstreams returns the preset key matching the configured
 // upstreams, or "custom" when the set doesn't match a known preset.
-func detectPiholeUpstreams() string {
-	got := parseUpstreams(piholeConfigRead("dns.upstreams"))
+func detectPiholeUpstreams(ctx context.Context) string {
+	got := parseUpstreams(piholeConfigRead(ctx, "dns.upstreams"))
 	if len(got) == 0 {
 		return ""
 	}
@@ -98,8 +98,8 @@ func applyPiholeUpstreams(ctx context.Context, o sysutil.Opts, value string) err
 
 // detectPiholeListenMode returns Pi-hole's current listening mode (e.g. ALL,
 // LOCAL).
-func detectPiholeListenMode() string {
-	return piholeConfigRead("dns.listeningMode")
+func detectPiholeListenMode(ctx context.Context) string {
+	return piholeConfigRead(ctx, "dns.listeningMode")
 }
 
 // applyPiholeListenMode sets Pi-hole's listening mode. The pihole-FTL restart
@@ -109,8 +109,8 @@ func applyPiholeListenMode(ctx context.Context, o sysutil.Opts, value string) er
 }
 
 // detectPiholeBlocking reports whether Pi-hole blocking is active.
-func detectPiholeBlocking() string {
-	if piholeConfigRead("dns.blocking.active") == "false" {
+func detectPiholeBlocking(ctx context.Context) string {
+	if piholeConfigRead(ctx, "dns.blocking.active") == "false" {
 		return "disabled"
 	}
 	return "enabled"

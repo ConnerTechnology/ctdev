@@ -117,7 +117,7 @@ func TestRunCategoryWizardOn_ShowOnlyRendersSetting(t *testing.T) {
 			Description: "a test",
 			Control:     setup.ControlToggle,
 			Default:     "enabled",
-			DetectFunc:  func() string { return "enabled" },
+			DetectFunc:  func(context.Context) string { return "enabled" },
 		},
 	}
 	out := captureStdout(t, func() {

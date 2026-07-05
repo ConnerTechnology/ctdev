@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"os/user"
@@ -77,7 +78,7 @@ func detectMT7925E() bool {
 	return false
 }
 
-func detectGrubTimeout() string {
+func detectGrubTimeout(_ context.Context) string {
 	content := readGrubFile()
 	if content == "" {
 		return "unknown"
@@ -89,7 +90,7 @@ func detectGrubTimeout() string {
 	return v
 }
 
-func detectGrubStyle() string {
+func detectGrubStyle(_ context.Context) string {
 	content := readGrubFile()
 	if content == "" {
 		return "unknown"
@@ -101,7 +102,7 @@ func detectGrubStyle() string {
 	return v
 }
 
-func detectGrubOSProber() string {
+func detectGrubOSProber(_ context.Context) string {
 	content := readGrubFile()
 	if content == "" {
 		return "unknown"
@@ -113,32 +114,32 @@ func detectGrubOSProber() string {
 	return "disabled"
 }
 
-func detectPowerProfile() string {
-	out, err := exec.Command("powerprofilesctl", "get").Output()
+func detectPowerProfile(ctx context.Context) string {
+	out, err := exec.CommandContext(ctx, "powerprofilesctl", "get").Output()
 	if err != nil {
 		return "unknown"
 	}
 	return strings.TrimSpace(string(out))
 }
 
-func detectDconfInt(path string) string {
-	out, err := exec.Command("dconf", "read", path).Output()
+func detectDconfInt(ctx context.Context, path string) string {
+	out, err := exec.CommandContext(ctx, "dconf", "read", path).Output()
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
 }
 
-func detectDconfBool(path string) string {
-	out, err := exec.Command("dconf", "read", path).Output()
+func detectDconfBool(ctx context.Context, path string) string {
+	out, err := exec.CommandContext(ctx, "dconf", "read", path).Output()
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
 }
 
-func detectDconfString(path string) string {
-	out, err := exec.Command("dconf", "read", path).Output()
+func detectDconfString(ctx context.Context, path string) string {
+	out, err := exec.CommandContext(ctx, "dconf", "read", path).Output()
 	if err != nil {
 		return ""
 	}
@@ -148,8 +149,8 @@ func detectDconfString(path string) string {
 	return v
 }
 
-func detectKeyRepeatDelay() string {
-	out, err := exec.Command("xset", "q").Output()
+func detectKeyRepeatDelay(ctx context.Context) string {
+	out, err := exec.CommandContext(ctx, "xset", "q").Output()
 	if err != nil {
 		return ""
 	}
@@ -162,8 +163,8 @@ func detectKeyRepeatDelay() string {
 	return ""
 }
 
-func detectKeyRepeatRate() string {
-	out, err := exec.Command("xset", "q").Output()
+func detectKeyRepeatRate(ctx context.Context) string {
+	out, err := exec.CommandContext(ctx, "xset", "q").Output()
 	if err != nil {
 		return ""
 	}
@@ -176,11 +177,11 @@ func detectKeyRepeatRate() string {
 	return ""
 }
 
-func detectModuleSigned() string {
+func detectModuleSigned(ctx context.Context) string {
 	if !detectNvidiaLoaded() {
 		return "no nvidia module"
 	}
-	out, err := exec.Command("modinfo", "-F", "sig_id", "nvidia").Output()
+	out, err := exec.CommandContext(ctx, "modinfo", "-F", "sig_id", "nvidia").Output()
 	if err != nil {
 		return "unknown"
 	}
@@ -191,7 +192,7 @@ func detectModuleSigned() string {
 	return "unsigned"
 }
 
-func detectNvidiaSuspendServices() string {
+func detectNvidiaSuspendServices(ctx context.Context) string {
 	services := []string{
 		"nvidia-suspend.service",
 		"nvidia-resume.service",
@@ -199,7 +200,7 @@ func detectNvidiaSuspendServices() string {
 	}
 	var ready []string
 	for _, svc := range services {
-		out, err := exec.Command("systemctl", "is-enabled", svc).Output()
+		out, err := exec.CommandContext(ctx, "systemctl", "is-enabled", svc).Output()
 		if err != nil {
 			continue
 		}
@@ -220,16 +221,16 @@ func detectNvidiaSuspendServices() string {
 	return "partial"
 }
 
-func detectSystemdService(name string) string {
-	out, err := exec.Command("systemctl", "is-active", name).Output()
+func detectSystemdService(ctx context.Context, name string) string {
+	out, err := exec.CommandContext(ctx, "systemctl", "is-active", name).Output()
 	if err != nil {
 		return "inactive"
 	}
 	return strings.TrimSpace(string(out))
 }
 
-func detectPackageInstalled(pkg string) bool {
-	err := exec.Command("dpkg", "-s", pkg).Run()
+func detectPackageInstalled(ctx context.Context, pkg string) bool {
+	err := exec.CommandContext(ctx, "dpkg", "-s", pkg).Run()
 	return err == nil
 }
 
@@ -249,8 +250,8 @@ func detectLogitechBolt() bool {
 }
 
 // detectUTF8Locale reports "installed" if an en_US UTF-8 locale is generated.
-func detectUTF8Locale() string {
-	out, _ := exec.Command("locale", "-a").Output()
+func detectUTF8Locale(ctx context.Context) string {
+	out, _ := exec.CommandContext(ctx, "locale", "-a").Output()
 	low := strings.ToLower(string(out))
 	if strings.Contains(low, "en_us.utf-8") || strings.Contains(low, "en_us.utf8") {
 		return "installed"
@@ -261,9 +262,9 @@ func detectUTF8Locale() string {
 // detectSuspendMasked reports "enabled" when all sleep targets are masked.
 // `systemctl is-enabled` prints "masked" with a non-zero exit, so the captured
 // stdout is checked rather than the error.
-func detectSuspendMasked() string {
+func detectSuspendMasked(ctx context.Context) string {
 	for _, t := range sleepTargets {
-		out, _ := exec.Command("systemctl", "is-enabled", t).Output()
+		out, _ := exec.CommandContext(ctx, "systemctl", "is-enabled", t).Output()
 		if strings.TrimSpace(string(out)) != "masked" {
 			return "disabled"
 		}
@@ -272,12 +273,12 @@ func detectSuspendMasked() string {
 }
 
 // detectLinger reports whether systemd lingering is enabled for the current user.
-func detectLinger() string {
+func detectLinger(ctx context.Context) string {
 	u, err := user.Current()
 	if err != nil {
 		return "disabled"
 	}
-	out, err := exec.Command("loginctl", "show-user", u.Username, "--property=Linger").Output()
+	out, err := exec.CommandContext(ctx, "loginctl", "show-user", u.Username, "--property=Linger").Output()
 	if err != nil {
 		return "disabled"
 	}
@@ -288,7 +289,7 @@ func detectLinger() string {
 }
 
 // detectCodeTunnelService reports whether the VS Code tunnel user service exists.
-func detectCodeTunnelService() string {
+func detectCodeTunnelService(_ context.Context) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "not installed"
@@ -296,10 +297,10 @@ func detectCodeTunnelService() string {
 	return detectFileExists(filepath.Join(home, ".config", "systemd", "user", "code-tunnel.service"))
 }
 
-func detectMouseSpeed() string {
-	return detectDconfString("/org/gnome/desktop/peripherals/mouse/speed")
+func detectMouseSpeed(ctx context.Context) string {
+	return detectDconfString(ctx, "/org/gnome/desktop/peripherals/mouse/speed")
 }
 
-func detectNaturalScroll() string {
-	return detectDconfBool("/org/gnome/desktop/peripherals/mouse/natural-scroll")
+func detectNaturalScroll(ctx context.Context) string {
+	return detectDconfBool(ctx, "/org/gnome/desktop/peripherals/mouse/natural-scroll")
 }
