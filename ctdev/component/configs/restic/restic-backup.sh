@@ -71,10 +71,21 @@ fi
 RETENTION=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6)
 HOSTTAG=$(hostname)
 
+# The systemd unit runs without $HOME; point restic's cache at the directory
+# systemd provisions (CacheDirectory=restic → $CACHE_DIRECTORY). Without a
+# cache every run re-downloads repo metadata from the backend.
+if [ -z "${RESTIC_CACHE_DIR:-}" ] && [ -n "${CACHE_DIRECTORY:-}" ]; then
+	export RESTIC_CACHE_DIR="$CACHE_DIRECTORY"
+fi
+
 overall=0
 
 backup_to() {
 	local repo="$1" label="$2" rc=0
+	# A backup killed mid-run (shutdown, suspend) leaves a stale lock that
+	# blocks the next prune forever. `restic unlock` removes only locks whose
+	# owning process is gone — safe on a repo only this host writes to.
+	restic -r "$repo" unlock >/dev/null 2>&1 || true
 	echo ">>> [$label] backup → $repo"
 	restic -r "$repo" backup "${BACKUP_PATHS[@]}" "${EXCLUDES[@]}" \
 		--host "$HOSTTAG" --tag ctdev

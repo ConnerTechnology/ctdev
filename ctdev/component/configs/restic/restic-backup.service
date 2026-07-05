@@ -7,6 +7,10 @@ After=network-online.target docker.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/restic-backup.sh
+# systemd provisions /var/cache/restic and exports $CACHE_DIRECTORY; the
+# script points RESTIC_CACHE_DIR at it. The unit has no $HOME, and a cacheless
+# restic re-downloads repo metadata from the backend on every run.
+CacheDirectory=restic
 # Be gentle on the Pi / SD card while backing up.
 Nice=10
 IOSchedulingClass=idle

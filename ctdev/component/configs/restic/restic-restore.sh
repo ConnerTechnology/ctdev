@@ -25,6 +25,12 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# Under the restic-check systemd unit there is no $HOME; use the cache
+# directory systemd provisions so checks don't re-download repo metadata.
+if [ -z "${RESTIC_CACHE_DIR:-}" ] && [ -n "${CACHE_DIRECTORY:-}" ]; then
+	export RESTIC_CACHE_DIR="$CACHE_DIRECTORY"
+fi
+
 usage() { sed -n '2,18p' "$0" >&2; exit 2; }
 
 resolve_repo() {

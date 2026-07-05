@@ -7,6 +7,8 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/restic-restore.sh check
+# Same cache arrangement as restic-backup.service (the unit has no $HOME).
+CacheDirectory=restic
 # Be gentle — a check reads a lot of repository data.
 Nice=10
 IOSchedulingClass=idle
