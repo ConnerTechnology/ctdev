@@ -9,12 +9,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# A tag push and the branch push that produced the tagged commit trigger two
-# separate workflow runs on the same SHA. Grouping by SHA with
-# cancel-in-progress lets the later run (the tag push, which gates the release
-# job) supersede the earlier one instead of running in parallel.
+# Group by ref, not SHA: a release pushes main and a tag at the same commit,
+# and with a SHA-keyed group whichever run starts first gets cancelled — when
+# that's the tag run, the release never builds (bit v12.4.0). Per-ref groups
+# keep branch and tag runs independent, while rapid successive pushes to the
+# same branch still supersede each other.
 concurrency:
-  group: ci-${{ github.sha }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 # Default to read-only; write perms are granted per-job where actually needed.
