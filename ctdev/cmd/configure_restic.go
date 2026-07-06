@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
@@ -108,12 +109,8 @@ func configureRestic(ctx context.Context) error {
 		env["HEALTHCHECK_URL"] = hc
 	}
 
-	// Carry forward retention overrides set by hand in restic.env, so a
-	// reconfigure doesn't silently reset the keep policy to the defaults.
-	for _, k := range []string{"RESTIC_KEEP_DAILY", "RESTIC_KEEP_WEEKLY", "RESTIC_KEEP_MONTHLY"} {
-		if v := current[k]; v != "" {
-			env[k] = v
-		}
+	if err := promptRetention(ctx, current, env); err != nil {
+		return err
 	}
 
 	if err := component.ResticWriteEnv(ctx, o, env); err != nil {
@@ -160,6 +157,48 @@ func configureRestic(ctx context.Context) error {
 	return nil
 }
 
+// resticKeepDefaults is the recommended retention: 7 dailies, then 4 weeklies,
+// then 6 monthlies. restic keeps the newest snapshot in each bucket, so this is
+// only ~17 snapshots total while still protecting against a mistake you don't
+// notice for weeks. Cheap for the small configs a homelab node backs up.
+var resticKeepDefaults = map[string]string{
+	"RESTIC_KEEP_DAILY":   "7",
+	"RESTIC_KEEP_WEEKLY":  "4",
+	"RESTIC_KEEP_MONTHLY": "6",
+}
+
+// promptRetention asks how many daily/weekly/monthly snapshots to keep,
+// defaulting to the current value or the recommended default. Values are
+// written to env so the backup script's forget/prune honors them.
+func promptRetention(ctx context.Context, current, env map[string]string) error {
+	fmt.Println()
+	fmt.Println(styles.Dimmed.Render("  Retention — how many snapshots to keep after each backup (the rest are"))
+	fmt.Println(styles.Dimmed.Render("  pruned). Recommended 7/4/6; set weekly and monthly to 0 to keep only"))
+	fmt.Println(styles.Dimmed.Render("  the last N daily backups. At least one must be above 0."))
+	prompts := []struct{ key, label string }{
+		{"RESTIC_KEEP_DAILY", "Keep daily"},
+		{"RESTIC_KEEP_WEEKLY", "Keep weekly"},
+		{"RESTIC_KEEP_MONTHLY", "Keep monthly"},
+	}
+	for _, p := range prompts {
+		def := firstNonEmpty(current[p.key], resticKeepDefaults[p.key])
+		v, err := promptWithDefaultCtx(ctx, p.label, def)
+		if err != nil {
+			return err
+		}
+		if _, perr := strconv.Atoi(v); perr != nil {
+			fmt.Println(styles.Warning.Render(fmt.Sprintf("  not a number (%q) — using %s", v, def)))
+			v = def
+		}
+		// Only persist non-defaults; the script already defaults to 7/4/6, so a
+		// stock policy leaves restic.env clean.
+		if v != resticKeepDefaults[p.key] {
+			env[p.key] = v
+		}
+	}
+	return nil
+}
+
 // promptResticRepository runs the backend wizard and returns the restic
 // repository string plus any backend credential env vars. With --repo set it
 // skips the menu and only prompts for credentials inferred from the scheme.
@@ -175,6 +214,27 @@ func promptResticRepository(ctx context.Context, current map[string]string) (str
 			return "", nil, err
 		}
 		return flagResticRepo, backendEnv, nil
+	}
+
+	// Reconfiguring an already-set-up node (e.g. to change retention or add a
+	// healthcheck) shouldn't force re-picking the backend and re-entering the
+	// bucket. Offer to keep the existing repository; its credentials carry
+	// forward from `current` unchanged.
+	if existing := current["RESTIC_REPOSITORY"]; existing != "" {
+		fmt.Printf("  Current repository: %s\n", styles.Value.Render(existing))
+		keep, err := promptYesNoCtx(ctx, "Keep this repository?", true)
+		if err != nil {
+			return "", nil, err
+		}
+		if keep {
+			for _, k := range []string{"B2_ACCOUNT_ID", "B2_ACCOUNT_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
+				if v := current[k]; v != "" {
+					backendEnv[k] = v
+				}
+			}
+			return existing, backendEnv, nil
+		}
+		fmt.Println()
 	}
 
 	fmt.Println("  Where should backups go?")
@@ -356,6 +416,11 @@ func showResticConfig(env map[string]string) error {
 	fmt.Printf("  %s %s\n", label.Render("Repository:"), styles.Value.Render(orDash(env["RESTIC_REPOSITORY"])))
 	fmt.Printf("  %s %s\n", label.Render("Second repo:"), styles.Value.Render(orDash(env["RESTIC_REPOSITORY_LOCAL"])))
 	fmt.Printf("  %s %s\n", label.Render("Healthcheck ping:"), styles.Value.Render(orDash(env["HEALTHCHECK_URL"])))
+	retention := fmt.Sprintf("%s daily · %s weekly · %s monthly",
+		firstNonEmpty(env["RESTIC_KEEP_DAILY"], resticKeepDefaults["RESTIC_KEEP_DAILY"]),
+		firstNonEmpty(env["RESTIC_KEEP_WEEKLY"], resticKeepDefaults["RESTIC_KEEP_WEEKLY"]),
+		firstNonEmpty(env["RESTIC_KEEP_MONTHLY"], resticKeepDefaults["RESTIC_KEEP_MONTHLY"]))
+	fmt.Printf("  %s %s\n", label.Render("Keep:"), styles.Value.Render(retention))
 	fmt.Printf("  %s %s\n", label.Render("Password:"), styles.Value.Render(set(env["RESTIC_PASSWORD"])))
 	for _, k := range []string{"B2_ACCOUNT_ID", "B2_ACCOUNT_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
 		if env[k] != "" {
