@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.4.2] - 2026-07-06
+
+### Added
+- **Configurable restic retention.** The backup script's keep policy (previously
+  hardcoded 7 daily / 4 weekly / 6 monthly) now reads `RESTIC_KEEP_DAILY`,
+  `RESTIC_KEEP_WEEKLY`, and `RESTIC_KEEP_MONTHLY` from `/etc/restic/restic.env`,
+  defaulting to the old values. Set e.g. `RESTIC_KEEP_DAILY=3` /
+  `RESTIC_KEEP_WEEKLY=0` / `RESTIC_KEEP_MONTHLY=0` to keep only the last 3 days.
+  `ctdev configure restic` carries these values forward so a reconfigure never
+  silently resets the policy.
+
 ## [12.4.1] - 2026-07-06
 
 ### Fixed
