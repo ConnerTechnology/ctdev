@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.4.0] - 2026-07-06
+
+### Added
+- **Full-screen settings browser.** A bare `ctdev configure` now opens every
+  applicable setting in one grouped, filterable screen: current value per row,
+  an `≠ REC` badge when it differs from the recommended value, and the
+  setting's description plus current/recommended (and slider range) in a detail
+  pane. Editing is modeless — Enter cycles pickers/toggles, ←/→ steps sliders,
+  `r` jumps to recommended, `u` reverts, `/` filters, `a` applies (with the
+  usual change summary and confirm), `q` discards. One-way install-style
+  settings queue their single honest action and show ✓ once applied. The line
+  wizard remains for per-category runs (`ctdev configure ssh`), `--show`,
+  `--batch`, and ACCESSIBLE/non-TTY sessions.
+- **`ctdev configure macos`** — the macOS defaults set (Dock auto-hide/no
+  recents, Finder path/status bars + list view, no .DS_Store on network/USB
+  drives, smart quotes/dashes/autocorrect off, fast key repeat, expanded
+  save/print dialogs, immediate password after screensaver) is now a real
+  category on Macs. It previously existed as unreachable code.
+
+### Fixed
+- **Settings are gated to where they actually work.** Every setting now
+  declares an OS/desktop gate (test-enforced): GRUB settings appear only where
+  `/etc/default/grub` exists (no more boot-menu offers on Pi firmware boot),
+  Cinnamon dconf settings only under Cinnamon (Ubuntu GNOME previously got
+  silent no-op writes reported as success), desktop packages only in graphical
+  sessions, WiFi power-save only with NetworkManager, the power profile only
+  where powerprofilesctl exists, and Linux-only categories (ssh/ufw/locale/
+  sleep/linger/tunnel/autoupdate) hide on macOS. A headless Pi's `ctdev
+  configure` now shows only what applies to it.
+
 ## [12.3.1] - 2026-07-05
 
 ### Fixed
