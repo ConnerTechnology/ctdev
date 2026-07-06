@@ -41,10 +41,14 @@ func resticDeploy(ctx context.Context, o sysutil.Opts, src, dest, mode string) e
 	return sysutil.SudoRun(ctx, o, "chmod", mode, dest)
 }
 
-// ResticConfigured reports whether /etc/restic/restic.env exists (checked via
-// sudo, since /etc/restic is root-only 0700).
+// ResticConfigured reports whether restic is usably configured — the env file
+// exists AND actually sets RESTIC_REPOSITORY. A bare file-exists check reported
+// success for configs written before v12.0.0 renamed RESTIC_REPO_B2 →
+// RESTIC_REPOSITORY, so status/verify/backup green-lit a config the backup
+// script then failed on. Checked via sudo since /etc/restic is root-only 0700.
 func ResticConfigured(ctx context.Context, o sysutil.Opts) bool {
-	return sysutil.SudoRun(ctx, o, "test", "-f", ResticEnvPath) == nil
+	// grep is quiet; a match (repo line present) exits 0.
+	return sysutil.SudoRun(ctx, o, "grep", "-q", "^RESTIC_REPOSITORY=", ResticEnvPath) == nil
 }
 
 // ResticReadEnv returns the key/value pairs in /etc/restic/restic.env (read via
