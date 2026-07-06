@@ -37,19 +37,44 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	label := styles.Label(14)
 
-	// System: uptime · load · disk.
+	// System: uptime · load · memory · disk.
 	var sys []string
 	if up := readUptime(); up != "" {
 		sys = append(sys, "up "+up)
 	}
 	if load := readLoadAvg(); load != "" {
+		if n := runtime.NumCPU(); n > 0 {
+			load += fmt.Sprintf(" (%d cores)", n)
+		}
 		sys = append(sys, "load "+load)
+	}
+	if mem := readMemUsage(); mem != "" {
+		sys = append(sys, "mem "+mem)
 	}
 	if disk := readDiskUsage("/"); disk != "" {
 		sys = append(sys, "disk / "+disk)
 	}
 	if len(sys) > 0 {
 		fmt.Printf("  %s %s\n", label.Render("System"), styles.Value.Render(strings.Join(sys, " · ")))
+	}
+
+	// Health: reboot pending, failed units, disk SMART — the "something's
+	// quietly wrong" catch-alls. Linux only; each shows only when relevant.
+	if runtime.GOOS == "linux" {
+		if rebootRequired() {
+			fmt.Printf("  %s %s\n", label.Render("Reboot"),
+				styles.Warning.Render("required")+styles.Dimmed.Render(" — a kernel/security update needs a reboot"))
+		}
+		if n := failedUnitCount(); n > 0 {
+			fmt.Printf("  %s %s\n", label.Render("Failed units"),
+				styles.Error.Render(fmt.Sprintf("%d", n))+styles.Dimmed.Render(" — systemctl --failed"))
+		}
+		if disks := diskHealth(ctx); disks != "" {
+			fmt.Printf("  %s %s\n", label.Render("Disk health"), disks)
+		}
+		if t := cpuThermal(); t != "" {
+			fmt.Printf("  %s %s\n", label.Render("Temp"), t)
+		}
 	}
 
 	// Tailscale connectivity.
@@ -80,7 +105,18 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Backups: freshness and result, read from systemd — no repo round-trip.
 	if runtime.GOOS == "linux" && pathExists(resticBackupScript) {
 		fmt.Printf("  %s %s\n", label.Render("Backups"), timerStatusLine("restic-backup", 26*time.Hour))
-		fmt.Printf("  %s %s\n", label.Render(""), styles.Dimmed.Render("integrity: ")+timerStatusLine("restic-check", 32*24*time.Hour))
+		// The integrity sub-line is only meaningful when backups actually run;
+		// suppress it when the backup timer is off. When the check timer was
+		// never deployed (pre-v12.3.1), say so plainly instead of "not-found".
+		if unitEnabled("restic-backup.timer") {
+			var integrity string
+			if !pathExists("/etc/systemd/system/restic-check.timer") {
+				integrity = styles.Dimmed.Render("not deployed — re-run 'ctdev install restic'")
+			} else {
+				integrity = timerStatusLine("restic-check", 32*24*time.Hour)
+			}
+			fmt.Printf("  %s %s\n", label.Render(""), styles.Dimmed.Render("integrity: ")+integrity)
+		}
 	}
 
 	// Pending apt updates — local read of the existing index (no refresh).
@@ -140,6 +176,130 @@ func timerStatusLine(unit string, maxAge time.Duration) string {
 		out = styles.Success.Render(out) + styles.Dimmed.Render(" · success")
 	}
 	return out
+}
+
+// readMemUsage returns "used/total" memory from /proc/meminfo, computing used
+// as total minus available (the number that actually matters).
+func readMemUsage() string {
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return ""
+	}
+	return parseMemUsage(string(b))
+}
+
+// parseMemUsage renders "used/total (pct)" from /proc/meminfo, where used is
+// total minus available (the figure that reflects real pressure).
+func parseMemUsage(meminfo string) string {
+	var totalKB, availKB int64
+	for _, line := range strings.Split(meminfo, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		switch fields[0] {
+		case "MemTotal:":
+			totalKB, _ = strconv.ParseInt(fields[1], 10, 64)
+		case "MemAvailable:":
+			availKB, _ = strconv.ParseInt(fields[1], 10, 64)
+		}
+	}
+	if totalKB == 0 {
+		return ""
+	}
+	used := totalKB - availKB
+	return fmt.Sprintf("%s/%s (%d%%)", humanKB(used), humanKB(totalKB), used*100/totalKB)
+}
+
+// rebootRequired reports whether a pending kernel/security update needs a
+// reboot — Debian/Ubuntu (and unattended-upgrades) drop this flag file.
+func rebootRequired() bool {
+	return pathExists("/var/run/reboot-required") || pathExists("/run/reboot-required")
+}
+
+// failedUnitCount returns how many systemd units are in the failed state.
+func failedUnitCount() int {
+	out, err := exec.Command("systemctl", "--failed", "--no-legend", "--plain").Output()
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// diskHealth summarizes SMART status across disks via smartctl. Returns "" when
+// smartmontools isn't installed or sudo isn't already cached — status stays
+// prompt-free, so this only reports when it can do so without asking for a
+// password (sudo -n).
+func diskHealth(ctx context.Context) string {
+	if !sysutil.CommandExists("smartctl") {
+		return ""
+	}
+	if exec.CommandContext(ctx, "sudo", "-n", "true").Run() != nil {
+		return "" // sudo not cached — don't prompt from status
+	}
+	devs := smartDevices(ctx)
+	if len(devs) == 0 {
+		return ""
+	}
+	var failing []string
+	healthy := 0
+	for _, d := range devs {
+		out, _ := exec.CommandContext(ctx, "sudo", "-n", "smartctl", "-H", d).CombinedOutput()
+		// smartctl prints "PASSED" (ATA) or "OK" (NVMe) on a healthy drive.
+		s := string(out)
+		if strings.Contains(s, "PASSED") || strings.Contains(s, "test result: OK") {
+			healthy++
+		} else {
+			failing = append(failing, d)
+		}
+	}
+	if len(failing) > 0 {
+		return styles.Error.Render("⚠ FAILING: "+strings.Join(failing, ", ")) + styles.Dimmed.Render(" — replace soon")
+	}
+	return styles.Success.Render(fmt.Sprintf("%d healthy", healthy))
+}
+
+// smartDevices lists physical block devices smartctl can query (via its own
+// --scan), so we don't guess device names.
+func smartDevices(ctx context.Context) []string {
+	out, err := exec.CommandContext(ctx, "sudo", "-n", "smartctl", "--scan").Output()
+	if err != nil {
+		return nil
+	}
+	var devs []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		// Lines look like: "/dev/sda -d scsi # ...". Take the device path.
+		if f := strings.Fields(line); len(f) > 0 && strings.HasPrefix(f[0], "/dev/") {
+			devs = append(devs, f[0])
+		}
+	}
+	return devs
+}
+
+// cpuThermal returns the CPU temperature and a throttling warning where the
+// kernel exposes them (Raspberry Pi, most laptops). Returns "" when there's no
+// thermal zone (e.g. many desktops).
+func cpuThermal() string {
+	b, err := os.ReadFile("/sys/class/thermal/thermal_zone0/temp")
+	if err != nil {
+		return ""
+	}
+	milli, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || milli <= 0 {
+		return ""
+	}
+	c := milli / 1000
+	line := fmt.Sprintf("%d°C", c)
+	if c >= 80 {
+		return styles.Warning.Render(line + " — hot")
+	}
+	return styles.Value.Render(line)
 }
 
 // unitProperty reads one systemd unit property value.

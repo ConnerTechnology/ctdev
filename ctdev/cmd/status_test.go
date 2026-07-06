@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -32,6 +33,18 @@ func TestParseDFLine(t *testing.T) {
 	}
 	if got := parseDFLine("garbage"); got != "" {
 		t.Errorf("parseDFLine(garbage) = %q, want empty", got)
+	}
+}
+
+func TestParseMemUsage(t *testing.T) {
+	// ~63 GiB total, ~55.8 GiB available → ~9.5G used, 15%.
+	meminfo := "MemTotal:       65805020 kB\nMemFree:        40000000 kB\nMemAvailable:   55805020 kB\nBuffers:          100 kB\n"
+	got := parseMemUsage(meminfo)
+	if !strings.Contains(got, "/63G") || !strings.HasSuffix(got, "(15%)") {
+		t.Errorf("parseMemUsage = %q, want ~9.5G/63G (15%%)", got)
+	}
+	if parseMemUsage("garbage") != "" {
+		t.Error("parseMemUsage(garbage) should be empty")
 	}
 }
 
