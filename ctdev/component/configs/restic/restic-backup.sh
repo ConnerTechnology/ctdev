@@ -68,7 +68,15 @@ if [ -r "$EXCLUDES_FILE" ]; then
 	done <"$EXCLUDES_FILE"
 fi
 
-RETENTION=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6)
+# Retention: how many snapshots restic keeps after each run (the rest are
+# forgotten and pruned). Override any of these in /etc/restic/restic.env, e.g.
+# RESTIC_KEEP_DAILY=3 / RESTIC_KEEP_WEEKLY=0 / RESTIC_KEEP_MONTHLY=0 to keep
+# only the last 3 days. At least one must be >0 or restic refuses to prune.
+RETENTION=(
+	--keep-daily "${RESTIC_KEEP_DAILY:-7}"
+	--keep-weekly "${RESTIC_KEEP_WEEKLY:-4}"
+	--keep-monthly "${RESTIC_KEEP_MONTHLY:-6}"
+)
 HOSTTAG=$(hostname)
 
 # The systemd unit runs without $HOME; point restic's cache at the directory

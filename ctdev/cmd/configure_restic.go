@@ -108,6 +108,14 @@ func configureRestic(ctx context.Context) error {
 		env["HEALTHCHECK_URL"] = hc
 	}
 
+	// Carry forward retention overrides set by hand in restic.env, so a
+	// reconfigure doesn't silently reset the keep policy to the defaults.
+	for _, k := range []string{"RESTIC_KEEP_DAILY", "RESTIC_KEEP_WEEKLY", "RESTIC_KEEP_MONTHLY"} {
+		if v := current[k]; v != "" {
+			env[k] = v
+		}
+	}
+
 	if err := component.ResticWriteEnv(ctx, o, env); err != nil {
 		return fmt.Errorf("write %s: %w", component.ResticEnvPath, err)
 	}
