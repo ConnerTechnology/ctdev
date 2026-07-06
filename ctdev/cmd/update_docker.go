@@ -123,6 +123,15 @@ func composeImages(ctx context.Context, compose string) ([]string, error) {
 // the update list. An image with no local registry digest is treated as
 // locally-built and checked via its Dockerfile base images instead.
 func imageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, string, error) {
+	// A locally-built image (caddy-homelab:local) is not in any registry, yet
+	// modern BuildKit still stamps it with a RepoDigest — so the RepoDigest
+	// heuristic below can't distinguish it from a pulled image and would try to
+	// `imagetools inspect` it, failing with an auth/not-found error. The
+	// authoritative signal is whether the stack has a Dockerfile: build it from
+	// its base images instead.
+	if stackIsBuilt(s) {
+		return builtImageHasUpdate(ctx, s, img)
+	}
 	local, ok := localIndexDigest(ctx, img)
 	if !ok {
 		return builtImageHasUpdate(ctx, s, img)
