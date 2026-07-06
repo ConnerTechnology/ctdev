@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.7.2] - 2026-07-06
+
+### Fixed
+- **smartmontools no longer leaves a failed unit on SD-card/eMMC machines.**
+  `ctdev install smartmontools` enabled smartd unconditionally, but smartd exits
+  ("No devices to monitor", status 17) and lands in `systemctl --failed` when
+  there is no SMART-capable disk — the norm on a Raspberry Pi booting from SD.
+  The daemon is now enabled only when a `smartctl --scan` finds a device;
+  otherwise the tool is installed but smartd is left off, with a clear note.
+
 ## [12.7.1] - 2026-07-06
 
 ### Changed

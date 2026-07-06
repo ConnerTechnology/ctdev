@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -180,20 +181,47 @@ func smartmontoolsInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
+	if o.DryRun {
+		return nil
+	}
+
+	// smartd exits (status 17, "No devices to monitor") and lands in
+	// systemctl --failed when there's no SMART-capable disk — which is the norm
+	// on an SD-card / eMMC Raspberry Pi. Only enable the daemon when a device
+	// scan actually finds something to watch.
+	if !hasSMARTDevices(ctx) {
+		fmt.Fprintln(opts.Stdout, "smartctl installed. No SMART-capable disks found (e.g. an SD-card-only Pi),")
+		fmt.Fprintln(opts.Stdout, "so the smartd monitoring service was not enabled.")
+		return nil
+	}
+
 	// smartd polls SMART attributes and logs pre-failure warnings to the
 	// journal. The Debian unit is "smartmontools"; older releases use "smartd".
-	if err := sysutil.ServiceEnable(ctx, o, "smartmontools"); err != nil {
-		if err2 := sysutil.ServiceEnable(ctx, o, "smartd"); err2 != nil {
+	unit := "smartmontools"
+	if err := sysutil.ServiceEnable(ctx, o, unit); err != nil {
+		unit = "smartd"
+		if err := sysutil.ServiceEnable(ctx, o, unit); err != nil {
 			fmt.Fprintf(opts.Stdout, "warning: could not enable the smartd service: %v\n", err)
 			return nil
 		}
-		_ = sysutil.ServiceStart(ctx, o, "smartd")
-		fmt.Fprintln(opts.Stdout, "smartd running — disk warnings land in: journalctl -u smartd")
+	}
+	if err := sysutil.ServiceStart(ctx, o, unit); err != nil {
+		fmt.Fprintf(opts.Stdout, "warning: smartd installed but did not start: %v\n", err)
 		return nil
 	}
-	_ = sysutil.ServiceStart(ctx, o, "smartmontools")
-	fmt.Fprintln(opts.Stdout, "smartd running — disk warnings land in: journalctl -u smartmontools")
+	fmt.Fprintf(opts.Stdout, "smartd running — disk warnings land in: journalctl -u %s\n", unit)
 	return nil
+}
+
+// hasSMARTDevices reports whether any SMART-capable block device is present for
+// smartd to monitor. Uses sudo (cached during install) since probing devices
+// needs root; matches smartd's own DEVICESCAN via `smartctl --scan`.
+func hasSMARTDevices(ctx context.Context) bool {
+	out, err := captureOutput(ctx, "sudo", "smartctl", "--scan")
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(out) != ""
 }
 
 func smartmontoolsUninstall(ctx context.Context, opts ExecOpts) error {
