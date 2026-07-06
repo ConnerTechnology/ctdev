@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.4.1] - 2026-07-06
+
+### Fixed
+- **`ctdev update` no longer errors on locally-built docker stacks.** The caddy
+  stack builds `caddy-homelab:local`, which lives in no registry — but modern
+  BuildKit stamps local images with a RepoDigest, so the update scanner couldn't
+  tell it from a registry-pulled image and ran `imagetools inspect` on it,
+  failing with "pull access denied". Built stacks (those with a Dockerfile) are
+  now tracked by their Dockerfile base images, the RepoDigest path is used only
+  for genuinely pulled stacks.
+- **`ctdev status`/`verify`/`backup` now honestly report an unconfigured restic.**
+  The configured-check only tested that `/etc/restic/restic.env` existed, so a
+  config written before v12.0.0 renamed `RESTIC_REPO_B2` → `RESTIC_REPOSITORY`
+  was green-lit while the backup script failed on it every night. It now requires
+  `RESTIC_REPOSITORY` to actually be set. (Nodes configured pre-v12.0.0 need one
+  `ctdev configure restic` to write the new schema.)
+- **CI: release builds no longer race the branch push.** A release pushes main
+  and a tag at the same commit; the SHA-keyed concurrency group made the two
+  runs cancel each other, and when the tag run lost, the release never built
+  (v12.4.0). The group is now keyed on the ref, so tag and branch runs are
+  independent.
+
 ## [12.4.0] - 2026-07-06
 
 ### Added
