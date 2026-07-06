@@ -2,16 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.5.0] - 2026-07-06
+
+### Added
+- **`ctdev backup test`** — a preflight that checks the whole backup chain is
+  set up correctly: restic installed, the repository configured and *reachable*
+  (credentials, network, and password verified against the live repo with a
+  read-only `restic cat config`), the selected paths exist on disk, and the
+  nightly timer is enabled. Nothing is written; exits non-zero on any problem,
+  so it doubles as a health check.
+- **Configurable restic retention.** The keep policy (previously hardcoded
+  7 daily / 4 weekly / 6 monthly) is now set in `ctdev configure restic` — it
+  prompts for daily/weekly/monthly counts, defaulting to the current or
+  recommended values. Set weekly and monthly to 0 to keep only the last N daily
+  backups. Stored as `RESTIC_KEEP_*` in `/etc/restic/restic.env` and honored by
+  the backup script's prune step; `configure restic --show` displays the policy.
+
+### Changed
+- **`ctdev configure restic` no longer makes you re-pick the backend when
+  reconfiguring.** With a repository already set, it shows the current one and
+  offers to keep it (Enter) — carrying its credentials forward — so changing
+  retention or adding a healthcheck no longer means re-entering the bucket and
+  keys. Secret prompts continue to show `[keep existing]`.
+
 ## [12.4.2] - 2026-07-06
 
 ### Added
 - **Configurable restic retention.** The backup script's keep policy (previously
   hardcoded 7 daily / 4 weekly / 6 monthly) now reads `RESTIC_KEEP_DAILY`,
   `RESTIC_KEEP_WEEKLY`, and `RESTIC_KEEP_MONTHLY` from `/etc/restic/restic.env`,
-  defaulting to the old values. Set e.g. `RESTIC_KEEP_DAILY=3` /
-  `RESTIC_KEEP_WEEKLY=0` / `RESTIC_KEEP_MONTHLY=0` to keep only the last 3 days.
-  `ctdev configure restic` carries these values forward so a reconfigure never
-  silently resets the policy.
+  defaulting to the old values. (v12.5.0 adds interactive prompts for these in
+  `ctdev configure restic`.)
 
 ## [12.4.1] - 2026-07-06
 

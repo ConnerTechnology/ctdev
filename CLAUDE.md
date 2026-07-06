@@ -39,6 +39,7 @@ ctdev configure restic          # restic backups (repo, credentials, paths) — 
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev backup now                # Run a restic snapshot of this machine now
+ctdev backup test               # Check backups are set up correctly (config, connection, paths)
 ctdev backup snapshots [primary|local]  # List this machine's restic snapshots
 ctdev backup paths              # Pick what to back up in a local web UI
 ctdev restore ls|files|in-place|check   # Inspect/restore from restic (see RECOVERY.md)
