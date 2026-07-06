@@ -3,12 +3,23 @@ package component
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
+
+// resticCheckTimerInstalled reports whether the monthly integrity-check timer
+// unit is deployed. Nodes that haven't re-run `ctdev install restic` since the
+// timer was added won't have it; touching it anyway makes systemctl print
+// "Unit file ... does not exist" straight to the user (SudoRun routes stderr to
+// stdout). The unit file is world-readable, so no sudo is needed to check.
+func resticCheckTimerInstalled() bool {
+	_, err := os.Stat("/etc/systemd/system/restic-check.timer")
+	return err == nil
+}
 
 // restic installs the restic backup tool plus a per-machine backup script, a
 // restore helper, and a daily systemd timer. The backup script (run as root)
@@ -138,19 +149,25 @@ func ResticEnableTimer(ctx context.Context, o sysutil.Opts) error {
 		return err
 	}
 	// The check timer ships with newer installs; older nodes that haven't
-	// re-run `ctdev install restic` won't have the unit yet — not fatal.
-	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "restic-check.timer"); err != nil {
-		fmt.Fprintln(o.Stdout, "note: restic-check.timer not enabled (re-run 'ctdev install restic' to deploy it)")
+	// re-run `ctdev install restic` won't have the unit yet.
+	if resticCheckTimerInstalled() {
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "restic-check.timer"); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintln(o.Stdout, "note: monthly integrity check not deployed — re-run 'ctdev install restic' for it")
 	}
 	return nil
 }
 
 // ResticDisableTimer stops and disables the backup and monthly-check timers,
-// pausing all scheduled runs. Config and snapshots are untouched. The check
-// timer may not exist on older installs, so its failure is ignored; the backup
-// timer's result is what determines success.
+// pausing all scheduled runs. Config and snapshots are untouched.
 func ResticDisableTimer(ctx context.Context, o sysutil.Opts) error {
-	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-check.timer")
+	if resticCheckTimerInstalled() {
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-check.timer"); err != nil {
+			return err
+		}
+	}
 	return sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-backup.timer")
 }
 
@@ -227,7 +244,9 @@ func resticInstall(ctx context.Context, opts ExecOpts) error {
 func resticUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-backup.timer")
-	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-check.timer")
+	if resticCheckTimerInstalled() {
+		_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-check.timer")
+	}
 	for _, f := range []string{
 		"/etc/systemd/system/restic-backup.timer",
 		"/etc/systemd/system/restic-backup.service",

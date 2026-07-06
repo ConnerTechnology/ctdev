@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.6.1] - 2026-07-06
+
+### Fixed
+- **No more `Failed to disable unit: restic-check.timer does not exist` noise.**
+  On a node without the monthly check timer (any install predating v12.3.1),
+  `ctdev backup disable`/`enable` and `ctdev uninstall restic` leaked systemctl's
+  error to the screen — the failure was ignored internally, but SudoRun routes
+  stderr to stdout. These now check whether the check-timer unit is deployed
+  before touching it.
+
 ## [12.6.0] - 2026-07-06
 
 ### Added
