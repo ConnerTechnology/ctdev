@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.7.1] - 2026-07-06
+
+### Changed
+- `ctdev status` prints each system vital (uptime, load, memory, disk) on its
+  own labeled line instead of one dense `·`-joined row, matching the rest of
+  the layout.
+
 ## [12.7.0] - 2026-07-06
 
 ### Added

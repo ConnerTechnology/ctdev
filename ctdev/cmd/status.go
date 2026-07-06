@@ -36,27 +36,23 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println(styles.Title.Render(fmt.Sprintf("ctdev status — %s", host)) + styles.Dimmed.Render("  (ctdev "+version+")"))
 	fmt.Println()
 	label := styles.Label(14)
-
-	// System: uptime · load · memory · disk.
-	var sys []string
-	if up := readUptime(); up != "" {
-		sys = append(sys, "up "+up)
+	// row prints one labeled line with a plain value, skipping empty values.
+	row := func(name, value string) {
+		if value != "" {
+			fmt.Printf("  %s %s\n", label.Render(name), styles.Value.Render(value))
+		}
 	}
+
+	// System vitals — one per line.
+	row("Uptime", readUptime())
 	if load := readLoadAvg(); load != "" {
 		if n := runtime.NumCPU(); n > 0 {
 			load += fmt.Sprintf(" (%d cores)", n)
 		}
-		sys = append(sys, "load "+load)
+		row("Load", load)
 	}
-	if mem := readMemUsage(); mem != "" {
-		sys = append(sys, "mem "+mem)
-	}
-	if disk := readDiskUsage("/"); disk != "" {
-		sys = append(sys, "disk / "+disk)
-	}
-	if len(sys) > 0 {
-		fmt.Printf("  %s %s\n", label.Render("System"), styles.Value.Render(strings.Join(sys, " · ")))
-	}
+	row("Memory", readMemUsage())
+	row("Disk /", readDiskUsage("/"))
 
 	// Health: reboot pending, failed units, disk SMART — the "something's
 	// quietly wrong" catch-alls. Linux only; each shows only when relevant.
