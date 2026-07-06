@@ -129,10 +129,67 @@ var restoreCheckCmd = &cobra.Command{
 	},
 }
 
+var backupDisableCmd = &cobra.Command{
+	Use:   "disable",
+	Short: "Pause scheduled backups (config + snapshots kept)",
+	Long: "Stop and disable the nightly backup timer (and the monthly integrity check), so no " +
+		"scheduled runs happen. Your configuration and all existing snapshots are kept — you can " +
+		"still run a one-off with 'ctdev backup now', and re-enable scheduling with 'ctdev backup " +
+		"enable'.",
+	RunE: runBackupDisable,
+}
+
+var backupEnableCmd = &cobra.Command{
+	Use:   "enable",
+	Short: "Resume scheduled backups",
+	Long:  "Enable and start the nightly backup timer and the monthly integrity check. Requires restic to be installed and configured.",
+	RunE:  runBackupEnable,
+}
+
 func init() {
-	backupCmd.AddCommand(backupNowCmd, backupSnapshotsCmd, backupPathsCmd)
+	backupCmd.AddCommand(backupNowCmd, backupSnapshotsCmd, backupPathsCmd, backupDisableCmd, backupEnableCmd)
 	restoreCmd.AddCommand(restoreLsCmd, restoreFilesCmd, restoreInPlaceCmd, restoreCheckCmd)
 	rootCmd.AddCommand(backupCmd, restoreCmd)
+}
+
+func runBackupDisable(cmd *cobra.Command, args []string) error {
+	ctx := cmdContext(cmd)
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	if !pathExists(resticBackupScript) {
+		return fmt.Errorf("restic is not installed on this machine (nothing to disable)")
+	}
+	if flagDryRun {
+		fmt.Println("[dry-run] would disable restic-backup.timer and restic-check.timer")
+		return nil
+	}
+	if err := ensureSudo(); err != nil {
+		return fmt.Errorf("sudo required: %w", err)
+	}
+	if err := component.ResticDisableTimer(ctx, o); err != nil {
+		return fmt.Errorf("disable backup timer: %w", err)
+	}
+	fmt.Println("Scheduled backups paused — no nightly runs.")
+	fmt.Println("  Config and snapshots are kept. Run a one-off any time: ctdev backup now")
+	fmt.Println("  Resume scheduled backups: ctdev backup enable")
+	return nil
+}
+
+func runBackupEnable(cmd *cobra.Command, args []string) error {
+	ctx := cmdContext(cmd)
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	// Installed + configured (else the timer would just fail every night).
+	if err := ensureResticReady(ctx, o, resticBackupScript); err != nil {
+		return err
+	}
+	if flagDryRun {
+		fmt.Println("[dry-run] would enable restic-backup.timer and restic-check.timer")
+		return nil
+	}
+	if err := component.ResticEnableTimer(ctx, o); err != nil {
+		return fmt.Errorf("enable backup timer: %w", err)
+	}
+	fmt.Println("Scheduled backups enabled — nightly snapshot + monthly integrity check.")
+	return nil
 }
 
 func runBackupNow(cmd *cobra.Command, args []string) error {

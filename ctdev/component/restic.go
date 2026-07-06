@@ -145,6 +145,15 @@ func ResticEnableTimer(ctx context.Context, o sysutil.Opts) error {
 	return nil
 }
 
+// ResticDisableTimer stops and disables the backup and monthly-check timers,
+// pausing all scheduled runs. Config and snapshots are untouched. The check
+// timer may not exist on older installs, so its failure is ignored; the backup
+// timer's result is what determines success.
+func ResticDisableTimer(ctx context.Context, o sysutil.Opts) error {
+	_ = sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-check.timer")
+	return sysutil.SudoRun(ctx, o, "systemctl", "disable", "--now", "restic-backup.timer")
+}
+
 // DefaultBackupExcludes returns conservative exclude patterns seeded alongside
 // the paths file. Caches and sockets are never worth backing up.
 func DefaultBackupExcludes() []string {
