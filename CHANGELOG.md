@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.6.0] - 2026-07-06
+
+### Added
+- **`ctdev backup disable` / `ctdev backup enable`** — a first-class off switch
+  for scheduled backups. `disable` stops and disables the nightly timer and the
+  monthly integrity check (config and snapshots are kept; one-off `ctdev backup
+  now` still works); `enable` turns them back on (requires restic installed and
+  configured). Previously the only ways to stop scheduled backups were dropping
+  to `systemctl` or uninstalling restic.
+
 ## [12.5.0] - 2026-07-06
 
 ### Added
