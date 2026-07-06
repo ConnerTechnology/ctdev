@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.7.0] - 2026-07-06
+
+### Added
+- **`ctdev status` reports more machine health**, all read locally so it stays
+  fast and prompt-free:
+  - **Memory** on the System line, and load now shows the core count for context.
+  - **Reboot required** — flags a pending kernel/security reboot
+    (`/var/run/reboot-required`), the natural companion to `configure autoupdate`.
+  - **Failed systemd units** — a count when anything is in the failed state, the
+    catch-all for a quietly broken service.
+  - **Disk SMART health** — PASSED/FAILING per disk via smartctl when
+    smartmontools is installed. Uses `sudo -n` only, so it reports when sudo is
+    already cached and silently skips otherwise — status never prompts.
+  - **CPU temperature** where the kernel exposes a thermal zone (Raspberry Pi,
+    laptops), with a "hot" warning past 80°C.
+
+### Fixed
+- `ctdev status` no longer shows a confusing `integrity: timer not-found` line:
+  the integrity sub-line is suppressed when the backup timer is disabled, and
+  says "not deployed" (with the fix) rather than "timer not-found" when the
+  monthly-check timer predates its introduction.
+
 ## [12.6.1] - 2026-07-06
 
 ### Fixed
