@@ -358,16 +358,18 @@ func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("nodenv"); err != nil {
 		return nil, nil
 	}
-	// Get current version
-	currentOut, err := exec.CommandContext(ctx, "nodenv", "version").Output()
+	// Compare against the global version — that's what the update step sets.
+	// `nodenv version` resolves the cwd's .node-version, so a project pin would
+	// make an already-applied update reappear forever.
+	currentOut, err := exec.CommandContext(ctx, "nodenv", "global").Output()
 	if err != nil {
-		return nil, fmt.Errorf("nodenv version: %w", err)
+		return nil, fmt.Errorf("nodenv global: %w", err)
 	}
-	fields := strings.Fields(strings.TrimSpace(string(currentOut)))
-	if len(fields) == 0 {
+	current := strings.TrimSpace(string(currentOut))
+	if current == "" || current[0] < '0' || current[0] > '9' {
+		// "system" or unset — not nodenv-managed, nothing for us to update
 		return nil, nil
 	}
-	current := fields[0]
 
 	// fetchLatestNodeLTS returns "" when nodenv has no usable definition list,
 	// which is a "can't determine", not a failure — stay silent in that case.
@@ -462,7 +464,12 @@ func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
 		}
 	}
 
-	out, err := exec.CommandContext(ctx, "go", "version").Output()
+	// GOTOOLCHAIN=local: inside a module with a newer `toolchain` directive,
+	// `go version` would report the auto-downloaded toolchain instead of the
+	// installed one, hiding a real update.
+	cmd := exec.CommandContext(ctx, "go", "version")
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("go version: %w", err)
 	}
@@ -492,16 +499,33 @@ func scanRuby(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("ruby"); err != nil {
 		return nil, nil
 	}
-	out, err := exec.CommandContext(ctx, "ruby", "--version").Output()
-	if err != nil {
-		return nil, fmt.Errorf("ruby --version: %w", err)
+	current := ""
+	// Prefer rbenv's global version — that's what the update step sets. Going
+	// through `ruby --version` hits the rbenv shim, which resolves the cwd's
+	// .ruby-version, so a project pin would make an already-applied update
+	// reappear forever.
+	if _, err := exec.LookPath("rbenv"); err == nil {
+		out, err := exec.CommandContext(ctx, "rbenv", "global").Output()
+		if err != nil {
+			return nil, fmt.Errorf("rbenv global: %w", err)
+		}
+		v := strings.TrimSpace(string(out))
+		if v != "" && v[0] >= '0' && v[0] <= '9' {
+			current = v
+		}
 	}
-	// "ruby 3.4.1 (2024-12-25 revision 48d4efcb85) +PRISM [x86_64-linux]"
-	fields := strings.Fields(string(out))
-	if len(fields) < 2 {
-		return nil, nil
+	if current == "" {
+		out, err := exec.CommandContext(ctx, "ruby", "--version").Output()
+		if err != nil {
+			return nil, fmt.Errorf("ruby --version: %w", err)
+		}
+		// "ruby 3.4.1 (2024-12-25 revision 48d4efcb85) +PRISM [x86_64-linux]"
+		fields := strings.Fields(string(out))
+		if len(fields) < 2 {
+			return nil, nil
+		}
+		current = fields[1]
 	}
-	current := fields[1]
 
 	// fetchLatestRubyVersion returns "" when ruby-build isn't present, which is a
 	// legitimate "can't determine", not a failure — stay silent in that case.
