@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.7.3] - 2026-07-08
+
+### Fixed
+- **`ctdev update` no longer re-offers node/ruby updates you've already applied.**
+  The scanners read the version through `nodenv version` / the rbenv shim, which
+  resolve the current directory's `.node-version` / `.ruby-version` — so running
+  `ctdev update` inside a project pinned to an older version offered the same
+  "update" forever (and applying it was a silent no-op, since the update step
+  sets the *global* version). The scanners now compare against `nodenv global` /
+  `rbenv global`, matching what the update actually changes.
+- **`ctdev update` can no longer miss a Go update when run inside a module with a
+  newer `toolchain` directive.** `go version` auto-switches to (and reports) the
+  downloaded toolchain in that case; the scanner now runs it with
+  `GOTOOLCHAIN=local` to see the real installed version.
+
 ## [12.7.2] - 2026-07-06
 
 ### Fixed
