@@ -453,20 +453,6 @@ var Registry = []Setting{
 	// ── Network ────────────────────────────────────────────────────────
 
 	{
-		Name:        "WiFi suspend fix (MT7925E)",
-		Slug:        "network",
-		Category:    "Network",
-		Description: "Installs a systemd sleep hook that performs a PCIe-level reset of the MT7925E WiFi adapter around suspend. Fixes WiFi not reconnecting after wake.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  func(_ context.Context) string { return detectFileExists("/usr/lib/systemd/system-sleep/wifi-mt7925") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyWifiSuspendFix(ctx, o)
-		},
-		HardwareFn: detectMT7925E,
-	},
-	{
 		Name:        "WiFi power save off",
 		Slug:        "network",
 		Category:    "Network",

@@ -196,15 +196,6 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 	// Reload udev after removing rules
 	_ = sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 
-	// WiFi suspend hook
-	sleepHook := "/usr/lib/systemd/system-sleep/wifi-mt7925"
-	if _, err := os.Stat(sleepHook); err == nil {
-		fmt.Fprintf(w, "Removing WiFi suspend fix...\n")
-		if err := sysutil.SudoRun(ctx, o, "rm", "-f", sleepHook); err != nil {
-			return fmt.Errorf("remove wifi suspend hook: %w", err)
-		}
-	}
-
 	// fstrim
 	fmt.Fprintf(w, "Resetting fstrim...\n")
 	_ = sysutil.SudoRun(ctx, o, "systemctl", "stop", "fstrim.timer")

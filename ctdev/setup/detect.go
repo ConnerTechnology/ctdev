@@ -68,16 +68,6 @@ func detectNvidiaLoaded() bool {
 	return false
 }
 
-func detectMT7925E() bool {
-	if out, err := exec.Command("lspci", "-d", "14c3:0717").Output(); err == nil && len(out) > 0 {
-		return true
-	}
-	if out, err := exec.Command("lsmod").Output(); err == nil {
-		return strings.Contains(string(out), "mt7925e")
-	}
-	return false
-}
-
 func detectGrubTimeout(_ context.Context) string {
 	content := readGrubFile()
 	if content == "" {

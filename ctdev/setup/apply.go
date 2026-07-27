@@ -13,33 +13,6 @@ import (
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
-const wifiSleepHookScript = `#!/bin/bash
-# MT7925E WiFi suspend fix — PCIe-level reset for reliable reconnect after sleep.
-# The simple modprobe approach is unreliable; a full PCIe unbind/remove/rescan
-# forces the hardware to re-enumerate cleanly on wake.
-DRIVER_DIR="/sys/bus/pci/drivers/mt7925e"
-
-case "$1" in
-    pre)
-        for dev in "$DRIVER_DIR"/0000:*; do
-            [ -e "$dev" ] || continue
-            addr=$(basename "$dev")
-            echo "$addr" > "$DRIVER_DIR/unbind" 2>/dev/null || true
-            echo 1 > "/sys/bus/pci/devices/$addr/remove" 2>/dev/null || true
-        done
-        ;;
-    post)
-        echo 1 > /sys/bus/pci/rescan
-        sleep 1
-        for dev in "$DRIVER_DIR"/0000:*; do
-            [ -e "$dev" ] || continue
-            addr=$(basename "$dev")
-            echo "$addr" > "$DRIVER_DIR/bind" 2>/dev/null || true
-        done
-        ;;
-esac
-`
-
 // grubVarArgs returns the sed command args to set a GRUB variable.
 // Uses sudo sed -i to replace or append the variable in /etc/default/grub.
 // Uses | as the sed delimiter to avoid conflicts with / in values.
@@ -269,11 +242,6 @@ func applyNvidiaSuspendServices(ctx context.Context, o sysutil.Opts) error {
 		}
 	}
 	return nil
-}
-
-// applyWifiSuspendFix writes a systemd sleep hook to handle MT7925E WiFi suspend.
-func applyWifiSuspendFix(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoWriteFile(ctx, o, wifiSleepHookScript, "/usr/lib/systemd/system-sleep/wifi-mt7925")
 }
 
 // applyXbindkeys installs xbindkeys and xdotool, deploys the config, and sets up autostart.
