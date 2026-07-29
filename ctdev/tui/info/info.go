@@ -94,6 +94,13 @@ func Render(sysInfo platform.SystemInfo, version string, components []ComponentI
 		}
 		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render(label), val))
 	}
+	for i, d := range sysInfo.Drives {
+		label := "Drive"
+		if len(sysInfo.Drives) > 1 {
+			label = fmt.Sprintf("Drive %d", i+1)
+		}
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render(label), renderDrive(d)))
+	}
 	for _, net := range sysInfo.Network {
 		label := "Network"
 		if net.Type == "wifi" {
@@ -249,6 +256,24 @@ func parseDiskInfo(out string) []DiskInfo {
 		return disks[i].Mount < disks[j].Mount
 	})
 	return disks
+}
+
+// renderDrive describes a physical disk: model, capacity, and what it holds.
+// A drive nothing mounts still gets a row — that's the whole point of listing
+// hardware separately from filesystems — annotated with what's on it.
+func renderDrive(d platform.DriveInfo) string {
+	model := d.Model
+	if model == "" {
+		model = d.Name
+	}
+	out := styles.Value.Render(model) + styles.Dimmed.Render(" "+sysutil.HumanKB(d.SizeKB))
+	if len(d.Carries) == 0 {
+		return out + styles.Dimmed.Render(" · empty")
+	}
+	if !d.Mounted {
+		return out + styles.Dimmed.Render(" · not mounted ("+strings.Join(d.Carries, ", ")+")")
+	}
+	return out + styles.Dimmed.Render(" · "+strings.Join(d.Carries, ", "))
 }
 
 // usageDetail is the "used / total (pct)" tail shared by the memory and disk

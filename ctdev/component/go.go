@@ -132,5 +132,13 @@ func goUninstall(ctx context.Context, opts ExecOpts) error {
 	if p.PackageManager == "brew" {
 		return sysutil.Run(ctx, o, "brew", "uninstall", "go")
 	}
-	return sysutil.SudoRun(ctx, o, "rm", "-rf", goInstallDir)
+	if err := sysutil.SudoRun(ctx, o, "rm", "-rf", goInstallDir); err != nil {
+		return err
+	}
+	// Only the tarball install is ours to remove. Say so when a distro-packaged
+	// Go is still on PATH, rather than reporting a removal that didn't happen.
+	if !o.DryRun && sysutil.CommandExists("go") {
+		fmt.Fprintln(opts.Stdout, "note: another go is still on PATH (not installed by ctdev) — remove it with your package manager")
+	}
+	return nil
 }

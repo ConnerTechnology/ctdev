@@ -45,3 +45,16 @@ func TestHelmDependsOnKubectl(t *testing.T) {
 		t.Errorf("expected helm to depend on kubectl, got %v", c.Dependencies)
 	}
 }
+
+func TestGoDetectionUsesPath(t *testing.T) {
+	// Regression: DetectPath is exclusive in IsInstalled, so pinning it to the
+	// tarball location reported a distro-packaged Go as missing — disagreeing
+	// with goInstall, which treats any `go` on PATH as installed.
+	c := FindByName("go")
+	if c == nil {
+		t.Fatal("go component missing from registry")
+	}
+	if c.DetectPath != "" {
+		t.Errorf("go must not set DetectPath (got %q) — detection falls through to a PATH lookup", c.DetectPath)
+	}
+}

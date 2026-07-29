@@ -18,7 +18,7 @@ ctdev uninstall <component...>  # Remove specific components
 ctdev update [-y]               # Update system packages, components, and Docker stacks
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
-ctdev info                      # Inventory: specs, kernel, uptime, profile, usage, installed components
+ctdev info                      # Inventory: specs, kernel, uptime, profile, drives, usage, installed components
 ctdev status                    # Needs attention: reboot/failed units, disk pressure/SMART, wedged apt, containers, backups, updates
 ctdev configure                 # Full-screen settings browser (all categories)
 ctdev configure <category>      # Configure a specific category

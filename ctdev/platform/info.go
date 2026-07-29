@@ -1,11 +1,13 @@
 package platform
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +22,17 @@ type NetworkAdapter struct {
 	Name      string
 	Type      string // "ethernet", "wifi"
 	Interface string
+}
+
+// DriveInfo is one physical disk. Carries lists what the drive actually holds:
+// the mount points of its partitions, or — for a drive nothing mounts, like a
+// second OS install — the filesystems found on it.
+type DriveInfo struct {
+	Name    string // "nvme0n1"
+	Model   string // "Samsung SSD 990 PRO 2TB"
+	SizeKB  int64
+	Carries []string
+	Mounted bool
 }
 
 type SystemInfo struct {
@@ -37,6 +50,7 @@ type SystemInfo struct {
 	Uptime     time.Duration // 0 where /proc/uptime isn't available
 	Kernel     string        // uname -r
 	GPUs       []GPUInfo
+	Drives     []DriveInfo
 	Network    []NetworkAdapter
 }
 
@@ -54,6 +68,7 @@ func GatherSystemInfo(dotfilesDir string) SystemInfo {
 	info.Uptime = readUptime()
 	info.Kernel = readKernel()
 	info.GPUs = readGPUs()
+	info.Drives = readDrives()
 	info.Network = readNetworkAdapters()
 	return info
 }
@@ -150,6 +165,85 @@ func parseMemUsageKB(meminfo string) (used, total int64) {
 		return 0, 0
 	}
 	return total - availKB, total
+}
+
+// lsblkDevice mirrors the subset of `lsblk -J` we read. Partitions nest under
+// their disk as children, one level for plain partitions and deeper through
+// LUKS/LVM, so collecting mount points means walking the whole subtree.
+type lsblkDevice struct {
+	Name       string        `json:"name"`
+	Type       string        `json:"type"`
+	Size       int64         `json:"size"`
+	Mountpoint string        `json:"mountpoint"`
+	FSType     string        `json:"fstype"`
+	Model      string        `json:"model"`
+	Children   []lsblkDevice `json:"children"`
+}
+
+// readDrives lists the physical disks in this machine. Distinct from the
+// filesystem view: a drive holding another OS is mounted nowhere and would
+// otherwise be invisible, even though it's very much installed.
+func readDrives() []DriveInfo {
+	out, err := exec.Command("lsblk", "-J", "-b", "-o", "NAME,TYPE,SIZE,MOUNTPOINT,FSTYPE,MODEL").Output()
+	if err != nil {
+		return nil
+	}
+	return parseDrives(out)
+}
+
+func parseDrives(data []byte) []DriveInfo {
+	var doc struct {
+		BlockDevices []lsblkDevice `json:"blockdevices"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil
+	}
+	var drives []DriveInfo
+	for _, d := range doc.BlockDevices {
+		if d.Type != "disk" {
+			continue
+		}
+		mounts, fstypes := walkDevice(d)
+		drive := DriveInfo{
+			Name:    d.Name,
+			Model:   strings.TrimSpace(d.Model),
+			SizeKB:  d.Size / 1024,
+			Mounted: len(mounts) > 0,
+		}
+		// Prefer what it's mounted as; fall back to what's on it.
+		if len(mounts) > 0 {
+			drive.Carries = mounts
+		} else {
+			drive.Carries = fstypes
+		}
+		drives = append(drives, drive)
+	}
+	return drives
+}
+
+// walkDevice collects the mount points and distinct filesystem types beneath a
+// device, descending through partitions, LUKS containers and LVM volumes.
+func walkDevice(d lsblkDevice) (mounts, fstypes []string) {
+	seen := map[string]bool{}
+	var walk func(lsblkDevice)
+	walk = func(node lsblkDevice) {
+		for _, c := range node.Children {
+			if c.Mountpoint != "" {
+				mounts = append(mounts, c.Mountpoint)
+			}
+			// crypto_LUKS/LVM2_member name the container, not the content —
+			// the real filesystem sits on the child we're about to visit.
+			if c.FSType != "" && c.FSType != "crypto_LUKS" && c.FSType != "LVM2_member" && !seen[c.FSType] {
+				seen[c.FSType] = true
+				fstypes = append(fstypes, c.FSType)
+			}
+			walk(c)
+		}
+	}
+	walk(d)
+	sort.Strings(mounts)
+	sort.Strings(fstypes)
+	return mounts, fstypes
 }
 
 // readKernel returns the running kernel release, the first thing worth knowing

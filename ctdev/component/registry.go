@@ -24,7 +24,10 @@ var Registry = []Component{
 	{Name: "gh", Description: "GitHub CLI", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: ghInstall, GoUninstall: ghUninstall, Tags: []string{"github", "git"}},
 	{Name: "git", Description: "Git configuration and aliases", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, GoInstall: gitInstall, GoUninstall: gitUninstall, Tags: []string{"vcs", "version"}},
 	{Name: "git-spice", Description: "Git Spice stacked branches tool", Category: CategoryCLI, SupportedOS: []OS{OSAny}, DetectCmd: "gs", GoInstall: gitSpiceInstall, GoUninstall: gitSpiceUninstall, Tags: []string{"git", "stacked"}},
-	{Name: "go", Description: "Go toolchain (official tarball)", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, DetectPath: "/usr/local/go/bin/go", GoInstall: goInstall, GoUninstall: goUninstall, Tags: []string{"golang", "runtime"}},
+	// No DetectPath: goInstall already treats any `go` on PATH as installed, so
+	// pinning detection to the tarball location made a distro-packaged Go read
+	// as missing. Falling through to a PATH lookup keeps the two in agreement.
+	{Name: "go", Description: "Go toolchain (official tarball)", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, GoInstall: goInstall, GoUninstall: goUninstall, Tags: []string{"golang", "runtime"}},
 	{Name: "helm", Description: "Kubernetes package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Dependencies: []string{"kubectl"}, GoInstall: helmInstall, GoUninstall: helmUninstall, Tags: []string{"kubernetes", "k8s"}},
 	{Name: "jq", Description: "JSON processor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("jq"), GoUninstall: SimplePackageUninstaller("jq"), Tags: []string{"json", "parser"}},
 	{Name: "kubectl", Description: "Kubernetes CLI", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: kubectlInstall, GoUninstall: kubectlUninstall, Tags: []string{"kubernetes", "k8s"}},

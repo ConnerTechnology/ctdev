@@ -109,3 +109,53 @@ func TestParseMemUsageKB(t *testing.T) {
 		t.Errorf("parseMemUsageKB(garbage) = (%d, %d), want (0, 0)", u, tot)
 	}
 }
+
+func TestParseDrives(t *testing.T) {
+	// Two disks: one with plain partitions, one where root sits under
+	// LUKS→LVM (so the mount point is two levels down), plus an unmounted disk.
+	data := []byte(`{"blockdevices":[
+	  {"name":"sda","type":"disk","size":2000398934016,"model":"Samsung SSD 870 EVO 2TB","children":[
+	    {"name":"sda1","type":"part","size":499999834112,"mountpoint":"/mnt/Data","fstype":"ext4"}]},
+	  {"name":"nvme0n1","type":"disk","size":2000398934016,"model":"Samsung SSD 990 PRO 2TB","children":[
+	    {"name":"nvme0n1p1","type":"part","size":536870912,"mountpoint":"/boot/efi","fstype":"vfat"},
+	    {"name":"nvme0n1p3","type":"part","size":1999000000000,"fstype":"crypto_LUKS","children":[
+	      {"name":"crypt","type":"crypt","size":1999000000000,"fstype":"LVM2_member","children":[
+	        {"name":"vgmint-root","type":"lvm","size":1999000000000,"mountpoint":"/","fstype":"ext4"}]}]}]},
+	  {"name":"nvme1n1","type":"disk","size":2000398934016,"model":"Windows Disk","children":[
+	    {"name":"nvme1n1p3","type":"part","size":1900000000000,"fstype":"ntfs"}]}]}`)
+
+	drives := parseDrives(data)
+	if len(drives) != 3 {
+		t.Fatalf("got %d drives, want 3: %+v", len(drives), drives)
+	}
+	if !drives[1].Mounted || len(drives[1].Carries) != 2 ||
+		drives[1].Carries[0] != "/" || drives[1].Carries[1] != "/boot/efi" {
+		t.Errorf("LUKS/LVM drive should surface / and /boot/efi, got %v", drives[1].Carries)
+	}
+	if drives[2].Mounted {
+		t.Error("a drive with no mounted partition must report Mounted=false")
+	}
+	if len(drives[2].Carries) != 1 || drives[2].Carries[0] != "ntfs" {
+		t.Errorf("unmounted drive should fall back to its filesystems, got %v", drives[2].Carries)
+	}
+	// crypto_LUKS / LVM2_member name containers, not content — never surface them.
+	for _, c := range drives[1].Carries {
+		if c == "crypto_LUKS" || c == "LVM2_member" {
+			t.Errorf("container type %q leaked into Carries", c)
+		}
+	}
+	if drives[0].SizeKB != 2000398934016/1024 {
+		t.Errorf("SizeKB = %d, want bytes/1024", drives[0].SizeKB)
+	}
+}
+
+func TestParseDrivesIgnoresNonDisks(t *testing.T) {
+	// A loop device (snap mounts) is not a drive.
+	data := []byte(`{"blockdevices":[{"name":"loop0","type":"loop","size":1024,"mountpoint":"/snap/x"}]}`)
+	if got := parseDrives(data); len(got) != 0 {
+		t.Errorf("got %+v, want no drives", got)
+	}
+	if got := parseDrives([]byte("not json")); got != nil {
+		t.Errorf("unparseable lsblk output should yield nil, got %+v", got)
+	}
+}
