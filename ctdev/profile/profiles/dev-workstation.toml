@@ -1,5 +1,5 @@
-# Personal development workstation: shell, editors, runtimes, containers, the
-# modern-CLI toolset, backups, and disk health.
+# Personal development workstation: shell, editors, runtimes, containers,
+# backups, and disk health.
 
 description = "Development workstation (shell, runtimes, containers, CLI tools)"
 
@@ -21,13 +21,6 @@ components = [
   "jq",
   "btop",
   "shellcheck",
-  "ripgrep",
-  "fd",
-  "fzf",
-  "bat",
-  "zoxide",
-  "direnv",
-  "lazygit",
   "restic",
   "smartmontools",
 ]
