@@ -3,6 +3,7 @@ package info
 import (
 	"fmt"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,8 +16,8 @@ import (
 
 type DiskInfo struct {
 	Mount   string
-	Total   string
-	Used    string
+	TotalKB int64
+	UsedKB  int64
 	Percent int
 }
 
@@ -114,11 +115,24 @@ func Render(sysInfo platform.SystemInfo, version string, components []ComponentI
 	if sysInfo.MemTotalKB > 0 {
 		pct := int(sysInfo.MemUsedKB * 100 / sysInfo.MemTotalKB)
 		b.WriteString(fmt.Sprintf("  %s %s %s\n", labelStyle.Render("Memory"), renderDiskBar(pct, 30),
-			styles.Dimmed.Render(fmt.Sprintf("%s / %s (%d%%)", sysutil.HumanKB(sysInfo.MemUsedKB), sysutil.HumanKB(sysInfo.MemTotalKB), pct))))
+			usageDetail(sysInfo.MemUsedKB, sysInfo.MemTotalKB, pct)))
 	}
-	for _, d := range getDiskInfo() {
-		bar := renderDiskBar(d.Percent, 30)
-		b.WriteString(fmt.Sprintf("  %s %s %s\n", labelStyle.Render(d.Mount), bar, styles.Dimmed.Render(fmt.Sprintf("%s / %s (%d%%)", d.Used, d.Total, d.Percent))))
+	// Disks get their own indented group under a "Disk" heading: a bare "/"
+	// column doesn't tell you it's a filesystem, and a machine with several
+	// mounted volumes needs them visibly grouped rather than listed loose.
+	if disks := getDiskInfo(); len(disks) > 0 {
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("  %s\n", styles.Dimmed.Render("Disk")))
+		// Indent by 2 more and narrow the label by 2, so the bars stay in the
+		// same column as Memory's.
+		diskLabel := styles.Label(18)
+		for i, d := range disks {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(fmt.Sprintf("    %s %s %s\n", diskLabel.Render(diskLabelText(d.Mount)),
+				renderDiskBar(d.Percent, 30), usageDetail(d.UsedKB, d.TotalKB, d.Percent)))
+		}
 	}
 
 	// Components section
@@ -192,31 +206,64 @@ func renderComponentEntry(c ComponentInfo, width int) string {
 	return icon + " " + name
 }
 
+// diskFloorKB hides filesystems too small to be worth a row — the EFI system
+// partition and similar. /boot (typically ~1.7G) stays: it fills up with old
+// kernels and that's worth seeing.
+const diskFloorKB = 1024 * 1024 // 1 GiB
+
 func getDiskInfo() []DiskInfo {
-	out, err := exec.Command("df", "-h", "--output=target,size,used,pcent").Output()
+	out, err := exec.Command("df", "-Pk", "--local",
+		"-x", "tmpfs", "-x", "devtmpfs", "-x", "squashfs", "-x", "overlay", "-x", "efivarfs").Output()
 	if err != nil {
 		return nil
 	}
-	var disks []DiskInfo
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 4 {
-			continue
-		}
-		mount := fields[0]
-		if mount != "/" && mount != "/home" {
-			continue
-		}
-		pctStr := strings.TrimRight(fields[3], "%")
-		pct, _ := strconv.Atoi(pctStr)
-		disks = append(disks, DiskInfo{
-			Mount:   mount,
-			Total:   fields[1],
-			Used:    fields[2],
-			Percent: pct,
-		})
+	return parseDiskInfo(string(out))
+}
+
+// parseDiskInfo turns `df -Pk` output into the rows to render: every real
+// filesystem above the size floor, root first and the rest alphabetical so the
+// list is stable between runs.
+func parseDiskInfo(out string) []DiskInfo {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		return nil
 	}
+	var disks []DiskInfo
+	for _, line := range lines[1:] { // skip the header
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			continue
+		}
+		totalKB, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil || totalKB < diskFloorKB {
+			continue
+		}
+		usedKB, _ := strconv.ParseInt(fields[2], 10, 64)
+		pct, _ := strconv.Atoi(strings.TrimSuffix(fields[4], "%"))
+		disks = append(disks, DiskInfo{Mount: fields[5], TotalKB: totalKB, UsedKB: usedKB, Percent: pct})
+	}
+	sort.Slice(disks, func(i, j int) bool {
+		if (disks[i].Mount == "/") != (disks[j].Mount == "/") {
+			return disks[i].Mount == "/"
+		}
+		return disks[i].Mount < disks[j].Mount
+	})
 	return disks
+}
+
+// usageDetail is the "used / total (pct)" tail shared by the memory and disk
+// rows, so both read in the same units.
+func usageDetail(usedKB, totalKB int64, pct int) string {
+	return styles.Dimmed.Render(fmt.Sprintf("%s / %s (%d%%)", sysutil.HumanKB(usedKB), sysutil.HumanKB(totalKB), pct))
+}
+
+// diskLabelText annotates root, whose bare "/" says nothing about what it
+// holds. Every other mount path (/boot, /mnt/Timeshift) already reads clearly.
+func diskLabelText(mount string) string {
+	if mount == "/" {
+		return "/ (system)"
+	}
+	return mount
 }
 
 // renderProfile shows the profile and how complete it is, pointing at

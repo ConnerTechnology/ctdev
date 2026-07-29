@@ -72,3 +72,20 @@ func TestSafeSymlinkReplacesExisting(t *testing.T) {
 		t.Errorf("expected link to %s, got %s", src, target)
 	}
 }
+
+func TestHumanKB(t *testing.T) {
+	tests := []struct {
+		kb   int64
+		want string
+	}{
+		{372 * 1024, "372M"},             // sub-GiB keeps megabyte precision
+		{1024 * 1024, "1.0G"},            // exactly 1 GiB
+		{11 * 1024 * 1024, "11G"},        // ≥10G drops the decimal
+		{2 * 1024 * 1024 * 1024, "2.0T"}, // TiB range
+	}
+	for _, tt := range tests {
+		if got := HumanKB(tt.kb); got != tt.want {
+			t.Errorf("HumanKB(%d) = %q, want %q", tt.kb, got, tt.want)
+		}
+	}
+}

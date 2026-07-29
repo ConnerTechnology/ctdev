@@ -59,9 +59,14 @@ func SafeSymlink(src, dst string) error {
 	return os.Symlink(src, dst)
 }
 
-// HumanKB renders a size in 1K blocks as G/T with one decimal where useful —
+// HumanKB renders a size in 1K blocks as M/G/T with one decimal where useful —
 // the same shape `df -h` prints, so ctdev's own sizes sit beside it cleanly.
 func HumanKB(kb int64) string {
+	// Below a gibibyte, report megabytes: a 372M /boot reads as "0.4G"
+	// otherwise, which loses the precision exactly where it matters.
+	if kb < 1024*1024 {
+		return fmt.Sprintf("%.0fM", float64(kb)/1024)
+	}
 	gb := float64(kb) / (1024 * 1024)
 	if gb >= 1024 {
 		return fmt.Sprintf("%.1fT", gb/1024)
