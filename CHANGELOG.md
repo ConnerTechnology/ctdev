@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.10.0] - 2026-07-29
+
+### Changed
+- **`ctdev status` and `ctdev info` no longer overlap.** `status` is now only
+  things that may need attention; `info` is the inventory. Uptime, load, memory
+  and disk usage are gone from `status` — disk was a straight duplicate of
+  `info`, and the rest were facts about the machine rather than problems with
+  it. `info` picks up **Uptime** in its System section, and its `Disk` section
+  becomes **`Usage`**, carrying memory alongside the disks with the same bar.
+  Hardware still lists installed capacity (64 GB); Usage shows what's consumed
+  of what's usable (17G / 62G) — the gap is firmware reservation, not a bug.
+
+### Added
+- **`ctdev status` flags a wedged apt.** The daily apt jobs hold
+  `/var/lib/apt/lists/lock` while they run, so one that stalls blocks every
+  later apt call until reboot — and `status` would cheerfully report "apt up to
+  date" against an index that hadn't refreshed in days. It now warns when a
+  daily job has been mid-run for over 30 minutes, or the package index is more
+  than 48 hours old, and points at the fix. Pairs with the `apt daily job
+  timeout` setting added in 12.9.0, which stops the wedge happening at all.
+- **`ctdev status` warns on disk pressure** — any filesystem at 85% or above,
+  with free space and a pointer to `ctdev cleanup`. Below the threshold it says
+  nothing, so the always-on usage view stays in `info` alone.
+- **`ctdev info` reports the machine's profile** — the one `ctdev apply`
+  recorded (now saved to `~/.local/state/ctdev/applied-profile`), with how many
+  of its components are present and a pointer to `ctdev diff` when any are
+  missing. On a machine composed by hand it infers the closest match instead,
+  labeled `(closest match)` so it's never mistaken for a recorded fact, and
+  stays silent below 50% overlap rather than claiming a bad match.
+- **`ctdev info` shows the kernel release and distro version** —
+  `linuxmint 22.3 (noble)` and `7.0.0-28-generic` instead of a bare
+  `linuxmint`. Both are the first thing you want when chasing a driver,
+  suspend, or repo problem.
+
 ## [12.9.0] - 2026-07-29
 
 ### Added
