@@ -271,4 +271,4 @@ Single-line messages only. No footers.
 4. Commit: `docs: update for vX.Y.Z`
 5. Tag: `git tag vX.Y.Z`
 6. Push: `git push && git push --tags`
-7. CI builds and creates the GitHub Release automatically via `.github/workflows/release.yml`
+7. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
