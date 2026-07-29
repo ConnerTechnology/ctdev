@@ -1,6 +1,7 @@
 package multiselect
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -241,6 +242,50 @@ func TestTruncate(t *testing.T) {
 	long := truncate("a-very-long-package-name-indeed", 10)
 	if !strings.HasSuffix(long, "…") {
 		t.Errorf("expected ellipsis, got %q", long)
+	}
+}
+
+func TestViewRendersInline(t *testing.T) {
+	m := New(sample(), Options{Title: "T"})
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if m.View().AltScreen {
+		t.Error("picker must render inline, not take over the screen")
+	}
+}
+
+func TestWindowCapsRowsOnTallTerminal(t *testing.T) {
+	var items []Item
+	for i := 0; i < 40; i++ {
+		items = append(items, Item{ID: strconv.Itoa(i), Primary: "pkg", Selectable: true, Bulk: true})
+	}
+	m := New([]Group{{Key: "g", Title: "Group", Items: items}}, Options{Title: "T"})
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 200})
+	window, _, below := m.windowFor(m.visibleIndices(), 3)
+	if len(window) > maxVisibleRows {
+		t.Errorf("window has %d rows, want at most %d", len(window), maxVisibleRows)
+	}
+	if below == 0 {
+		t.Error("expected a hidden-below count so the ↓ indicator renders")
+	}
+}
+
+func TestSummaryViewOnExit(t *testing.T) {
+	m := New(sample(), Options{Title: "Available Updates", PreselectAll: true})
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.confirmed = true
+	got := m.View().Content
+	// One line plus the trailing newline that keeps the next output off it.
+	if strings.Count(got, "\n") != 1 || !strings.HasSuffix(got, "\n") {
+		t.Errorf("confirmed view should collapse to one line + newline, got %q", got)
+	}
+	if !strings.Contains(got, "3 selected") {
+		t.Errorf("confirmed view should report the selection count, got %q", got)
+	}
+
+	q := New(sample(), Options{Title: "Available Updates"})
+	q.quitting = true
+	if !strings.Contains(q.View().Content, "cancelled") {
+		t.Errorf("quit view should say cancelled, got %q", q.View().Content)
 	}
 }
 

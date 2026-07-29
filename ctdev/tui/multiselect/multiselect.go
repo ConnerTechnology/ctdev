@@ -4,6 +4,9 @@
 // header/footer, incremental filtering, bulk select/none/invert, per-group
 // toggles, a discoverable help bar (bubbles help+key), and a full-width cursor
 // highlight — while callers supply only the grouped data to render.
+//
+// It renders inline (never the alt screen) and collapses to a one-line summary
+// on exit, so a picker leaves the terminal roughly as it found it.
 package multiselect
 
 import (
@@ -22,6 +25,11 @@ import (
 // nameColWidth is the fixed width of the primary-label column; longer labels
 // are truncated with an ellipsis so the detail column stays aligned.
 const nameColWidth = 22
+
+// maxVisibleRows caps the list window. The view renders inline (no alt screen),
+// so on a tall terminal an uncapped list would still push everything you had on
+// screen out of view — the thing the alt screen was doing that we're avoiding.
+const maxVisibleRows = 15
 
 // Badge is a small labeled tag rendered after an item (e.g. "KERNEL").
 type Badge struct {
@@ -420,6 +428,10 @@ func (m *Model) onFilterChanged() {
 // --- view ---
 
 func (m *Model) View() tea.View {
+	if m.quitting || m.confirmed {
+		return tea.NewView(m.summaryView())
+	}
+
 	header := m.headerView()
 	footer := m.footerView()
 	chrome := lipgloss.Height(header) + lipgloss.Height(footer)
@@ -448,9 +460,21 @@ func (m *Model) View() tea.View {
 	}
 	lines = append(lines, footer)
 
-	v := tea.NewView(strings.Join(lines, "\n"))
-	v.AltScreen = true
-	return v
+	return tea.NewView(strings.Join(lines, "\n"))
+}
+
+// summaryView is the single line the picker collapses to on exit. Rendering
+// inline means the last frame stays in the scrollback, and a screen-height list
+// there would bury whatever runs next (the install/update progress).
+//
+// The trailing newline matters: Bubble Tea leaves the cursor at the start of the
+// final line, so without it the next thing printed overwrites this summary.
+func (m *Model) summaryView() string {
+	if m.confirmed {
+		return styles.Success.Render("✓ ") + styles.Title.Render(m.title) +
+			styles.Dimmed.Render(fmt.Sprintf(" · %d selected", len(m.selected))) + "\n"
+	}
+	return styles.Dimmed.Render("✗ "+m.title+" · cancelled") + "\n"
 }
 
 func (m *Model) headerView() string {
@@ -562,11 +586,10 @@ func (m *Model) visibleIndices() []int {
 // keep the cursor in view. It returns the window plus the counts hidden above
 // and below (for the "N more" indicators).
 func (m *Model) windowFor(visible []int, chrome int) (window []int, above, below int) {
-	if m.height <= 0 {
-		m.scrollOffset = 0
-		return visible, 0, 0
+	avail := maxVisibleRows
+	if m.height > 0 && m.height-chrome < avail {
+		avail = m.height - chrome
 	}
-	avail := m.height - chrome
 	if avail >= len(visible) {
 		m.scrollOffset = 0
 		return visible, 0, 0
