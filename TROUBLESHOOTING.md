@@ -25,7 +25,7 @@ ctdev install <component> --force # Full reinstall including package
 The v9.0 Go rewrite replaces symlinks with embedded config files. If you see dangling symlinks after upgrading:
 
 ```bash
-ctdev install zsh tmux ghostty claude-code git   # Re-deploys all configs
+ctdev install zsh tmux claude-code git   # Re-deploys all configs
 ```
 
 This replaces old symlinks (pointing to deleted `components/` directory) with regular files containing the embedded configs.

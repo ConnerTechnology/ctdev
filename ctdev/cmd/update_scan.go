@@ -241,7 +241,6 @@ var managedCasks = map[string]string{
 	"claude":                        "claude-desktop",
 	"dbeaver-community":             "dbeaver",
 	"docker":                        "docker",
-	"ghostty":                       "ghostty",
 	"google-chrome":                 "chrome",
 	"linear-linear":                 "linear",
 	"logi-options+":                 "logi-options",

@@ -61,9 +61,9 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-51 components:
+50 components:
 
-1password, age, bat, beszel, btop, bun, caddy, chrome, cleanmymac, claude-code, claude-desktop, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, ghostty, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
+1password, age, bat, beszel, btop, bun, caddy, chrome, cleanmymac, claude-code, claude-desktop, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
 
 ## Profiles
 
