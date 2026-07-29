@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.11.0] - 2026-07-29
+
+### Added
+- **`ctdev info` lists the machine's physical drives** in its Hardware section:
+  model, capacity, and what each one carries. This is deliberately not the same
+  view as `Usage` — that one lists mounted filesystems, so a drive holding a
+  second OS is mounted nowhere and doesn't appear at all, despite being very
+  much installed. A drive nothing mounts is reported by the filesystems found
+  on it instead (`not mounted (ntfs, vfat)`). The reader walks the whole
+  `lsblk` tree, so a root under LUKS→LVM is still attributed to the disk that
+  holds it, and container types (`crypto_LUKS`, `LVM2_member`) are filtered out
+  since they name the wrapper rather than its content.
+
+### Fixed
+- **The `go` component reported itself not installed when Go came from the
+  distro.** Its registry entry pinned `DetectPath` to `/usr/local/go/bin/go`,
+  and `IsInstalled` treats `DetectPath` as exclusive — filesystem check, no
+  PATH fallback. That contradicted `goInstall`, which has always treated any
+  `go` on PATH as installed, so `ctdev install go` would say "Go already
+  installed" while `ctdev info` listed it missing and every profile carrying
+  `go` showed permanent drift. Detection now falls through to a PATH lookup,
+  matching the installer.
+- `ctdev uninstall go` only ever removed the official tarball at
+  `/usr/local/go`. When a distro-packaged Go is still on PATH afterwards it now
+  says so, instead of reporting a removal that didn't happen.
+
 ## [12.10.1] - 2026-07-29
 
 ### Fixed
