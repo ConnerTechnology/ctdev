@@ -237,7 +237,6 @@ func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
 // Only installed components are shown in update output.
 var managedCasks = map[string]string{
 	"1password":                     "1password",
-	"chatgpt":                       "chatgpt",
 	"cleanmymac":                    "cleanmymac",
 	"claude":                        "claude-desktop",
 	"dbeaver-community":             "dbeaver",

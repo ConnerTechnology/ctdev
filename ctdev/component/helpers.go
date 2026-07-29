@@ -21,7 +21,7 @@ func unsupportedPMError(component, pm string) error {
 
 // componentByName is populated from Registry in init(). Indexing it from
 // within installer functions avoids the init-time cycle that would otherwise
-// arise from `chatgptInstall -> alreadyInstalled -> FindByName -> Registry`.
+// arise from `slackInstall -> alreadyInstalled -> FindByName -> Registry`.
 var componentByName = make(map[string]*Component)
 
 func init() {
