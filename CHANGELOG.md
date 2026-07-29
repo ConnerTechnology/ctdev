@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.10.1] - 2026-07-29
+
+### Fixed
+- **`ctdev info` was only ever showing two filesystems.** The disk scan
+  hardcoded a filter to `/` and `/home`, so every other mounted volume was
+  silently dropped — on a machine with a second drive, entire disks were
+  missing from the inventory. It now lists every real filesystem (skipping
+  tmpfs and friends, and anything under 1 GiB so the EFI partition doesn't earn
+  a row), sorted root-first then alphabetically so the list is stable run to
+  run. `/boot` is deliberately kept: it fills with old kernels and that's worth
+  seeing.
+- Sizes below a gibibyte now read in megabytes. A 372M `/boot` was rendering as
+  `0.4G`, losing precision exactly where it mattered. This also sharpens the
+  free-space figure in `ctdev status`'s disk-pressure warning.
+
+### Changed
+- The `Usage` section groups the filesystems under a **`Disk`** heading, labels
+  root as `/ (system)` — a bare `/` doesn't say it's a filesystem, let alone
+  which one — and spaces the bars out so they're readable at a glance rather
+  than stacked flush. Disk sizes now go through the same formatter as memory,
+  so both columns read in identical units.
+
 ## [12.10.0] - 2026-07-29
 
 ### Changed
