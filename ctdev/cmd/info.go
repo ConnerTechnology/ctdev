@@ -10,6 +10,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/dotfiles/ctdev/profile"
+	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	tuiinfo "github.com/ConnerTechnology/dotfiles/ctdev/tui/info"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
@@ -76,13 +78,55 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	if isTTY && !noColor {
 		styles.SetDarkBackground(lipgloss.HasDarkBackground(os.Stdin, os.Stdout))
 	}
-	output := tuiinfo.Render(sysInfo, version, components, width)
+	output := tuiinfo.Render(sysInfo, version, components, machineProfile(), width)
 	// Strip color when piped/redirected, or when NO_COLOR is set (no-color.org).
 	if !isTTY || noColor {
 		output = ansi.Strip(output)
 	}
 	fmt.Print(output)
 	return nil
+}
+
+// inferredProfileFloor is how much of a profile must already be installed
+// before we're willing to guess a machine was built from it. Below that, the
+// "closest match" is noise — a Pi profile would otherwise claim a desktop.
+const inferredProfileFloor = 0.5
+
+// machineProfile names the profile this host was built from: the one `ctdev
+// apply` recorded, or — for a machine composed by hand — the closest match by
+// components installed. Returns nil when neither applies.
+func machineProfile() *tuiinfo.ProfileInfo {
+	installed := component.InstalledSet()
+
+	if name := state.AppliedProfile(); name != "" {
+		// A recorded profile is authoritative even at 0 components installed:
+		// that's drift worth showing, not a reason to guess something else.
+		if p, err := profile.Load(name); err == nil {
+			return profileStats(p, installed, false)
+		}
+	}
+
+	var best *tuiinfo.ProfileInfo
+	for _, p := range profile.List() {
+		st := profileStats(&p, installed, true)
+		if st.Total == 0 || float64(st.Installed)/float64(st.Total) < inferredProfileFloor {
+			continue
+		}
+		if best == nil || st.Installed > best.Installed {
+			best = st
+		}
+	}
+	return best
+}
+
+func profileStats(p *profile.Profile, installed map[string]bool, inferred bool) *tuiinfo.ProfileInfo {
+	st := &tuiinfo.ProfileInfo{Name: p.Name, Inferred: inferred, Total: len(p.Components)}
+	for _, c := range p.Components {
+		if installed[c] {
+			st.Installed++
+		}
+	}
+	return st
 }
 
 // infoTerminalSize returns the usable column width and whether stdout is a TTY.

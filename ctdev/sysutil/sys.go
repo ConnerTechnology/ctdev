@@ -58,3 +58,16 @@ func SafeSymlink(src, dst string) error {
 	os.Remove(dst)
 	return os.Symlink(src, dst)
 }
+
+// HumanKB renders a size in 1K blocks as G/T with one decimal where useful —
+// the same shape `df -h` prints, so ctdev's own sizes sit beside it cleanly.
+func HumanKB(kb int64) string {
+	gb := float64(kb) / (1024 * 1024)
+	if gb >= 1024 {
+		return fmt.Sprintf("%.1fT", gb/1024)
+	}
+	if gb >= 10 {
+		return fmt.Sprintf("%.0fG", gb)
+	}
+	return fmt.Sprintf("%.1fG", gb)
+}

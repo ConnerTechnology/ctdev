@@ -25,41 +25,23 @@ func TestHumanAge(t *testing.T) {
 	}
 }
 
-func TestParseDFLine(t *testing.T) {
+// Memory/disk/uptime rendering moved to tui/info and platform; their tests
+// live alongside them now.
+
+func TestParseDiskPressure(t *testing.T) {
+	// Capacity column drives the decision; 84% must stay quiet, 85% must not.
 	df := "Filesystem 1024-blocks Used Available Capacity Mounted on\n" +
-		"/dev/mapper/vgmint-root  1917499848 405340248 1414682176      23% /\n"
-	if got := parseDFLine(df); got != "387G/1.8T (23%)" {
-		t.Errorf("parseDFLine = %q, want %q", got, "387G/1.8T (23%)")
+		"/dev/sda1  1917499848 1800000000  117499848      94% /\n" +
+		"/dev/sdb1  1917499848  100000000 1817499848       6% /data\n" +
+		"/dev/sdc1   500000000  420000000   80000000      84% /var\n"
+	got := parseDiskPressure(df)
+	if len(got) != 1 {
+		t.Fatalf("got %d over-threshold mounts, want 1: %v", len(got), got)
 	}
-	if got := parseDFLine("garbage"); got != "" {
-		t.Errorf("parseDFLine(garbage) = %q, want empty", got)
+	if !strings.Contains(got[0], "/ at 94%") || !strings.Contains(got[0], "free") {
+		t.Errorf("line = %q, want the mount, percent and free space", got[0])
 	}
-}
-
-func TestParseMemUsage(t *testing.T) {
-	// ~63 GiB total, ~55.8 GiB available → ~9.5G used, 15%.
-	meminfo := "MemTotal:       65805020 kB\nMemFree:        40000000 kB\nMemAvailable:   55805020 kB\nBuffers:          100 kB\n"
-	got := parseMemUsage(meminfo)
-	if !strings.Contains(got, "/63G") || !strings.HasSuffix(got, "(15%)") {
-		t.Errorf("parseMemUsage = %q, want ~9.5G/63G (15%%)", got)
-	}
-	if parseMemUsage("garbage") != "" {
-		t.Error("parseMemUsage(garbage) should be empty")
-	}
-}
-
-func TestHumanKB(t *testing.T) {
-	tests := []struct {
-		kb   int64
-		want string
-	}{
-		{1024 * 1024, "1.0G"},            // 1 GiB
-		{11 * 1024 * 1024, "11G"},        // ≥10G drops the decimal
-		{2 * 1024 * 1024 * 1024, "2.0T"}, // TiB range
-	}
-	for _, tt := range tests {
-		if got := humanKB(tt.kb); got != tt.want {
-			t.Errorf("humanKB(%d) = %q, want %q", tt.kb, got, tt.want)
-		}
+	if len(parseDiskPressure("garbage")) != 0 {
+		t.Error("unparseable df output should yield no warnings")
 	}
 }

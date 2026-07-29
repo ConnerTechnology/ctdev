@@ -18,10 +18,12 @@ import (
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show this machine's health at a glance",
-	Long: "One screen of operational health: disk headroom, Tailscale connectivity, homelab " +
-		"containers, backup freshness (last run, result, integrity check), and pending apt " +
-		"updates. Everything is read locally — no network calls — so it's fast enough to run " +
-		"on every login. Sections appear only when they apply to this machine.",
+	Long: "One screen of things that may need attention: a pending reboot, failed units, disk " +
+		"SMART health, Tailscale connectivity, homelab containers, backup freshness (last run, " +
+		"result, integrity check), and pending apt updates. Everything is read locally — no " +
+		"network calls — so it's fast enough to run on every login. Sections appear only when " +
+		"they apply to this machine. For inventory (specs, uptime, memory and disk usage, " +
+		"installed components) see 'ctdev info'.",
 	RunE: runStatus,
 }
 
@@ -36,23 +38,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println(styles.Title.Render(fmt.Sprintf("ctdev status — %s", host)) + styles.Dimmed.Render("  (ctdev "+version+")"))
 	fmt.Println()
 	label := styles.Label(14)
-	// row prints one labeled line with a plain value, skipping empty values.
-	row := func(name, value string) {
-		if value != "" {
-			fmt.Printf("  %s %s\n", label.Render(name), styles.Value.Render(value))
-		}
-	}
-
-	// System vitals — one per line.
-	row("Uptime", readUptime())
-	if load := readLoadAvg(); load != "" {
-		if n := runtime.NumCPU(); n > 0 {
-			load += fmt.Sprintf(" (%d cores)", n)
-		}
-		row("Load", load)
-	}
-	row("Memory", readMemUsage())
-	row("Disk /", readDiskUsage("/"))
 
 	// Health: reboot pending, failed units, disk SMART — the "something's
 	// quietly wrong" catch-alls. Linux only; each shows only when relevant.
@@ -65,8 +50,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			fmt.Printf("  %s %s\n", label.Render("Failed units"),
 				styles.Error.Render(fmt.Sprintf("%d", n))+styles.Dimmed.Render(" — systemctl --failed"))
 		}
+		if full := diskPressure(); full != "" {
+			fmt.Printf("  %s %s\n", label.Render("Disk"), full)
+		}
 		if disks := diskHealth(ctx); disks != "" {
 			fmt.Printf("  %s %s\n", label.Render("Disk health"), disks)
+		}
+		if apt := aptHealth(); apt != "" {
+			fmt.Printf("  %s %s\n", label.Render("APT"), apt)
 		}
 		if t := cpuThermal(); t != "" {
 			fmt.Printf("  %s %s\n", label.Render("Temp"), t)
@@ -174,37 +165,123 @@ func timerStatusLine(unit string, maxAge time.Duration) string {
 	return out
 }
 
-// readMemUsage returns "used/total" memory from /proc/meminfo, computing used
-// as total minus available (the number that actually matters).
-func readMemUsage() string {
-	b, err := os.ReadFile("/proc/meminfo")
+const (
+	// diskWarnPercent is where a filesystem stops being background information
+	// and starts being a problem. Below it status says nothing — ctdev info
+	// carries the always-on usage view, and repeating it here is noise.
+	diskWarnPercent = 85
+	// aptStuckAfter is how long a daily apt job may sit mid-run before we call
+	// it wedged. A healthy `apt-get update` is minutes at worst, even on a Pi.
+	aptStuckAfter = 30 * time.Minute
+	// aptIndexStale is when the package index stops being trustworthy — two
+	// missed daily runs. Until it refreshes, "up to date" means nothing.
+	aptIndexStale = 48 * time.Hour
+)
+
+// diskPressure names filesystems at or above diskWarnPercent, worst first.
+// Returns "" when everything has headroom.
+func diskPressure() string {
+	out, err := exec.Command("df", "-Pk", "--local",
+		"-x", "tmpfs", "-x", "devtmpfs", "-x", "squashfs", "-x", "overlay", "-x", "efivarfs").Output()
 	if err != nil {
 		return ""
 	}
-	return parseMemUsage(string(b))
-}
-
-// parseMemUsage renders "used/total (pct)" from /proc/meminfo, where used is
-// total minus available (the figure that reflects real pressure).
-func parseMemUsage(meminfo string) string {
-	var totalKB, availKB int64
-	for _, line := range strings.Split(meminfo, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		switch fields[0] {
-		case "MemTotal:":
-			totalKB, _ = strconv.ParseInt(fields[1], 10, 64)
-		case "MemAvailable:":
-			availKB, _ = strconv.ParseInt(fields[1], 10, 64)
-		}
-	}
-	if totalKB == 0 {
+	full := parseDiskPressure(string(out))
+	if len(full) == 0 {
 		return ""
 	}
-	used := totalKB - availKB
-	return fmt.Sprintf("%s/%s (%d%%)", humanKB(used), humanKB(totalKB), used*100/totalKB)
+	return styles.Warning.Render("⚠ "+strings.Join(full, ", ")) + styles.Dimmed.Render(" — ctdev cleanup")
+}
+
+// parseDiskPressure extracts the over-threshold mounts from `df -Pk` output.
+func parseDiskPressure(out string) []string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		return nil
+	}
+	var full []string
+	for _, line := range lines[1:] { // skip the header
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			continue
+		}
+		pct, err := strconv.Atoi(strings.TrimSuffix(fields[4], "%"))
+		if err != nil || pct < diskWarnPercent {
+			continue
+		}
+		availKB, _ := strconv.ParseInt(fields[3], 10, 64)
+		full = append(full, fmt.Sprintf("%s at %d%% (%s free)", fields[5], pct, sysutil.HumanKB(availKB)))
+	}
+	return full
+}
+
+// aptHealth reports trouble with apt's own housekeeping. The daily jobs hold
+// /var/lib/apt/lists/lock while they run and are Type=oneshot, so systemd gives
+// them no start timeout by default (see 'ctdev configure autoupdate') — one
+// that stalls blocks every later apt call for as long as the machine is up,
+// while a stale index quietly makes "up to date" a lie. Returns "" when fine.
+func aptHealth() string {
+	if _, err := exec.LookPath("apt-get"); err != nil {
+		return ""
+	}
+	var problems []string
+	for _, unit := range []string{"apt-daily.service", "apt-daily-upgrade.service"} {
+		if age := stuckActivating(unit); age > aptStuckAfter {
+			problems = append(problems, fmt.Sprintf("%s wedged %s", strings.TrimSuffix(unit, ".service"), humanAge(age)))
+		}
+	}
+	if age := aptIndexAge(); age > aptIndexStale {
+		problems = append(problems, fmt.Sprintf("index %s old", humanAge(age)))
+	}
+	if len(problems) == 0 {
+		return ""
+	}
+	hint := " — sudo systemctl stop apt-daily.service"
+	if len(problems) == 1 && strings.HasPrefix(problems[0], "index") {
+		hint = " — sudo apt-get update"
+	}
+	return styles.Warning.Render("⚠ "+strings.Join(problems, ", ")) + styles.Dimmed.Render(hint)
+}
+
+// stuckActivating returns how long a unit has been mid-start, or 0 when it
+// isn't activating. Units enter "activating" on start and leave it when
+// ExecStart returns, so a large age here means the job never finished.
+func stuckActivating(unit string) time.Duration {
+	if unitProperty(unit, "ActiveState") != "activating" {
+		return 0
+	}
+	started := unitProperty(unit, "InactiveExitTimestamp")
+	t, err := time.Parse("Mon 2006-01-02 15:04:05 MST", started)
+	if err != nil {
+		return 0
+	}
+	return time.Since(t)
+}
+
+// aptIndexAge returns how long ago the package index was last written, read
+// from the newest file apt drops in its lists directory on a successful fetch.
+func aptIndexAge() time.Duration {
+	entries, err := os.ReadDir("/var/lib/apt/lists")
+	if err != nil {
+		return 0
+	}
+	var newest time.Time
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		fi, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if fi.ModTime().After(newest) {
+			newest = fi.ModTime()
+		}
+	}
+	if newest.IsZero() {
+		return 0
+	}
+	return time.Since(newest)
 }
 
 // rebootRequired reports whether a pending kernel/security update needs a
@@ -325,75 +402,6 @@ func humanAge(d time.Duration) string {
 		return fmt.Sprintf("%dd", days)
 	}
 	return fmt.Sprintf("%dd %dh", days, hours)
-}
-
-// readUptime returns the machine uptime from /proc (Linux; "" elsewhere).
-func readUptime() string {
-	b, err := os.ReadFile("/proc/uptime")
-	if err != nil {
-		return ""
-	}
-	fields := strings.Fields(string(b))
-	if len(fields) == 0 {
-		return ""
-	}
-	secs, err := strconv.ParseFloat(fields[0], 64)
-	if err != nil {
-		return ""
-	}
-	return humanAge(time.Duration(secs) * time.Second)
-}
-
-// readLoadAvg returns the 1-minute load average (Linux; "" elsewhere).
-func readLoadAvg() string {
-	b, err := os.ReadFile("/proc/loadavg")
-	if err != nil {
-		return ""
-	}
-	fields := strings.Fields(string(b))
-	if len(fields) == 0 {
-		return ""
-	}
-	return fields[0]
-}
-
-// readDiskUsage returns "used/total (pct)" for a mount via df.
-func readDiskUsage(mount string) string {
-	out, err := exec.Command("df", "-Pk", mount).Output()
-	if err != nil {
-		return ""
-	}
-	return parseDFLine(string(out))
-}
-
-// parseDFLine extracts "used/total (pct)" from `df -Pk` output.
-func parseDFLine(out string) string {
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) < 2 {
-		return ""
-	}
-	fields := strings.Fields(lines[len(lines)-1])
-	if len(fields) < 5 {
-		return ""
-	}
-	totalKB, err1 := strconv.ParseInt(fields[1], 10, 64)
-	usedKB, err2 := strconv.ParseInt(fields[2], 10, 64)
-	if err1 != nil || err2 != nil {
-		return ""
-	}
-	return fmt.Sprintf("%s/%s (%s)", humanKB(usedKB), humanKB(totalKB), fields[4])
-}
-
-// humanKB renders a size in 1K blocks as G/T with one decimal where useful.
-func humanKB(kb int64) string {
-	gb := float64(kb) / (1024 * 1024)
-	if gb >= 1024 {
-		return fmt.Sprintf("%.1fT", gb/1024)
-	}
-	if gb >= 10 {
-		return fmt.Sprintf("%.0fG", gb)
-	}
-	return fmt.Sprintf("%.1fG", gb)
 }
 
 // commandOutput runs a command and returns its trimmed stdout ("" on error).

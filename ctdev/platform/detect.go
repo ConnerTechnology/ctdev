@@ -19,6 +19,7 @@ const (
 type Info struct {
 	OS             OS
 	Distro         string // "linuxmint", "ubuntu", etc.
+	DistroVersion  string // "22.2", "24.04", etc. (VERSION_ID)
 	Codename       string // "noble", "jammy", etc. (UBUNTU_CODENAME or VERSION_CODENAME)
 	Arch           string // "amd64", "arm64"
 	PackageManager string // "apt", "dnf", "pacman", "brew"
@@ -42,7 +43,7 @@ func detect() Info {
 		OS:   detectOS(),
 		Arch: detectArch(),
 	}
-	info.Distro, info.Codename = detectDistro()
+	info.Distro, info.DistroVersion, info.Codename = detectDistro()
 	info.PackageManager = detectPackageManager(info.OS)
 	info.IsContainer = detectContainer()
 	return info
@@ -63,15 +64,18 @@ func detectArch() string {
 	return runtime.GOARCH
 }
 
-func detectDistro() (string, string) {
+func detectDistro() (id, version, codename string) {
 	data, err := os.ReadFile("/etc/os-release")
 	if err != nil {
-		return "", ""
+		return "", "", ""
 	}
-	var id, codename, versionCodename string
+	var versionCodename string
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.HasPrefix(line, "ID=") {
 			id = strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
+		}
+		if strings.HasPrefix(line, "VERSION_ID=") {
+			version = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
 		}
 		if strings.HasPrefix(line, "UBUNTU_CODENAME=") {
 			codename = strings.Trim(strings.TrimPrefix(line, "UBUNTU_CODENAME="), "\"")
@@ -83,7 +87,7 @@ func detectDistro() (string, string) {
 	if codename == "" {
 		codename = versionCodename
 	}
-	return id, codename
+	return id, version, codename
 }
 
 func detectPackageManager(osType OS) string {

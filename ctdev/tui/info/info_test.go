@@ -1,6 +1,9 @@
 package info
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestRenderDiskBar(t *testing.T) {
 	tests := []struct {
@@ -53,5 +56,22 @@ func TestRenderComponentEntry(t *testing.T) {
 				t.Errorf("expected non-empty result for component %q", tt.component.Name)
 			}
 		})
+	}
+}
+
+func TestHumanUptime(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{45 * time.Minute, "45m"},
+		{5*time.Hour + 30*time.Minute, "5h 30m"},
+		{48 * time.Hour, "2d"},
+		{76 * time.Hour, "3d 4h"},
+	}
+	for _, tt := range tests {
+		if got := humanUptime(tt.d); got != tt.want {
+			t.Errorf("humanUptime(%v) = %q, want %q", tt.d, got, tt.want)
+		}
 	}
 }

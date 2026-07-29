@@ -94,3 +94,18 @@ func TestParseCPUModel(t *testing.T) {
 		t.Errorf("expected empty for cpuinfo without model lines, got %q", got)
 	}
 }
+
+func TestParseMemUsageKB(t *testing.T) {
+	// ~63 GiB total, ~55.8 GiB available → ~9.5 GiB used.
+	meminfo := "MemTotal:       65805020 kB\nMemFree:        40000000 kB\nMemAvailable:   55805020 kB\nBuffers:          100 kB\n"
+	used, total := parseMemUsageKB(meminfo)
+	if total != 65805020 {
+		t.Errorf("total = %d, want 65805020", total)
+	}
+	if used != 10000000 {
+		t.Errorf("used = %d, want 10000000 (total minus available)", used)
+	}
+	if u, tot := parseMemUsageKB("garbage"); u != 0 || tot != 0 {
+		t.Errorf("parseMemUsageKB(garbage) = (%d, %d), want (0, 0)", u, tot)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
 	"github.com/ConnerTechnology/dotfiles/ctdev/profile"
 	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
+	"github.com/ConnerTechnology/dotfiles/ctdev/state"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
@@ -180,6 +181,11 @@ func applyProfile(ctx context.Context, name string) error {
 	}
 	if len(failed) > 0 {
 		return fmt.Errorf("%d configure categor(y/ies) failed: %s", len(failed), strings.Join(failed, ", "))
+	}
+	// Remember what this machine was built from so `ctdev info` can name it.
+	// A failure here costs nothing but the label, so it never fails the apply.
+	if err := state.RecordAppliedProfile(p.Name); err != nil {
+		fmt.Printf("  %s\n", styles.Dimmed.Render(fmt.Sprintf("note: could not record applied profile: %v", err)))
 	}
 	fmt.Println()
 	fmt.Println(styles.Success.Render(fmt.Sprintf("Profile %s applied.", p.Name)))

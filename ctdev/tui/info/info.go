@@ -5,9 +5,11 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 )
 
@@ -24,7 +26,17 @@ type ComponentInfo struct {
 	Installed bool
 }
 
-func Render(sysInfo platform.SystemInfo, version string, components []ComponentInfo, termWidth int) string {
+// ProfileInfo names the machine profile this host was built from, and how much
+// of it is actually present. Inferred is set when no `ctdev apply` recorded a
+// profile and the name is a best guess from what's installed.
+type ProfileInfo struct {
+	Name      string
+	Inferred  bool
+	Installed int
+	Total     int
+}
+
+func Render(sysInfo platform.SystemInfo, version string, components []ComponentInfo, prof *ProfileInfo, termWidth int) string {
 	var b strings.Builder
 
 	b.WriteString(styles.Title.Render("System Information"))
@@ -39,14 +51,30 @@ func Render(sysInfo platform.SystemInfo, version string, components []ComponentI
 	b.WriteString("\n")
 	osStr := string(sysInfo.Platform.OS)
 	if sysInfo.Platform.Distro != "" {
-		osStr = fmt.Sprintf("%s (%s)", sysInfo.Platform.Distro, sysInfo.Platform.OS)
+		distro := sysInfo.Platform.Distro
+		if v := sysInfo.Platform.DistroVersion; v != "" {
+			distro += " " + v
+		}
+		if c := sysInfo.Platform.Codename; c != "" {
+			distro += " (" + c + ")"
+		}
+		osStr = fmt.Sprintf("%s (%s)", distro, sysInfo.Platform.OS)
 	}
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("OS"), valueStyle.Render(osStr)))
+	if sysInfo.Kernel != "" {
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Kernel"), valueStyle.Render(sysInfo.Kernel)))
+	}
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Architecture"), valueStyle.Render(sysInfo.Platform.Arch)))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Package Manager"), valueStyle.Render(sysInfo.Platform.PackageManager)))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Shell"), valueStyle.Render(sysInfo.Shell)))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Dotfiles"), valueStyle.Render(sysInfo.DotfilesDir)))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("ctdev"), valueStyle.Render(version)))
+	if sysInfo.Uptime > 0 {
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Uptime"), valueStyle.Render(humanUptime(sysInfo.Uptime))))
+	}
+	if prof != nil {
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Profile"), renderProfile(prof)))
+	}
 
 	// Hardware section
 	b.WriteString("\n")
@@ -79,12 +107,16 @@ func Render(sysInfo platform.SystemInfo, version string, components []ComponentI
 		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render(label), val))
 	}
 
-	// Disk section
+	// Usage section — live consumption, as opposed to the Hardware specs above.
 	b.WriteString("\n")
-	b.WriteString(headerStyle.Render("Disk"))
+	b.WriteString(headerStyle.Render("Usage"))
 	b.WriteString("\n")
-	disks := getDiskInfo()
-	for _, d := range disks {
+	if sysInfo.MemTotalKB > 0 {
+		pct := int(sysInfo.MemUsedKB * 100 / sysInfo.MemTotalKB)
+		b.WriteString(fmt.Sprintf("  %s %s %s\n", labelStyle.Render("Memory"), renderDiskBar(pct, 30),
+			styles.Dimmed.Render(fmt.Sprintf("%s / %s (%d%%)", sysutil.HumanKB(sysInfo.MemUsedKB), sysutil.HumanKB(sysInfo.MemTotalKB), pct))))
+	}
+	for _, d := range getDiskInfo() {
 		bar := renderDiskBar(d.Percent, 30)
 		b.WriteString(fmt.Sprintf("  %s %s %s\n", labelStyle.Render(d.Mount), bar, styles.Dimmed.Render(fmt.Sprintf("%s / %s (%d%%)", d.Used, d.Total, d.Percent))))
 	}
@@ -185,6 +217,38 @@ func getDiskInfo() []DiskInfo {
 		})
 	}
 	return disks
+}
+
+// renderProfile shows the profile and how complete it is, pointing at
+// `ctdev diff` only when something is actually missing.
+func renderProfile(p *ProfileInfo) string {
+	out := styles.Value.Render(p.Name)
+	if p.Inferred {
+		out += styles.Dimmed.Render(" (closest match)")
+	}
+	missing := p.Total - p.Installed
+	if missing <= 0 {
+		return out + styles.Dimmed.Render(fmt.Sprintf(" · %d/%d components", p.Installed, p.Total))
+	}
+	return out + styles.Warning.Render(fmt.Sprintf(" · %d/%d components", p.Installed, p.Total)) +
+		styles.Dimmed.Render(fmt.Sprintf(" — ctdev diff %s", p.Name))
+}
+
+// humanUptime renders uptime at the coarsest useful precision: minutes for a
+// fresh boot, then hours, then days — an always-on box reads "34d", not "816h".
+func humanUptime(d time.Duration) string {
+	switch {
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+	default:
+		days := int(d.Hours()) / 24
+		if hours := int(d.Hours()) % 24; hours > 0 {
+			return fmt.Sprintf("%dd %dh", days, hours)
+		}
+		return fmt.Sprintf("%dd", days)
+	}
 }
 
 func renderDiskBar(percent, width int) string {

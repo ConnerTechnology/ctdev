@@ -6,7 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type GPUInfo struct {
@@ -28,8 +30,14 @@ type SystemInfo struct {
 	CPUModel    string
 	CPUThreads  int
 	MemoryGB    int
-	GPUs        []GPUInfo
-	Network     []NetworkAdapter
+	// MemUsedKB/MemTotalKB are live consumption, distinct from MemoryGB (the
+	// installed capacity). Both are 0 where /proc/meminfo isn't available.
+	MemUsedKB  int64
+	MemTotalKB int64
+	Uptime     time.Duration // 0 where /proc/uptime isn't available
+	Kernel     string        // uname -r
+	GPUs       []GPUInfo
+	Network    []NetworkAdapter
 }
 
 func GatherSystemInfo(dotfilesDir string) SystemInfo {
@@ -42,6 +50,9 @@ func GatherSystemInfo(dotfilesDir string) SystemInfo {
 	info.Shell = filepath.Base(os.Getenv("SHELL"))
 	info.CPUModel = readCPUModel()
 	info.MemoryGB = readMemoryGB()
+	info.MemUsedKB, info.MemTotalKB = readMemUsageKB()
+	info.Uptime = readUptime()
+	info.Kernel = readKernel()
 	info.GPUs = readGPUs()
 	info.Network = readNetworkAdapters()
 	return info
@@ -108,6 +119,67 @@ func readMemoryGB() int {
 		}
 	}
 	return 0
+}
+
+// readMemUsageKB returns live memory use as (used, total) in 1K blocks. Used is
+// total minus available — the figure that reflects real pressure, since cache
+// and buffers are reclaimable.
+func readMemUsageKB() (used, total int64) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, 0
+	}
+	return parseMemUsageKB(string(data))
+}
+
+func parseMemUsageKB(meminfo string) (used, total int64) {
+	var availKB int64
+	for _, line := range strings.Split(meminfo, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		switch fields[0] {
+		case "MemTotal:":
+			total, _ = strconv.ParseInt(fields[1], 10, 64)
+		case "MemAvailable:":
+			availKB, _ = strconv.ParseInt(fields[1], 10, 64)
+		}
+	}
+	if total == 0 {
+		return 0, 0
+	}
+	return total - availKB, total
+}
+
+// readKernel returns the running kernel release, the first thing worth knowing
+// when a driver or suspend problem turns up.
+func readKernel() string {
+	if data, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	out, err := exec.Command("uname", "-r").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// readUptime returns how long this machine has been up (Linux; 0 elsewhere).
+func readUptime() time.Duration {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return 0
+	}
+	secs, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return 0
+	}
+	return time.Duration(secs) * time.Second
 }
 
 func readGPUs() []GPUInfo {
