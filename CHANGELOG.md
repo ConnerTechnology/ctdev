@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.8.0] - 2026-07-29
+
+### Changed
+- **The `ctdev update`, `ctdev install`/`uninstall`, and `ctdev cleanup` pickers
+  render inline instead of taking over the terminal.** They opened on the
+  alternate screen, so the list covered whatever you had on screen and then
+  vanished on exit, and `ctdev update` visibly flipped in and out of full screen
+  between picking updates and applying them (the progress view was already
+  inline). The list now scrolls inside a 15-row window in the normal terminal
+  flow, and collapses to a one-line summary (`✓ Available Updates · 12
+  selected`) once you confirm or cancel, so a run reads as ordinary command
+  output and stays in the scrollback. The full-screen `ctdev configure` settings
+  browser is unchanged.
+
+### Removed
+- **Components `chatgpt`, `codex`, and `ghostty`** — the registry is now 50.
+  `ghostty` also drops its embedded `~/.config/ghostty/config` and, on apt, the
+  pinned checksum-verified third-party installer it used (Ghostty has no official
+  Ubuntu package). Run `ctdev uninstall <name>` on any machine that still has one
+  **before** upgrading — ctdev can no longer remove them afterwards. Codex's npm
+  package is unaffected by the uninstall path either way: remove it with
+  `npm uninstall -g @openai/codex`.
+- **The modern-CLI toolset from the `dev-workstation` profile** — `ripgrep`,
+  `fd`, `fzf`, `bat`, `zoxide`, `direnv`, `lazygit`, and `ghostty`. The first
+  seven remain in the registry and installable on demand (`ctdev install bat`);
+  they are simply no longer part of the profile, so `ctdev diff dev-workstation`
+  no longer reports a machine without them as drifted.
+- **The MT7925E WiFi suspend-fix setting** from `ctdev configure` — the systemd
+  sleep hook that performed a PCIe-level reset of the adapter around suspend,
+  along with its hardware detection and reset path. Machines that already
+  installed it keep the hook; remove it by hand with
+  `sudo rm /usr/lib/systemd/system-sleep/wifi-mt7925`.
+
 ## [12.7.3] - 2026-07-08
 
 ### Fixed
