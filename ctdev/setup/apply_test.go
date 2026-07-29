@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -15,6 +16,52 @@ func TestDconfWriteArgs(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("args[%d] = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestAptDailyDropInPath(t *testing.T) {
+	// The drop-in must live under /etc, not /usr — /usr/lib/systemd is package
+	// territory and apt would overwrite it on upgrade.
+	for _, unit := range aptDailyUnits {
+		got := aptDailyDropInPath(unit)
+		want := "/etc/systemd/system/" + unit + ".d/ctdev-timeout.conf"
+		if got != want {
+			t.Errorf("aptDailyDropInPath(%q) = %q, want %q", unit, got, want)
+		}
+	}
+}
+
+func TestAptDailyTimeoutConfRenders(t *testing.T) {
+	got := fmt.Sprintf(aptDailyTimeoutConf, "30min")
+	if !strings.Contains(got, "[Service]") {
+		t.Errorf("drop-in missing [Service] section: %q", got)
+	}
+	if !strings.Contains(got, "TimeoutStartSec=30min") {
+		t.Errorf("drop-in missing the timespan: %q", got)
+	}
+}
+
+func TestAptDailyTimeoutChoicesRoundTrip(t *testing.T) {
+	// DetectFunc returns systemd's own formatting of the timespan, so every
+	// choice must be spelled the way systemd echoes it back — otherwise a
+	// correctly-configured machine reads as drifted forever.
+	var s *Setting
+	for i := range Registry {
+		if Registry[i].Name == "apt daily job timeout" {
+			s = &Registry[i]
+		}
+	}
+	if s == nil {
+		t.Fatal("apt daily job timeout setting not found in Registry")
+	}
+	valid := map[string]bool{"15min": true, "30min": true, "1h": true, "infinity": true}
+	for _, c := range s.Choices {
+		if !valid[c.Value] {
+			t.Errorf("choice %q is not a systemd round-trip form", c.Value)
+		}
+	}
+	if !valid[s.Default] {
+		t.Errorf("default %q is not a systemd round-trip form", s.Default)
 	}
 }
 

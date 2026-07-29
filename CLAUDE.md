@@ -31,7 +31,7 @@ ctdev configure sleep           # Never-suspend (mask sleep targets)
 ctdev configure locale          # UTF-8 locale (for Mosh)
 ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
-ctdev configure autoupdate      # Automatic security updates (unattended-upgrades)
+ctdev configure autoupdate      # Automatic security updates + apt-daily job timeout
 ctdev configure macos           # macOS defaults (Dock/Finder/keyboard) — macOS only
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)

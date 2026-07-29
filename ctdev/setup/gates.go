@@ -27,6 +27,17 @@ func gateGrub() bool {
 	return err == nil
 }
 
+// gateAptDaily reports whether this host ships apt's daily download/upgrade
+// units. They come from the apt package itself, so they exist on Debian-family
+// machines and nowhere else.
+func gateAptDaily() bool {
+	if !gateLinux() {
+		return false
+	}
+	_, err := os.Stat("/usr/lib/systemd/system/apt-daily.service")
+	return err == nil
+}
+
 // gateDesktop reports whether a graphical session is plausible on this Linux
 // host (a headless node exports none of these).
 func gateDesktop() bool {

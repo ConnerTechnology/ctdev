@@ -219,6 +219,17 @@ func detectSystemdService(ctx context.Context, name string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// detectAptDailyTimeout reports apt-daily.service's effective start timeout.
+// systemd echoes a timespan back in the same shorthand it was given ("30min",
+// "1h", "infinity"), so the result compares directly against the picker choices.
+func detectAptDailyTimeout(ctx context.Context) string {
+	out, err := runOutput(ctx, "systemctl", "show", "apt-daily.service", "-p", "TimeoutStartUSec", "--value")
+	if err != nil || out == "" {
+		return "infinity"
+	}
+	return out
+}
+
 func detectPackageInstalled(ctx context.Context, pkg string) bool {
 	err := exec.CommandContext(ctx, "dpkg", "-s", pkg).Run()
 	return err == nil

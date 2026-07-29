@@ -212,6 +212,47 @@ func detectUnattendedUpgrades(ctx context.Context) string {
 	return "enabled"
 }
 
+// aptDailyUnits are the two stock apt jobs that take /var/lib/apt/lists/lock.
+// Both ship with the apt package and are driven by their own timers.
+var aptDailyUnits = []string{"apt-daily.service", "apt-daily-upgrade.service"}
+
+// aptDailyTimeoutConf caps a single unit's start timeout. %s is the timespan.
+const aptDailyTimeoutConf = `# Written by ctdev (configure autoupdate).
+# Both apt-daily units are Type=oneshot, which systemd gives an infinite start
+# timeout. A fetch that stalls rather than fails then holds the apt lock for as
+# long as the machine is up, and every later apt run — including ctdev update —
+# can't lock. This cap lets systemd kill the run instead.
+[Service]
+TimeoutStartSec=%s
+`
+
+func aptDailyDropInPath(unit string) string {
+	return filepath.Join("/etc/systemd/system", unit+".d", "ctdev-timeout.conf")
+}
+
+// applyAptDailyTimeout writes (or removes) the start-timeout drop-in for both
+// apt-daily units. "infinity" removes the drop-in rather than writing it out,
+// so turning the cap off restores stock apt behavior instead of leaving a
+// ctdev file behind that merely restates the default.
+func applyAptDailyTimeout(ctx context.Context, o sysutil.Opts, value string) error {
+	for _, unit := range aptDailyUnits {
+		path := aptDailyDropInPath(unit)
+		if value == "infinity" {
+			if err := sysutil.SudoRun(ctx, o, "rm", "-f", path); err != nil {
+				return fmt.Errorf("remove %s: %w", path, err)
+			}
+			continue
+		}
+		if err := sysutil.SudoRun(ctx, o, "mkdir", "-p", filepath.Dir(path)); err != nil {
+			return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+		}
+		if err := sysutil.SudoWriteFile(ctx, o, fmt.Sprintf(aptDailyTimeoutConf, value), path); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+	}
+	return sysutil.SudoRun(ctx, o, "systemctl", "daemon-reload")
+}
+
 // applyNvidiaSigning runs the GPU signing setup via the gpu package.
 func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{
