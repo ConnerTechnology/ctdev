@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.9.0] - 2026-07-29
+
+### Added
+- **`ctdev configure autoupdate` can now cap how long apt's daily jobs run.**
+  `apt-daily.service` and `apt-daily-upgrade.service` ship with the `apt`
+  package as `Type=oneshot`, and systemd gives that type a start timeout of
+  `infinity` — so a mirror fetch that stalls instead of failing (a suspend or
+  network switch black-holing the connection mid-download, say) holds
+  `/var/lib/apt/lists/lock` until reboot. Every later apt run then fails to lock,
+  and `ctdev update` silently scans a stale index. The new "apt daily job
+  timeout" setting writes a `TimeoutStartSec=` drop-in to both units under
+  `/etc/systemd/system/` (not `/usr/lib`, which apt overwrites on upgrade) and
+  reloads systemd. Choices are 15min / **30min** (recommended) / 1h, plus
+  "No timeout", which removes the drop-in and restores stock apt rather than
+  writing a file that merely restates the default. Shown by `configure
+  --show`, applied by `--batch`, and included in the `autoupdate` category that
+  the built-in profiles already configure.
+
+### Fixed
+- The release runbook in `CLAUDE.md` pointed at `.github/workflows/release.yml`,
+  which doesn't exist — the tag-triggered release job lives in `ci.yml`.
+
 ## [12.8.0] - 2026-07-29
 
 ### Changed
