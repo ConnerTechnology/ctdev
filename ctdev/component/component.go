@@ -31,6 +31,29 @@ const (
 	OSAny   OS = "any"
 )
 
+// RootNeed says when a component's install or uninstall shells out as root, so
+// ctdev only asks for a sudo password when something is actually going to use
+// it. A container without sudo (or without privilege escalation at all) can
+// still install everything that lives in $HOME.
+type RootNeed int
+
+const (
+	// RootWhenMissing is the zero value and the common case: root is needed to
+	// put the software in place — a package manager, /usr/local, a systemd unit
+	// — while re-running over an already-installed component only re-syncs
+	// config files under $HOME.
+	RootWhenMissing RootNeed = iota
+	// RootAlways marks components that do privileged work on every run,
+	// installed or not: restic redeploys its /etc units, caddy brings its stack
+	// up through sudo, nomachine re-applies its ufw rule, smartmontools
+	// re-enables smartd.
+	RootAlways
+	// RootNever marks components that install and uninstall entirely inside
+	// $HOME — via Homebrew, an upstream user-scope installer, or the docker
+	// socket. ctdev must never prompt for a password on their account.
+	RootNever
+)
+
 type Component struct {
 	Name         string
 	Description  string
@@ -38,6 +61,10 @@ type Component struct {
 	SupportedOS  []OS
 	Dependencies []string
 	Tags         []string
+
+	// Root declares when this component needs root; see RootNeed. The zero
+	// value assumes a package-manager install, so only exceptions declare it.
+	Root RootNeed
 
 	// DetectCmd is the command name to check if this component is installed.
 	// If empty, defaults to Name.
@@ -80,6 +107,44 @@ func (inst *Component) IsInstalled() bool {
 	}
 	_, err := exec.LookPath(cmd)
 	return err == nil
+}
+
+// InstallNeedsRoot reports whether installing these components can shell out as
+// root. ctdev caches a sudo password up front only when this is true: the
+// progress TUI owns the terminal once installs start, so a prompt from inside
+// one would hang — but asking when nothing needs root is what broke
+// shell-config-only installs in containers that have no sudo to ask with.
+func InstallNeedsRoot(names []string, force bool) bool {
+	for _, name := range names {
+		c := FindByName(name)
+		if c == nil {
+			continue
+		}
+		switch c.Root {
+		case RootNever:
+			continue
+		case RootAlways:
+			return true
+		default:
+			// --force re-runs the install step even when it's already there.
+			if force || !c.IsInstalled() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// UninstallNeedsRoot reports whether removing these components needs root:
+// anything that didn't install into $HOME took a package or a system path with
+// it, and that has to be undone as root.
+func UninstallNeedsRoot(names []string) bool {
+	for _, name := range names {
+		if c := FindByName(name); c != nil && c.Root != RootNever {
+			return true
+		}
+	}
+	return false
 }
 
 func (inst *Component) SupportsOS(os OS) bool {

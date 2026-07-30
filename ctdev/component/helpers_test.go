@@ -21,8 +21,13 @@ func TestInstallDebWithDepFix_DryRunSkipsVerify(t *testing.T) {
 		t.Fatalf("dry-run returned error: %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "[dry-run] sudo dpkg -i /tmp/fake.deb") {
-		t.Errorf("expected dry-run dpkg line; got:\n%s", out)
+	// Running as root (a container's default) drops the sudo wrapper.
+	want := "[dry-run] sudo dpkg -i /tmp/fake.deb"
+	if sysutil.IsRoot() {
+		want = "[dry-run] dpkg -i /tmp/fake.deb"
+	}
+	if !strings.Contains(out, want) {
+		t.Errorf("expected %q; got:\n%s", want, out)
 	}
 }
 

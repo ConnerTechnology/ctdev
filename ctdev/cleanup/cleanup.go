@@ -117,11 +117,9 @@ func measurePaths(ctx context.Context, paths ...string) int64 {
 // duKB returns the disk usage of a single path in KiB via `du -sk` (portable
 // across GNU and BSD du), optionally through non-interactive sudo.
 func duKB(ctx context.Context, path string, useSudo bool) (int64, bool) {
-	var c *exec.Cmd
+	c := exec.CommandContext(ctx, "du", "-sk", path)
 	if useSudo {
-		c = exec.CommandContext(ctx, "sudo", "-n", "du", "-sk", path)
-	} else {
-		c = exec.CommandContext(ctx, "du", "-sk", path)
+		c = sysutil.SudoNoPrompt(ctx, "du", "-sk", path)
 	}
 	out, err := c.Output()
 	if err != nil {

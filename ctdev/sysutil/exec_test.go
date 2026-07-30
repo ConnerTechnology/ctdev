@@ -84,7 +84,11 @@ func TestSudoRun_DryRunIncludesSudo(t *testing.T) {
 	if err := SudoRun(context.Background(), o, "apt-get", "update"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// Running as root (a container's default) drops the wrapper entirely.
 	want := "[dry-run] sudo apt-get update\n"
+	if IsRoot() {
+		want = "[dry-run] apt-get update\n"
+	}
 	if buf.String() != want {
 		t.Errorf("got %q, want %q", buf.String(), want)
 	}

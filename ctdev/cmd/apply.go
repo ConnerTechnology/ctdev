@@ -154,8 +154,12 @@ func applyProfile(ctx context.Context, name string) error {
 		}
 	}
 
-	if err := ensureSudo(); err != nil {
-		return fmt.Errorf("sudo required: %w", err)
+	// The configure categories all write system state, so any profile with them
+	// needs root regardless of what its components need.
+	if len(p.Configure) > 0 || comp.InstallNeedsRoot(resolved, flagForce) {
+		if err := ensureSudo(); err != nil {
+			return fmt.Errorf("sudo required: %w", err)
+		}
 	}
 	if err := runWithProgress(ctx, progressOperation{mode: progress.ModeInstall, names: resolved}); err != nil {
 		return err

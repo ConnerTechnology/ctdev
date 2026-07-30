@@ -67,7 +67,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		selected = pickerResult.Selected
 	}
 
-	if !flagDryRun {
+	if !flagDryRun && comp.UninstallNeedsRoot(selected) {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required for uninstall: %w", err)
 		}

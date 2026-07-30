@@ -29,8 +29,19 @@ func Run(ctx context.Context, o Opts, name string, args ...string) error {
 	return nil
 }
 
-// SudoRun executes a command with sudo.
+// SudoRun executes a command with root privileges — through sudo as a normal
+// user, directly when we already are root. Containers routinely run as root
+// with no sudo installed at all, where wrapping unconditionally would fail on
+// "sudo: executable file not found".
 func SudoRun(ctx context.Context, o Opts, name string, args ...string) error {
+	if IsRoot() {
+		return Run(ctx, o, name, args...)
+	}
+	// Say what's missing rather than letting exec report `"sudo": executable
+	// file not found` — a container image without sudo is the common cause.
+	if !o.DryRun && !CommandExists("sudo") {
+		return fmt.Errorf("%s needs root, but there is no sudo to run it with", name)
+	}
 	sudoArgs := append([]string{name}, args...)
 	return Run(ctx, o, "sudo", sudoArgs...)
 }

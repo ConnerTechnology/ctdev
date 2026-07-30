@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
@@ -80,23 +81,43 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 }
 
-// ensureSudo caches sudo credentials before starting a TUI.
-// Scripts using maybe_sudo/sudo will hang if stdin isn't connected,
-// which happens once Bubble Tea takes over the terminal.
+// ensureSudo caches sudo credentials before starting a TUI: commands that shell
+// out through sudo would otherwise prompt into a stdin Bubble Tea owns, and
+// hang. Callers gate it on work that will actually use root — see
+// component.InstallNeedsRoot.
+//
+// Reaching root is best-effort. When we already are root, when there is no sudo
+// to run, when the environment forbids escalation (a container started with
+// no-new-privileges), or when nothing can type a password, it warns and returns
+// nil: whatever genuinely needs root then fails with its own error, instead of
+// ctdev refusing to do the part of the run that never needed it. Only a prompt
+// the user fails or cancels is an error.
 func ensureSudo() error {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
-	// Check if we already have cached credentials
-	if err := exec.Command("sudo", "-n", "true").Run(); err == nil {
+	switch sysutil.CheckSudoAccess(context.Background()) {
+	case sysutil.AlreadyRoot, sysutil.SudoCached:
+		return nil
+	case sysutil.SudoUnavailable:
+		warnNoRoot("sudo is unavailable here")
 		return nil
 	}
-	fmt.Println("Some components require sudo. Please enter your password:")
+	if isBatchMode() {
+		warnNoRoot("no terminal to enter a sudo password on")
+		return nil
+	}
+	fmt.Println("Some steps require sudo. Please enter your password:")
 	cmd := exec.Command("sudo", "-v")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func warnNoRoot(reason string) {
+	fmt.Println(styles.Warning.Render("Continuing without root: " + reason + "."))
+	fmt.Println(styles.Dimmed.Render("  Anything that needs it (packages, /usr/local, systemd) will report a failure."))
 }
 
 // resetTerminal cleans up escape sequences that Bubble Tea v2 may leak on exit

@@ -65,7 +65,7 @@ func ResticConfigured(ctx context.Context, o sysutil.Opts) bool {
 // ResticReadEnv returns the key/value pairs in /etc/restic/restic.env (read via
 // sudo), or an empty map when it's absent/unreadable.
 func ResticReadEnv(ctx context.Context) map[string]string {
-	out, err := captureOutput(ctx, "sudo", "cat", ResticEnvPath)
+	out, err := captureRoot(ctx, "cat", ResticEnvPath)
 	if err != nil {
 		return map[string]string{}
 	}
@@ -76,7 +76,7 @@ func ResticReadEnv(ctx context.Context) map[string]string {
 // restic config file (read via sudo), e.g. backup-paths or backup-excludes.
 // Returns nil when the file is absent/unreadable.
 func ResticReadLines(ctx context.Context, path string) []string {
-	out, err := captureOutput(ctx, "sudo", "cat", path)
+	out, err := captureRoot(ctx, "cat", path)
 	if err != nil {
 		return nil
 	}

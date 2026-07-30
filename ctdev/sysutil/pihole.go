@@ -51,7 +51,7 @@ func PiholeCapture(ctx context.Context, args ...string) (string, error) {
 	if PiholeContainerized() {
 		cmd = exec.CommandContext(ctx, "docker", append([]string{"exec", PiholeContainer}, args...)...)
 	} else {
-		cmd = exec.CommandContext(ctx, "sudo", append([]string{"-n"}, args...)...)
+		cmd = SudoNoPrompt(ctx, args[0], args[1:]...)
 	}
 	out, err := cmd.Output()
 	return string(out), err

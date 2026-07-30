@@ -313,8 +313,8 @@ func diskHealth(ctx context.Context) string {
 	if !sysutil.CommandExists("smartctl") {
 		return ""
 	}
-	if exec.CommandContext(ctx, "sudo", "-n", "true").Run() != nil {
-		return "" // sudo not cached — don't prompt from status
+	if !sysutil.CanElevateQuietly(ctx) {
+		return "" // no root without a prompt — don't ask from status
 	}
 	devs := smartDevices(ctx)
 	if len(devs) == 0 {
@@ -323,7 +323,7 @@ func diskHealth(ctx context.Context) string {
 	var failing []string
 	healthy := 0
 	for _, d := range devs {
-		out, _ := exec.CommandContext(ctx, "sudo", "-n", "smartctl", "-H", d).CombinedOutput()
+		out, _ := sysutil.SudoNoPrompt(ctx, "smartctl", "-H", d).CombinedOutput()
 		// smartctl prints "PASSED" (ATA) or "OK" (NVMe) on a healthy drive.
 		s := string(out)
 		if strings.Contains(s, "PASSED") || strings.Contains(s, "test result: OK") {
@@ -341,7 +341,7 @@ func diskHealth(ctx context.Context) string {
 // smartDevices lists physical block devices smartctl can query (via its own
 // --scan), so we don't guess device names.
 func smartDevices(ctx context.Context) []string {
-	out, err := exec.CommandContext(ctx, "sudo", "-n", "smartctl", "--scan").Output()
+	out, err := sysutil.SudoNoPrompt(ctx, "smartctl", "--scan").Output()
 	if err != nil {
 		return nil
 	}

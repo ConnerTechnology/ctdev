@@ -217,7 +217,7 @@ func smartmontoolsInstall(ctx context.Context, opts ExecOpts) error {
 // smartd to monitor. Uses sudo (cached during install) since probing devices
 // needs root; matches smartd's own DEVICESCAN via `smartctl --scan`.
 func hasSMARTDevices(ctx context.Context) bool {
-	out, err := captureOutput(ctx, "sudo", "smartctl", "--scan")
+	out, err := captureRoot(ctx, "smartctl", "--scan")
 	if err != nil {
 		return false
 	}

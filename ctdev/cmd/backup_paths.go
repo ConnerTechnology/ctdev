@@ -442,11 +442,9 @@ func excludeMatches(pattern, path string) bool {
 // non-interactive sudo for root-only trees. Returns -1 when it can't be sized.
 func duBytes(ctx context.Context, path string) int64 {
 	for _, useSudo := range []bool{false, true} {
-		var c *exec.Cmd
+		c := exec.CommandContext(ctx, "du", "-sk", path)
 		if useSudo {
-			c = exec.CommandContext(ctx, "sudo", "-n", "du", "-sk", path)
-		} else {
-			c = exec.CommandContext(ctx, "du", "-sk", path)
+			c = sysutil.SudoNoPrompt(ctx, "du", "-sk", path)
 		}
 		out, err := c.Output()
 		if err != nil {

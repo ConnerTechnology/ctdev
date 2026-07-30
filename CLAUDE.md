@@ -183,6 +183,7 @@ ctdev/                 Go module root
 - Components with configs use Phase 1/Phase 2: Phase 1 installs the binary (skip if exists), Phase 2 always deploys configs
 - For `.deb` installs on apt, use `installDebWithDepFix(ctx, o, debPath, pkgName)` — runs dpkg, recovers with `apt-get -f`, and verifies via `IsPackageInstalled` so corrupt/wrong-arch `.deb`s don't silently report success
 - All installers accept `ctx context.Context` as first parameter
+- Never spell `sudo` in an argv — use `sysutil.SudoRun` (or `sysutil.SudoNoPrompt` for silent probes). They drop the wrapper when we already are root, which is how a container with no sudo installed still works
 
 ## Adding a new component
 
@@ -235,6 +236,17 @@ For simple package-manager installs, use the helper:
 ```go
 GoInstall: SimplePackageInstaller("name"), GoUninstall: SimplePackageUninstaller("name")
 ```
+
+Set `Root` when the component isn't a plain package install. The zero value,
+`RootWhenMissing`, means root is needed to put the software in place while a
+re-run over an installed component only re-syncs `$HOME` — so `ctdev install`
+asks for a sudo password only when a selected component actually needs it, and a
+dotfiles-only install works in a container with no sudo. Declare `RootAlways`
+when every run does privileged work (redeploying a systemd unit, `sudo docker
+compose`, a ufw rule) and `RootNever` when install and uninstall stay inside
+`$HOME` (Homebrew, an upstream user-scope installer, the docker socket).
+Forgetting `RootAlways` costs a password prompt inside the progress TUI, which
+hangs — when in doubt, leave the default.
 
 If the component has config files, place them in `ctdev/component/configs/<name>/` and use Phase 1/Phase 2:
 ```go

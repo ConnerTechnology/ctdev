@@ -82,7 +82,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			len(requested), len(deps), strings.Join(deps, ", "))
 	}
 
-	if !flagDryRun {
+	// Only ask for a password when something in this run will use it — a
+	// dotfiles-only install (zsh configs, claude-code, fonts) works fine in a
+	// container that has no sudo at all.
+	if !flagDryRun && comp.InstallNeedsRoot(resolved, flagForce) {
 		if err := ensureSudo(); err != nil {
 			return fmt.Errorf("sudo required for install: %w", err)
 		}

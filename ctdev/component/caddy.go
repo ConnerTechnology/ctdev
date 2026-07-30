@@ -164,6 +164,17 @@ func caddyTailscaleIP(ctx context.Context) string {
 	return strings.TrimSpace(out)
 }
 
+// captureRoot runs a read-only command as root and returns its stdout — through
+// sudo as a normal user, directly when we already are root (where sudo is often
+// not installed at all).
+func captureRoot(ctx context.Context, name string, args ...string) (string, error) {
+	if !sysutil.IsRoot() {
+		args = append([]string{name}, args...)
+		name = "sudo"
+	}
+	return captureOutput(ctx, name, args...)
+}
+
 // captureOutput runs a command and returns its stdout, respecting ctx.
 func captureOutput(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
