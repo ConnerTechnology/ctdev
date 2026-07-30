@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.12.0] - 2026-07-30
+
+### Fixed
+- **`ctdev install` aborted inside a devcontainer before installing anything.**
+  Every install began by caching sudo credentials, so a container that runs as
+  root with no sudo in the image — or one started with `no-new-privileges` —
+  failed that probe and the run stopped at `sudo required for install`. It did
+  this even for `zsh`, `claude-code`, and `git`, which only write files under
+  `$HOME`. Sudo is now asked for only when the selected components will actually
+  use it: each registry entry declares its need (`Root`), the default being that
+  root is required to put the software in place but not to re-sync configs over
+  an install that's already there. A shell-config-only install never touches
+  sudo. When root is genuinely needed but out of reach, ctdev warns and
+  continues rather than refusing to start — the step that needs it fails with
+  its own error and everything else still lands.
+- **Privileged commands no longer route through `sudo` when ctdev is already
+  root.** `sysutil.SudoRun` — every package install, `/usr/local` write, and
+  systemd action — prefixed `sudo` unconditionally, which fails in the one
+  environment that needs it least. A command that does need root with no sudo
+  available now reports `apt-get needs root, but there is no sudo to run it
+  with` instead of `exec: "sudo": executable file not found in $PATH`.
+- The prompt-free root probes behind `ctdev status` (SMART health) and the
+  directory sizing in `ctdev cleanup` / `ctdev backup paths` also assumed
+  `sudo -n`, so they reported nothing at all as root. They now run directly.
+
 ## [12.11.0] - 2026-07-29
 
 ### Added
