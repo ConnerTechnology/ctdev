@@ -33,8 +33,11 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 		if which, err := exec.LookPath("zsh"); err == nil {
 			zshPath = which
 		}
-		if err := sysutil.Run(ctx, o, "chsh", "-s", zshPath); err != nil {
-			fmt.Fprintf(opts.Stdout, "warning: could not change shell: %v\n", err)
+		if sysutil.LoginShell(ctx) != zshPath {
+			if err := sysutil.SetLoginShell(ctx, o, zshPath); err != nil {
+				fmt.Fprintf(opts.Stdout, "warning: zsh is not your login shell (%v)\n", err)
+				fmt.Fprintf(opts.Stdout, "  run: sudo chsh -s %s %s\n", zshPath, os.Getenv("USER"))
+			}
 		}
 
 		if !dirExists(omzDir) {
