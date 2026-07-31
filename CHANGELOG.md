@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.12.1] - 2026-07-30
+
+### Fixed
+- **A devcontainer kept opening `bash` after `ctdev install zsh` said it
+  succeeded.** The install ran `chsh` unprivileged, and unprivileged chsh
+  authenticates the caller through PAM — so on the passwordless user a
+  devcontainer runs as, it failed with `chsh: PAM: Authentication failure`. The
+  login shell stayed `/bin/bash`, the freshly deployed `.zshrc` was never
+  sourced, and the Pure prompt never appeared. Only a warning was printed, so
+  the run still reported success. `chsh` now runs as root against the current
+  user, and is skipped entirely when zsh is already the login shell.
+- The shell is registered in `/etc/shells` before `chsh` runs. chsh rejects a
+  shell that isn't listed there, which is where a zsh from Homebrew or a source
+  build lands.
+- When root is genuinely out of reach, the warning now names the command to
+  finish the job by hand (`sudo chsh -s /usr/bin/zsh <user>`) instead of
+  reporting a bare `exit status 1`.
+
 ## [12.12.0] - 2026-07-30
 
 ### Fixed
