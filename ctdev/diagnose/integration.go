@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,7 +58,7 @@ type Detection struct {
 // The interface is read-only by construction. There is no method here that
 // changes anything, and there deliberately never will be: ctdev will not
 // restart an access point or alter a setting on infrastructure it was merely
-// pointed at, from a command called "diagnose".
+// pointed at, from a command called "doctor".
 type Provider interface {
 	// Name is the product family, e.g. "UniFi".
 	Name() string
@@ -240,7 +241,14 @@ func dedupeStrings(in []string) []string {
 // — an environment variable, a config file on your own machine, or a prompt
 // answered once and kept in memory — is the command layer's decision.
 type Integrations struct {
-	UniFi UnifiCreds
+	UniFi    UnifiCreds
+	Synology SynologyCreds
+	Proxmox  ProxmoxCreds
+}
+
+// Any reports whether there is anything to collect at all.
+func (in Integrations) Any() bool {
+	return in.UniFi.usable() || in.Synology.usable() || in.Proxmox.usable()
 }
 
 // CollectIntegrations runs the vendor probes that credentials unlock, returning
@@ -249,20 +257,38 @@ type Integrations struct {
 // Every call underneath is a GET. There is no path through this function that
 // changes a setting on anyone's infrastructure.
 func CollectIntegrations(ctx context.Context, in Integrations) ([]Check, map[string]Result) {
-	if !in.UniFi.usable() {
-		return nil, nil
+	var checks []Check
+	results := map[string]Result{}
+
+	add := func(more []Check, moreResults map[string]Result) {
+		checks = append(checks, more...)
+		for id, res := range moreResults {
+			results[id] = res
+		}
 	}
 
-	snap, err := collectUnifi(ctx, in.UniFi)
+	if in.UniFi.usable() {
+		add(collectUnifiSection(ctx, in.UniFi))
+	}
+	if in.Synology.usable() {
+		add(collectSynologySection(ctx, in.Synology))
+	}
+	if in.Proxmox.usable() {
+		add(collectProxmoxSection(ctx, in.Proxmox))
+	}
+
+	if len(checks) == 0 {
+		return nil, nil
+	}
+	return checks, results
+}
+
+func collectUnifiSection(ctx context.Context, creds UnifiCreds) ([]Check, map[string]Result) {
+	snap, err := collectUnifi(ctx, creds)
 	if err != nil {
 		// A controller that refuses us is worth one honest row, not a failed
 		// run — the local diagnosis stands on its own.
-		return []Check{{
-				ID: "unifi.access", Name: "UniFi controller",
-				Group: GroupNetwork, Network: true, Deep: true,
-			}}, map[string]Result{
-				"unifi.access": skipf("could not read the controller: %v", err),
-			}
+		return accessFailure("unifi.access", "UniFi controller", GroupNetwork, err)
 	}
 
 	results := unifiResults(snap)
@@ -278,6 +304,50 @@ func CollectIntegrations(ctx context.Context, in Integrations) ([]Check, map[str
 		results[checks[0].ID] = first
 	}
 	return checks, results
+}
+
+func collectSynologySection(ctx context.Context, creds SynologyCreds) ([]Check, map[string]Result) {
+	storage, err := collectSynology(ctx, creds)
+	if err != nil {
+		return accessFailure("nas.access", "Synology NAS", GroupHardware, err)
+	}
+	results := synologyVerdict(storage)
+	return checksFor(results, GroupHardware, map[string]string{
+		"nas.disks":   "NAS disks",
+		"nas.volumes": "NAS volumes",
+	}), results
+}
+
+func collectProxmoxSection(ctx context.Context, creds ProxmoxCreds) ([]Check, map[string]Result) {
+	snap, err := collectProxmox(ctx, creds)
+	if err != nil {
+		return accessFailure("pve.access", "Proxmox", GroupSystem, err)
+	}
+	results := proxmoxVerdict(snap)
+	return checksFor(results, GroupSystem, map[string]string{
+		"pve.nodes":   "Proxmox nodes",
+		"pve.storage": "Proxmox storage",
+	}), results
+}
+
+// accessFailure is the one honest row a system we could not reach deserves.
+func accessFailure(id, name, group string, err error) ([]Check, map[string]Result) {
+	return []Check{{ID: id, Name: name, Group: group, Network: true, Deep: true}},
+		map[string]Result{id: skipf("could not read %s: %v", name, err)}
+}
+
+// checksFor builds the check rows for a set of results, in a stable order.
+func checksFor(results map[string]Result, group string, names map[string]string) []Check {
+	checks := make([]Check, 0, len(results))
+	for id := range results {
+		name := names[id]
+		if name == "" {
+			name = id
+		}
+		checks = append(checks, Check{ID: id, Name: name, Group: group, Network: true, Deep: true})
+	}
+	slices.SortFunc(checks, func(a, b Check) int { return strings.Compare(a.ID, b.ID) })
+	return checks
 }
 
 // checkNetworkGear identifies the network equipment and, when it recognizes
