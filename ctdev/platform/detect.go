@@ -13,6 +13,7 @@ type OS string
 const (
 	Linux   OS = "linux"
 	MacOS   OS = "macos"
+	Windows OS = "windows"
 	Unknown OS = "unknown"
 )
 
@@ -55,6 +56,8 @@ func detectOS() OS {
 		return Linux
 	case "darwin":
 		return MacOS
+	case "windows":
+		return Windows
 	default:
 		return Unknown
 	}
@@ -93,6 +96,12 @@ func detectDistro() (id, version, codename string) {
 func detectPackageManager(osType OS) string {
 	if osType == MacOS {
 		return "brew"
+	}
+	// ctdev installs nothing on Windows — it's a diagnostic tool there — so
+	// report no package manager rather than "unknown", which would imply we
+	// looked for one and failed.
+	if osType == Windows {
+		return ""
 	}
 	managers := []struct {
 		cmd  string

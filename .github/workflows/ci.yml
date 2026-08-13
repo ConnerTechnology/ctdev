@@ -65,6 +65,16 @@ jobs:
         working-directory: ctdev
         run: go vet ./...
 
+      # ctdev only ships `diagnose` on Windows, but it has to compile there —
+      # and nothing else in CI would catch a Unix-only syscall creeping in.
+      - name: Cross-compile check
+        working-directory: ctdev
+        run: |
+          for target in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            echo "==> $target"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go vet ./...
+          done
+
       - name: Build
         working-directory: ctdev
         run: |
@@ -188,12 +198,23 @@ jobs:
         include:
           - os: linux
             arch: amd64
+            ext: ''
           - os: linux
             arch: arm64
+            ext: ''
           - os: darwin
             arch: amd64
+            ext: ''
           - os: darwin
             arch: arm64
+            ext: ''
+          # Windows ships the diagnostic command only — see cmd/root.go.
+          - os: windows
+            arch: amd64
+            ext: '.exe'
+          - os: windows
+            arch: arm64
+            ext: '.exe'
 
     steps:
       - name: Checkout code
@@ -225,13 +246,13 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           VERSION=$(cat ../VERSION)
-          go build -ldflags "-X main.version=$VERSION" -o ctdev-${{ matrix.os }}-${{ matrix.arch }} .
+          go build -ldflags "-X main.version=$VERSION" -o ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ctdev-${{ matrix.os }}-${{ matrix.arch }}
-          path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}
+          name: ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
   release:
     name: Create Release

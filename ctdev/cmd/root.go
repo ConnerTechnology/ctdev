@@ -42,8 +42,44 @@ var rootCmd = &cobra.Command{
 	// Runtime failures ("2 components failed") aren't usage errors — don't
 	// follow them with a page of flags, and let main print the error exactly
 	// once. Cobra still prints usage for genuine arg/flag parse errors.
-	SilenceUsage:  true,
-	SilenceErrors: true,
+	SilenceUsage:      true,
+	SilenceErrors:     true,
+	PersistentPreRunE: guardWindows,
+}
+
+// windowsCommands are the only commands that run on Windows. ctdev manages
+// Linux and macOS machines; the Windows build exists so `ctdev diagnose` can
+// look at someone else's laptop. Everything that installs or configures refuses
+// up front here rather than failing halfway through with a confusing error
+// about a missing package manager.
+var windowsCommands = map[string]bool{
+	"ctdev":      true, // bare `ctdev`, which prints help
+	"diagnose":   true,
+	"help":       true,
+	"completion": true,
+	"__complete": true,
+}
+
+func guardWindows(cmd *cobra.Command, _ []string) error {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	name := topLevelName(cmd)
+	if windowsCommands[name] {
+		return nil
+	}
+	return fmt.Errorf("ctdev %s is not supported on Windows — only 'ctdev diagnose' runs here", name)
+}
+
+// topLevelName returns the name of cmd's outermost ancestor below the root, so
+// `ctdev backup test` reports "backup". The root itself reports "ctdev".
+func topLevelName(cmd *cobra.Command) string {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Parent() == nil || c.Parent().Parent() == nil {
+			return c.Name()
+		}
+	}
+	return ""
 }
 
 func Execute() error {
