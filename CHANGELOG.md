@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.13.0] - 2026-08-13
+
+### Fixed
+- **`ctdev update` and `ctdev install tailscale` hung on macOS with no visible
+  prompt.** `ensureSudo()` — the one place ctdev pre-caches a sudo credential,
+  and the reason a password prompt can't land inside a Bubble Tea program —
+  began with `if runtime.GOOS != "linux" { return nil }`, so on a Mac all 17 of
+  its call sites did nothing. Homebrew escalates on its own for casks that ship
+  a pkg payload or a system extension (tailscale, docker, 1password), and with
+  no cached credential its `sudo` prompted on `/dev/tty`: invisible, because
+  ctdev captures step output through a pipe, and unanswerable, because the TUI
+  held the terminal in raw mode. Ctrl-C was the only way out.
+- **The update summary was truncated.** The progress TUI renders inline, and its
+  final frame listed every step plus up to 15 replayed lines per failure.
+  Bubble Tea's inline renderer drops lines from the *top* of a frame taller than
+  the terminal, so a run with a few dozen brew packages silently lost its
+  headline and first results. The final frame is now short — headline, tally,
+  failed names — and the full per-item report prints as ordinary stdout text
+  afterwards, where the terminal scrolls it and scrollback keeps it.
+- **Homebrew versions were parsed wrong.** `brew outdated --verbose` prints
+  `openssl@3 (3.3.2, 3.4.0) < 3.4.1` when two kegs are installed, and the old
+  whitespace parser read the literal `<` as the new version. Scanning now uses
+  `brew outdated --json=v2`, which also fixes multi-word current versions
+  (`latest HEAD`) and `[pinned at X]` suffixes. Pinned formulae are skipped —
+  `brew upgrade` errors on them, and one pinned formula failed the whole batch.
+- **The runtime updaters fought Homebrew.** On a Mac with brew-installed Go, the
+  scanner offered Go as a "runtime" update whose apply step ran
+  `sudo rm -rf /usr/local/go` over the top of the Homebrew install — while the
+  same Go also appeared under `brew`. `scanGo` and `scanRuby` now defer to the
+  brew scanner, matching what the installers already did.
+- **The Docker stack scan wasn't OS-gated.** Stacks were selected by a bare
+  `os.Stat` on their compose file, so a Mac holding a restored `~/pihole/` was
+  scanned for Linux-only stacks. The docker probes were also unbounded, so a
+  stopped Docker Desktop stalled the scan behind its spinner; each now has a
+  20-second timeout.
+- macOS asked for a password it did not need. Root requirements were not
+  package-manager aware, so the "a package install needs root" assumption from
+  apt applied to Homebrew too, which installs into a user-owned prefix. Only
+  components whose Homebrew payload actually escalates now pre-authorize.
+
+### Added
+- The sudo credential is refreshed in the background for the length of a run.
+  macOS expires it after 5 minutes by default, which a large `brew upgrade`
+  easily outlasts — and an expiry mid-run brought the hang straight back.
+- `SUDO_ASKPASS` points at a helper that explains itself and supplies nothing,
+  so a tool that escalates unexpectedly fails with an actionable message instead
+  of blocking forever on a prompt nobody can see.
+- The update checklist grows with the terminal instead of stopping at 15 rows,
+  and takes PgUp/PgDn (and ctrl+u/ctrl+d).
+- `brew update` runs before scanning, mirroring the existing APT index refresh,
+  so suppressing Homebrew's mid-step auto-update can't leave results stale.
+- CI runs `go test` and `go vet` on macOS. They only ran on Ubuntu, which is why
+  all of the above shipped unnoticed.
+
 ## [12.12.1] - 2026-07-30
 
 ### Fixed
