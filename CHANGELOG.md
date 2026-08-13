@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.13.0] - 2026-08-13
+
+### Changed
+- **`claude-code` no longer deploys Claude's configuration — it clones the repo
+  that owns it and hands off.** ctdev used to copy `CLAUDE.md`, `settings.json`,
+  and `settings.local.json` over the live files on every install. Because
+  nothing ever wrote back, anything changed inside Claude Code was silently
+  reverted on the next run, and the committed copies drifted: at the time of
+  this change they were four settings behind reality and would have wiped the
+  permission rules Claude's agents need to write their own memory. The component
+  now clones `ConnerTechnology/AI` to `~/Repos/github.com/ConnerTechnology/AI`
+  and runs its `scripts/setup.sh`, which merges settings instead of overwriting
+  them. Set `CT_AI_REPO` to check the repo out somewhere else.
+- The AI repo is private, so a machine without SSH access to GitHub now warns and
+  continues rather than failing the install. The CLI still works; only its
+  configuration is missing.
+
+### Removed
+- The embedded `configs/claude-code/` copies of `CLAUDE.md`, `settings.json`, and
+  `settings.local.json`. They live in the AI repo now, which is the only place
+  they're edited.
+
+### Fixed
+- **`ctdev uninstall claude-code` deleted `~/.claude/settings.json`.** That file
+  is no longer deployed by ctdev — it's merged in place and holds machine state
+  ctdev never owned, including plugin and MCP configuration. Uninstall now
+  removes only the symlinks that point into the AI repo, leaving real files and
+  unrelated links alone. Re-running the repo's `setup.sh` restores them.
+
 ## [12.12.1] - 2026-07-30
 
 ### Fixed
