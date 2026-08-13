@@ -39,7 +39,7 @@ func Markdown(r Report) string {
 	writeMarkdownData(&b, r)
 
 	b.WriteString("---\n\n")
-	b.WriteString("*Produced by `ctdev diagnose`. Every check is read-only — nothing on this machine was changed.*\n")
+	b.WriteString("*Produced by `ctdev doctor`. Every check is read-only — nothing on this machine was changed.*\n")
 	return b.String()
 }
 
@@ -192,7 +192,7 @@ func ReportFilename(r Report) string {
 	if host == "" {
 		host = "unknown"
 	}
-	return fmt.Sprintf("ctdev-diagnose-%s-%s.md", safeFilename(host), when.Format("20060102-150405"))
+	return fmt.Sprintf("ctdev-doctor-%s-%s.md", safeFilename(host), when.Format("20060102-150405"))
 }
 
 func safeFilename(s string) string {

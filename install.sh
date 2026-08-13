@@ -4,8 +4,8 @@ set -euo pipefail
 # Install ctdev - development environment manager
 # Usage: curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
 #
-# Or, to diagnose a machine without installing anything at all:
-#   curl -fsSL .../install.sh | bash -s -- --diagnose
+# Or, to check a machine without installing anything at all:
+#   curl -fsSL .../install.sh | bash -s -- --doctor
 
 REPO="ConnerTechnology/dotfiles"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
@@ -14,7 +14,7 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 # for machines you're only visiting. It touches no install directory, changes
 # no PATH, and never calls sudo.
 EPHEMERAL=0
-DIAGNOSE_ARGS=()
+DOCTOR_ARGS=()
 
 # Colors
 RED='\033[0;31m'
@@ -40,15 +40,15 @@ error() { echo -e "${RED}[✗]${NC} $1" >&2; exit 1; }
 
 usage() {
     cat <<'EOF'
-Usage: install.sh [--diagnose [diagnose options]]
+Usage: install.sh [--doctor [doctor options]]
 
 Installs the ctdev binary. With no arguments it installs to ~/.local/bin.
 
 Options:
-  --diagnose [args]  Don't install. Download ctdev to a temporary directory,
-                     run 'ctdev diagnose', then delete it. Nothing is left
+  --doctor [args]    Don't install. Download ctdev to a temporary directory,
+                     run 'ctdev doctor', then delete it. Nothing is left
                      behind and sudo is never used. Any following arguments
-                     are passed to diagnose (--deep, --report, --redact).
+                     are passed to doctor (--deep, --report, --redact).
   -h, --help         Show this help.
 
 Environment:
@@ -59,12 +59,12 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --diagnose)
+        --doctor)
             EPHEMERAL=1
             shift
-            # Everything after --diagnose belongs to diagnose, including
+            # Everything after --doctor belongs to doctor, including
             # anything that looks like an installer flag.
-            DIAGNOSE_ARGS=("$@")
+            DOCTOR_ARGS=("$@")
             break
             ;;
         -h|--help)
@@ -158,7 +158,7 @@ fi
 info "Latest version: $VERSION"
 
 # Clean up old bash-based install. Skipped entirely when running ephemerally:
-# removing things from someone else's machine is exactly what --diagnose
+# removing things from someone else's machine is exactly what --doctor
 # promises not to do.
 if [[ $EPHEMERAL -eq 0 ]]; then
     if [[ -L "$INSTALL_DIR/ctdev" ]]; then
@@ -228,13 +228,13 @@ SUMS_TMP=""
 
 # Ephemeral: run from the temp directory and let the EXIT trap delete it.
 # Nothing was installed, no PATH was touched, and the exit status is whatever
-# diagnose reported.
+# doctor reported.
 if [[ $EPHEMERAL -eq 1 ]]; then
-    info "Running diagnose (nothing is installed)..."
+    info "Running doctor (nothing is installed)..."
     log ""
     # The ${arr[@]+...} form keeps this working under `set -u` with an empty
     # array on bash 3.2, which is still what ships on macOS.
-    "$INSTALL_DIR/ctdev" diagnose ${DIAGNOSE_ARGS[@]+"${DIAGNOSE_ARGS[@]}"}
+    "$INSTALL_DIR/ctdev" doctor ${DOCTOR_ARGS[@]+"${DOCTOR_ARGS[@]}"}
     exit $?
 fi
 

@@ -48,13 +48,13 @@ var rootCmd = &cobra.Command{
 }
 
 // windowsCommands are the only commands that run on Windows. ctdev manages
-// Linux and macOS machines; the Windows build exists so `ctdev diagnose` can
+// Linux and macOS machines; the Windows build exists so `ctdev doctor` can
 // look at someone else's laptop. Everything that installs or configures refuses
 // up front here rather than failing halfway through with a confusing error
 // about a missing package manager.
 var windowsCommands = map[string]bool{
 	"ctdev":      true, // bare `ctdev`, which prints help
-	"diagnose":   true,
+	"doctor":     true,
 	"help":       true,
 	"completion": true,
 	"__complete": true,
@@ -68,7 +68,7 @@ func guardWindows(cmd *cobra.Command, _ []string) error {
 	if windowsCommands[name] {
 		return nil
 	}
-	return fmt.Errorf("ctdev %s is not supported on Windows — only 'ctdev diagnose' runs here", name)
+	return fmt.Errorf("ctdev %s is not supported on Windows — only 'ctdev doctor' runs here", name)
 }
 
 // topLevelName returns the name of cmd's outermost ancestor below the root, so

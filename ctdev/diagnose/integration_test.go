@@ -222,7 +222,7 @@ func TestUnifiSetupHelp(t *testing.T) {
 	for _, want := range []string{
 		"Control Plane → Integrations",
 		"shows it exactly once",
-		"ctdev diagnose --deep --unifi https://192.168.1.1",
+		"ctdev doctor --deep --unifi https://192.168.1.1",
 		"CTDEV_UNIFI_API_KEY",
 		":8443",
 	} {

@@ -252,9 +252,9 @@ func (unifiProvider) SetupHelp(d Detection) string {
 		"A deeper look needs read-only API access. About a minute to set up:",
 		"  1. Open " + endpoint + " and sign in as an admin",
 		"  2. Settings → Control Plane → Integrations",
-		"  3. Create New API Key, name it \"ctdev-diagnose\"",
+		"  3. Create New API Key, name it \"ctdev-doctor\"",
 		"  4. Copy the key now — UniFi shows it exactly once",
-		"Then: ctdev diagnose --deep --unifi " + endpoint,
+		"Then: ctdev doctor --deep --unifi " + endpoint,
 		"Or set CTDEV_UNIFI_API_KEY for the one-line installer.",
 		"Legacy controllers on :8443 predate API keys — use --unifi-user instead.",
 	}, "\n")

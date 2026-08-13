@@ -134,7 +134,7 @@ func TestIsSecretish(t *testing.T) {
 
 func TestReportFilename(t *testing.T) {
 	got := ReportFilename(sampleReport())
-	want := "ctdev-diagnose-client-laptop-20260813-091553.md"
+	want := "ctdev-doctor-client-laptop-20260813-091553.md"
 	if got != want {
 		t.Errorf("ReportFilename = %q, want %q", got, want)
 	}

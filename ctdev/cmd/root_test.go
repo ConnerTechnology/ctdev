@@ -8,18 +8,18 @@ import (
 
 func TestTopLevelName(t *testing.T) {
 	root := &cobra.Command{Use: "ctdev"}
-	diagnose := &cobra.Command{Use: "diagnose"}
+	doctor := &cobra.Command{Use: "doctor"}
 	backup := &cobra.Command{Use: "backup"}
 	backupTest := &cobra.Command{Use: "test"}
 	backup.AddCommand(backupTest)
-	root.AddCommand(diagnose, backup)
+	root.AddCommand(doctor, backup)
 
 	tests := []struct {
 		cmd  *cobra.Command
 		want string
 	}{
 		{root, "ctdev"},
-		{diagnose, "diagnose"},
+		{doctor, "doctor"},
 		{backup, "backup"},
 		// A nested command reports the top-level name the guard gates on, not
 		// its own — otherwise `ctdev backup test` would be read as "test".

@@ -28,7 +28,7 @@ func Render(r Report, width int) string {
 	}
 	var b strings.Builder
 
-	b.WriteString(styles.Title.Render("ctdev diagnose — " + r.Facts.Hostname))
+	b.WriteString(styles.Title.Render("ctdev doctor — " + r.Facts.Hostname))
 	if r.Version != "" {
 		b.WriteString(styles.Dimmed.Render("  (ctdev " + r.Version + ")"))
 	}

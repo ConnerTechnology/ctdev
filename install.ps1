@@ -6,11 +6,11 @@
     With no arguments, installs the ctdev binary to %LOCALAPPDATA%\Programs\ctdev
     and adds it to the user PATH.
 
-    With -Diagnose, downloads ctdev to a temporary directory, runs
-    'ctdev diagnose', and deletes it. Nothing is installed, no PATH is changed,
+    With -Doctor, downloads ctdev to a temporary directory, runs
+    'ctdev doctor', and deletes it. Nothing is installed, no PATH is changed,
     and no elevation is requested — for machines you're only visiting.
 
-    On Windows, ctdev supports the diagnose command only. Everything else is
+    On Windows, ctdev supports the doctor command only. Everything else is
     Linux and macOS.
 
 .EXAMPLE
@@ -18,32 +18,32 @@
 
 .EXAMPLE
     # `irm | iex` cannot pass arguments, so wrap the script in a scriptblock:
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.ps1))) -Diagnose
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.ps1))) -Doctor
 
 .EXAMPLE
-    & ([scriptblock]::Create((irm .../install.ps1))) -Diagnose -DiagnoseArgs '--deep','--report'
+    & ([scriptblock]::Create((irm .../install.ps1))) -Doctor -DoctorArgs '--deep','--report'
 #>
 [CmdletBinding()]
 param(
-    [switch]$Diagnose,
+    [switch]$Doctor,
     [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$DiagnoseArgs = @()
+    [string[]]$DoctorArgs = @()
 )
 
 $ErrorActionPreference = 'Stop'
 $Repo = 'ConnerTechnology/dotfiles'
 
-# In diagnose mode the report owns stdout, so progress goes to the information
+# In doctor mode the report owns stdout, so progress goes to the information
 # stream instead — that keeps `| Out-File report.txt` clean.
 function Write-Progress-Line {
     param([string]$Message)
-    if ($Diagnose) { [Console]::Error.WriteLine("==> $Message") }
+    if ($Doctor) { [Console]::Error.WriteLine("==> $Message") }
     else { Write-Host "==> $Message" -ForegroundColor Blue }
 }
 
 function Write-Success {
     param([string]$Message)
-    if ($Diagnose) { [Console]::Error.WriteLine("[OK] $Message") }
+    if ($Doctor) { [Console]::Error.WriteLine("[OK] $Message") }
     else { Write-Host "[OK] $Message" -ForegroundColor Green }
 }
 
@@ -76,7 +76,7 @@ $assetName = "ctdev-windows-$arch.exe"
 $binaryUrl = "https://github.com/$Repo/releases/download/$version/$assetName"
 $sumsUrl = "https://github.com/$Repo/releases/download/$version/SHA256SUMS"
 
-# Stage the download in a temp directory either way. In diagnose mode this is
+# Stage the download in a temp directory either way. In doctor mode this is
 # also where it runs from, and it is removed in the finally block below.
 $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ctdev-" + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $workDir -Force | Out-Null
@@ -121,9 +121,9 @@ try {
         Write-Progress-Line "Checksum verified"
     }
 
-    if ($Diagnose) {
-        Write-Progress-Line "Running diagnose (nothing is installed)..."
-        $arguments = @('diagnose') + $DiagnoseArgs
+    if ($Doctor) {
+        Write-Progress-Line "Running doctor (nothing is installed)..."
+        $arguments = @('doctor') + $DoctorArgs
         & $binaryPath @arguments
         exit $LASTEXITCODE
     }
@@ -144,7 +144,7 @@ try {
     }
 
     Write-Host ""
-    Write-Host "On Windows, ctdev supports 'ctdev diagnose'. Run it to check this machine." -ForegroundColor Yellow
+    Write-Host "On Windows, ctdev supports 'ctdev doctor'. Run it to check this machine." -ForegroundColor Yellow
 }
 finally {
     if (Test-Path $workDir) {

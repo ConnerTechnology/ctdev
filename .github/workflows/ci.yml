@@ -68,13 +68,13 @@ jobs:
       - name: Check for parameter binding
         shell: pwsh
         run: |
-          # The documented `& ([scriptblock]::Create((irm ...))) -Diagnose`
+          # The documented `& ([scriptblock]::Create((irm ...))) -Doctor`
           # invocation only works if the script declares its parameters.
           $ast = [System.Management.Automation.Language.Parser]::ParseFile(
             (Resolve-Path ./install.ps1), [ref]$null, [ref]$null)
           if (-not $ast.ParamBlock) { throw "install.ps1 must declare a param() block" }
           $names = $ast.ParamBlock.Parameters.Name.VariablePath.UserPath
-          foreach ($required in @('Diagnose', 'DiagnoseArgs')) {
+          foreach ($required in @('Doctor', 'DoctorArgs')) {
             if ($names -notcontains $required) { throw "install.ps1 is missing the -$required parameter" }
           }
           Write-Host "install.ps1 exposes the expected parameters"
@@ -101,7 +101,7 @@ jobs:
         working-directory: ctdev
         run: go vet ./...
 
-      # ctdev only ships `diagnose` on Windows, but it has to compile there —
+      # ctdev only ships `doctor` on Windows, but it has to compile there —
       # and nothing else in CI would catch a Unix-only syscall creeping in.
       - name: Cross-compile check
         working-directory: ctdev
