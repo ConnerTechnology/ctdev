@@ -6,10 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ConnerTechnology/dotfiles/ctdev/diagnose"
+	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
 	"github.com/spf13/cobra"
@@ -39,29 +40,24 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	label := styles.Label(14)
 
-	// Health: reboot pending, failed units, disk SMART — the "something's
-	// quietly wrong" catch-alls. Linux only; each shows only when relevant.
-	if runtime.GOOS == "linux" {
-		if rebootRequired() {
-			fmt.Printf("  %s %s\n", label.Render("Reboot"),
-				styles.Warning.Render("required")+styles.Dimmed.Render(" — a kernel/security update needs a reboot"))
+	// Health comes from the shared diagnose catalog, filtered to the checks
+	// that touch nothing but this machine. That keeps one implementation of
+	// "is the disk full" instead of two, without breaking the promise that
+	// status makes no network calls.
+	facts := diagnose.GatherFacts(ctx, platform.Detect())
+	results, checks := diagnose.LocalChecks(ctx, platform.Detect(), facts)
+	attention := diagnose.NeedsAttention(results)
+
+	for _, c := range checks {
+		res, needs := attention[c.ID]
+		if !needs {
+			continue
 		}
-		if n := failedUnitCount(); n > 0 {
-			fmt.Printf("  %s %s\n", label.Render("Failed units"),
-				styles.Error.Render(fmt.Sprintf("%d", n))+styles.Dimmed.Render(" — systemctl --failed"))
+		style := styles.Warning
+		if res.Severity == diagnose.Fail {
+			style = styles.Error
 		}
-		if full := diskPressure(); full != "" {
-			fmt.Printf("  %s %s\n", label.Render("Disk"), full)
-		}
-		if disks := diskHealth(ctx); disks != "" {
-			fmt.Printf("  %s %s\n", label.Render("Disk health"), disks)
-		}
-		if apt := aptHealth(); apt != "" {
-			fmt.Printf("  %s %s\n", label.Render("APT"), apt)
-		}
-		if t := cpuThermal(); t != "" {
-			fmt.Printf("  %s %s\n", label.Render("Temp"), t)
-		}
+		fmt.Printf("  %s %s\n", label.Render(c.Name), style.Render(res.Detail))
 	}
 
 	// Tailscale connectivity.
@@ -178,43 +174,6 @@ const (
 	aptIndexStale = 48 * time.Hour
 )
 
-// diskPressure names filesystems at or above diskWarnPercent, worst first.
-// Returns "" when everything has headroom.
-func diskPressure() string {
-	out, err := exec.Command("df", "-Pk", "--local",
-		"-x", "tmpfs", "-x", "devtmpfs", "-x", "squashfs", "-x", "overlay", "-x", "efivarfs").Output()
-	if err != nil {
-		return ""
-	}
-	full := parseDiskPressure(string(out))
-	if len(full) == 0 {
-		return ""
-	}
-	return styles.Warning.Render("⚠ "+strings.Join(full, ", ")) + styles.Dimmed.Render(" — ctdev cleanup")
-}
-
-// parseDiskPressure extracts the over-threshold mounts from `df -Pk` output.
-func parseDiskPressure(out string) []string {
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) < 2 {
-		return nil
-	}
-	var full []string
-	for _, line := range lines[1:] { // skip the header
-		fields := strings.Fields(line)
-		if len(fields) < 6 {
-			continue
-		}
-		pct, err := strconv.Atoi(strings.TrimSuffix(fields[4], "%"))
-		if err != nil || pct < diskWarnPercent {
-			continue
-		}
-		availKB, _ := strconv.ParseInt(fields[3], 10, 64)
-		full = append(full, fmt.Sprintf("%s at %d%% (%s free)", fields[5], pct, sysutil.HumanKB(availKB)))
-	}
-	return full
-}
-
 // aptHealth reports trouble with apt's own housekeeping. The daily jobs hold
 // /var/lib/apt/lists/lock while they run and are Type=oneshot, so systemd gives
 // them no start timeout by default (see 'ctdev configure autoupdate') — one
@@ -282,97 +241,6 @@ func aptIndexAge() time.Duration {
 		return 0
 	}
 	return time.Since(newest)
-}
-
-// rebootRequired reports whether a pending kernel/security update needs a
-// reboot — Debian/Ubuntu (and unattended-upgrades) drop this flag file.
-func rebootRequired() bool {
-	return pathExists("/var/run/reboot-required") || pathExists("/run/reboot-required")
-}
-
-// failedUnitCount returns how many systemd units are in the failed state.
-func failedUnitCount() int {
-	out, err := exec.Command("systemctl", "--failed", "--no-legend", "--plain").Output()
-	if err != nil {
-		return 0
-	}
-	n := 0
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if strings.TrimSpace(line) != "" {
-			n++
-		}
-	}
-	return n
-}
-
-// diskHealth summarizes SMART status across disks via smartctl. Returns "" when
-// smartmontools isn't installed or sudo isn't already cached — status stays
-// prompt-free, so this only reports when it can do so without asking for a
-// password (sudo -n).
-func diskHealth(ctx context.Context) string {
-	if !sysutil.CommandExists("smartctl") {
-		return ""
-	}
-	if !sysutil.CanElevateQuietly(ctx) {
-		return "" // no root without a prompt — don't ask from status
-	}
-	devs := smartDevices(ctx)
-	if len(devs) == 0 {
-		return ""
-	}
-	var failing []string
-	healthy := 0
-	for _, d := range devs {
-		out, _ := sysutil.SudoNoPrompt(ctx, "smartctl", "-H", d).CombinedOutput()
-		// smartctl prints "PASSED" (ATA) or "OK" (NVMe) on a healthy drive.
-		s := string(out)
-		if strings.Contains(s, "PASSED") || strings.Contains(s, "test result: OK") {
-			healthy++
-		} else {
-			failing = append(failing, d)
-		}
-	}
-	if len(failing) > 0 {
-		return styles.Error.Render("⚠ FAILING: "+strings.Join(failing, ", ")) + styles.Dimmed.Render(" — replace soon")
-	}
-	return styles.Success.Render(fmt.Sprintf("%d healthy", healthy))
-}
-
-// smartDevices lists physical block devices smartctl can query (via its own
-// --scan), so we don't guess device names.
-func smartDevices(ctx context.Context) []string {
-	out, err := sysutil.SudoNoPrompt(ctx, "smartctl", "--scan").Output()
-	if err != nil {
-		return nil
-	}
-	var devs []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		// Lines look like: "/dev/sda -d scsi # ...". Take the device path.
-		if f := strings.Fields(line); len(f) > 0 && strings.HasPrefix(f[0], "/dev/") {
-			devs = append(devs, f[0])
-		}
-	}
-	return devs
-}
-
-// cpuThermal returns the CPU temperature and a throttling warning where the
-// kernel exposes them (Raspberry Pi, most laptops). Returns "" when there's no
-// thermal zone (e.g. many desktops).
-func cpuThermal() string {
-	b, err := os.ReadFile("/sys/class/thermal/thermal_zone0/temp")
-	if err != nil {
-		return ""
-	}
-	milli, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil || milli <= 0 {
-		return ""
-	}
-	c := milli / 1000
-	line := fmt.Sprintf("%d°C", c)
-	if c >= 80 {
-		return styles.Warning.Render(line + " — hot")
-	}
-	return styles.Value.Render(line)
 }
 
 // unitProperty reads one systemd unit property value.

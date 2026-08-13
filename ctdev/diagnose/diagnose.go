@@ -313,3 +313,23 @@ func runOne(ctx context.Context, c Check, f Facts) Result {
 		return skipf("timed out after %s", checkTimeout)
 	}
 }
+
+// LocalChecks runs the checks that touch nothing but this machine — no network
+// I/O, nothing slow. It exists so `ctdev status` can share this catalog while
+// keeping its own contract of being cheap enough to run on every login.
+func LocalChecks(ctx context.Context, info platform.Info, f Facts) (map[string]Result, []Check) {
+	checks := Select(Catalog(info, f), false, false)
+	return RunAll(ctx, checks, f), checks
+}
+
+// NeedsAttention filters results down to the ones worth interrupting someone
+// for. A clean pass and a check that couldn't run are both silence.
+func NeedsAttention(results map[string]Result) map[string]Result {
+	out := make(map[string]Result, len(results))
+	for id, res := range results {
+		if res.Severity == Warn || res.Severity == Fail {
+			out[id] = res
+		}
+	}
+	return out
+}
