@@ -105,6 +105,12 @@ func sharedChecks(f Facts) []Check {
 			Run:     checkNetworkGear,
 		},
 
+		// Local systems that need no credentials, so they cost nothing to ask.
+		Check{ID: "svc.pihole", Name: "Pi-hole", Group: GroupNetwork, Run: checkPihole},
+		Check{ID: "svc.tailscale", Name: "Tailscale", Group: GroupNetwork, Run: checkTailscale},
+		Check{ID: "svc.docker", Name: "Containers", Group: GroupSystem, Run: checkDocker},
+		Check{ID: "svc.dockerlogs", Name: "Container logs", Group: GroupSystem, Run: checkDockerLogs},
+
 		Check{ID: "hw.disk", Name: "Disk space", Group: GroupHardware, Run: checkDiskSpace},
 		Check{ID: "hw.inodes", Name: "Inodes", Group: GroupHardware, Run: checkInodes},
 		Check{ID: "hw.memory", Name: "Memory", Group: GroupHardware, Run: checkMemory},
