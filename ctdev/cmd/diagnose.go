@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"charm.land/lipgloss/v2"
@@ -17,7 +18,13 @@ var (
 	flagDiagnoseDeep    bool
 	flagDiagnoseNetwork bool
 	flagDiagnoseStrict  bool
+	flagDiagnoseRedact  bool
+	flagDiagnoseReport  string
 )
+
+// reportToStdout is the --report value that writes the Markdown to stdout
+// instead of a file, following the usual "-" convention.
+const reportToStdout = "-"
 
 var diagnoseCmd = &cobra.Command{
 	Use:     "diagnose",
@@ -42,7 +49,18 @@ func init() {
 		"only run the network and internet checks")
 	diagnoseCmd.Flags().BoolVar(&flagDiagnoseStrict, "strict", false,
 		"exit non-zero when a check fails")
+	diagnoseCmd.Flags().BoolVar(&flagDiagnoseRedact, "redact", false,
+		"mask the SSID, MAC addresses, and public IP so the report is safe to share")
+	// NoOptDefVal lets --report stand alone and pick its own filename, while
+	// --report=<path> still writes where you say.
+	diagnoseCmd.Flags().StringVar(&flagDiagnoseReport, "report", "",
+		"also write a Markdown report (bare flag picks a filename; '-' writes to stdout)")
+	diagnoseCmd.Flags().Lookup("report").NoOptDefVal = reportAutoName
 }
+
+// reportAutoName marks "--report given with no value", which resolves to a
+// generated filename once the hostname and timestamp are known.
+const reportAutoName = "\x00auto"
 
 func runDiagnose(cmd *cobra.Command, args []string) error {
 	ctx := cmdContext(cmd)
@@ -76,11 +94,25 @@ func runDiagnose(cmd *cobra.Command, args []string) error {
 		Findings: diagnose.Diagnose(results, facts),
 	}
 
+	// Redaction happens once, before anything renders, so the terminal view
+	// and the saved file can never disagree about what was masked.
+	if flagDiagnoseRedact {
+		report = diagnose.Redact(report)
+	}
+
 	out := diagnose.Render(report, width)
 	if !isTTY || os.Getenv("NO_COLOR") != "" {
 		out = ansi.Strip(out)
 	}
 	fmt.Print(out)
+
+	if flagDiagnoseReport != "" {
+		if err := writeDiagnoseReport(report); err != nil {
+			// The report is a bonus; failing to save it must not discard the
+			// diagnosis already on screen.
+			fmt.Fprintln(os.Stderr, styles.Warning.Render("Could not write the report: "+err.Error()))
+		}
+	}
 
 	// Exit 0 by default: main prints "Error: …" for a non-nil error, which is
 	// the wrong framing for "your Wi-Fi signal is weak". --strict opts into the
@@ -90,6 +122,34 @@ func runDiagnose(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("%d check(s) failed", n)
 		}
 	}
+	return nil
+}
+
+// writeDiagnoseReport saves the Markdown report. It writes to the working
+// directory rather than anywhere under $HOME: on a machine you're only
+// visiting, leaving a file in someone's home directory is a change you didn't
+// ask permission for.
+func writeDiagnoseReport(report diagnose.Report) error {
+	md := diagnose.Markdown(report)
+
+	if flagDiagnoseReport == reportToStdout {
+		fmt.Print("\n" + md)
+		return nil
+	}
+
+	path := flagDiagnoseReport
+	if path == reportAutoName {
+		path = diagnose.ReportFilename(report)
+	}
+	if err := os.WriteFile(path, []byte(md), 0o644); err != nil {
+		return err
+	}
+
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	fmt.Fprintln(os.Stderr, styles.Dimmed.Render("Report written to "+abs))
 	return nil
 }
 
