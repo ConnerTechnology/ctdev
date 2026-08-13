@@ -47,13 +47,22 @@ ctdev backup paths              # Pick what to back up in a local web UI
 ctdev restore ls|files|in-place|check   # Inspect/restore from restic (see RECOVERY.md)
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev verify                    # Verify the bootstrap installation
+ctdev doctor                    # Diagnose any machine: network, hardware, OS, security
+ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint
+ctdev doctor --network          # network and internet checks only
+ctdev doctor --report [path]    # also write a shareable Markdown report
+ctdev doctor --redact           # mask SSID/MAC/public IP so the report can be shared
+ctdev doctor --strict           # exit non-zero on failure (for cron)
+ctdev doctor --no-integrations  # never call a vendor API, even with credentials
 ```
 
 ## Install
 
 `install.sh` (repo root) installs just the `ctdev` binary (downloads the latest
-release, or builds from source in a clone when Go is present, verifying against
-`SHA256SUMS`). There is no all-in-one machine bootstrap — compose a machine from
+release and verifies it against `SHA256SUMS`; there is no source-build path).
+`install.sh --doctor` instead runs `ctdev doctor` from a temp directory and
+deletes it — nothing installed, no PATH change, no sudo. `install.ps1` is the
+Windows equivalent. There is no all-in-one machine bootstrap — compose a machine from
 individual `ctdev install <component>` and `ctdev configure <category>` calls.
 See README "Fresh Machine Setup".
 
@@ -153,12 +162,41 @@ restic snapshots the rendered `~/<svc>/.env` files (they're under the backed-up 
 so a restore brings them back; a brand-new node re-enters them from your password manager.
 **Never commit a secret.** See `RECOVERY.md` (disaster recovery).
 
+## ctdev doctor
+
+`ctdev doctor` is the one command that assumes nothing about the machine — it is
+built for diagnosing hardware you did not set up. Every check is read-only, root
+is never required (checks needing it report Skipped and say so), and no data
+leaves the machine beyond the diagnostic probes themselves.
+
+- **Checks** live in `ctdev/diagnose/` as a catalog of struct literals with
+  closures, built as a function of `platform.Info` + `Facts` — the same shape as
+  `cleanup.Task`. Gate at construction time so a wired machine has no Wi-Fi rows
+  rather than a column of "n/a".
+- **`Check.Network`** marks a check that does network I/O; `ctdev status` reuses
+  the same catalog filtered to `!Network && !Deep`, which is what keeps its
+  "no network calls" contract honest. **`Check.Deep`** marks slow or third-party
+  probes that only run under `--deep`.
+- **`Diagnose(results, facts) []Finding`** is the correlation engine: a pure
+  function that turns combinations into verdicts. Network rules are layered and
+  first-match-wins, because a network fault has one root cause and everything
+  downstream is noise. Hardware verdicts accumulate.
+- **Vendor integrations** (`integration_*.go`) are read-only *by construction* —
+  the `Provider` interface has no action method. They live in package `diagnose`
+  rather than a subpackage to avoid an import cycle.
+- **Credentials** come from flags, environment (`CTDEV_UNIFI_API_KEY`,
+  `CTDEV_SYNOLOGY_PASSWORD`, `CTDEV_PROXMOX_SECRET`, …), or a one-shot prompt
+  held in memory. **Nothing is ever written to the machine being diagnosed.**
+  They are only ever sent to private addresses, and never appear in a report —
+  `visibleData` drops secret-looking keys at the render boundary.
+
 ## Directory structure
 
 ```
 ctdev/                 Go module root
   cmd/                 Cobra command handlers
   cleanup/             Disk-reclaim task catalog (Linux + macOS), scan/run
+  diagnose/            ctdev doctor: check catalog, correlation engine, vendor integrations
   component/           Component registry, installers, and embedded config files
     configs/           Config files deployed by installers (go:embed)
   gpu/                 GPU/NVIDIA signing management
