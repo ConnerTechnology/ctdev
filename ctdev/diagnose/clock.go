@@ -3,6 +3,7 @@ package diagnose
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -43,6 +44,7 @@ func checkClock(ctx context.Context, _ Facts) Result {
 // clockVerdict takes the signed offset between this machine and real time.
 // Positive means the machine is ahead.
 func clockVerdict(skew time.Duration) Result {
+	signed := int(skew.Seconds())
 	ahead := skew > 0
 	if skew < 0 {
 		skew = -skew
@@ -52,19 +54,22 @@ func clockVerdict(skew time.Duration) Result {
 		direction = "ahead"
 	}
 
+	var res Result
 	switch {
 	case skew >= clockFail:
-		return failf("Turn on automatic time in the date and time settings. Until it's fixed, secure sites will keep failing.",
+		res = failf("Turn on automatic time in the date and time settings. Until it's fixed, secure sites will keep failing.",
 			"the clock is %s %s — this breaks HTTPS on every site, and reads as 'the internet is down'",
 			roundSkew(skew), direction)
 
 	case skew >= clockWarn:
-		return warnf("Enable automatic time sync so it doesn't drift further.",
+		res = warnf("Enable automatic time sync so it doesn't drift further.",
 			"the clock is %s %s", roundSkew(skew), direction)
 
 	default:
-		return okf("accurate to within %s", roundSkew(skew))
+		res = okf("accurate to within %s", roundSkew(skew))
 	}
+	res.Data = map[string]string{DataClockSkewSec: strconv.Itoa(signed)}
+	return res
 }
 
 // roundSkew formats an offset at a precision a person would use.

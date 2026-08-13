@@ -66,13 +66,14 @@ func runDiagnose(cmd *cobra.Command, args []string) error {
 	results := diagnose.RunAll(ctx, checks, facts)
 
 	report := diagnose.Report{
-		Facts:   facts,
-		Version: version,
-		Started: started,
-		Elapsed: time.Since(started),
-		Deep:    flagDiagnoseDeep,
-		Checks:  checks,
-		Results: results,
+		Facts:    facts,
+		Version:  version,
+		Started:  started,
+		Elapsed:  time.Since(started),
+		Deep:     flagDiagnoseDeep,
+		Checks:   checks,
+		Results:  results,
+		Findings: diagnose.Diagnose(results, facts),
 	}
 
 	out := diagnose.Render(report, width)

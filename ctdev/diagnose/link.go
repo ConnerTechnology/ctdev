@@ -77,7 +77,7 @@ func checkWiFi(ctx context.Context, f Facts) Result {
 	res.Data = map[string]string{
 		"ssid":    w.SSID,
 		"bssid":   w.BSSID,
-		"rssi":    strconv.Itoa(w.RSSI) + " dBm",
+		DataRSSI:  strconv.Itoa(w.RSSI),
 		"channel": strconv.Itoa(w.Channel),
 		"band":    w.Band,
 	}

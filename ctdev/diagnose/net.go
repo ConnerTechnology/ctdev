@@ -64,9 +64,13 @@ func checkCaptivePortal(ctx context.Context, _ Facts) Result {
 		return okf("reachable")
 
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
-		return failf("Open a browser and complete the network's sign-in page, then run this again.",
+		res := failf("Open a browser and complete the network's sign-in page, then run this again.",
 			"redirected to %s — this network wants a browser sign-in first (captive portal)",
 			resp.Header.Get("Location"))
+		// Only a redirect proves a portal. A plain connection failure fails
+		// this check too, and must not be mistaken for one.
+		res.Data = map[string]string{DataCaptivePortal: "yes"}
+		return res
 
 	default:
 		// A 200 where a 204 was promised means something rewrote the

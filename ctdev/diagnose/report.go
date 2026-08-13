@@ -82,7 +82,7 @@ func renderFindings(r Report, width int) string {
 			b.WriteString(indent(styles.Dimmed.Render(wrap(fd.Detail, body)), "     ") + "\n")
 		}
 		if fd.Action != "" {
-			b.WriteString(indent(styles.Value.Render(wrap("→ "+fd.Action, body)), "     ") + "\n")
+			b.WriteString(hangingIndent(styles.Value.Render(wrap("→ "+fd.Action, body-2)), "     ", "  ") + "\n")
 		}
 		b.WriteString("\n")
 	}
@@ -137,8 +137,8 @@ func renderCheck(c Check, res Result, width int) string {
 	// Advice earns a line only when there's something to do about it.
 	if res.Advice != "" && (res.Severity == Warn || res.Severity == Fail) {
 		indentBy := strings.Repeat(" ", nameWidth+4)
-		wrapped := wrap("→ "+res.Advice, width-nameWidth-6)
-		b.WriteString(indent(styles.Dimmed.Render(wrapped), indentBy) + "\n")
+		wrapped := wrap("→ "+res.Advice, width-nameWidth-8)
+		b.WriteString(hangingIndent(styles.Dimmed.Render(wrapped), indentBy, "  ") + "\n")
 	}
 	return b.String()
 }
@@ -205,6 +205,21 @@ func indent(s, prefix string) string {
 	ls := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	for i, l := range ls {
 		ls[i] = prefix + l
+	}
+	return strings.Join(ls, "\n")
+}
+
+// hangingIndent indents the first line by prefix and every continuation by
+// prefix plus hang, so wrapped advice lines up under its own text rather than
+// under the "→" that introduces it.
+func hangingIndent(s, prefix, hang string) string {
+	ls := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	for i, l := range ls {
+		if i == 0 {
+			ls[i] = prefix + l
+			continue
+		}
+		ls[i] = prefix + hang + l
 	}
 	return strings.Join(ls, "\n")
 }

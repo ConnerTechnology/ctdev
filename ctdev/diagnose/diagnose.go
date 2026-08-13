@@ -113,6 +113,22 @@ type Check struct {
 	Run func(ctx context.Context, f Facts) Result
 }
 
+// Data keys the correlation pass reads. Checks and Diagnose have to agree on
+// these, so they are named constants — and the pass keys off them rather than
+// pattern-matching the prose in Detail, which is written for people and free
+// to be reworded.
+const (
+	// DataCaptivePortal is "yes" when the probe was redirected, as opposed to
+	// failing outright. Only a redirect means there's a sign-in page.
+	DataCaptivePortal = "captive_portal"
+	// DataRSSI is Wi-Fi signal strength in dBm, as a plain integer.
+	DataRSSI = "rssi_dbm"
+	// DataClockSkewSec is the signed clock offset in seconds.
+	DataClockSkewSec = "clock_skew_seconds"
+	// DataTempC is CPU temperature in whole degrees Celsius.
+	DataTempC = "cpu_celsius"
+)
+
 // Result is what a Check found.
 type Result struct {
 	Severity Severity

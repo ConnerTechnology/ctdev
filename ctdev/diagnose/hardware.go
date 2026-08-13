@@ -444,20 +444,22 @@ func checkTemperature(ctx context.Context, f Facts) Result {
 	// than the instantaneous temperature.
 	throttle := piThrottleReason(ctx)
 
+	var res Result
 	switch {
 	case c >= tempFailC:
-		return failf("Clean the fans and vents. At this temperature the CPU is slowing itself down to survive.",
+		res = failf("Clean the fans and vents. At this temperature the CPU is slowing itself down to survive.",
 			"CPU at %d°C (%s)%s", c, name, throttle)
 	case c >= tempWarnC:
-		return warnf("Warm. Worth cleaning the vents before it starts throttling.",
+		res = warnf("Warm. Worth cleaning the vents before it starts throttling.",
+			"CPU at %d°C (%s)%s", c, name, throttle)
+	case throttle != "":
+		res = warnf("The CPU has throttled recently even though it's cool now — on a Pi this is usually an underpowered supply.",
 			"CPU at %d°C (%s)%s", c, name, throttle)
 	default:
-		if throttle != "" {
-			return warnf("The CPU has throttled recently even though it's cool now — on a Pi this is usually an underpowered supply.",
-				"CPU at %d°C (%s)%s", c, name, throttle)
-		}
-		return okf("CPU at %d°C (%s)", c, name)
+		res = okf("CPU at %d°C (%s)", c, name)
 	}
+	res.Data = map[string]string{DataTempC: strconv.Itoa(c)}
+	return res
 }
 
 // cpuSensorNames are the hwmon drivers that expose a CPU package temperature,
