@@ -19,7 +19,8 @@ func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 			return nil
 		}
 		fmt.Fprintln(opts.Stdout, "Installing 1Password...")
-		return sysutil.BrewCaskInstall(ctx, o, "1password")
+		return sysutil.BrewCaskInstallVerified(ctx, o, "1password",
+			func() bool { return alreadyInstalled("1password") })
 	}
 
 	if p.PackageManager != "apt" {

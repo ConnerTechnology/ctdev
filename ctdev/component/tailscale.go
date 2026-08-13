@@ -12,7 +12,7 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	if !opts.Force && sysutil.CommandExists("tailscale") {
+	if !opts.Force && alreadyInstalled("tailscale") {
 		fmt.Fprintln(opts.Stdout, "Tailscale already installed")
 		return nil
 	}
@@ -21,7 +21,10 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskInstall(ctx, o, "tailscale")
+		// The tailscale cask is a .pkg whose installer runs under sudo, so an
+		// interrupted run leaves brew claiming success with nothing installed.
+		return sysutil.BrewCaskInstallVerified(ctx, o, "tailscale",
+			func() bool { return alreadyInstalled("tailscale") })
 	case "apt":
 		codename := p.Codename
 		if codename == "" {

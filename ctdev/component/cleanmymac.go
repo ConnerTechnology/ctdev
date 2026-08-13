@@ -18,7 +18,8 @@ func cleanmymacInstall(ctx context.Context, opts ExecOpts) error {
 		return nil
 	}
 	fmt.Fprintln(opts.Stdout, "Installing CleanMyMac...")
-	return sysutil.BrewCaskInstall(ctx, o, "cleanmymac")
+	return sysutil.BrewCaskInstallVerified(ctx, o, "cleanmymac",
+		func() bool { return alreadyInstalled("cleanmymac") })
 }
 
 func cleanmymacUninstall(ctx context.Context, opts ExecOpts) error {

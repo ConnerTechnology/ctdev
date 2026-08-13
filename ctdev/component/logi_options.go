@@ -18,7 +18,8 @@ func logiOptionsInstall(ctx context.Context, opts ExecOpts) error {
 		return nil
 	}
 	fmt.Fprintln(opts.Stdout, "Installing Logi Options+...")
-	return sysutil.BrewCaskInstall(ctx, o, "logi-options+")
+	return sysutil.BrewCaskInstallVerified(ctx, o, "logi-options+",
+		func() bool { return alreadyInstalled("logi-options") })
 }
 
 func logiOptionsUninstall(ctx context.Context, opts ExecOpts) error {

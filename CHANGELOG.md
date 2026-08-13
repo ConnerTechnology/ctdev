@@ -37,6 +37,16 @@ All notable changes to this project will be documented in this file.
   scanned for Linux-only stacks. The docker probes were also unbounded, so a
   stopped Docker Desktop stalled the scan behind its spinner; each now has a
   20-second timeout.
+- **A cask install could report success without installing anything.** Homebrew
+  marks a cask installed as soon as its Caskroom entry exists, independently of
+  the artifact being put in place — so when the sudo prompt above interrupted
+  the `.pkg` step for `tailscale`, brew went on believing the job was done. Every
+  later `brew install --cask` then no-opped and exited 0, and ctdev faithfully
+  reported a successful install of software that was never on the machine.
+  Installs of the casks that escalate (tailscale, docker, 1password, cleanmymac,
+  logi-options) now verify the component's own detection predicate afterwards
+  and repair with `brew reinstall` when the files aren't there, failing loudly if
+  they still aren't.
 - macOS asked for a password it did not need. Root requirements were not
   package-manager aware, so the "a package install needs root" assumption from
   apt applied to Homebrew too, which installs into a user-owned prefix. Only

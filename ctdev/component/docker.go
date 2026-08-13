@@ -28,7 +28,10 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 
 	switch p.PackageManager {
 	case "brew":
-		return sysutil.BrewCaskInstall(ctx, o, "docker")
+		// Verify against the app bundle rather than the CLI: Docker Desktop only
+		// links `docker` onto PATH after its first launch.
+		return sysutil.BrewCaskInstallVerified(ctx, o, "docker",
+			func() bool { return alreadyInstalled("docker") })
 
 	case "apt":
 		// Determine distro base for Docker repo URL
