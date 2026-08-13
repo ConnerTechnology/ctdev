@@ -25,17 +25,17 @@ const (
 func checkClock(ctx context.Context, _ Facts) Result {
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, captivePortalURL, nil)
 	if err != nil {
-		return skip("could not build the probe request: %v", err)
+		return skipf("could not build the probe request: %v", err)
 	}
 	resp, err := probeClient().Do(req)
 	if err != nil {
-		return skip("no reachable server to compare the clock against")
+		return skipf("no reachable server to compare the clock against")
 	}
 	defer resp.Body.Close()
 
 	served, err := http.ParseTime(resp.Header.Get("Date"))
 	if err != nil {
-		return skip("the server did not return a usable Date header")
+		return skipf("the server did not return a usable Date header")
 	}
 	return clockVerdict(time.Since(served))
 }
@@ -54,16 +54,16 @@ func clockVerdict(skew time.Duration) Result {
 
 	switch {
 	case skew >= clockFail:
-		return fail("Turn on automatic time in the date and time settings. Until it's fixed, secure sites will keep failing.",
+		return failf("Turn on automatic time in the date and time settings. Until it's fixed, secure sites will keep failing.",
 			"the clock is %s %s — this breaks HTTPS on every site, and reads as 'the internet is down'",
 			roundSkew(skew), direction)
 
 	case skew >= clockWarn:
-		return warn("Enable automatic time sync so it doesn't drift further.",
+		return warnf("Enable automatic time sync so it doesn't drift further.",
 			"the clock is %s %s", roundSkew(skew), direction)
 
 	default:
-		return ok("accurate to within %s", roundSkew(skew))
+		return okf("accurate to within %s", roundSkew(skew))
 	}
 }
 

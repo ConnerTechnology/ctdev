@@ -9,23 +9,23 @@ import (
 func checkLocalAddress(_ context.Context, f Facts) Result {
 	switch {
 	case !f.LocalIP.IsValid():
-		return fail("Check that Wi-Fi is on and the cable is seated, then reconnect to the network.",
+		return failf("Check that Wi-Fi is on and the cable is seated, then reconnect to the network.",
 			"no usable address — this machine isn't on a network")
 
 	case LinkLocalIPv4(f.LocalIP):
 		// 169.254.x is what an OS assigns itself when DHCP gets no answer.
 		// It's the single most diagnostic address a machine can have.
-		return fail("Reboot the router. If other devices work, forget this network on this machine and rejoin.",
+		return failf("Reboot the router. If other devices work, forget this network on this machine and rejoin.",
 			"self-assigned %s on %s — the router never handed out an address (DHCP failed)",
 			f.LocalIP, describeLink(f))
 
 	case IsPrivate(f.LocalIP):
-		return ok("%s on %s", f.LocalIP, describeLink(f))
+		return okf("%s on %s", f.LocalIP, describeLink(f))
 
 	default:
 		// A public address directly on the interface is legitimate on a
 		// server, and worth saying out loud on a laptop.
-		return info("%s on %s — a public address, not behind NAT", f.LocalIP, describeLink(f))
+		return infof("%s on %s — a public address, not behind NAT", f.LocalIP, describeLink(f))
 	}
 }
 
@@ -49,29 +49,29 @@ const captivePortalURL = "http://connectivitycheck.gstatic.com/generate_204"
 func checkCaptivePortal(ctx context.Context, _ Facts) Result {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, captivePortalURL, nil)
 	if err != nil {
-		return skip("could not build the probe request: %v", err)
+		return skipf("could not build the probe request: %v", err)
 	}
 
 	resp, err := probeClient().Do(req)
 	if err != nil {
-		return fail("Check whether the gateway responds. If it does, the problem is upstream — power-cycle the modem.",
+		return failf("Check whether the gateway responds. If it does, the problem is upstream — power-cycle the modem.",
 			"no answer from the internet — %s", netReason(err))
 	}
 	defer resp.Body.Close()
 
 	switch {
 	case resp.StatusCode == http.StatusNoContent:
-		return ok("reachable")
+		return okf("reachable")
 
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
-		return fail("Open a browser and complete the network's sign-in page, then run this again.",
+		return failf("Open a browser and complete the network's sign-in page, then run this again.",
 			"redirected to %s — this network wants a browser sign-in first (captive portal)",
 			resp.Header.Get("Location"))
 
 	default:
 		// A 200 where a 204 was promised means something rewrote the
 		// response — a portal splash page, or a filtering middlebox.
-		return warn("Open a browser and see what loads. A sign-in page means a captive portal; anything else is a filtering proxy.",
+		return warnf("Open a browser and see what loads. A sign-in page means a captive portal; anything else is a filtering proxy.",
 			"expected 204, got %s — something is intercepting plain HTTP", resp.Status)
 	}
 }

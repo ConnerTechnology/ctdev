@@ -93,6 +93,29 @@ func sharedChecks(f Facts) []Check {
 		},
 	}
 
+	checks = append(checks,
+		Check{ID: "hw.disk", Name: "Disk space", Group: GroupHardware, Run: checkDiskSpace},
+		Check{ID: "hw.inodes", Name: "Inodes", Group: GroupHardware, Run: checkInodes},
+		Check{ID: "hw.memory", Name: "Memory", Group: GroupHardware, Run: checkMemory},
+		Check{ID: "hw.load", Name: "CPU load", Group: GroupHardware, Run: checkLoad},
+		Check{ID: "hw.temp", Name: "CPU temperature", Group: GroupHardware, Run: checkTemperature},
+		Check{ID: "hw.smart", Name: "Drive health", Group: GroupHardware, Run: checkSMART},
+		Check{ID: "hw.battery", Name: "Battery", Group: GroupHardware, Run: checkBattery},
+		Check{ID: "hw.raid", Name: "RAID array", Group: GroupHardware, Run: checkRAID},
+
+		Check{ID: "sys.uptime", Name: "Uptime", Group: GroupSystem, Run: checkUptime},
+		Check{ID: "sys.reboot", Name: "Restart pending", Group: GroupSystem, Run: checkRebootPending},
+		Check{ID: "sys.units", Name: "Services", Group: GroupSystem, Run: checkFailedUnits},
+		Check{ID: "sys.oom", Name: "Memory kills", Group: GroupSystem, Run: checkOOM},
+		Check{ID: "sys.os", Name: "OS support", Group: GroupSystem, Run: checkOSSupport},
+		Check{ID: "sys.updates", Name: "Updates", Group: GroupSystem, Run: checkPendingUpdates},
+		Check{ID: "sys.print", Name: "Print queue", Group: GroupSystem, Run: checkPrintQueue},
+
+		Check{ID: "sec.firewall", Name: "Firewall", Group: GroupSecurity, Run: checkFirewall},
+		Check{ID: "sec.encryption", Name: "Disk encryption", Group: GroupSecurity, Run: checkDiskEncryption},
+		Check{ID: "sec.ssh", Name: "SSH access", Group: GroupSecurity, Run: checkSSHExposure},
+	)
+
 	if f.IsWiFi {
 		checks = append(checks,
 			Check{

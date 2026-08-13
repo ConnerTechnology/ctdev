@@ -33,12 +33,12 @@ var publicIPs = []string{"1.1.1.1", "8.8.8.8"}
 
 func checkGateway(ctx context.Context, f Facts) Result {
 	if !f.Gateway.IsValid() {
-		return fail("Reconnect to the network. If it doesn't come back, reboot the router.",
+		return failf("Reconnect to the network. If it doesn't come back, reboot the router.",
 			"no default route — this machine doesn't know where to send traffic")
 	}
 	p, err := ping(ctx, f.Platform, f.Gateway.String(), pingCount)
 	if err != nil {
-		return skip("no usable ping on this machine")
+		return skipf("no usable ping on this machine")
 	}
 	return gatewayVerdict(p, f.Gateway.String(), f.IsWiFi)
 }
@@ -54,23 +54,23 @@ func gatewayVerdict(p PingResult, gw string, isWiFi bool) Result {
 
 	switch {
 	case p.Lost() && isWiFi:
-		return fail("Move closer to the router, or plug in with a cable to confirm. If other devices reach it, this machine's Wi-Fi is the problem.",
+		return failf("Move closer to the router, or plug in with a cable to confirm. If other devices reach it, this machine's Wi-Fi is the problem.",
 			"router at %s is not answering — %d/%d packets lost", gw, p.Sent, p.Sent)
 
 	case p.Lost():
-		return fail("Check both ends of the cable and try a different port on the router.",
+		return failf("Check both ends of the cable and try a different port on the router.",
 			"router at %s is not answering — %d/%d packets lost", gw, p.Sent, p.Sent)
 
 	case p.LossPercent >= lossWarn:
-		return warn("On Wi-Fi this is usually interference or distance. On a cable it's usually the cable.",
+		return warnf("On Wi-Fi this is usually interference or distance. On a cable it's usually the cable.",
 			"router at %s is dropping %.0f%% of packets", gw, p.LossPercent)
 
 	case p.AvgRTT > rttWarn:
-		return warn("Something is saturating the local network, or the Wi-Fi channel is crowded.",
+		return warnf("Something is saturating the local network, or the Wi-Fi channel is crowded.",
 			"router at %s is slow to answer — %s average", gw, round(p.AvgRTT))
 
 	default:
-		return ok("%s answering in %s", gw, round(p.AvgRTT))
+		return okf("%s answering in %s", gw, round(p.AvgRTT))
 	}
 }
 
@@ -80,14 +80,14 @@ func checkInternetICMP(ctx context.Context, f Facts) Result {
 	for _, host := range publicIPs {
 		p, err := ping(ctx, f.Platform, host, pingCount)
 		if err != nil {
-			return skip("no usable ping on this machine")
+			return skipf("no usable ping on this machine")
 		}
 		if !p.Lost() && (reached == "" || p.AvgRTT < best.AvgRTT) {
 			best, reached = p, host
 		}
 	}
 	if reached == "" {
-		return fail("If the router itself answers, the problem is upstream — power-cycle the modem, then call the ISP.",
+		return failf("If the router itself answers, the problem is upstream — power-cycle the modem, then call the ISP.",
 			"cannot reach %s by address — this is past the router", strings.Join(publicIPs, " or "))
 	}
 	return internetVerdict(best, reached)
@@ -96,15 +96,15 @@ func checkInternetICMP(ctx context.Context, f Facts) Result {
 func internetVerdict(p PingResult, host string) Result {
 	switch {
 	case p.LossPercent >= lossWarn:
-		return warn("Intermittent loss on the way out. Worth a modem reboot, and worth telling the ISP if it persists.",
+		return warnf("Intermittent loss on the way out. Worth a modem reboot, and worth telling the ISP if it persists.",
 			"%s reachable but dropping %.0f%% of packets", host, p.LossPercent)
 
 	case p.AvgRTT > internetRTTWarn:
-		return warn("Fine for browsing, poor for calls and games. Normal on satellite or a congested link.",
+		return warnf("Fine for browsing, poor for calls and games. Normal on satellite or a congested link.",
 			"%s reachable but slow — %s average, %s jitter", host, round(p.AvgRTT), round(p.Jitter))
 
 	default:
-		return ok("%s in %s", host, round(p.AvgRTT))
+		return okf("%s in %s", host, round(p.AvgRTT))
 	}
 }
 
@@ -116,12 +116,12 @@ func checkHTTPS(ctx context.Context, _ Facts) Result {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, target, nil)
 	if err != nil {
-		return skip("could not build the probe request: %v", err)
+		return skipf("could not build the probe request: %v", err)
 	}
 	resp, err := probeClient().Do(req)
 	if err == nil {
 		resp.Body.Close()
-		return ok("TLS to cloudflare.com verified")
+		return okf("TLS to cloudflare.com verified")
 	}
 
 	var unknownAuthority x509.UnknownAuthorityError
@@ -131,19 +131,19 @@ func checkHTTPS(ctx context.Context, _ Facts) Result {
 	switch {
 	case errors.As(err, &invalidCert) && invalidCert.Reason == x509.Expired:
 		// Nothing expires a valid Cloudflare certificate except our own clock.
-		return fail("Fix the system clock — check the date and time settings and re-enable automatic time.",
+		return failf("Fix the system clock — check the date and time settings and re-enable automatic time.",
 			"certificate rejected as expired, which almost always means this machine's clock is wrong")
 
 	case errors.As(err, &unknownAuthority):
-		return fail("Expected on a corporate or school network that inspects traffic. Anywhere else, treat it as untrusted.",
+		return failf("Expected on a corporate or school network that inspects traffic. Anywhere else, treat it as untrusted.",
 			"certificate signed by an unknown authority — something is intercepting HTTPS")
 
 	case errors.As(err, &hostnameErr):
-		return fail("Something is impersonating the site. Don't enter passwords on this network.",
+		return failf("Something is impersonating the site. Don't enter passwords on this network.",
 			"certificate is for the wrong host — %v", hostnameErr)
 
 	default:
-		return fail("If plain HTTP works but this doesn't, a firewall is blocking port 443.",
+		return failf("If plain HTTP works but this doesn't, a firewall is blocking port 443.",
 			"cannot complete an HTTPS connection — %s", netReason(err))
 	}
 }
@@ -155,11 +155,11 @@ const cloudflareTrace = "https://www.cloudflare.com/cdn-cgi/trace"
 func checkPublicIP(ctx context.Context, f Facts) Result {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cloudflareTrace, nil)
 	if err != nil {
-		return skip("could not build the probe request: %v", err)
+		return skipf("could not build the probe request: %v", err)
 	}
 	resp, err := probeClient().Do(req)
 	if err != nil {
-		return skip("could not look up the public address — %s", netReason(err))
+		return skipf("could not look up the public address — %s", netReason(err))
 	}
 	defer resp.Body.Close()
 
@@ -169,7 +169,7 @@ func checkPublicIP(ctx context.Context, f Facts) Result {
 
 	ip := trace["ip"]
 	if ip == "" {
-		return skip("no address in the lookup response")
+		return skipf("no address in the lookup response")
 	}
 
 	data := map[string]string{"public_ip": ip}
@@ -181,13 +181,13 @@ func checkPublicIP(ctx context.Context, f Facts) Result {
 	// customers. Everything browsing-shaped works; inbound connections,
 	// port forwarding, and some VPNs do not.
 	if IsCGNAT(f.LocalIP) {
-		res := warn("Ask the ISP for a real public address if you need port forwarding or to host anything.",
+		res := warnf("Ask the ISP for a real public address if you need port forwarding or to host anything.",
 			"public address %s, but this machine holds a carrier-grade NAT lease (%s)", ip, f.LocalIP)
 		res.Data = data
 		return res
 	}
 
-	res := ok("%s%s", ip, countrySuffix(trace["loc"]))
+	res := okf("%s%s", ip, countrySuffix(trace["loc"]))
 	res.Data = data
 	return res
 }
@@ -213,7 +213,7 @@ func parseCloudflareTrace(body string) map[string]string {
 func checkIPv6(ctx context.Context, _ Facts) Result {
 	if !hasGlobalIPv6() {
 		// The overwhelmingly common case, and not a problem.
-		return info("not configured on this network")
+		return infof("not configured on this network")
 	}
 
 	// A machine with a global IPv6 address will *prefer* it. When the address
@@ -223,11 +223,11 @@ func checkIPv6(ctx context.Context, _ Facts) Result {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp6", "[2606:4700:4700::1111]:443")
 	if err != nil {
-		return fail("Turn IPv6 off on this machine or on the router until the ISP fixes it — pages will load normally again.",
+		return failf("Turn IPv6 off on this machine or on the router until the ISP fixes it — pages will load normally again.",
 			"this machine has an IPv6 address but cannot reach the IPv6 internet, so connections stall before falling back")
 	}
 	conn.Close()
-	return ok("reachable")
+	return okf("reachable")
 }
 
 func hasGlobalIPv6() bool {

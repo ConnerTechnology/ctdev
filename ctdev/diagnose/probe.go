@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -54,6 +55,13 @@ func powershell(ctx context.Context, script string) string {
 }
 
 func commandExists(name string) bool { return sysutil.CommandExists(name) }
+
+// globPaths is filepath.Glob with the error dropped — a malformed pattern is a
+// bug in a literal here, not a runtime condition worth propagating.
+func globPaths(pattern string) []string {
+	matches, _ := filepath.Glob(pattern)
+	return matches
+}
 
 // firstLine returns the first line of s, trimmed.
 func firstLine(s string) string {

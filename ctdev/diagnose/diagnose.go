@@ -129,23 +129,23 @@ type Result struct {
 
 // Result constructors, kept terse because check bodies are full of them.
 
-func ok(format string, a ...any) Result {
+func okf(format string, a ...any) Result {
 	return Result{Severity: OK, Detail: fmt.Sprintf(format, a...)}
 }
 
-func info(format string, a ...any) Result {
+func infof(format string, a ...any) Result {
 	return Result{Severity: Info, Detail: fmt.Sprintf(format, a...)}
 }
 
-func warn(advice, format string, a ...any) Result {
+func warnf(advice, format string, a ...any) Result {
 	return Result{Severity: Warn, Detail: fmt.Sprintf(format, a...), Advice: advice}
 }
 
-func fail(advice, format string, a ...any) Result {
+func failf(advice, format string, a ...any) Result {
 	return Result{Severity: Fail, Detail: fmt.Sprintf(format, a...), Advice: advice}
 }
 
-func skip(format string, a ...any) Result {
+func skipf(format string, a ...any) Result {
 	return Result{Severity: Skipped, Detail: fmt.Sprintf(format, a...)}
 }
 
@@ -284,7 +284,7 @@ func runOne(ctx context.Context, c Check, f Facts) Result {
 		// panicking check take down the process.
 		defer func() {
 			if r := recover(); r != nil {
-				done <- skip("check panicked: %v", r)
+				done <- skipf("check panicked: %v", r)
 			}
 		}()
 		done <- c.Run(ctx, f)
@@ -294,6 +294,6 @@ func runOne(ctx context.Context, c Check, f Facts) Result {
 	case r := <-done:
 		return r
 	case <-ctx.Done():
-		return skip("timed out after %s", checkTimeout)
+		return skipf("timed out after %s", checkTimeout)
 	}
 }

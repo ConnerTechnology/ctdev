@@ -3,6 +3,7 @@ package diagnose
 import (
 	"context"
 	"net/netip"
+	"strconv"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
@@ -10,6 +11,97 @@ import (
 
 func macChecks(info platform.Info, f Facts) []Check {
 	return nil
+}
+
+// macMemory assembles the memory picture from two sources, because macOS
+// exposes no single one: the physical total from sysctl, and the page counts
+// from vm_stat.
+func macMemory(ctx context.Context) MemoryUsage {
+	var m MemoryUsage
+	if total, err := strconv.ParseInt(firstLine(capture(ctx, "sysctl", "-n", "hw.memsize")), 10, 64); err == nil {
+		m.TotalKB = total / 1024
+	}
+	m.AvailableKB = parseVMStatAvailableKB(capture(ctx, "vm_stat"))
+
+	swapTotal, swapUsed := parseSwapusage(capture(ctx, "sysctl", "-n", "vm.swapusage"))
+	m.SwapTotalKB = swapTotal
+	m.SwapFreeKB = swapTotal - swapUsed
+	return m
+}
+
+// parseVMStatAvailableKB sums the page classes the kernel can hand to a new
+// allocation without swapping — free, inactive, speculative, and purgeable.
+// "Free" alone reads near zero on a healthy Mac, because unused memory is
+// spent on cache by design.
+func parseVMStatAvailableKB(out string) int64 {
+	pageSize := int64(4096)
+	if _, rest, found := strings.Cut(out, "page size of "); found {
+		if n, _, ok := strings.Cut(rest, " bytes"); ok {
+			if v, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil && v > 0 {
+				pageSize = v
+			}
+		}
+	}
+
+	available := map[string]bool{
+		"Pages free":        true,
+		"Pages inactive":    true,
+		"Pages speculative": true,
+		"Pages purgeable":   true,
+	}
+
+	var pages int64
+	for _, line := range lines(out) {
+		key, value, found := strings.Cut(line, ":")
+		if !found || !available[strings.TrimSpace(key)] {
+			continue
+		}
+		v, err := strconv.ParseInt(strings.TrimRight(strings.TrimSpace(value), "."), 10, 64)
+		if err != nil {
+			continue
+		}
+		pages += v
+	}
+	return pages * pageSize / 1024
+}
+
+// parseSwapusage reads `sysctl -n vm.swapusage`:
+//
+//	total = 2048.00M  used = 512.00M  free = 1536.00M  (encrypted)
+func parseSwapusage(out string) (totalKB, usedKB int64) {
+	// Dropping the '=' leaves alternating key/value fields to walk pairwise.
+	fields := strings.Fields(strings.ReplaceAll(out, "=", " "))
+	for i := 0; i+1 < len(fields); i += 2 {
+		kb := parseSizeSuffixKB(fields[i+1])
+		switch fields[i] {
+		case "total":
+			totalKB = kb
+		case "used":
+			usedKB = kb
+		}
+	}
+	return totalKB, usedKB
+}
+
+// parseSizeSuffixKB reads a macOS size like "512.00M" or "2.00G" into KB.
+func parseSizeSuffixKB(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	mult := int64(1)
+	switch s[len(s)-1] {
+	case 'K':
+		s = s[:len(s)-1]
+	case 'M':
+		s, mult = s[:len(s)-1], 1024
+	case 'G':
+		s, mult = s[:len(s)-1], 1024*1024
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return int64(v) * mult
 }
 
 func macGateway(ctx context.Context) netip.Addr {

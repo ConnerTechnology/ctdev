@@ -61,7 +61,7 @@ func TestSelect(t *testing.T) {
 func TestRunAllRecoversPanic(t *testing.T) {
 	checks := []Check{
 		{ID: "boom", Run: func(context.Context, Facts) Result { panic("unexpected output") }},
-		{ID: "fine", Run: func(context.Context, Facts) Result { return ok("all good") }},
+		{ID: "fine", Run: func(context.Context, Facts) Result { return okf("all good") }},
 	}
 
 	results := RunAll(context.Background(), checks, Facts{})
@@ -91,9 +91,9 @@ func TestRunAllTimesOutSlowCheck(t *testing.T) {
 			<-ctx.Done()
 			// Deliberately return a healthy result after the deadline: the
 			// point is that RunAll has already moved on.
-			return ok("finished late")
+			return okf("finished late")
 		}},
-		{ID: "fast", Run: func(context.Context, Facts) Result { return ok("quick") }},
+		{ID: "fast", Run: func(context.Context, Facts) Result { return okf("quick") }},
 	}
 
 	start := time.Now()

@@ -64,12 +64,12 @@ func wifiInfo(ctx context.Context, info platform.Info, iface string) WiFiInfo {
 func checkWiFi(ctx context.Context, f Facts) Result {
 	w := wifiInfo(ctx, f.Platform, f.Iface)
 	if !w.Associated {
-		return skip("could not read the wireless association")
+		return skipf("could not read the wireless association")
 	}
 
 	desc := describeWiFi(w)
 	if w.RSSI == 0 {
-		return info("%s", desc)
+		return infof("%s", desc)
 	}
 
 	res := wifiSignalVerdict(w.RSSI)
@@ -313,18 +313,18 @@ func normalizeBand(s string) string {
 // the call outright: the wireless radio is switched off.
 func checkRadioBlocked(ctx context.Context, f Facts) Result {
 	if f.Platform.OS != platform.Linux || !commandExists("rfkill") {
-		return skip("no rfkill on this machine")
+		return skipf("no rfkill on this machine")
 	}
 	soft, hard := parseRfkill(capture(ctx, "rfkill", "list"))
 	switch {
 	case hard:
-		return fail("Find the physical Wi-Fi switch or key (often Fn+F2) and turn the radio back on.",
+		return failf("Find the physical Wi-Fi switch or key (often Fn+F2) and turn the radio back on.",
 			"the wireless radio is blocked by a hardware switch")
 	case soft:
-		return fail("Turn Wi-Fi back on: 'rfkill unblock wifi', or the Wi-Fi toggle in system settings.",
+		return failf("Turn Wi-Fi back on: 'rfkill unblock wifi', or the Wi-Fi toggle in system settings.",
 			"the wireless radio is switched off in software")
 	default:
-		return ok("radio enabled")
+		return okf("radio enabled")
 	}
 }
 
@@ -355,23 +355,23 @@ func parseRfkill(out string) (soft, hard bool) {
 // internet got slow" long after anyone would think to check the cable.
 func checkLinkSpeed(_ context.Context, f Facts) Result {
 	if f.Platform.OS != platform.Linux {
-		return skip("link speed is only read on Linux so far")
+		return skipf("link speed is only read on Linux so far")
 	}
 	data, err := os.ReadFile("/sys/class/net/" + f.Iface + "/speed")
 	if err != nil {
-		return skip("the driver does not report a link speed")
+		return skipf("the driver does not report a link speed")
 	}
 	mbps, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || mbps <= 0 {
-		return skip("the driver does not report a link speed")
+		return skipf("the driver does not report a link speed")
 	}
 
 	switch {
 	case mbps <= 100:
-		return warn("Almost always a damaged cable or a dirty port. Swap the cable before anything else.",
+		return warnf("Almost always a damaged cable or a dirty port. Swap the cable before anything else.",
 			"negotiated %d Mb/s — well below what the port supports", mbps)
 	default:
-		return ok("%d Mb/s", mbps)
+		return okf("%d Mb/s", mbps)
 	}
 }
 
