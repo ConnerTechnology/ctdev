@@ -134,11 +134,39 @@ func renderCheck(c Check, res Result, width int) string {
 	b.WriteString(styles.Label(nameWidth).Render(c.Name))
 	b.WriteString(styles.Value.Render(res.Detail) + "\n")
 
-	// Advice earns a line only when there's something to do about it.
-	if res.Advice != "" && (res.Severity == Warn || res.Severity == Fail) {
+	// Advice earns a line whenever there's something to do — which includes
+	// informational rows like "this is a UniFi network, here's how to look
+	// deeper". Only a clean pass has nothing to add.
+	if res.Advice != "" && res.Severity != OK {
+		b.WriteString(renderAdvice(res.Advice, width))
+	}
+	return b.String()
+}
+
+// renderAdvice lays out the advice under a check.
+//
+// One-liners sit in the gutter beside the check name. Multi-line advice — set-up
+// instructions with numbered steps — breaks out to the full width instead:
+// squeezed into a 50-column gutter the steps rewrap into soup, and the commands
+// they contain are meant to be copied.
+func renderAdvice(advice string, width int) string {
+	if !strings.Contains(advice, "\n") {
 		indentBy := strings.Repeat(" ", nameWidth+4)
-		wrapped := wrap("→ "+res.Advice, width-nameWidth-8)
-		b.WriteString(hangingIndent(styles.Dimmed.Render(wrapped), indentBy, "  ") + "\n")
+		wrapped := wrap("→ "+advice, width-nameWidth-8)
+		return hangingIndent(styles.Dimmed.Render(wrapped), indentBy, "  ") + "\n"
+	}
+
+	var b strings.Builder
+	for i, line := range strings.Split(strings.TrimRight(advice, "\n"), "\n") {
+		if i == 0 {
+			line = "→ " + line
+		}
+		// Preserve the leading whitespace of numbered steps, and hang their
+		// continuations under the text rather than under the number.
+		trimmed := strings.TrimLeft(line, " ")
+		lead := strings.Repeat(" ", len(line)-len(trimmed))
+		wrapped := wrap(trimmed, width-6-len(lead))
+		b.WriteString(hangingIndent(styles.Dimmed.Render(wrapped), "    "+lead, "   ") + "\n")
 	}
 	return b.String()
 }

@@ -94,6 +94,17 @@ func sharedChecks(f Facts) []Check {
 	}
 
 	checks = append(checks,
+		// Deep-only: this sends a discovery datagram and opens TLS connections
+		// to the router, which is more than a default run should do uninvited.
+		Check{
+			ID:      "link.gear",
+			Name:    "Network equipment",
+			Group:   GroupNetwork,
+			Network: true,
+			Deep:    true,
+			Run:     checkNetworkGear,
+		},
+
 		Check{ID: "hw.disk", Name: "Disk space", Group: GroupHardware, Run: checkDiskSpace},
 		Check{ID: "hw.inodes", Name: "Inodes", Group: GroupHardware, Run: checkInodes},
 		Check{ID: "hw.memory", Name: "Memory", Group: GroupHardware, Run: checkMemory},
