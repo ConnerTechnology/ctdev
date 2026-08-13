@@ -338,20 +338,96 @@ func (inst *Model) componentWindow() (start, end, above, below int) {
 	return start, end, start, n - end
 }
 
+const (
+	// summaryFailedNamesMax caps how many failed names the final frame lists, so
+	// a run where everything failed can't reintroduce an unbounded frame.
+	summaryFailedNamesMax = 5
+	// summaryReportMinItems is the run size below which the detailed report adds
+	// nothing the final frame didn't already say.
+	summaryReportMinItems = 2
+)
+
+// viewSummary is the last frame the TUI renders, and its height must stay
+// bounded no matter how many steps ran. Bubble Tea's inline renderer drops lines
+// from the *top* of a frame taller than the terminal, which would silently eat
+// the headline — the one line people actually read. The per-item detail lives in
+// SummaryReport instead, which the caller prints as ordinary stdout text after
+// the program exits, where the terminal scrolls it normally.
+//
+// The trailing newline is load-bearing: Bubble Tea leaves the cursor at the
+// start of the final line, so without it the printed report overwrites this.
 func (inst *Model) viewSummary() string {
 	var b strings.Builder
-	var failedNames []string
 	succeeded, failed, skipped, _ := inst.Counts()
 
 	// Don't claim success when something failed — the header is the one line
 	// people read.
 	noun := map[Mode]string{ModeInstall: "Installation", ModeUninstall: "Uninstall", ModeUpdate: "Update"}[inst.mode]
 	if failed > 0 {
-		b.WriteString(styles.Error.Render(fmt.Sprintf("✗ %s finished with %d failure(s)", noun, failed)) + inst.dryRunSuffix() + "\n\n")
+		b.WriteString(styles.Error.Render(fmt.Sprintf("✗ %s finished with %d failure(s)", noun, failed)) + inst.dryRunSuffix() + "\n")
 	} else {
-		b.WriteString(styles.Success.Render("✓ "+noun+" complete") + inst.dryRunSuffix() + "\n\n")
+		b.WriteString(styles.Success.Render("✓ "+noun+" complete") + inst.dryRunSuffix() + "\n")
 	}
 
+	// Build the tally so a clean run reads "N succeeded" without an alarming
+	// red "0 failed"; failed/skipped segments appear only when non-zero.
+	segments := []string{styles.Success.Render(fmt.Sprintf("%d succeeded", succeeded))}
+	if skipped > 0 {
+		segments = append(segments, styles.Warning.Render(fmt.Sprintf("%d skipped", skipped)))
+	}
+	if failed > 0 {
+		segments = append(segments, styles.Error.Render(fmt.Sprintf("%d failed", failed)))
+	}
+	b.WriteString("\n  " + strings.Join(segments, " · ") + "\n")
+
+	if failedNames := inst.FailedNames(); len(failedNames) > 0 {
+		shown := failedNames
+		suffix := ""
+		if len(shown) > summaryFailedNamesMax {
+			shown = shown[:summaryFailedNamesMax]
+			suffix = fmt.Sprintf(" (+%d more)", len(failedNames)-summaryFailedNamesMax)
+		}
+		b.WriteString(fmt.Sprintf("  %s %s%s\n",
+			styles.Error.Render("Failed:"), strings.Join(shown, " "), styles.Dimmed.Render(suffix)))
+
+		// The retry hint only makes sense where the names are CLI arguments.
+		if inst.mode != ModeUpdate {
+			retryCmd := "install"
+			if inst.mode == ModeUninstall {
+				retryCmd = "uninstall"
+			}
+			b.WriteString(fmt.Sprintf("\n  Retry: ctdev %s %s\n", retryCmd, strings.Join(failedNames, " ")))
+		}
+	}
+
+	return b.String()
+}
+
+// FailedNames lists the components that failed, in run order.
+func (inst *Model) FailedNames() []string {
+	var names []string
+	for _, c := range inst.components {
+		if c.Status == StatusFailed {
+			names = append(names, c.Name)
+		}
+	}
+	return names
+}
+
+// SummaryReport is the full per-item result: every component with its status,
+// and the replayed output tail for each failure. Callers print it to stdout
+// after the Bubble Tea program has exited, so it lands in scrollback intact
+// rather than being truncated by the inline renderer (see viewSummary).
+//
+// Returns "" when there is nothing worth printing — a short, entirely
+// successful run is already fully described by the final frame.
+func (inst *Model) SummaryReport() string {
+	_, failed, skipped, _ := inst.Counts()
+	if failed == 0 && skipped == 0 && len(inst.components) <= summaryReportMinItems {
+		return ""
+	}
+
+	var b strings.Builder
 	for _, c := range inst.components {
 		switch c.Status {
 		case StatusDone:
@@ -360,7 +436,6 @@ func (inst *Model) viewSummary() string {
 				styles.Dimmed.Render(fmt.Sprintf("%.1fs", c.Duration.Seconds())),
 			))
 		case StatusFailed:
-			failedNames = append(failedNames, c.Name)
 			b.WriteString(fmt.Sprintf("  %s %s %s\n",
 				styles.Error.Render("✗"), c.Name,
 				styles.Error.Render(c.Error),
@@ -377,27 +452,9 @@ func (inst *Model) viewSummary() string {
 			))
 		}
 	}
-
-	// Build the tally so a clean run reads "N succeeded" without an alarming
-	// red "0 failed"; failed/skipped segments appear only when non-zero.
-	segments := []string{styles.Success.Render(fmt.Sprintf("%d succeeded", succeeded))}
-	if skipped > 0 {
-		segments = append(segments, styles.Warning.Render(fmt.Sprintf("%d skipped", skipped)))
+	if b.Len() == 0 {
+		return ""
 	}
-	if failed > 0 {
-		segments = append(segments, styles.Error.Render(fmt.Sprintf("%d failed", failed)))
-	}
-	b.WriteString("\n  " + strings.Join(segments, " · ") + "\n")
-
-	// The retry hint only makes sense where the names are CLI arguments.
-	if len(failedNames) > 0 && inst.mode != ModeUpdate {
-		retryCmd := "install"
-		if inst.mode == ModeUninstall {
-			retryCmd = "uninstall"
-		}
-		b.WriteString(fmt.Sprintf("\n  Retry: ctdev %s %s\n", retryCmd, strings.Join(failedNames, " ")))
-	}
-
 	return b.String()
 }
 

@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
 )
@@ -35,10 +37,22 @@ type dockerStack struct {
 // this node. A stack is any installed component whose DetectPath points at a
 // docker-compose.yml (pihole, caddy, beszel, portainer, ...).
 func dockerComposeStacks() []dockerStack {
+	return dockerComposeStacksFor(component.OS(platform.Detect().OS))
+}
+
+// dockerComposeStacksFor takes the OS as a parameter so it can be tested;
+// platform.Detect() is sync.Once-cached and can't be injected.
+func dockerComposeStacksFor(osType component.OS) []dockerStack {
 	var stacks []dockerStack
 	for i := range component.Registry {
 		c := &component.Registry[i]
 		if !strings.HasSuffix(c.DetectPath, "docker-compose.yml") {
+			continue
+		}
+		// IsInstalled is a bare os.Stat on DetectPath, so without this gate a Mac
+		// holding a restored ~/pihole/docker-compose.yml would be scanned — and
+		// offered updates — for a Linux-only stack it isn't running.
+		if !c.SupportsOS(osType) {
 			continue
 		}
 		if !c.IsInstalled() {
@@ -104,8 +118,16 @@ func scanDocker(ctx context.Context) ([]checklist.UpdateItem, error) {
 	return items, nil
 }
 
+// dockerProbeTimeout bounds each docker call made while scanning. The scan runs
+// behind a single-line spinner, so an unbounded call is indistinguishable from a
+// hang: `docker image inspect` blocks when Docker Desktop isn't running, and
+// `buildx imagetools inspect` is a network round-trip per image.
+const dockerProbeTimeout = 20 * time.Second
+
 // composeImages lists the images a stack resolves to (one per service).
 func composeImages(ctx context.Context, compose string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
+	defer cancel()
 	out, err := exec.CommandContext(ctx, "docker", "compose", "-f", compose, "config", "--images").Output()
 	if err != nil {
 		return nil, fmt.Errorf("compose config: %w", err)
@@ -189,6 +211,8 @@ func builtImageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, 
 // from (its RepoDigest). ok is false for locally-built or absent images, which
 // have no RepoDigest to compare.
 func localIndexDigest(ctx context.Context, img string) (digest string, ok bool) {
+	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
+	defer cancel()
 	out, err := exec.CommandContext(ctx, "docker", "image", "inspect", img, "--format", "{{json .RepoDigests}}").Output()
 	if err != nil {
 		return "", false
@@ -203,6 +227,8 @@ func localIndexDigest(ctx context.Context, img string) (digest string, ok bool) 
 // remoteIndexDigest returns the current index digest for img in its registry,
 // via buildx imagetools (no pull). Returns "" if the digest line is absent.
 func remoteIndexDigest(ctx context.Context, img string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
+	defer cancel()
 	out, err := exec.CommandContext(ctx, "docker", "buildx", "imagetools", "inspect", img).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("imagetools inspect: %s", strings.TrimSpace(string(out)))

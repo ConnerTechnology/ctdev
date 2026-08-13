@@ -34,7 +34,7 @@ func init() {
 	updateCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation (install all updates)")
 	updateCmd.Flags().BoolVar(&flagCheck, "check", false, "list available updates without installing")
 	updateCmd.Flags().BoolVar(&flagRefreshKeys, "refresh-keys", false, "refresh APT GPG keys before updating")
-	updateCmd.Flags().BoolVar(&flagNoRefresh, "no-refresh", false, "skip refreshing the APT package index before scanning")
+	updateCmd.Flags().BoolVar(&flagNoRefresh, "no-refresh", false, "skip refreshing the package index (APT / Homebrew) before scanning")
 	rootCmd.AddCommand(updateCmd)
 }
 
@@ -59,6 +59,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	// reality. Without this, an update run on a machine with a stale index can
 	// report "everything is up to date" while security updates are pending.
 	refreshAptIndex(ctx)
+	refreshBrew(ctx)
 
 	items := scanAll(ctx)
 
@@ -90,13 +91,45 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		selected = checkResult.Selected
 	}
 
-	if !flagDryRun {
-		if err := ensureSudo(); err != nil {
+	if !flagDryRun && updateNeedsRoot(selected) {
+		if err := ensureSudo(ctx); err != nil {
 			return fmt.Errorf("sudo required for updates: %w", err)
 		}
 	}
 
 	return executeUpdates(ctx, selected)
+}
+
+// updateNeedsRoot reports whether applying these items will shell out as root,
+// mirroring component.InstallNeedsRoot. It gates the up-front password prompt so
+// a Mac upgrading only Homebrew formulae — which land in the brew prefix and
+// never touch root — isn't asked for one.
+//
+// The classification tracks what buildUpdateSteps actually runs, not what the
+// source "feels" like:
+//   - apt shells out through SudoRun.
+//   - brew formulae don't, but casks do: Homebrew escalates internally for pkg
+//     payloads and system extensions.
+//   - among the runtimes only go is privileged (sudo rm/mv into /usr/local/go);
+//     bun, nodenv and rbenv all stay inside $HOME.
+//   - the cli tools resolve their destination at run time via `which` and fall
+//     back to /usr/local/bin, so assume root.
+//   - docker stacks can rebuild through `sudo docker compose`.
+//
+// flatpak, npm, oh-my-zsh and the ctdev self-update run unprivileged (ctdev's
+// install.sh targets ~/.local/bin and only ever uses `sudo -n`).
+func updateNeedsRoot(items []checklist.UpdateItem) bool {
+	for _, item := range items {
+		switch item.Source {
+		case "apt", "brew-cask", "docker", "cli":
+			return true
+		case "runtime":
+			if item.Name == "go" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // refreshAptIndex runs `apt-get update` before scanning so the upgradable list
@@ -112,13 +145,40 @@ func refreshAptIndex(ctx context.Context) {
 		return
 	}
 	fmt.Println(styles.Dimmed.Render("Refreshing APT package index..."))
-	if err := ensureSudo(); err != nil {
+	if err := ensureSudo(ctx); err != nil {
 		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("sudo unavailable; scanning against a possibly stale index: %v", err)))
 		return
 	}
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 	if err := sysutil.APTUpdate(ctx, o); err != nil {
 		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("apt index refresh failed; results may be stale: %v", err)))
+	}
+}
+
+// shouldRefreshBrew decides whether to refresh Homebrew's catalog before
+// scanning. Mirrors shouldRefreshKeys: --dry-run and --no-refresh suppress it.
+func shouldRefreshBrew(dryRun, noRefresh bool) bool {
+	return !dryRun && !noRefresh
+}
+
+// refreshBrew runs `brew update` before scanning, the Homebrew counterpart to
+// refreshAptIndex. ctdev sets HOMEBREW_NO_AUTO_UPDATE so brew never decides to
+// refresh itself in the middle of a step; that makes an explicit refresh here
+// necessary, or `brew outdated` would answer from an arbitrarily stale catalog
+// and report "everything is up to date" while upgrades were pending.
+//
+// Failures are non-fatal — scanning a stale catalog beats aborting the update.
+func refreshBrew(ctx context.Context) {
+	if _, err := exec.LookPath("brew"); err != nil {
+		return
+	}
+	if !shouldRefreshBrew(flagDryRun, flagNoRefresh) {
+		return
+	}
+	fmt.Println(styles.Dimmed.Render("Refreshing Homebrew catalog..."))
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	if err := sysutil.Run(ctx, o, "brew", "update", "--quiet"); err != nil {
+		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("brew update failed; results may be stale: %v", err)))
 	}
 }
 

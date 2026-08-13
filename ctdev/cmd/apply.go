@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 	"github.com/ConnerTechnology/dotfiles/ctdev/profile"
 	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
 	"github.com/ConnerTechnology/dotfiles/ctdev/state"
@@ -156,8 +157,8 @@ func applyProfile(ctx context.Context, name string) error {
 
 	// The configure categories all write system state, so any profile with them
 	// needs root regardless of what its components need.
-	if len(p.Configure) > 0 || comp.InstallNeedsRoot(resolved, flagForce) {
-		if err := ensureSudo(); err != nil {
+	if len(p.Configure) > 0 || comp.InstallNeedsRoot(platform.Detect().PackageManager, resolved, flagForce) {
+		if err := ensureSudo(ctx); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}

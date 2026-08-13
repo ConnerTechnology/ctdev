@@ -39,7 +39,7 @@ func runConfigureGPU(cmd *cobra.Command, args []string) error {
 	}
 
 	if !flagDryRun {
-		if err := ensureSudo(); err != nil {
+		if err := ensureSudo(cmdContext(cmd)); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}

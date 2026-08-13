@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // SudoAccess describes how this process can reach root, if at all.
@@ -41,15 +42,74 @@ func CanElevateQuietly(ctx context.Context) bool {
 	return false
 }
 
+// sudoArgv builds the argv for running name as root: the bare command when we
+// already are root, otherwise `sudo [-n] name args...`. Keeping this pure means
+// the wrapper logic is testable without executing anything, and SudoRun and
+// SudoNoPrompt can't drift apart.
+func sudoArgv(noPrompt bool, name string, args []string) []string {
+	if IsRoot() {
+		return append([]string{name}, args...)
+	}
+	argv := []string{"sudo"}
+	if noPrompt {
+		argv = append(argv, "-n")
+	}
+	return append(append(argv, name), args...)
+}
+
 // SudoNoPrompt builds a command that runs name as root but never asks for a
 // password: `sudo -n` for a normal user, the bare command when we already are
 // root. For read-only probes that must not stall — a missing password is a
 // failed probe, not a prompt.
 func SudoNoPrompt(ctx context.Context, name string, args ...string) *exec.Cmd {
+	argv := sudoArgv(true, name, args)
+	return exec.CommandContext(ctx, argv[0], argv[1:]...)
+}
+
+const (
+	// sudoRefreshInterval is comfortably inside the shortest default
+	// timestamp_timeout we care about (5 minutes on macOS, 15 on Linux).
+	sudoRefreshInterval = 60 * time.Second
+	// sudoRefreshMaxFailures stops the refresher once it's clearly never going
+	// to work — timestamp_timeout can be 0, or the sudoers rule can be
+	// command-scoped, and every failed attempt is a syslog line.
+	sudoRefreshMaxFailures = 3
+)
+
+// KeepSudoAlive refreshes the cached sudo credential in the background until ctx
+// is done. A long `brew upgrade` or `apt` run easily outlives macOS's 5-minute
+// default timestamp_timeout, and a credential expiring mid-run reintroduces the
+// very hang that caching it was meant to prevent.
+//
+// The refresher is deliberately silent: `sudo -n -v` writes to stderr when it
+// fails, and that would land in the middle of a progress TUI frame.
+func KeepSudoAlive(ctx context.Context) {
 	if IsRoot() {
-		return exec.CommandContext(ctx, name, args...)
+		return
 	}
-	return exec.CommandContext(ctx, "sudo", append([]string{"-n", name}, args...)...)
+	go func() {
+		ticker := time.NewTicker(sudoRefreshInterval)
+		defer ticker.Stop()
+		failures := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			cmd := exec.CommandContext(ctx, "sudo", "-n", "-v")
+			cmd.Stdout = nil
+			cmd.Stderr = nil
+			if err := cmd.Run(); err != nil {
+				failures++
+				if failures >= sudoRefreshMaxFailures {
+					return
+				}
+				continue
+			}
+			failures = 0
+		}
+	}()
 }
 
 // CheckSudoAccess probes for root access without prompting for anything.

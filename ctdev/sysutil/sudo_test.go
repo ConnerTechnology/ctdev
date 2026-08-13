@@ -28,6 +28,31 @@ func TestSudoNoPrompt(t *testing.T) {
 	}
 }
 
+func TestSudoArgv(t *testing.T) {
+	tests := []struct {
+		name     string
+		noPrompt bool
+		want     []string
+	}{
+		{"prompting wrapper", false, []string{"sudo", "apt", "install", "jq"}},
+		{"non-prompting wrapper", true, []string{"sudo", "-n", "apt", "install", "jq"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := tt.want
+			// As root the wrapper has to disappear entirely: containers run as
+			// uid 0 and often have no sudo installed at all.
+			if IsRoot() {
+				want = []string{"apt", "install", "jq"}
+			}
+			got := sudoArgv(tt.noPrompt, "apt", []string{"install", "jq"})
+			if strings.Join(got, " ") != strings.Join(want, " ") {
+				t.Errorf("sudoArgv(%v) = %v, want %v", tt.noPrompt, got, want)
+			}
+		})
+	}
+}
+
 func TestCheckSudoAccess_NoSudoBinary(t *testing.T) {
 	if IsRoot() {
 		if got := CheckSudoAccess(context.Background()); got != AlreadyRoot {

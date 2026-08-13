@@ -4,7 +4,37 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/component"
 )
+
+// The compose stacks ctdev manages (pihole, caddy, beszel, portainer) are all
+// declared Linux-only, but IsInstalled() is a bare os.Stat on the compose file.
+// Without an OS gate a Mac holding a restored ~/pihole/ would be scanned — and
+// offered updates — for a stack it isn't running.
+func TestDockerComposeStacksAreLinuxOnly(t *testing.T) {
+	if got := dockerComposeStacksFor(component.OSMacOS); len(got) != 0 {
+		t.Errorf("expected no compose stacks on macOS, got %v", got)
+	}
+
+	// Sanity-check the fixture assumption: the registry really does declare
+	// compose stacks, and they really are Linux-only. Otherwise the assertion
+	// above would pass for the wrong reason.
+	var composeComponents int
+	for i := range component.Registry {
+		c := &component.Registry[i]
+		if filepath.Base(c.DetectPath) != "docker-compose.yml" {
+			continue
+		}
+		composeComponents++
+		if c.SupportsOS(component.OSMacOS) {
+			t.Errorf("%s is a compose stack that claims macOS support; the gate needs revisiting", c.Name)
+		}
+	}
+	if composeComponents == 0 {
+		t.Fatal("no compose-stack components in the registry — this test proves nothing")
+	}
+}
 
 func TestParseBuildxDigest(t *testing.T) {
 	out := `Name:      docker.io/pihole/pihole:latest

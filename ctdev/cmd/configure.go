@@ -72,7 +72,7 @@ func init() {
 			Short: fmt.Sprintf("Configure %s settings", slugDescription(slug)),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				if !flagDryRun && !flagConfigShow {
-					if err := ensureSudo(); err != nil {
+					if err := ensureSudo(cmdContext(cmd)); err != nil {
 						return fmt.Errorf("sudo required: %w", err)
 					}
 				}
@@ -118,7 +118,7 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 		// Sudo up front: detection reads some root-only state (pihole), and
 		// the apply that follows the browser needs it anyway.
 		if !flagDryRun {
-			if err := ensureSudo(); err != nil {
+			if err := ensureSudo(cmdContext(cmd)); err != nil {
 				return fmt.Errorf("sudo required: %w", err)
 			}
 		}
@@ -126,7 +126,7 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 	}
 
 	if !flagDryRun && !flagConfigShow {
-		if err := ensureSudo(); err != nil {
+		if err := ensureSudo(cmdContext(cmd)); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}

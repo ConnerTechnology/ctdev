@@ -59,7 +59,9 @@ func runWithProgress(parent context.Context, op progressOperation) error {
 		return err
 	}
 
-	// The summary screen already showed the details; make the exit code match.
+	printSummaryReport(&progressModel)
+
+	// The summary screen already showed the tally; make the exit code match.
 	_, failed, _, notRun := progressModel.Counts()
 	if notRun > 0 {
 		fmt.Printf("Cancelled — %d of %d not run.\n", notRun, len(op.names))
@@ -68,6 +70,19 @@ func runWithProgress(parent context.Context, op progressOperation) error {
 		return fmt.Errorf("%d component(s) failed", failed)
 	}
 	return nil
+}
+
+// printSummaryReport writes the per-item results to stdout after the TUI has
+// exited. It deliberately does not go through Bubble Tea: the inline renderer
+// truncates any frame taller than the terminal (dropping lines from the top), so
+// a run with a few dozen steps would lose most of its results. Printed as
+// ordinary text it scrolls and lands in scrollback intact.
+func printSummaryReport(m *progress.Model) {
+	report := m.SummaryReport()
+	if report == "" {
+		return
+	}
+	fmt.Print(report)
 }
 
 // streamThrough runs fn with a pipe writer whose lines are forwarded to send as
@@ -118,6 +133,10 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 			Verbose: flagVerbose,
 			Stdout:  pw,
 			Stderr:  pw,
+			// The TUI owns the terminal for the duration of this call, so a sudo
+			// prompt here would be invisible and unanswerable. ensureSudo has
+			// already cached the credential; if it somehow didn't, fail loudly.
+			NoSudoPrompt: true,
 		}
 		if op.mode == progress.ModeUninstall {
 			result = comp.Uninstall(ctx, c, opts)
@@ -148,7 +167,8 @@ func runOneStep(ctx context.Context, send msgSender, step updateStep) {
 
 	var runErr error
 	err := streamThrough(send, step.name, func(pw *os.File) {
-		runErr = step.run(ctx, sysutil.Opts{Stdout: pw, DryRun: flagDryRun})
+		// NoSudoPrompt: the TUI holds the terminal — see runOneComponent.
+		runErr = step.run(ctx, sysutil.Opts{Stdout: pw, DryRun: flagDryRun, NoSudoPrompt: true})
 	})
 	if err == nil {
 		err = runErr
@@ -198,6 +218,8 @@ func runUpdateSteps(parent context.Context, steps []updateStep) error {
 	if err != nil {
 		return err
 	}
+
+	printSummaryReport(&progressModel)
 
 	_, failed, _, notRun := progressModel.Counts()
 	if notRun > 0 {

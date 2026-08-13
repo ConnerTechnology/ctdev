@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -54,6 +55,8 @@ func Execute() error {
 	if os.Getenv("NO_COLOR") != "" || !term.IsTerminal(os.Stdout.Fd()) {
 		styles.Disable()
 	}
+	defer setupAskpass()()
+	setupHomebrewEnv()
 	// Bind SIGINT/SIGTERM to a context so Ctrl-C cancels in-flight installs,
 	// updates, and other long-running shell-outs via the ctx threaded through
 	// sysutil. A second signal aborts hard (signal.NotifyContext stops trapping
@@ -81,10 +84,32 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 }
 
+// sudoPlan decides what ensureSudo should do for a given access level. Split out
+// as a pure function because ensureSudo itself shells out and can't be tested.
+// An empty warn with needPrompt false means "nothing to do, we already have
+// root".
+func sudoPlan(access sysutil.SudoAccess, batch bool) (needPrompt bool, warn string) {
+	switch access {
+	case sysutil.AlreadyRoot, sysutil.SudoCached:
+		return false, ""
+	case sysutil.SudoUnavailable:
+		return false, "sudo is unavailable here"
+	}
+	// SudoNeedsPassword: only a terminal can supply one.
+	if batch {
+		return false, "no terminal to enter a sudo password on"
+	}
+	return true, ""
+}
+
 // ensureSudo caches sudo credentials before starting a TUI: commands that shell
-// out through sudo would otherwise prompt into a stdin Bubble Tea owns, and
-// hang. Callers gate it on work that will actually use root — see
-// component.InstallNeedsRoot.
+// out through sudo would otherwise prompt on /dev/tty while Bubble Tea holds the
+// terminal in raw mode, and hang. Callers gate it on work that will actually use
+// root — see component.InstallNeedsRoot and updateNeedsRoot.
+//
+// This matters just as much on macOS as on Linux: Homebrew shells out to sudo
+// itself for casks that ship a pkg payload or a system extension, so a cask
+// install with no cached credential hangs exactly the same way.
 //
 // Reaching root is best-effort. When we already are root, when there is no sudo
 // to run, when the environment forbids escalation (a container started with
@@ -92,32 +117,53 @@ func initConfig() {
 // nil: whatever genuinely needs root then fails with its own error, instead of
 // ctdev refusing to do the part of the run that never needed it. Only a prompt
 // the user fails or cancels is an error.
-func ensureSudo() error {
-	if runtime.GOOS != "linux" {
+func ensureSudo(ctx context.Context) error {
+	access := sysutil.CheckSudoAccess(ctx)
+	needPrompt, warn := sudoPlan(access, isBatchMode())
+	if warn != "" {
+		warnNoRoot(warn)
 		return nil
 	}
-	switch sysutil.CheckSudoAccess(context.Background()) {
-	case sysutil.AlreadyRoot, sysutil.SudoCached:
-		return nil
-	case sysutil.SudoUnavailable:
-		warnNoRoot("sudo is unavailable here")
-		return nil
-	}
-	if isBatchMode() {
-		warnNoRoot("no terminal to enter a sudo password on")
+	if !needPrompt {
+		// Already cached — but it can still expire mid-run, so keep it warm.
+		if access == sysutil.SudoCached {
+			startSudoKeepalive(ctx)
+		}
 		return nil
 	}
+
 	fmt.Println("Some steps require sudo. Please enter your password:")
 	cmd := exec.Command("sudo", "-v")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	startSudoKeepalive(ctx)
+	return nil
+}
+
+// sudoKeepaliveOnce guards the refresher so the 17 ensureSudo call sites can't
+// start a herd of goroutines. The keepalive lives for the process, which for a
+// short-lived CLI is the whole run.
+var sudoKeepaliveOnce sync.Once
+
+func startSudoKeepalive(ctx context.Context) {
+	sudoKeepaliveOnce.Do(func() { sysutil.KeepSudoAlive(ctx) })
+}
+
+// rootHint names the things that need root on this OS, for the warning below.
+func rootHint() string {
+	if runtime.GOOS == "darwin" {
+		return "packages, /usr/local, casks that install a system extension"
+	}
+	return "packages, /usr/local, systemd"
 }
 
 func warnNoRoot(reason string) {
 	fmt.Println(styles.Warning.Render("Continuing without root: " + reason + "."))
-	fmt.Println(styles.Dimmed.Render("  Anything that needs it (packages, /usr/local, systemd) will report a failure."))
+	fmt.Println(styles.Dimmed.Render("  Anything that needs it (" + rootHint() + ") will report a failure."))
 }
 
 // resetTerminal cleans up escape sequences that Bubble Tea v2 may leak on exit

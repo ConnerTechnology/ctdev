@@ -65,7 +65,7 @@ func runBackupPaths(cmd *cobra.Command, args []string) error {
 	if isBatchMode() {
 		return fmt.Errorf("ctdev backup paths needs a browser; run it in an interactive session (or edit %s directly)", component.ResticPathsFile)
 	}
-	if err := ensureSudo(); err != nil {
+	if err := ensureSudo(cmdContext(cmd)); err != nil {
 		return fmt.Errorf("sudo required (to read/write %s): %w", component.ResticPathsFile, err)
 	}
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}

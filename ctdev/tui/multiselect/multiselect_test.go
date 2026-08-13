@@ -253,19 +253,88 @@ func TestViewRendersInline(t *testing.T) {
 	}
 }
 
-func TestWindowCapsRowsOnTallTerminal(t *testing.T) {
+func bigList(n int) *Model {
 	var items []Item
-	for i := 0; i < 40; i++ {
+	for i := 0; i < n; i++ {
 		items = append(items, Item{ID: strconv.Itoa(i), Primary: "pkg", Selectable: true, Bulk: true})
 	}
-	m := New([]Group{{Key: "g", Title: "Group", Items: items}}, Options{Title: "T"})
-	m.Update(tea.WindowSizeMsg{Width: 80, Height: 200})
+	return New([]Group{{Key: "g", Title: "Group", Items: items}}, Options{Title: "T"})
+}
+
+// The window is sized to the terminal, not to a constant. A 60-line terminal
+// showing only 15 of 40 updates was what made a long list feel unnavigable.
+func TestWindowGrowsWithTallTerminal(t *testing.T) {
+	m := bigList(40)
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 60})
+	window, _, _ := m.windowFor(m.visibleIndices(), 3)
+	if len(window) <= minVisibleRows {
+		t.Errorf("window has %d rows on a 60-line terminal, want more than the %d floor",
+			len(window), minVisibleRows)
+	}
+	if len(window) > 60 {
+		t.Errorf("window has %d rows, more than the terminal height", len(window))
+	}
+}
+
+// A list longer than the terminal still scrolls, and the window stays inside the
+// screen so the inline renderer can't truncate the frame.
+func TestWindowScrollsWhenListExceedsTerminal(t *testing.T) {
+	m := bigList(200)
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	window, _, below := m.windowFor(m.visibleIndices(), 3)
-	if len(window) > maxVisibleRows {
-		t.Errorf("window has %d rows, want at most %d", len(window), maxVisibleRows)
+	if len(window) > 30 {
+		t.Errorf("window has %d rows, more than the 30-line terminal", len(window))
 	}
 	if below == 0 {
 		t.Error("expected a hidden-below count so the ↓ indicator renders")
+	}
+}
+
+// Before the terminal size is known, fall back to the floor rather than 0 rows.
+func TestWindowUsesFloorBeforeResize(t *testing.T) {
+	m := bigList(40)
+	window, _, below := m.windowFor(m.visibleIndices(), 3)
+	if len(window) == 0 {
+		t.Fatal("window is empty before the first WindowSizeMsg")
+	}
+	if len(window) > minVisibleRows {
+		t.Errorf("window has %d rows with no known height, want at most the %d floor",
+			len(window), minVisibleRows)
+	}
+	if below == 0 {
+		t.Error("expected a hidden-below count so the ↓ indicator renders")
+	}
+}
+
+func TestPageKeysMoveAWindowfulAndClamp(t *testing.T) {
+	m := bigList(100)
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+
+	start := m.cursor
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	if m.cursor <= start {
+		t.Fatalf("pgdn did not move the cursor (still %d)", m.cursor)
+	}
+	if moved := m.cursor - start; moved != m.pageSize() {
+		t.Errorf("pgdn moved %d rows, want a full page of %d", moved, m.pageSize())
+	}
+	if !m.landable(m.cursor) {
+		t.Error("pgdn left the cursor on an unlandable row")
+	}
+
+	// Paging past the end clamps rather than running off the list.
+	for i := 0; i < 100; i++ {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	}
+	if m.cursor != m.lastLandable() {
+		t.Errorf("pgdn past the end left cursor at %d, want last landable %d", m.cursor, m.lastLandable())
+	}
+
+	for i := 0; i < 100; i++ {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	}
+	if m.cursor != m.firstLandable() {
+		t.Errorf("pgup past the start left cursor at %d, want first landable %d", m.cursor, m.firstLandable())
 	}
 }
 

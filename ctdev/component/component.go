@@ -66,6 +66,14 @@ type Component struct {
 	// value assumes a package-manager install, so only exceptions declare it.
 	Root RootNeed
 
+	// BrewNeedsRoot marks the few components whose Homebrew install escalates.
+	// Root can't answer this on its own because it isn't OS-aware: `apt install
+	// docker` needs root while `brew install jq` does not, so on Homebrew the
+	// default has to flip. Set it for casks that ship a pkg payload, a system
+	// extension, or a privileged helper — Homebrew calls sudo itself for those,
+	// from inside the progress TUI, where an un-cached credential hangs.
+	BrewNeedsRoot bool
+
 	// DetectCmd is the command name to check if this component is installed.
 	// If empty, defaults to Name.
 	DetectCmd string
@@ -85,6 +93,10 @@ type ExecOpts struct {
 	Verbose bool
 	Stdout  io.Writer
 	Stderr  io.Writer
+
+	// NoSudoPrompt is set when a progress TUI owns the terminal; it reaches
+	// sysutil.Opts through execOpts. See sysutil.Opts.NoSudoPrompt.
+	NoSudoPrompt bool
 }
 
 func (inst *Component) IsInstalled() bool {
@@ -114,22 +126,31 @@ func (inst *Component) IsInstalled() bool {
 // progress TUI owns the terminal once installs start, so a prompt from inside
 // one would hang — but asking when nothing needs root is what broke
 // shell-config-only installs in containers that have no sudo to ask with.
-func InstallNeedsRoot(names []string, force bool) bool {
+func InstallNeedsRoot(pm string, names []string, force bool) bool {
 	for _, name := range names {
 		c := FindByName(name)
 		if c == nil {
 			continue
 		}
-		switch c.Root {
-		case RootNever:
+		if c.Root == RootNever {
 			continue
-		case RootAlways:
-			return true
-		default:
-			// --force re-runs the install step even when it's already there.
-			if force || !c.IsInstalled() {
+		}
+		// Homebrew installs into a prefix the user owns, so the usual "a package
+		// install needs root" assumption is backwards there: only the components
+		// flagged BrewNeedsRoot escalate. Without this a Mac would be asked for a
+		// password to `brew install jq`.
+		if pm == "brew" {
+			if c.BrewNeedsRoot && (force || !c.IsInstalled()) {
 				return true
 			}
+			continue
+		}
+		if c.Root == RootAlways {
+			return true
+		}
+		// --force re-runs the install step even when it's already there.
+		if force || !c.IsInstalled() {
+			return true
 		}
 	}
 	return false

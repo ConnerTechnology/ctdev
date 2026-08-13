@@ -51,7 +51,7 @@ func configureRestic(ctx context.Context) error {
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 
 	if !flagDryRun {
-		if err := ensureSudo(); err != nil {
+		if err := ensureSudo(ctx); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}

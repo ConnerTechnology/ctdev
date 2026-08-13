@@ -9,7 +9,7 @@ import (
 
 // execOpts converts component ExecOpts to sysutil Opts.
 func execOpts(opts ExecOpts) sysutil.Opts {
-	return sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	return sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun, NoSudoPrompt: opts.NoSudoPrompt}
 }
 
 // unsupportedPMError wraps ErrUnsupportedOS with a descriptive message so the

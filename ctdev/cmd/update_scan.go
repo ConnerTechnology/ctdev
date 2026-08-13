@@ -30,7 +30,6 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"apt", scanAPT},
 		{"flatpak", scanFlatpak},
 		{"brew", scanBrew},
-		{"brew-cask", scanBrewCask},
 		{"oh-my-zsh", scanOhMyZsh},
 		{"bun", scanBun},
 		{"nodenv", scanNodeEnv},
@@ -202,35 +201,103 @@ func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
 	return parseFlatpakUpdates(string(out)), nil
 }
 
-func parseBrewOutdated(output string) []checklist.UpdateItem {
+// brewManages reports whether Homebrew owns this formula on this machine.
+//
+// The runtime updaters install upstream tarballs into /usr/local (go) or drive
+// nodenv/rbenv, which is right on Linux but actively harmful on a Mac where the
+// same tool came from brew: `updateGo` would `sudo rm -rf /usr/local/go` on top
+// of a Homebrew install, and the tool would show up twice in the same update
+// list. The installers already defer to brew here (see component/go.go,
+// component/ruby.go, component/node.go); the scanners have to as well.
+//
+// `brew list --versions` exits non-zero when the formula isn't installed, which
+// is exactly the question being asked.
+func brewManages(ctx context.Context, formula string) bool {
+	if _, err := exec.LookPath("brew"); err != nil {
+		return false
+	}
+	return exec.CommandContext(ctx, "brew", "list", "--versions", formula).Run() == nil
+}
+
+// brewOutdated mirrors the shape of `brew outdated --json=v2`. Both arrays carry
+// the same fields (see Homebrew's cmd/outdated.rb and cask/cask.rb).
+//
+// The JSON form exists because the human-readable one can't be parsed reliably:
+// `brew outdated --verbose` prints `openssl@3 (3.3.2, 3.4.0) < 3.4.1` when two
+// kegs are installed, and the current version may itself be multi-word
+// ("latest HEAD") or carry a trailing "[pinned at X]".
+type brewOutdated struct {
+	Formulae []brewOutdatedEntry `json:"formulae"`
+	Casks    []brewOutdatedEntry `json:"casks"`
+}
+
+type brewOutdatedEntry struct {
+	Name              string   `json:"name"`
+	InstalledVersions []string `json:"installed_versions"`
+	CurrentVersion    string   `json:"current_version"`
+	Pinned            bool     `json:"pinned"`
+}
+
+// parseBrewOutdatedJSON turns `brew outdated --json=v2` output into update items
+// for both the "brew" and "brew-cask" sources.
+//
+// Pinned entries are dropped: `brew upgrade` errors out on a pinned formula, and
+// the apply step batches every name into a single command, so one pinned formula
+// would fail the whole batch.
+func parseBrewOutdatedJSON(data []byte) ([]checklist.UpdateItem, error) {
+	var out brewOutdated
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("parse brew outdated: %w", err)
+	}
+
 	var items []checklist.UpdateItem
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) < 4 {
+	for _, f := range out.Formulae {
+		if f.Pinned || f.Name == "" {
 			continue
 		}
 		items = append(items, checklist.UpdateItem{
-			Name:       parts[0],
+			Name:       f.Name,
 			Source:     "brew",
-			CurrentVer: strings.Trim(parts[1], "()"),
-			NewVer:     parts[3],
+			CurrentVer: strings.Join(f.InstalledVersions, ", "),
+			NewVer:     f.CurrentVersion,
 		})
 	}
-	return items
+	for _, c := range out.Casks {
+		if c.Pinned || c.Name == "" {
+			continue
+		}
+		// Only surface casks ctdev manages and that are actually installed.
+		compName, managed := managedCasks[c.Name]
+		if !managed {
+			continue
+		}
+		comp := component.FindByName(compName)
+		if comp == nil || !comp.IsInstalled() {
+			continue
+		}
+		items = append(items, checklist.UpdateItem{
+			Name:       c.Name,
+			Source:     "brew-cask",
+			CurrentVer: strings.Join(c.InstalledVersions, ", "),
+			NewVer:     c.CurrentVersion,
+		})
+	}
+	return items, nil
 }
 
+// scanBrew reports both outdated formulae and outdated casks from a single
+// `brew outdated` call — one invocation instead of the two the text-scraping
+// version needed. --greedy keeps self-updating casks (Chrome, Slack) in view;
+// managedCasks narrows the result to what ctdev installed.
 func scanBrew(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("brew"); err != nil {
 		return nil, nil
 	}
-	out, err := exec.CommandContext(ctx, "brew", "outdated", "--verbose").Output()
+	out, err := exec.CommandContext(ctx, "brew", "outdated", "--json=v2", "--greedy").Output()
 	if err != nil {
 		return nil, err
 	}
-	return parseBrewOutdated(string(out)), nil
+	return parseBrewOutdatedJSON(out)
 }
 
 // managedCasks maps brew cask names to ctdev component names.
@@ -249,47 +316,6 @@ var managedCasks = map[string]string{
 	"visual-studio-code":            "vscode",
 	"font-fira-code-nerd-font":      "fonts",
 	"font-jetbrains-mono-nerd-font": "fonts",
-}
-
-func scanBrewCask(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("brew"); err != nil {
-		return nil, nil
-	}
-	out, err := exec.CommandContext(ctx, "brew", "outdated", "--cask", "--greedy", "--verbose").Output()
-	if err != nil {
-		return nil, err
-	}
-	return parseBrewCaskOutdated(string(out)), nil
-}
-
-func parseBrewCaskOutdated(output string) []checklist.UpdateItem {
-	var items []checklist.UpdateItem
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		if line == "" {
-			continue
-		}
-		// Format: name (current_ver) != new_ver
-		parts := strings.Fields(line)
-		if len(parts) < 4 {
-			continue
-		}
-		name := parts[0]
-		compName, managed := managedCasks[name]
-		if !managed {
-			continue
-		}
-		comp := component.FindByName(compName)
-		if comp == nil || !comp.IsInstalled() {
-			continue
-		}
-		items = append(items, checklist.UpdateItem{
-			Name:       name,
-			Source:     "brew-cask",
-			CurrentVer: strings.Trim(parts[1], "()"),
-			NewVer:     parts[3],
-		})
-	}
-	return items
 }
 
 func scanOhMyZsh(ctx context.Context) ([]checklist.UpdateItem, error) {
@@ -461,6 +487,10 @@ func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
 			return nil, nil
 		}
 	}
+	// Same for Homebrew — the brew scanner already covers it.
+	if brewManages(ctx, "go") {
+		return nil, nil
+	}
 
 	// GOTOOLCHAIN=local: inside a module with a newer `toolchain` directive,
 	// `go version` would report the auto-downloaded toolchain instead of the
@@ -495,6 +525,10 @@ func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
 
 func scanRuby(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("ruby"); err != nil {
+		return nil, nil
+	}
+	// Homebrew's ruby is upgraded by the brew scanner; rbenv would fight it.
+	if brewManages(ctx, "ruby") {
 		return nil, nil
 	}
 	current := ""

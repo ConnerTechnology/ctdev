@@ -80,7 +80,7 @@ func runSettingsBrowser(ctx context.Context) error {
 			fmt.Println(styles.Dimmed.Render("  Skipped."))
 			return nil
 		}
-		if err := ensureSudo(); err != nil {
+		if err := ensureSudo(ctx); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}

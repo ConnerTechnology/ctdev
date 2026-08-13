@@ -26,10 +26,15 @@ import (
 // are truncated with an ellipsis so the detail column stays aligned.
 const nameColWidth = 22
 
-// maxVisibleRows caps the list window. The view renders inline (no alt screen),
-// so on a tall terminal an uncapped list would still push everything you had on
-// screen out of view — the thing the alt screen was doing that we're avoiding.
-const maxVisibleRows = 15
+// minVisibleRows is the list window's floor. The view renders inline (no alt
+// screen), so the window is otherwise sized to the terminal — but never smaller
+// than this, because a cramped list is worse than one that scrolls the screen a
+// little. On a tall terminal the window grows up to windowHeightSlack lines
+// short of the full height, leaving some of what you had on screen visible.
+const (
+	minVisibleRows    = 15
+	windowHeightSlack = 2
+)
 
 // Badge is a small labeled tag rendered after an item (e.g. "KERNEL").
 type Badge struct {
@@ -161,6 +166,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.moveCursor(-1)
 		case key.Matches(msg, m.keys.Down):
 			m.moveCursor(1)
+		case key.Matches(msg, m.keys.PageUp):
+			m.movePage(-1)
+		case key.Matches(msg, m.keys.PageDn):
+			m.movePage(1)
 		case key.Matches(msg, m.keys.Home):
 			m.cursor = m.firstLandable()
 		case key.Matches(msg, m.keys.End):
@@ -280,6 +289,20 @@ func (m *Model) moveCursor(dir int) {
 		}
 	}
 	m.snapCursor()
+}
+
+// movePage jumps the cursor a windowful in dir, then settles on a landable row.
+// It steps through moveCursor rather than adding pageSize to the index so that
+// collapsed groups and an active filter are respected — the visible rows, not
+// the raw ones, are what a "page" means to the user.
+func (m *Model) movePage(dir int) {
+	for i := 0; i < m.pageSize(); i++ {
+		before := m.cursor
+		m.moveCursor(dir)
+		if m.cursor == before {
+			break // clamped at an end
+		}
+	}
 }
 
 // snapCursor moves the cursor to the nearest landable row (forward then back).
@@ -585,22 +608,42 @@ func (m *Model) visibleIndices() []int {
 // windowFor slices visible into the rows that fit below the chrome, scrolling to
 // keep the cursor in view. It returns the window plus the counts hidden above
 // and below (for the "N more" indicators).
-func (m *Model) windowFor(visible []int, chrome int) (window []int, above, below int) {
-	avail := maxVisibleRows
-	if m.height > 0 && m.height-chrome < avail {
-		avail = m.height - chrome
+// availableRows is how many list rows fit below the chrome. It grows with the
+// terminal rather than being pinned to a constant — a 50-line window showing 15
+// rows was the reason a long update list felt unnavigable — but never drops
+// below minVisibleRows, and leaves windowHeightSlack lines of prior scrollback
+// visible on tall terminals.
+func (m *Model) availableRows(chrome int) int {
+	if m.height <= 0 {
+		return minVisibleRows
 	}
+	avail := m.height - chrome - windowHeightSlack
+	if avail < minVisibleRows {
+		// On a genuinely short terminal, fit what's there rather than the floor.
+		if fits := m.height - chrome; fits < minVisibleRows {
+			return max(fits, 3)
+		}
+		return minVisibleRows
+	}
+	return avail
+}
+
+// pageSize is how far PgUp/PgDn move the cursor: one windowful. Update needs it
+// before View has run, so the capacity math can't live only inside windowFor.
+func (m *Model) pageSize() int {
+	// chromeEstimate matches the header/footer block windowFor measures exactly;
+	// being a line or two off just makes a page slightly short, never wrong.
+	const chromeEstimate = 6
+	return max(m.availableRows(chromeEstimate)-2, 1)
+}
+
+func (m *Model) windowFor(visible []int, chrome int) (window []int, above, below int) {
+	avail := m.availableRows(chrome)
 	if avail >= len(visible) {
 		m.scrollOffset = 0
 		return visible, 0, 0
 	}
-	if avail < 3 {
-		avail = 3
-	}
-	capacity := avail - 2 // reserve a line each for the ↑/↓ indicators
-	if capacity < 1 {
-		capacity = 1
-	}
+	capacity := max(avail-2, 1) // reserve a line each for the ↑/↓ indicators
 
 	cursorPos := 0
 	for p, idx := range visible {

@@ -162,7 +162,7 @@ func runBackupDisable(cmd *cobra.Command, args []string) error {
 		fmt.Println("[dry-run] would disable restic-backup.timer and restic-check.timer")
 		return nil
 	}
-	if err := ensureSudo(); err != nil {
+	if err := ensureSudo(cmdContext(cmd)); err != nil {
 		return fmt.Errorf("sudo required: %w", err)
 	}
 	if err := component.ResticDisableTimer(ctx, o); err != nil {
@@ -233,7 +233,7 @@ func ensureResticReady(ctx context.Context, o sysutil.Opts, scriptPath string) e
 		// Nothing will execute — don't prompt for a sudo password to preview.
 		return nil
 	}
-	if err := ensureSudo(); err != nil {
+	if err := ensureSudo(ctx); err != nil {
 		return fmt.Errorf("sudo required: %w", err)
 	}
 	if !component.ResticConfigured(ctx, o) {

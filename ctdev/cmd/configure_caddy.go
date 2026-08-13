@@ -87,7 +87,7 @@ func configureCaddy(ctx context.Context) error {
 	// silently skipped the whole wiring step on containerized nodes.
 	havePihole := sysutil.PiholeAvailable()
 	if !flagDryRun && (havePihole || component.CaddyStackDeployed()) {
-		if err := ensureSudo(); err != nil {
+		if err := ensureSudo(ctx); err != nil {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}

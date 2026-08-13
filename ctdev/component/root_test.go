@@ -23,6 +23,8 @@ func registerRootFixtures(t testing.TB) {
 		{Name: "test-always", DetectPath: present, Root: RootAlways},
 		{Name: "test-pkg-present", DetectPath: present},
 		{Name: "test-pkg-missing", DetectPath: missing},
+		{Name: "test-brew-escalates", DetectPath: missing, BrewNeedsRoot: true},
+		{Name: "test-brew-escalates-present", DetectPath: present, BrewNeedsRoot: true},
 	} {
 		RegisterForTest(t, c)
 	}
@@ -50,8 +52,39 @@ func TestInstallNeedsRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := InstallNeedsRoot(tt.names, tt.force); got != tt.want {
-				t.Errorf("InstallNeedsRoot(%v, force=%v) = %v, want %v", tt.names, tt.force, got, tt.want)
+			if got := InstallNeedsRoot("apt", tt.names, tt.force); got != tt.want {
+				t.Errorf("InstallNeedsRoot(apt, %v, force=%v) = %v, want %v", tt.names, tt.force, got, tt.want)
+			}
+		})
+	}
+}
+
+// Homebrew installs into a user-owned prefix, so the apt assumption inverts: a
+// plain package install needs no root, and only the flagged casks — the ones
+// whose payload escalates, which is what hung `ctdev install tailscale` — do.
+func TestInstallNeedsRootOnBrew(t *testing.T) {
+	registerRootFixtures(t)
+
+	tests := []struct {
+		name  string
+		names []string
+		force bool
+		want  bool
+	}{
+		{"plain brew package needs no root", []string{"test-pkg-missing"}, false, false},
+		{"force does not make a plain package privileged", []string{"test-pkg-present"}, true, false},
+		{"home-only stays home-only", []string{"test-home-only-missing"}, false, false},
+		{"escalating cask needs root when missing", []string{"test-brew-escalates"}, false, true},
+		{"escalating cask already installed needs nothing", []string{"test-brew-escalates-present"}, false, false},
+		{"force reinstalls an escalating cask", []string{"test-brew-escalates-present"}, true, true},
+		{"one escalating cask among many is enough", []string{"test-pkg-missing", "test-brew-escalates"}, false, true},
+		{"nothing selected", nil, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := InstallNeedsRoot("brew", tt.names, tt.force); got != tt.want {
+				t.Errorf("InstallNeedsRoot(brew, %v, force=%v) = %v, want %v", tt.names, tt.force, got, tt.want)
 			}
 		})
 	}
@@ -87,13 +120,31 @@ func TestUninstallNeedsRoot(t *testing.T) {
 // The devcontainer case that motivated the gate: a shell-config-only install
 // must not ask for a password, while anything from a package manager still does.
 func TestInstallNeedsRoot_RealRegistry(t *testing.T) {
-	if InstallNeedsRoot([]string{"claude-code", "fonts", "bun", "node", "devcontainer"}, true) {
+	if InstallNeedsRoot("apt", []string{"claude-code", "fonts", "bun", "node", "devcontainer"}, true) {
 		t.Error("home-only components asked for root")
 	}
-	if !InstallNeedsRoot([]string{"claude-code", "docker"}, true) {
+	if !InstallNeedsRoot("apt", []string{"claude-code", "docker"}, true) {
 		t.Error("docker should need root")
 	}
-	if !InstallNeedsRoot([]string{"restic"}, false) {
+	if !InstallNeedsRoot("apt", []string{"restic"}, false) {
 		t.Error("restic redeploys /etc units on every run and should need root")
+	}
+}
+
+// On a Mac, `ctdev install tailscale` hung because Homebrew escalated for the
+// cask's system extension with no cached credential. It must now pre-authorize —
+// while an ordinary formula still installs without a password prompt.
+func TestInstallNeedsRoot_RealRegistryOnBrew(t *testing.T) {
+	if !InstallNeedsRoot("brew", []string{"tailscale"}, true) {
+		t.Error("the tailscale cask escalates on macOS and must pre-authorize sudo")
+	}
+	if !InstallNeedsRoot("brew", []string{"docker"}, true) {
+		t.Error("Docker Desktop installs a privileged helper and must pre-authorize sudo")
+	}
+	if InstallNeedsRoot("brew", []string{"jq", "fd", "bat", "ripgrep"}, true) {
+		t.Error("plain Homebrew formulae must not ask for a password")
+	}
+	if InstallNeedsRoot("brew", []string{"chrome", "slack", "vscode"}, true) {
+		t.Error("drag-to-Applications casks must not ask for a password")
 	}
 }

@@ -115,7 +115,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := ensureSudo(); err != nil {
+	if err := ensureSudo(cmdContext(cmd)); err != nil {
 		return fmt.Errorf("sudo required for cleanup: %w", err)
 	}
 

@@ -61,7 +61,7 @@ func runBackupTest(cmd *cobra.Command, args []string) error {
 		return stop("backup script missing — run: ctdev install restic")
 	}
 
-	if err := ensureSudo(); err != nil {
+	if err := ensureSudo(cmdContext(cmd)); err != nil {
 		return fmt.Errorf("sudo required to read /etc/restic: %w", err)
 	}
 

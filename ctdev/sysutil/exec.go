@@ -18,15 +18,25 @@ func Run(ctx context.Context, o Opts, name string, args ...string) error {
 	cmd.Stdout = o.Stdout
 	cmd.Stderr = o.Stdout
 	if err := cmd.Run(); err != nil {
-		// A bare "exit status 1" is useless by the time it reaches a summary
-		// screen — name the command (the real one, when run through sudo).
-		label := name
-		if name == "sudo" && len(args) > 0 {
-			label = "sudo " + args[0]
-		}
-		return fmt.Errorf("%s: %w", label, err)
+		return fmt.Errorf("%s: %w", commandLabel(name, args), err)
 	}
 	return nil
+}
+
+// commandLabel names the command for an error message. A bare "exit status 1"
+// is useless by the time it reaches a summary screen, and for a sudo invocation
+// the interesting name is the wrapped command, not "sudo" — so skip past sudo's
+// own flags (`-n`) to find it.
+func commandLabel(name string, args []string) string {
+	if name != "sudo" {
+		return name
+	}
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			return "sudo " + a
+		}
+	}
+	return name
 }
 
 // SudoRun executes a command with root privileges — through sudo as a normal
@@ -42,6 +52,6 @@ func SudoRun(ctx context.Context, o Opts, name string, args ...string) error {
 	if !o.DryRun && !CommandExists("sudo") {
 		return fmt.Errorf("%s needs root, but there is no sudo to run it with", name)
 	}
-	sudoArgs := append([]string{name}, args...)
-	return Run(ctx, o, "sudo", sudoArgs...)
+	argv := sudoArgv(o.NoSudoPrompt, name, args)
+	return Run(ctx, o, argv[0], argv[1:]...)
 }

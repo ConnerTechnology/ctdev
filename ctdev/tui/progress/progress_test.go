@@ -1,6 +1,7 @@
 package progress
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -160,17 +161,89 @@ func TestSummaryReplaysFailureOutput(t *testing.T) {
 	updated, _ = m.Update(InstallFailMsg{Name: "docker", Error: "exit status 100", Duration: time.Second})
 	m = updated.(*Model)
 
-	summary := m.viewSummary()
-	if !strings.Contains(summary, "Unable to locate package") {
-		t.Errorf("expected the failure's output replayed in the summary, got:\n%s", summary)
+	// The failure tail lives in the printed report, not the final frame — the
+	// frame has to stay short enough that the inline renderer can't truncate it.
+	report := m.SummaryReport()
+	if !strings.Contains(report, "Unable to locate package") {
+		t.Errorf("expected the failure's output replayed in the report, got:\n%s", report)
 	}
+
+	summary := m.viewSummary()
 	if !strings.Contains(summary, "finished with 1 failure") {
 		t.Errorf("expected an honest failure header, got:\n%s", summary)
+	}
+	if !strings.Contains(summary, "docker") {
+		t.Errorf("expected the failed name in the final frame, got:\n%s", summary)
 	}
 
 	done, failed, skipped, notRun := m.Counts()
 	if done != 0 || failed != 1 || skipped != 0 || notRun != 1 {
 		t.Errorf("Counts() = %d,%d,%d,%d; want 0,1,0,1", done, failed, skipped, notRun)
+	}
+}
+
+// TestSummaryFrameStaysBounded is the regression guard for the truncated-output
+// bug: the final frame used to render every component plus a replayed tail per
+// failure, and Bubble Tea's inline renderer drops lines from the *top* of any
+// frame taller than the terminal — so on a big update run the headline and the
+// first results vanished. The frame must now be short regardless of run size.
+func TestSummaryFrameStaysBounded(t *testing.T) {
+	names := make([]string, 60)
+	for i := range names {
+		names[i] = fmt.Sprintf("pkg-%02d", i)
+	}
+	val := New(names, ModeUpdate, false)
+	m := &val
+
+	for i, name := range names {
+		updated, _ := m.Update(InstallStartMsg{Name: name})
+		m = updated.(*Model)
+		// Every third step fails, each with a long output tail to replay.
+		if i%3 == 0 {
+			for line := 0; line < 30; line++ {
+				updated, _ = m.Update(InstallOutputMsg{Name: name, Line: fmt.Sprintf("output line %d", line)})
+				m = updated.(*Model)
+			}
+			updated, _ = m.Update(InstallFailMsg{Name: name, Error: "exit status 1", Duration: time.Second})
+		} else {
+			updated, _ = m.Update(InstallDoneMsg{Name: name, Duration: time.Second})
+		}
+		m = updated.(*Model)
+	}
+	updated, _ := m.Update(AllDoneMsg{})
+	m = updated.(*Model)
+
+	// Comfortably inside a short terminal, with room for the shell prompt after.
+	const maxFrameLines = 12
+	frame := m.View().Content
+	if got := strings.Count(frame, "\n"); got > maxFrameLines {
+		t.Errorf("final frame is %d lines, want at most %d — it will be truncated by the inline renderer:\n%s",
+			got, maxFrameLines, frame)
+	}
+
+	// The detail still has to be reachable, just not through the frame.
+	report := m.SummaryReport()
+	if !strings.Contains(report, "pkg-59") {
+		t.Error("expected every component in SummaryReport, pkg-59 missing")
+	}
+	if !strings.Contains(report, "output line 29") {
+		t.Error("expected failure output tails in SummaryReport")
+	}
+}
+
+// A short, fully successful run is already described by the final frame; the
+// report would just repeat it.
+func TestSummaryReportEmptyForTrivialRun(t *testing.T) {
+	val := New([]string{"jq"}, ModeInstall, false)
+	m := &val
+
+	updated, _ := m.Update(InstallStartMsg{Name: "jq"})
+	m = updated.(*Model)
+	updated, _ = m.Update(InstallDoneMsg{Name: "jq", Duration: time.Second})
+	m = updated.(*Model)
+
+	if report := m.SummaryReport(); report != "" {
+		t.Errorf("expected no report for a single-item clean run, got:\n%s", report)
 	}
 }
 

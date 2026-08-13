@@ -93,3 +93,41 @@ func TestSudoRun_DryRunIncludesSudo(t *testing.T) {
 		t.Errorf("got %q, want %q", buf.String(), want)
 	}
 }
+
+// Under the progress TUI a sudo prompt is invisible and unanswerable, so callers
+// there set NoSudoPrompt and sudo must get -n.
+func TestSudoRun_NoSudoPromptPassesDashN(t *testing.T) {
+	var buf bytes.Buffer
+	o := Opts{Stdout: &buf, DryRun: true, NoSudoPrompt: true}
+	if err := SudoRun(context.Background(), o, "apt-get", "update"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "[dry-run] sudo -n apt-get update\n"
+	if IsRoot() {
+		want = "[dry-run] apt-get update\n"
+	}
+	if buf.String() != want {
+		t.Errorf("got %q, want %q", buf.String(), want)
+	}
+}
+
+// The error names the wrapped command, not "sudo" and not its flags — a bare
+// "exit status 1" is useless by the time it reaches the summary.
+func TestCommandLabel(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"apt-get", []string{"update"}, "apt-get"},
+		{"sudo", []string{"apt-get", "update"}, "sudo apt-get"},
+		{"sudo", []string{"-n", "apt-get", "update"}, "sudo apt-get"},
+		{"sudo", nil, "sudo"},
+		{"sudo", []string{"-n"}, "sudo"},
+	}
+	for _, tt := range tests {
+		if got := commandLabel(tt.name, tt.args); got != tt.want {
+			t.Errorf("commandLabel(%q, %v) = %q, want %q", tt.name, tt.args, got, tt.want)
+		}
+	}
+}

@@ -158,6 +158,16 @@ jobs:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
 
+      # The unit tests only ran on Ubuntu, so darwin-only breakage (sudo
+      # pre-auth, the brew scanners) shipped unnoticed. Run them here too.
+      - name: Run tests
+        working-directory: ctdev
+        run: go test -race ./...
+
+      - name: Run go vet
+        working-directory: ctdev
+        run: go vet ./...
+
       - name: Build ctdev
         working-directory: ctdev
         run: |
@@ -170,6 +180,11 @@ jobs:
           ./ctdev --version
           ./ctdev install --help
           ./ctdev info
+
+      # Exercises the Homebrew scan path end to end (brew outdated --json=v2).
+      - name: Check for updates
+        working-directory: ctdev
+        run: ./ctdev update --check
 
       - name: Install jq component
         working-directory: ctdev

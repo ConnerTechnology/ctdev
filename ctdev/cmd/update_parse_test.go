@@ -29,15 +29,27 @@ func TestParseAPTUpgradableEmpty(t *testing.T) {
 	}
 }
 
-func TestParseBrewOutdated(t *testing.T) {
-	output := "node (21.0.0) < 22.0.0\npython (3.12.0) < 3.13.0\n"
+func TestParseBrewOutdatedJSON(t *testing.T) {
+	data := []byte(`{
+	  "formulae": [
+	    {"name":"node","installed_versions":["21.0.0"],"current_version":"22.0.0","pinned":false},
+	    {"name":"python","installed_versions":["3.12.0"],"current_version":"3.13.0","pinned":false}
+	  ],
+	  "casks": []
+	}`)
 
-	items := parseBrewOutdated(output)
+	items, err := parseBrewOutdatedJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(items) != 2 {
 		t.Fatalf("expected 2 items, got %d", len(items))
 	}
 	if items[0].Name != "node" {
 		t.Errorf("expected node, got %s", items[0].Name)
+	}
+	if items[0].Source != "brew" {
+		t.Errorf("expected source brew, got %s", items[0].Source)
 	}
 	if items[0].CurrentVer != "21.0.0" {
 		t.Errorf("expected 21.0.0, got %s", items[0].CurrentVer)
@@ -47,10 +59,92 @@ func TestParseBrewOutdated(t *testing.T) {
 	}
 }
 
-func TestParseBrewOutdatedEmpty(t *testing.T) {
-	items := parseBrewOutdated("")
+// The regression that motivated moving to JSON: with two kegs installed, the old
+// text parser read the literal "<" separator as the new version.
+func TestParseBrewOutdatedJSONMultipleInstalledVersions(t *testing.T) {
+	data := []byte(`{"formulae":[
+	  {"name":"openssl@3","installed_versions":["3.3.2","3.4.0"],"current_version":"3.4.1","pinned":false}
+	],"casks":[]}`)
+
+	items, err := parseBrewOutdatedJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].NewVer != "3.4.1" {
+		t.Errorf("NewVer = %q, want 3.4.1", items[0].NewVer)
+	}
+	if items[0].CurrentVer != "3.3.2, 3.4.0" {
+		t.Errorf("CurrentVer = %q, want both installed versions", items[0].CurrentVer)
+	}
+}
+
+// A HEAD formula reports a multi-word current version, which also defeated the
+// whitespace parser.
+func TestParseBrewOutdatedJSONHeadFormula(t *testing.T) {
+	data := []byte(`{"formulae":[
+	  {"name":"neovim","installed_versions":["HEAD-abc123"],"current_version":"HEAD","pinned":false}
+	],"casks":[]}`)
+
+	items, err := parseBrewOutdatedJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 || items[0].NewVer != "HEAD" {
+		t.Errorf("expected one HEAD item, got %+v", items)
+	}
+}
+
+// `brew upgrade` errors on a pinned formula, and the apply step batches every
+// name into one command — so one pinned formula would fail the whole batch.
+func TestParseBrewOutdatedJSONSkipsPinned(t *testing.T) {
+	data := []byte(`{"formulae":[
+	  {"name":"postgresql@14","installed_versions":["14.1"],"current_version":"14.9","pinned":true},
+	  {"name":"jq","installed_versions":["1.6"],"current_version":"1.7","pinned":false}
+	],"casks":[]}`)
+
+	items, err := parseBrewOutdatedJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected the pinned formula dropped, got %d items: %+v", len(items), items)
+	}
+	if items[0].Name != "jq" {
+		t.Errorf("expected jq, got %s", items[0].Name)
+	}
+}
+
+// Third-party taps report a full_name; that's what `brew upgrade` needs.
+func TestParseBrewOutdatedJSONTappedFormula(t *testing.T) {
+	data := []byte(`{"formulae":[
+	  {"name":"oven-sh/bun/bun","installed_versions":["1.0.0"],"current_version":"1.1.0","pinned":false}
+	],"casks":[]}`)
+
+	items, err := parseBrewOutdatedJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 || items[0].Name != "oven-sh/bun/bun" {
+		t.Errorf("expected the tapped full_name preserved, got %+v", items)
+	}
+}
+
+func TestParseBrewOutdatedJSONEmpty(t *testing.T) {
+	items, err := parseBrewOutdatedJSON([]byte(`{"formulae":[],"casks":[]}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(items) != 0 {
 		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestParseBrewOutdatedJSONMalformed(t *testing.T) {
+	if _, err := parseBrewOutdatedJSON([]byte("not json")); err == nil {
+		t.Error("expected an error for malformed JSON, not a panic or a silent empty list")
 	}
 }
 
@@ -150,18 +244,41 @@ func TestVersionNewer(t *testing.T) {
 	}
 }
 
-func TestParseBrewCaskOutdatedEmpty(t *testing.T) {
-	items := parseBrewCaskOutdated("")
+func TestParseBrewOutdatedJSONUnmanagedCask(t *testing.T) {
+	// A cask not in managedCasks should be filtered out.
+	data := []byte(`{"formulae":[],"casks":[
+	  {"name":"some-unknown-cask","installed_versions":["1.0.0"],"current_version":"2.0.0","pinned":false}
+	]}`)
+
+	items, err := parseBrewOutdatedJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(items) != 0 {
-		t.Errorf("expected 0 items, got %d", len(items))
+		t.Errorf("expected 0 items for an unmanaged cask, got %d", len(items))
 	}
 }
 
-func TestParseBrewCaskOutdatedUnmanagedCask(t *testing.T) {
-	// A cask not in managedCasks should be filtered out
-	items := parseBrewCaskOutdated("some-unknown-cask (1.0.0) != 2.0.0\n")
-	if len(items) != 0 {
-		t.Errorf("expected 0 items for unmanaged cask, got %d", len(items))
+// Casks that track "latest" report it as both installed and current version.
+// It must survive as-is rather than being mistaken for a missing field.
+func TestParseBrewOutdatedJSONCaskLatest(t *testing.T) {
+	data := []byte(`{"formulae":[],"casks":[
+	  {"name":"tailscale","installed_versions":["latest"],"current_version":"latest","pinned":false}
+	]}`)
+
+	items, err := parseBrewOutdatedJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// tailscale is in managedCasks, so it appears only when the component is
+	// installed on this machine — assert the shape, whichever way that lands.
+	for _, it := range items {
+		if it.Source != "brew-cask" {
+			t.Errorf("cask item has source %q, want brew-cask", it.Source)
+		}
+		if it.NewVer != "latest" || it.CurrentVer != "latest" {
+			t.Errorf(`expected "latest" preserved, got %+v`, it)
+		}
 	}
 }
 
@@ -179,14 +296,6 @@ func TestParseAPTUpgradableMalformedLine(t *testing.T) {
 
 func TestParseAPTUpgradableNoUpgradableKeyword(t *testing.T) {
 	items := parseAPTUpgradable("some random line\nanother line\n")
-	if len(items) != 0 {
-		t.Errorf("expected 0 items, got %d", len(items))
-	}
-}
-
-func TestParseBrewOutdatedFewerThan4Fields(t *testing.T) {
-	// Lines with fewer than 4 fields should be skipped
-	items := parseBrewOutdated("node (21.0.0)\nonly-two fields\n")
 	if len(items) != 0 {
 		t.Errorf("expected 0 items, got %d", len(items))
 	}
