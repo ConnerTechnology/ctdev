@@ -233,6 +233,53 @@ func dedupeStrings(in []string) []string {
 	return out
 }
 
+// Integrations carries the credentials a deep run may use. Empty is the normal
+// case, and means detection only.
+//
+// Nothing here is ever written to disk by this package. Where these came from
+// — an environment variable, a config file on your own machine, or a prompt
+// answered once and kept in memory — is the command layer's decision.
+type Integrations struct {
+	UniFi UnifiCreds
+}
+
+// CollectIntegrations runs the vendor probes that credentials unlock, returning
+// extra checks and their results to fold into the report.
+//
+// Every call underneath is a GET. There is no path through this function that
+// changes a setting on anyone's infrastructure.
+func CollectIntegrations(ctx context.Context, in Integrations) ([]Check, map[string]Result) {
+	if !in.UniFi.usable() {
+		return nil, nil
+	}
+
+	snap, err := collectUnifi(ctx, in.UniFi)
+	if err != nil {
+		// A controller that refuses us is worth one honest row, not a failed
+		// run — the local diagnosis stands on its own.
+		return []Check{{
+				ID: "unifi.access", Name: "UniFi controller",
+				Group: GroupNetwork, Network: true, Deep: true,
+			}}, map[string]Result{
+				"unifi.access": skipf("could not read the controller: %v", err),
+			}
+	}
+
+	results := unifiResults(snap)
+	checks := unifiChecks(snap)
+	if len(checks) > 0 {
+		first := results[checks[0].ID]
+		if first.Data == nil {
+			first.Data = map[string]string{}
+		}
+		for k, v := range unifiDataFor(snap) {
+			first.Data[k] = v
+		}
+		results[checks[0].ID] = first
+	}
+	return checks, results
+}
+
 // checkNetworkGear identifies the network equipment and, when it recognizes
 // something it could look deeper into, says how to enable that.
 //

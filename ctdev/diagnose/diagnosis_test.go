@@ -317,3 +317,101 @@ func TestSkewText(t *testing.T) {
 		t.Errorf("skewText with no data = %q", got)
 	}
 }
+
+// These are the conclusions no client-side probe can reach — the whole reason
+// the vendor integration exists.
+func TestDiagnoseInfrastructureVerdicts(t *testing.T) {
+	base := map[string]Result{
+		"link.ip":      res(OK, "192.168.1.42"),
+		"link.gateway": res(OK, "answering"),
+		"net.icmp":     res(OK, "reachable"),
+	}
+	with := func(extra map[string]Result) map[string]Result {
+		out := map[string]Result{}
+		for k, v := range base {
+			out[k] = v
+		}
+		for k, v := range extra {
+			out[k] = v
+		}
+		return out
+	}
+
+	tests := []struct {
+		name      string
+		results   map[string]Result
+		wantTitle string
+	}{
+		{
+			name:      "radar eviction",
+			results:   with(map[string]Result{"unifi.radar": res(Fail, "2 radar detections on Living Room")}),
+			wantTitle: "knocked off its channel by radar",
+		},
+		{
+			// The finding the whole integration exists for: the laptop blames
+			// itself, the controller shows the access point is the problem.
+			name: "weak signal explained by a saturated mesh AP",
+			results: with(map[string]Result{
+				"link.wifi":     res(Warn, "-76 dBm"),
+				"unifi.airtime": res(Fail, "ch 36 is 88% busy"),
+				"unifi.devices": res(Warn, "Garage on a wireless mesh uplink"),
+			}),
+			wantTitle: "access point serving this machine is the bottleneck",
+		},
+		{
+			name: "weak signal explained by congestion alone",
+			results: with(map[string]Result{
+				"link.wifi":     res(Warn, "-76 dBm"),
+				"unifi.airtime": res(Warn, "ch 6 is 72% busy"),
+			}),
+			wantTitle: "congested channel, not just distance",
+		},
+		{
+			name:      "gateway reports its own WAN down",
+			results:   with(map[string]Result{"unifi.health": res(Fail, "WAN status \"error\"")}),
+			wantTitle: "gateway reports the internet connection as down",
+		},
+		{
+			name:      "min-RSSI kicks working clients",
+			results:   with(map[string]Result{"unifi.wlan": res(Warn, "minimum-RSSI set aggressively on Home")}),
+			wantTitle: "disconnect distant clients",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			findings := Diagnose(tt.results, wiredFacts())
+			var titles []string
+			matched := false
+			for _, f := range findings {
+				titles = append(titles, f.Title)
+				if strings.Contains(f.Title, tt.wantTitle) {
+					matched = true
+					if f.Action == "" {
+						t.Error("verdict carries no action")
+					}
+				}
+			}
+			if !matched {
+				t.Errorf("no verdict mentioned %q; got %v", tt.wantTitle, titles)
+			}
+		})
+	}
+}
+
+// Without controller access there are no vendor rows at all, and the local
+// diagnosis must stand on its own without inventing infrastructure findings.
+func TestDiagnoseWithoutControllerAccess(t *testing.T) {
+	findings := Diagnose(map[string]Result{
+		"link.ip":      res(OK, "192.168.1.42"),
+		"link.gateway": res(OK, "answering"),
+		"link.wifi":    res(Warn, "-76 dBm"),
+		"unifi.access": res(Skipped, "could not read the controller"),
+	}, wifiFacts())
+
+	for _, f := range findings {
+		if strings.Contains(f.Title, "access point serving this machine") {
+			t.Error("claimed an infrastructure verdict with no controller data")
+		}
+	}
+}

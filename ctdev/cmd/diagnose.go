@@ -20,6 +20,10 @@ var (
 	flagDiagnoseStrict  bool
 	flagDiagnoseRedact  bool
 	flagDiagnoseReport  string
+
+	flagDiagnoseUnifi          string
+	flagDiagnoseUnifiUser      string
+	flagDiagnoseNoIntegrations bool
 )
 
 // reportToStdout is the --report value that writes the Markdown to stdout
@@ -56,11 +60,36 @@ func init() {
 	diagnoseCmd.Flags().StringVar(&flagDiagnoseReport, "report", "",
 		"also write a Markdown report (bare flag picks a filename; '-' writes to stdout)")
 	diagnoseCmd.Flags().Lookup("report").NoOptDefVal = reportAutoName
+
+	diagnoseCmd.Flags().StringVar(&flagDiagnoseUnifi, "unifi", "",
+		"UniFi controller URL to read (needs CTDEV_UNIFI_API_KEY)")
+	diagnoseCmd.Flags().StringVar(&flagDiagnoseUnifiUser, "unifi-user", "",
+		"UniFi admin username for legacy :8443 controllers (needs CTDEV_UNIFI_PASSWORD)")
+	diagnoseCmd.Flags().BoolVar(&flagDiagnoseNoIntegrations, "no-integrations", false,
+		"never call a vendor API, even with credentials available")
 }
 
 // reportAutoName marks "--report given with no value", which resolves to a
 // generated filename once the hostname and timestamp are known.
 const reportAutoName = "\x00auto"
+
+// integrationCreds assembles vendor credentials for this run.
+//
+// Nothing here writes to the machine being diagnosed. Credentials come from
+// the flags you typed or from the environment, and live only as long as the
+// process — which is what makes the one-line ephemeral installer safe to point
+// at somebody else's laptop.
+func integrationCreds() diagnose.Integrations {
+	var in diagnose.Integrations
+
+	in.UniFi.Endpoint = firstNonEmpty(flagDiagnoseUnifi, os.Getenv("CTDEV_UNIFI_HOST"))
+	in.UniFi.APIKey = os.Getenv("CTDEV_UNIFI_API_KEY")
+	in.UniFi.Username = firstNonEmpty(flagDiagnoseUnifiUser, os.Getenv("CTDEV_UNIFI_USER"))
+	in.UniFi.Password = os.Getenv("CTDEV_UNIFI_PASSWORD")
+	in.UniFi.Site = os.Getenv("CTDEV_UNIFI_SITE")
+
+	return in
+}
 
 func runDiagnose(cmd *cobra.Command, args []string) error {
 	ctx := cmdContext(cmd)
@@ -82,6 +111,16 @@ func runDiagnose(cmd *cobra.Command, args []string) error {
 		checks = onlyNetworkGroups(checks)
 	}
 	results := diagnose.RunAll(ctx, checks, facts)
+
+	// Vendor probes run only under --deep and only with credentials. Without
+	// them the gear check still names what it found and how to grant access.
+	if flagDiagnoseDeep && !flagDiagnoseNoIntegrations {
+		vendorChecks, vendorResults := diagnose.CollectIntegrations(ctx, integrationCreds())
+		checks = append(checks, vendorChecks...)
+		for id, res := range vendorResults {
+			results[id] = res
+		}
+	}
 
 	report := diagnose.Report{
 		Facts:    facts,

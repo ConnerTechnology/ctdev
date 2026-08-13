@@ -27,6 +27,11 @@ func Diagnose(results map[string]Result, f Facts) []Finding {
 		findings = append(findings, *fd)
 	}
 
+	// What the controller knows sits alongside the local story rather than
+	// replacing it: the machine's own symptoms are still true, and the
+	// infrastructure explains why.
+	findings = append(findings, infrastructureVerdicts(rs)...)
+
 	// Hardware and system faults are independent of each other and of the
 	// network, so these accumulate.
 	findings = append(findings, hardwareVerdicts(rs)...)
@@ -301,3 +306,79 @@ func hardwareVerdicts(rs resultSet) []Finding {
 }
 
 func durationSeconds(n int) time.Duration { return time.Duration(n) * time.Second }
+
+// infrastructureVerdicts explain a local symptom using what the network's own
+// equipment reported. These are the conclusions no client-side probe can
+// reach: a laptop can see that its signal is poor, but only the controller
+// knows the access point it is attached to is relaying its own backhaul over
+// a congested channel and was thrown off it by radar an hour ago.
+func infrastructureVerdicts(rs resultSet) []Finding {
+	var out []Finding
+
+	// Radar eviction is invisible from the client — the Wi-Fi simply dies for
+	// everyone at once and comes back somewhere else.
+	if rs.failed("unifi.radar") {
+		out = append(out, Finding{
+			Severity: Fail,
+			Title:    "Wi-Fi is being knocked off its channel by radar.",
+			Detail: rs.detail("unifi.radar") + ". On a DFS channel an access point must vacate " +
+				"the moment it hears radar, so every client drops at once. From a laptop this looks like " +
+				"the Wi-Fi randomly failing.",
+			Action:  "Pin those access points to non-DFS channels — 36-48 or 149-165 in most regions.",
+			Because: []string{"unifi.radar"},
+		})
+	}
+
+	// The combination worth naming: the client blames its own signal, and the
+	// controller shows why the signal is poor.
+	weakLocally := rs.broken("link.wifi")
+	switch {
+	case weakLocally && rs.broken("unifi.airtime") && rs.broken("unifi.devices"):
+		out = append(out, Finding{
+			Severity: Warn,
+			Title:    "The access point serving this machine is the bottleneck, not the machine.",
+			Detail: "This machine reports a weak link, and the controller shows the access point it is on is " +
+				"both relaying its own uplink wirelessly and saturating its channel. Everything behind that " +
+				"access point is sharing the same problem.",
+			Action:  "Run a cable to that access point and move it off the congested channel. Moving this one laptop won't fix it.",
+			Because: []string{"link.wifi", "unifi.airtime", "unifi.devices"},
+		})
+
+	case weakLocally && rs.broken("unifi.airtime"):
+		out = append(out, Finding{
+			Severity: Warn,
+			Title:    "Weak Wi-Fi here is a congested channel, not just distance.",
+			Detail: "This machine reports a weak link, and the controller shows the channel is heavily used. " +
+				"Moving closer will help less than clearing the channel will.",
+			Action:  "Change channel, or move some clients to another band.",
+			Because: []string{"link.wifi", "unifi.airtime"},
+		})
+	}
+
+	// The controller's own view of the WAN outranks anything guessed from a
+	// client: it is the device that actually holds the internet connection.
+	if rs.failed("unifi.health") {
+		out = append(out, Finding{
+			Severity: Fail,
+			Title:    "The gateway reports the internet connection as down.",
+			Detail:   "This is the router's own view of its WAN link, which is more authoritative than anything measured from a client.",
+			Action:   "Power-cycle the modem. If the gateway still reports no WAN, it's a call to the ISP.",
+			Because:  []string{"unifi.health"},
+		})
+	}
+
+	// A kick threshold set too high disconnects people who were working fine,
+	// which is a configuration choice rather than a fault to chase.
+	if rs.broken("unifi.wlan") {
+		out = append(out, Finding{
+			Severity: Warn,
+			Title:    "The network is configured to disconnect distant clients.",
+			Detail: rs.detail("unifi.wlan") + ". This is deliberate — it pushes clients toward a nearer access " +
+				"point — but set too high it just drops people who were working.",
+			Action:  "Lower the minimum-RSSI threshold or turn it off, then see whether the dropouts stop.",
+			Because: []string{"unifi.wlan"},
+		})
+	}
+
+	return out
+}
