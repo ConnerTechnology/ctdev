@@ -3,9 +3,18 @@ set -euo pipefail
 
 # Install ctdev - development environment manager
 # Usage: curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
+#
+# Or, to check a machine without installing anything at all:
+#   curl -fsSL .../install.sh | bash -s -- --doctor
 
 REPO="ConnerTechnology/dotfiles"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+
+# EPHEMERAL runs ctdev from a temporary directory and deletes it afterwards,
+# for machines you're only visiting. It touches no install directory, changes
+# no PATH, and never calls sudo.
+EPHEMERAL=0
+DOCTOR_ARGS=()
 
 # Colors
 RED='\033[0;31m'
@@ -14,10 +23,77 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-info() { echo -e "${BLUE}==>${NC} $1"; }
-success() { echo -e "${GREEN}[✓]${NC} $1"; }
-warn() { echo -e "${YELLOW}[!]${NC} $1"; }
-error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+# In ephemeral mode the diagnostic report owns stdout, so installer chatter
+# goes to stderr — that way `| tee report.txt` captures the report alone.
+log() {
+    if [[ $EPHEMERAL -eq 1 ]]; then
+        echo -e "$1" >&2
+    else
+        echo -e "$1"
+    fi
+}
+
+info() { log "${BLUE}==>${NC} $1"; }
+success() { log "${GREEN}[✓]${NC} $1"; }
+warn() { log "${YELLOW}[!]${NC} $1"; }
+error() { echo -e "${RED}[✗]${NC} $1" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+Usage: install.sh [--doctor [doctor options]]
+
+Installs the ctdev binary. With no arguments it installs to ~/.local/bin.
+
+Options:
+  --doctor [args]    Don't install. Download ctdev to a temporary directory,
+                     run 'ctdev doctor', then delete it. Nothing is left
+                     behind and sudo is never used. Any following arguments
+                     are passed to doctor (--deep, --report, --redact).
+  -h, --help         Show this help.
+
+Environment:
+  INSTALL_DIR        Where to install (default: ~/.local/bin)
+  CTDEV_SKIP_VERIFY  Set to 1 to skip checksum verification
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --doctor)
+            EPHEMERAL=1
+            shift
+            # Everything after --doctor belongs to doctor, including
+            # anything that looks like an installer flag.
+            DOCTOR_ARGS=("$@")
+            break
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            error "Unknown option: $1\n  Run with --help for usage."
+            ;;
+    esac
+done
+
+# One cleanup path for every temporary thing, so the traps can't clobber each
+# other as the script sets more of them up.
+TMP=""
+SUMS_TMP=""
+RUN_DIR=""
+cleanup() {
+    if [[ -n "$TMP" ]]; then rm -f "$TMP"; fi
+    if [[ -n "$SUMS_TMP" ]]; then rm -f "$SUMS_TMP"; fi
+    if [[ -n "$RUN_DIR" ]]; then rm -rf "$RUN_DIR"; fi
+    return 0
+}
+trap cleanup EXIT
+
+if [[ $EPHEMERAL -eq 1 ]]; then
+    RUN_DIR=$(mktemp -d)
+    INSTALL_DIR="$RUN_DIR"
+fi
 
 detect_platform() {
     local os arch
@@ -61,11 +137,13 @@ download() {
     fi
 }
 
-echo
-echo "  ┌─────────────────────────────────────┐"
-echo "  │  ctdev installer                    │"
-echo "  └─────────────────────────────────────┘"
-echo
+if [[ $EPHEMERAL -eq 0 ]]; then
+    echo
+    echo "  ┌─────────────────────────────────────┐"
+    echo "  │  ctdev installer                    │"
+    echo "  └─────────────────────────────────────┘"
+    echo
+fi
 
 # Detect platform
 PLATFORM=$(detect_platform)
@@ -79,20 +157,24 @@ if [[ -z "$VERSION" ]]; then
 fi
 info "Latest version: $VERSION"
 
-# Clean up old bash-based install
-if [[ -L "$INSTALL_DIR/ctdev" ]]; then
-    old_target=$(readlink "$INSTALL_DIR/ctdev" 2>/dev/null || true)
-    if [[ "$old_target" == */dotfiles/ctdev ]] || [[ "$old_target" == */dotfiles/ctdev.sh ]]; then
-        info "Removing old bash ctdev symlink..."
-        rm -f "$INSTALL_DIR/ctdev"
+# Clean up old bash-based install. Skipped entirely when running ephemerally:
+# removing things from someone else's machine is exactly what --doctor
+# promises not to do.
+if [[ $EPHEMERAL -eq 0 ]]; then
+    if [[ -L "$INSTALL_DIR/ctdev" ]]; then
+        old_target=$(readlink "$INSTALL_DIR/ctdev" 2>/dev/null || true)
+        if [[ "$old_target" == */dotfiles/ctdev ]] || [[ "$old_target" == */dotfiles/ctdev.sh ]]; then
+            info "Removing old bash ctdev symlink..."
+            rm -f "$INSTALL_DIR/ctdev"
+        fi
     fi
-fi
-if [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; then
-    # sudo -n only: a script running from a curl|bash pipe should never sit on a
-    # password prompt (and training people to type sudo passwords into piped
-    # scripts is its own problem).
-    info "Removing old ctdev from /usr/local/bin..."
-    sudo -n rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev (needs sudo) — run: sudo rm /usr/local/bin/ctdev"
+    if [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; then
+        # sudo -n only: a script running from a curl|bash pipe should never sit on a
+        # password prompt (and training people to type sudo passwords into piped
+        # scripts is its own problem).
+        info "Removing old ctdev from /usr/local/bin..."
+        sudo -n rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev (needs sudo) — run: sudo rm /usr/local/bin/ctdev"
+    fi
 fi
 
 # Create install directory
@@ -105,7 +187,6 @@ info "Downloading ctdev-${PLATFORM}..."
 # Download into INSTALL_DIR so the final mv is a same-filesystem rename —
 # atomic, so a crash mid-install can't leave a truncated binary in place.
 TMP=$(mktemp "$INSTALL_DIR/.ctdev-download.XXXXXX")
-trap 'rm -f "$TMP"' EXIT
 
 if ! download "$BINARY_URL" "$TMP"; then
     error "Download failed. Check that a release exists for $PLATFORM at:\n  https://github.com/${REPO}/releases/tag/${VERSION}"
@@ -118,7 +199,6 @@ fi
 # releases that predate checksum publishing.
 SUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/SHA256SUMS"
 SUMS_TMP=$(mktemp)
-trap 'rm -f "$TMP" "$SUMS_TMP"' EXIT
 if [[ "${CTDEV_SKIP_VERIFY:-}" == "1" ]]; then
     warn "CTDEV_SKIP_VERIFY=1 — skipping checksum verification"
 else
@@ -142,8 +222,24 @@ fi
 # Install
 chmod +x "$TMP"
 mv "$TMP" "$INSTALL_DIR/ctdev"
+TMP=""
 rm -f "$SUMS_TMP"
+SUMS_TMP=""
+
+# Ephemeral: run from the temp directory and let the EXIT trap delete it.
+# Nothing was installed, no PATH was touched, and the exit status is whatever
+# doctor reported.
+if [[ $EPHEMERAL -eq 1 ]]; then
+    info "Running doctor (nothing is installed)..."
+    log ""
+    # The ${arr[@]+...} form keeps this working under `set -u` with an empty
+    # array on bash 3.2, which is still what ships on macOS.
+    "$INSTALL_DIR/ctdev" doctor ${DOCTOR_ARGS[@]+"${DOCTOR_ARGS[@]}"}
+    exit $?
+fi
+
 trap - EXIT
+RUN_DIR=""
 
 success "ctdev ${VERSION} installed to $INSTALL_DIR/ctdev"
 

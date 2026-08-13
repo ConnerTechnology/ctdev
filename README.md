@@ -126,6 +126,22 @@ re-entering them from your password manager. **Never commit a secret.**
 curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
 ```
 
+## Diagnose a machine without installing anything
+
+For a machine you're only visiting — a family member's laptop, a client's
+desktop. Downloads to a temp directory, runs the report, and deletes itself.
+Nothing is installed, no PATH is changed, and sudo is never used.
+
+```bash
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash -s -- --doctor
+```
+
+```powershell
+# Windows — `irm | iex` cannot pass arguments, so wrap it in a scriptblock
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.ps1))) -Doctor
+```
+
 ## Getting Started
 
 ```bash
@@ -162,6 +178,10 @@ ctdev backup paths              # Pick what to back up in a local web UI
 ctdev restore ls|files|in-place|check  # Inspect/restore from restic
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev verify                    # Verify the bootstrap installation
+ctdev doctor                    # Diagnose this machine's network and hardware
+ctdev doctor --deep             # + vendor APIs, Wi-Fi scan, path trace
+ctdev doctor --report           # also write a shareable Markdown report
+ctdev doctor --redact           # mask SSID, MACs, and public IP before sharing
 ```
 
 Run `ctdev install` (no args) for an interactive component picker.
@@ -188,6 +208,7 @@ Add to your VS Code `settings.json`:
 
 - **Ubuntu/Debian/Linux Mint** - apt (primary target)
 - **macOS** - Homebrew
+- **Windows** - `ctdev doctor` only; every other command refuses up front
 
 Other package managers (dnf, pacman) are not supported; components on those
 systems report as skipped.

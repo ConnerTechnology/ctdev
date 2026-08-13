@@ -43,6 +43,42 @@ jobs:
       - name: Run ShellCheck
         run: shellcheck install.sh uninstall.sh devcontainer.sh
 
+  powershell-lint:
+    name: PowerShell Lint
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # install.ps1 is the Windows half of the installer, and no Linux or macOS
+      # runner can parse it — without this job a syntax error would ship.
+      - name: Parse install.ps1
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host "install.ps1 parses cleanly"
+
+      - name: Check for parameter binding
+        shell: pwsh
+        run: |
+          # The documented `& ([scriptblock]::Create((irm ...))) -Doctor`
+          # invocation only works if the script declares its parameters.
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1), [ref]$null, [ref]$null)
+          if (-not $ast.ParamBlock) { throw "install.ps1 must declare a param() block" }
+          $names = $ast.ParamBlock.Parameters.Name.VariablePath.UserPath
+          foreach ($required in @('Doctor', 'DoctorArgs')) {
+            if ($names -notcontains $required) { throw "install.ps1 is missing the -$required parameter" }
+          }
+          Write-Host "install.ps1 exposes the expected parameters"
+
   go-test:
     name: Go Tests
     runs-on: ubuntu-latest
@@ -64,6 +100,16 @@ jobs:
       - name: Vet
         working-directory: ctdev
         run: go vet ./...
+
+      # ctdev only ships `doctor` on Windows, but it has to compile there —
+      # and nothing else in CI would catch a Unix-only syscall creeping in.
+      - name: Cross-compile check
+        working-directory: ctdev
+        run: |
+          for target in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            echo "==> $target"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go vet ./...
+          done
 
       - name: Build
         working-directory: ctdev
@@ -196,19 +242,30 @@ jobs:
   build-release:
     name: Build ${{ matrix.os }}-${{ matrix.arch }}
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [shellcheck, go-test, test-ubuntu, test-macos]
+    needs: [shellcheck, powershell-lint, go-test, test-ubuntu, test-macos]
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
           - os: linux
             arch: amd64
+            ext: ''
           - os: linux
             arch: arm64
+            ext: ''
           - os: darwin
             arch: amd64
+            ext: ''
           - os: darwin
             arch: arm64
+            ext: ''
+          # Windows ships the diagnostic command only — see cmd/root.go.
+          - os: windows
+            arch: amd64
+            ext: '.exe'
+          - os: windows
+            arch: arm64
+            ext: '.exe'
 
     steps:
       - name: Checkout code
@@ -240,13 +297,13 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           VERSION=$(cat ../VERSION)
-          go build -ldflags "-X main.version=$VERSION" -o ctdev-${{ matrix.os }}-${{ matrix.arch }} .
+          go build -ldflags "-X main.version=$VERSION" -o ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ctdev-${{ matrix.os }}-${{ matrix.arch }}
-          path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}
+          name: ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
   release:
     name: Create Release

@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.14.0] - 2026-08-13
+
+### Added
+- **`ctdev doctor` — a health report for machines ctdev doesn't manage.** The
+  rest of ctdev assumes it set the machine up; this assumes nothing. It's for
+  the laptop someone hands you saying "my Wi-Fi doesn't work". Every check is
+  read-only, root is never required (checks that need it report Skipped and say
+  why), and no data leaves the machine beyond the diagnostic probes themselves.
+
+  Roughly 35 checks across network, internet, hardware, system, and security:
+  Wi-Fi signal in dBm with band and channel, gateway reachability, per-resolver
+  DNS timing, captive-portal detection, TLS failures reported separately from
+  connection failures, IPv6-present-but-unreachable, clock skew, disk and inode
+  pressure, SMART health, thermal throttling, OOM kills, degraded RAID, stuck
+  print queues, container restart loops, firewall and disk-encryption posture.
+
+- **Verdicts, not just checks.** A column of red marks tells you twelve things
+  are wrong; `doctor` tells you the one thing that is wrong and that the other
+  eleven are downstream of it — "the router is fine, the connection to the
+  internet is down", "the clock is wrong, which breaks every secure website",
+  "the router isn't handing out addresses". Network rules are layered so one
+  root cause produces one verdict.
+
+- **Vendor deep-dives under `--deep`.** A laptop can see its own signal is poor;
+  only the controller knows the access point it's on is relaying its uplink
+  wirelessly over a channel it was thrown off by radar an hour ago. Reads UniFi
+  (radar events, airtime, mesh uplinks, min-RSSI thresholds), Synology (disk and
+  volume health), Proxmox (node and storage health), plus credential-free
+  Pi-hole, Docker, and Tailscale checks. Read-only by construction — the
+  provider interface has no method that changes anything.
+
+  Without credentials it still fingerprints the gear from the gateway MAC, a
+  Ubiquiti discovery probe, and the management certificate, then prints exact
+  instructions for granting read-only access.
+
+- **Run it without installing anything.** `install.sh --doctor` downloads ctdev
+  to a temp directory, runs the report, and deletes it — no install directory
+  touched, no PATH changed, no sudo. `install.ps1 -Doctor` on Windows.
+
+- **`--report` writes shareable Markdown**, and `--redact` masks the SSID, MAC
+  addresses, and this connection's public IP first. Public resolvers survive
+  redaction, because "1.1.1.1 answers and yours doesn't" is the diagnosis.
+
+- **Windows support, scoped to `doctor`.** Every other command refuses up front
+  rather than failing halfway through. Release builds now cover
+  `windows/amd64` and `windows/arm64`.
+
+### Changed
+- **`ctdev status` now shares the `doctor` check catalog**, filtered to the
+  checks that touch nothing but this machine — so there's one implementation of
+  "is the disk full" instead of two. Its no-network contract is unchanged.
+
+### Fixed
+- **`install.sh` documentation corrected**: it downloads a release binary and
+  verifies it against `SHA256SUMS`. It has never had a source-build path,
+  despite CLAUDE.md claiming otherwise.
+
 ## [12.13.0] - 2026-08-13
 
 ### Fixed
@@ -65,6 +122,7 @@ All notable changes to this project will be documented in this file.
   so suppressing Homebrew's mid-step auto-update can't leave results stale.
 - CI runs `go test` and `go vet` on macOS. They only ran on Ubuntu, which is why
   all of the above shipped unnoticed.
+
 
 ## [12.12.1] - 2026-07-30
 
