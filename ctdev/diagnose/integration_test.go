@@ -222,7 +222,7 @@ func TestUnifiSetupHelp(t *testing.T) {
 	for _, want := range []string{
 		"Control Plane → Integrations",
 		"shows it exactly once",
-		"ctdev doctor --deep --unifi https://192.168.1.1",
+		"CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep",
 		"CTDEV_UNIFI_API_KEY",
 		":8443",
 	} {
@@ -245,3 +245,27 @@ func TestFingerprintingIsPrivateOnly(t *testing.T) {
 }
 
 func mustAddr(s string) netip.Addr { return netip.MustParseAddr(s) }
+
+// Printing set-up instructions after the set-up plainly worked is the worst
+// kind of noise: it reads as "this failed" when the controller's own rows are
+// right there in the same report.
+func TestNetworkGearSuppressesSetupHelpWhenConfigured(t *testing.T) {
+	gw := GatewayIdentity{
+		Addr: mustAddr("192.168.1.1"), MAC: "78:8a:20:1a:2b:3c", Vendor: "Ubiquiti",
+	}
+
+	// Without credentials the instructions are the whole point.
+	noCreds := gearResult(context.Background(), Facts{Gateway: gw.Addr}, gw)
+	if noCreds.Advice == "" {
+		t.Error("without credentials the row must explain how to grant access")
+	}
+
+	// With them, the row should point at the controller data instead.
+	withCreds := gearResult(context.Background(), Facts{Gateway: gw.Addr, IntegrationsConfigured: true}, gw)
+	if withCreds.Advice != "" {
+		t.Errorf("credentials are configured, yet set-up instructions were printed: %q", withCreds.Advice)
+	}
+	if !strings.Contains(withCreds.Detail, "reading the controller") {
+		t.Errorf("detail = %q, want it to point at the controller rows", withCreds.Detail)
+	}
+}

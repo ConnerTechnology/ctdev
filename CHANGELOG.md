@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.14.1] - 2026-08-14
+
+### Fixed
+- **`CTDEV_UNIFI_API_KEY` alone did nothing.** The set-up instructions said the
+  key was enough, but the controller endpoint had to be supplied separately —
+  so `doctor` would identify a UniFi gateway, print instructions promising the
+  key would work, and then refuse to talk to it. The controller now defaults to
+  the detected gateway; `--unifi <url>` still overrides it for the case where
+  the controller isn't the gateway.
+- **Set-up instructions printed even after the set-up had worked.** With
+  credentials in hand, the network-equipment row sat above five rows of live
+  controller data telling you to go and create an API key. It now points at the
+  controller data instead.
+
 ## [12.14.0] - 2026-08-13
 
 ### Added

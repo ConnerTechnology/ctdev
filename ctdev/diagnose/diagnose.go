@@ -188,6 +188,12 @@ type Facts struct {
 	// Root records whether root-only sources (SMART, some kernel logs) are
 	// readable, so checks can degrade to Skipped with a useful reason.
 	Root bool
+
+	// IntegrationsConfigured records that vendor credentials were supplied for
+	// this run, so checks can stop offering set-up instructions for access
+	// that already exists. Deliberately a bool and not the credentials
+	// themselves: Facts travels into the report, and secrets must not.
+	IntegrationsConfigured bool
 }
 
 // Finding is a verdict the correlation engine reached by combining several

@@ -54,6 +54,10 @@ ctdev doctor --report [path]    # also write a shareable Markdown report
 ctdev doctor --redact           # mask SSID/MAC/public IP so the report can be shared
 ctdev doctor --strict           # exit non-zero on failure (for cron)
 ctdev doctor --no-integrations  # never call a vendor API, even with credentials
+
+# Vendor deep-dive: the key alone is enough — the controller defaults to the gateway.
+CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep
+ctdev doctor --deep --unifi https://10.2.2.1   # when it isn't the gateway
 ```
 
 ## Install

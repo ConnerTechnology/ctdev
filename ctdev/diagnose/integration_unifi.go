@@ -254,8 +254,8 @@ func (unifiProvider) SetupHelp(d Detection) string {
 		"  2. Settings → Control Plane → Integrations",
 		"  3. Create New API Key, name it \"ctdev-doctor\"",
 		"  4. Copy the key now — UniFi shows it exactly once",
-		"Then: ctdev doctor --deep --unifi " + endpoint,
-		"Or set CTDEV_UNIFI_API_KEY for the one-line installer.",
+		"Then: CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep",
+		"The controller defaults to the gateway; --unifi <url> overrides it.",
 		"Legacy controllers on :8443 predate API keys — use --unifi-user instead.",
 	}, "\n")
 }

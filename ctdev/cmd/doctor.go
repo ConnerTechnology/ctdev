@@ -79,7 +79,7 @@ const reportAutoName = "\x00auto"
 // the flags you typed or from the environment, and live only as long as the
 // process — which is what makes the one-line ephemeral installer safe to point
 // at somebody else's laptop.
-func integrationCreds(ctx context.Context) diagnose.Integrations {
+func integrationCreds(ctx context.Context, f diagnose.Facts) diagnose.Integrations {
 	var in diagnose.Integrations
 
 	in.UniFi.Endpoint = firstNonEmpty(flagDoctorUnifi, os.Getenv("CTDEV_UNIFI_HOST"))
@@ -95,6 +95,14 @@ func integrationCreds(ctx context.Context) diagnose.Integrations {
 	in.Proxmox.Endpoint = os.Getenv("CTDEV_PROXMOX_HOST")
 	in.Proxmox.TokenID = os.Getenv("CTDEV_PROXMOX_TOKEN_ID")
 	in.Proxmox.Secret = os.Getenv("CTDEV_PROXMOX_SECRET")
+
+	// A key with no endpoint means the gateway: we just found the controller,
+	// and making someone name an address the tool already knows is exactly the
+	// kind of busywork that gets a diagnostic abandoned mid-call. It also makes
+	// the documented one-liner — set the key, run doctor — actually true.
+	if in.UniFi.APIKey != "" && in.UniFi.Endpoint == "" && f.Gateway.IsValid() {
+		in.UniFi.Endpoint = "https://" + f.Gateway.String()
+	}
 
 	promptForMissingSecrets(ctx, &in)
 	return in
@@ -149,6 +157,16 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	started := time.Now()
 	facts := diagnose.GatherFacts(ctx, info)
 
+	// Resolve credentials before the checks run, not after: any prompt belongs
+	// up front rather than interrupting a report mid-flow, and the gear check
+	// needs to know whether access already exists before it offers set-up
+	// instructions for it.
+	var creds diagnose.Integrations
+	if flagDoctorDeep && !flagDoctorNoIntegrations {
+		creds = integrationCreds(ctx, facts)
+		facts.IntegrationsConfigured = creds.Any()
+	}
+
 	checks := diagnose.Select(diagnose.Catalog(info, facts), flagDoctorDeep, true)
 	if flagDoctorNetwork {
 		checks = onlyNetworkGroups(checks)
@@ -157,8 +175,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Vendor probes run only under --deep and only with credentials. Without
 	// them the gear check still names what it found and how to grant access.
-	if flagDoctorDeep && !flagDoctorNoIntegrations {
-		vendorChecks, vendorResults := diagnose.CollectIntegrations(ctx, integrationCreds(ctx))
+	if creds.Any() {
+		vendorChecks, vendorResults := diagnose.CollectIntegrations(ctx, creds)
 		checks = append(checks, vendorChecks...)
 		for id, res := range vendorResults {
 			results[id] = res

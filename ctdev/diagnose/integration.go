@@ -359,8 +359,13 @@ func checkNetworkGear(ctx context.Context, f Facts) Result {
 	if !f.Gateway.IsValid() {
 		return skipf("no gateway to identify")
 	}
-	gw := identifyGateway(ctx, f)
+	return gearResult(ctx, f, identifyGateway(ctx, f))
+}
 
+// gearResult turns a gateway fingerprint into a report row. Split from the
+// probing above so it can be tested against a known identity without touching
+// the network.
+func gearResult(ctx context.Context, f Facts, gw GatewayIdentity) Result {
 	var found []Detection
 	for _, p := range providers() {
 		if d := p.Detect(ctx, f, gw); d.Found {
@@ -377,15 +382,22 @@ func checkNetworkGear(ctx context.Context, f Facts) Result {
 	}
 
 	d := found[0]
-	res := infof("%s detected — %s (%s)", d.Product, d.Endpoint, d.Confidence)
-	res.Data = map[string]string{
-		"product":    d.Product,
-		"endpoint":   d.Endpoint,
-		"confidence": d.Confidence.String(),
-		"evidence":   strings.Join(d.Evidence, "; "),
+
+	// With credentials in hand the controller's own rows are already in this
+	// report, so say that instead of printing set-up instructions for a step
+	// that plainly worked — nothing reads worse than being told to do the
+	// thing you just did.
+	if f.IntegrationsConfigured {
+		res := okf("%s at %s — reading the controller directly (see below)", d.Product, d.Endpoint)
+		res.Data = detectionData(d)
+		return res
 	}
-	// The setup instructions ride along as advice, so a run that finds UniFi
-	// but has no credentials still tells you exactly how to unlock the rest.
+
+	res := infof("%s detected — %s (%s)", d.Product, d.Endpoint, d.Confidence)
+	res.Data = detectionData(d)
+	// Without credentials the set-up instructions are the useful part: they
+	// are the difference between "this is a UniFi network" and being able to
+	// ask it anything.
 	for _, p := range providers() {
 		if p.Name() == d.Product || strings.HasPrefix(d.Product, p.Name()) {
 			res.Advice = p.SetupHelp(d)
@@ -393,4 +405,13 @@ func checkNetworkGear(ctx context.Context, f Facts) Result {
 		}
 	}
 	return res
+}
+
+func detectionData(d Detection) map[string]string {
+	return map[string]string{
+		"product":    d.Product,
+		"endpoint":   d.Endpoint,
+		"confidence": d.Confidence.String(),
+		"evidence":   strings.Join(d.Evidence, "; "),
+	}
 }

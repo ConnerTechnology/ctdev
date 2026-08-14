@@ -182,6 +182,10 @@ ctdev doctor                    # Diagnose this machine's network and hardware
 ctdev doctor --deep             # + vendor APIs, Wi-Fi scan, path trace
 ctdev doctor --report           # also write a shareable Markdown report
 ctdev doctor --redact           # mask SSID, MACs, and public IP before sharing
+
+# Read the UniFi controller too (radar events, airtime, mesh uplinks).
+# Create a read-only key: Settings → Control Plane → Integrations.
+CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep
 ```
 
 Run `ctdev install` (no args) for an interactive component picker.
