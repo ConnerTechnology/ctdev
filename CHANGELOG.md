@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.16.0] - 2026-08-19
+
+### Added
+- **`ctdev backup paths --listen tailnet`.** The path picker binds to loopback,
+  which makes it unusable in the situation it is most needed: SSH'd into a
+  headless node. The old advice was to forward the port from your laptop, but
+  the port is chosen fresh on every run — so you had to read it off the screen,
+  open a second terminal, and get the forward up before giving up. The picker
+  can now serve itself on the node's Tailscale address instead, printing a
+  MagicDNS URL you can open from any device on the tailnet.
+
+  Loopback remains the default and the flag is opt-in: the page browses the
+  whole filesystem and writes root-owned files, so it is not something to widen
+  automatically. Tailnet mode binds the node's Tailscale address specifically,
+  never `0.0.0.0` — it does not become reachable from the LAN — and the
+  single-use launch token and session cookie are unchanged. The request-origin
+  guard accepts exactly the host the page is served from, so a lookalike name
+  like `<node>.ts.net.example.com` is still refused.
+
+### Changed
+- **The loopback picker now says so when you are on a remote session.** It
+  detects SSH, warns that the URL it just printed will not open from where you
+  are, points at `--listen tailnet`, and prints the forward command using the
+  node's MagicDNS name with a note that the port changes each run.
+
 ## [12.15.0] - 2026-08-19
 
 ### Added
