@@ -36,6 +36,17 @@ var backupPathsCmd = &cobra.Command{
 	RunE: runBackupPaths,
 }
 
+// flagBackupPathsListen selects where the picker listens. Loopback is the
+// default because the page can read the whole filesystem and write root-owned
+// files. "tailnet" trades that for being usable over SSH without a port
+// forward, which is how this is actually run on a headless node.
+var flagBackupPathsListen string
+
+func init() {
+	backupPathsCmd.Flags().StringVar(&flagBackupPathsListen, "listen", "loopback",
+		"where to serve the picker: loopback, or tailnet to reach it from another device on your tailnet")
+}
+
 // sessionCookie carries the API token between page loads. The token itself
 // never appears in a URL, so it can't leak via browser history or the argv of
 // the browser-opening command.
@@ -57,6 +68,11 @@ type pathPicker struct {
 	done     chan struct{}
 	doneOnce sync.Once
 	dryRun   bool
+
+	// extraOrigin is the non-loopback host the page is served from in tailnet
+	// mode. Empty in the default loopback mode, so the origin check stays as
+	// strict as it was.
+	extraOrigin string
 }
 
 func runBackupPaths(cmd *cobra.Command, args []string) error {
@@ -96,22 +112,38 @@ func runBackupPaths(cmd *cobra.Command, args []string) error {
 	}
 	p.load(ctx)
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	bindHost, reachHost, err := pickerBind(ctx, flagBackupPathsListen)
+	if err != nil {
+		return err
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort(bindHost, "0"))
 	if err != nil {
 		return fmt.Errorf("start local server: %w", err)
 	}
-	pageURL := fmt.Sprintf("http://%s/?t=%s", ln.Addr().String(), bootTok)
+	if reachHost != "" {
+		p.extraOrigin = reachHost
+	}
+	// The URL has to name the host the browser will actually use, so the Origin
+	// it sends back matches what the guard accepts.
+	urlHost := net.JoinHostPort(bindHost, portOf(ln))
+	if reachHost != "" {
+		urlHost = net.JoinHostPort(reachHost, portOf(ln))
+	}
+	pageURL := fmt.Sprintf("http://%s/?t=%s", urlHost, bootTok)
 
 	srv := &http.Server{Handler: p.routes()}
 	go srv.Serve(ln)
 
 	fmt.Println(styles.Title.Render("Backup path picker"))
 	fmt.Printf("  Open: %s\n", styles.Value.Render(pageURL))
-	if err := openBrowser(pageURL); err != nil {
-		fmt.Println(styles.Dimmed.Render("  (couldn't open a browser automatically)"))
+	if reachHost != "" {
+		fmt.Println(styles.Dimmed.Render("  Reachable from any device on your tailnet, for this session only."))
+	} else {
+		if err := openBrowser(pageURL); err != nil {
+			fmt.Println(styles.Dimmed.Render("  (couldn't open a browser automatically)"))
+		}
+		printPickerRemoteHint(ctx, portOf(ln))
 	}
-	fmt.Println(styles.Dimmed.Render("  On a headless/remote host, forward the port from your laptop, e.g.:"))
-	fmt.Printf("    %s\n", styles.Dimmed.Render(fmt.Sprintf("ssh -L %[1]s:localhost:%[1]s %s", portOf(ln), hostLabel())))
 	fmt.Println(styles.Dimmed.Render("  Waiting for you to Save & Close (Ctrl-C to cancel)..."))
 
 	select {
@@ -159,7 +191,7 @@ func (inst *pathPicker) guard(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		if origin := r.Header.Get("Origin"); origin != "" && !isLoopbackOrigin(origin) {
+		if origin := r.Header.Get("Origin"); origin != "" && !inst.originAllowed(origin) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -498,6 +530,23 @@ func openBrowser(url string) error {
 	return exec.Command(name, args...).Start()
 }
 
+// originAllowed accepts loopback always, plus the exact host the page is served
+// from when the picker was started in tailnet mode. Matching is on the parsed
+// hostname, never a substring.
+func (inst *pathPicker) originAllowed(origin string) bool {
+	if isLoopbackOrigin(origin) {
+		return true
+	}
+	if inst.extraOrigin == "" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	return u.Hostname() == inst.extraOrigin
+}
+
 // isLoopbackOrigin reports whether an Origin header names a loopback host.
 // The hostname must match exactly — a substring check would wave through
 // "localhost.attacker.com".
@@ -514,6 +563,66 @@ func isLoopbackOrigin(origin string) bool {
 		return ip.IsLoopback()
 	}
 	return false
+}
+
+// pickerBind resolves the --listen choice to the address to bind and, for
+// tailnet mode, the host the browser should use. Tailnet mode binds the node's
+// Tailscale address specifically — never 0.0.0.0, which would also put a
+// filesystem browser that writes root-owned files on the LAN.
+func pickerBind(ctx context.Context, mode string) (bindHost, reachHost string, err error) {
+	switch mode {
+	case "", "loopback":
+		return "127.0.0.1", "", nil
+	case "tailnet":
+		ip := commandOutput(ctx, "tailscale", "ip", "-4")
+		if ip == "" {
+			return "", "", fmt.Errorf("--listen tailnet needs Tailscale up on this machine (run 'sudo tailscale up')")
+		}
+		// Prefer the MagicDNS name in the URL: it is what the tailnet's own
+		// certificate and a human's memory both use, and it survives an IP
+		// change mid-session.
+		reach := ip
+		if name := magicDNSName(ctx); name != "" {
+			reach = name
+		}
+		return ip, reach, nil
+	default:
+		return "", "", fmt.Errorf("--listen must be loopback or tailnet, got %q", mode)
+	}
+}
+
+// magicDNSName returns this node's MagicDNS name without the trailing dot, or
+// "" when Tailscale isn't up or MagicDNS is off.
+func magicDNSName(ctx context.Context) string {
+	out := commandOutput(ctx, "tailscale", "status", "--json")
+	if out == "" {
+		return ""
+	}
+	var st struct {
+		Self struct{ DNSName string }
+	}
+	if json.Unmarshal([]byte(out), &st) != nil {
+		return ""
+	}
+	return strings.TrimSuffix(st.Self.DNSName, ".")
+}
+
+// printPickerRemoteHint explains how to reach a loopback-bound picker from
+// somewhere else. The port is fresh every run, so the forward command is only
+// useful printed here — and over SSH the tailnet flag beats it outright.
+func printPickerRemoteHint(ctx context.Context, port string) {
+	remote := os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != ""
+	if remote {
+		fmt.Println(styles.Warning.Render("  You're on a remote session — this loopback URL won't open from here."))
+		fmt.Println(styles.Dimmed.Render("  Serve it on your tailnet instead (no port forward, no second terminal):"))
+		fmt.Printf("    %s\n", styles.Value.Render("ctdev backup paths --listen tailnet"))
+	}
+	host := hostLabel()
+	if name := magicDNSName(ctx); name != "" {
+		host = name
+	}
+	fmt.Println(styles.Dimmed.Render("  Or forward the port from your laptop (the port changes every run):"))
+	fmt.Printf("    %s\n", styles.Dimmed.Render(fmt.Sprintf("ssh -L %[1]s:localhost:%[1]s %s", port, host)))
 }
 
 func portOf(ln net.Listener) string {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -295,4 +296,55 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+func TestPickerBindModes(t *testing.T) {
+	ctx := context.Background()
+
+	bind, reach, err := pickerBind(ctx, "loopback")
+	if err != nil || bind != "127.0.0.1" || reach != "" {
+		t.Errorf("loopback = (%q, %q, %v), want (127.0.0.1, \"\", nil)", bind, reach, err)
+	}
+	// The default (empty) must stay loopback: the picker reads the whole
+	// filesystem and writes root-owned files.
+	if bind, reach, err := pickerBind(ctx, ""); err != nil || bind != "127.0.0.1" || reach != "" {
+		t.Errorf("default = (%q, %q, %v), want loopback", bind, reach, err)
+	}
+	if _, _, err := pickerBind(ctx, "0.0.0.0"); err == nil {
+		t.Error("an arbitrary bind address must be rejected, not passed through")
+	}
+	if _, _, err := pickerBind(ctx, "lan"); err == nil {
+		t.Error("unknown listen mode must be rejected")
+	}
+}
+
+// The origin guard is what stops a page in another tab driving a server that
+// can write root-owned files, so widening it for tailnet mode must not widen it
+// for anything else.
+func TestPickerOriginAllowed(t *testing.T) {
+	loopbackOnly := &pathPicker{}
+	tailnet := &pathPicker{extraOrigin: "ctpi01.tail3c73d9.ts.net"}
+
+	cases := []struct {
+		origin           string
+		wantLoopbackOnly bool
+		wantTailnet      bool
+	}{
+		{"http://127.0.0.1:41949", true, true},
+		{"http://localhost:41949", true, true},
+		{"http://ctpi01.tail3c73d9.ts.net:41949", false, true},
+		{"http://evil.example.com", false, false},
+		// Must not match on a suffix or prefix of the allowed host.
+		{"http://ctpi01.tail3c73d9.ts.net.evil.com", false, false},
+		{"http://notctpi01.tail3c73d9.ts.net", false, false},
+		{"file:///etc/passwd", false, false},
+	}
+	for _, tc := range cases {
+		if got := loopbackOnly.originAllowed(tc.origin); got != tc.wantLoopbackOnly {
+			t.Errorf("loopback mode: originAllowed(%q) = %v, want %v", tc.origin, got, tc.wantLoopbackOnly)
+		}
+		if got := tailnet.originAllowed(tc.origin); got != tc.wantTailnet {
+			t.Errorf("tailnet mode: originAllowed(%q) = %v, want %v", tc.origin, got, tc.wantTailnet)
+		}
+	}
 }
