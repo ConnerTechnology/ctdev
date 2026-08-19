@@ -2,6 +2,73 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.15.0] - 2026-08-19
+
+### Added
+- **`mcp-email-server` component — your mail, on the node, not on your laptops.**
+  An MCP server that reads (and optionally sends) mail over IMAP, run as a Docker
+  compose stack on an always-on box. Every laptop reaches it over Tailscale, so no
+  email credential is ever stored on a laptop — that property is the whole point
+  of the component.
+
+  Upstream ships no authentication: `mcp-email-server streamable-http` accepts only
+  `--host` and `--port`, so anything that reaches the port reads every configured
+  mailbox in full. The container port is therefore published on `127.0.0.1` only
+  (a bare mapping would be LAN-wide even behind UFW, because Docker's iptables
+  rules are inserted ahead of it), and `tailscale serve` on the host is the only
+  route in — TLS from the tailnet's own certificate, reachable only by
+  authenticated tailnet peers. The image tag is pinned rather than tracking
+  `latest`; a silent upgrade of the process holding mail credentials isn't
+  something to discover afterwards.
+
+- **`ctdev configure mcp-email-server`** — adds and removes mailboxes over SSH
+  (upstream's `ui` subcommand needs a browser), then publishes the service to the
+  tailnet. Presets for iCloud, Gmail/Workspace, Microsoft 365, and Fastmail;
+  sending is opt-in per account, so a mailbox an agent can read isn't
+  automatically one it can send from. `--show` reports the accounts, the
+  credential file's actual mode, and the tailnet endpoint.
+
+  The stack is built from a Dockerfile pinning `mcp-email-server==1.4.1` on
+  `python:3.12-slim` rather than pulling upstream's image, which stops at 0.16.0
+  — a major version behind the Python package. That also buys the headless setup
+  path: `account add --password-stdin` (never argv), `--json` on every command,
+  and an `account test` IMAP login check run right after you enter a password, so
+  a typo fails on the spot instead of as an empty inbox days later. Removing or
+  replacing an account passes the `--expected-revision` and `--confirm` flags
+  upstream requires; without them removal failed silently, so re-running
+  configure to fix a typo could not replace the old record.
+
+  Mailbox passwords sit in the managed catalog at
+  `~/mcp-email-server/config/managed.sqlite3`, mode 0600, owned by the invoking
+  user — the container runs as that uid, not root. They are not encrypted at
+  rest; the mode and the node's isolation are the protection. Install and
+  configure both print the path and the mode they actually found rather than
+  asserting it. `ctdev uninstall` stops the stack and keeps the catalog: losing it
+  means re-issuing an app-specific password for every mailbox.
+
+  On a node already running Caddy it publishes on tailnet port 8443 rather than
+  443, because `ctdev configure caddy` points `*.<domain>` at that node's
+  Tailscale IP — a serve rule on 443 would intercept it and quietly send every
+  `https://<svc>.<domain>` to the email server instead of Caddy. `--serve-port`
+  overrides it.
+
+- **Install refuses to replace an email server it did not create.** The first
+  version of this component did exactly that on `ctpi01`: a different
+  implementation was serving the same role, `ctdev install` swapped it out, and
+  the replacement answered `list_available_accounts` with an empty list and
+  `isError: false`. To a client that reads as "no mailboxes configured", not
+  "your accounts are gone" — an assistant triaging mail against it would have
+  reported a clean inbox. Install now probes for a container it didn't build, a
+  `./config` belonging to another server, and a `tailscale serve` mapping already
+  bound to the port; on any of those it names what it found, says the accounts
+  will not carry over, and stops unless `--force` is given. `--dry-run` previews
+  the refusal. Re-running install over its own stack stays idempotent and never
+  touches `./config`.
+
+- **`ai-node` profile** — the box that runs the AI services: zsh, git, tailscale,
+  docker, portainer, beszel, restic, and mcp-email-server. Built for a Raspberry
+  Pi today and a Proxmox VM or LXC container later, with no change to the profile.
+
 ## [12.14.1] - 2026-08-14
 
 ### Fixed

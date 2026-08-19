@@ -6,7 +6,8 @@ Instructions for Claude Code when working with this repository.
 
 `ctdev install <component>` installs the component (pulling in its `Dependencies`
 first) and then runs its configuration step if it has one — a `configure <name>`
-category (e.g. `pihole`) or the `caddy` wizard. Re-running `install` on something
+category (e.g. `pihole`) or a dedicated wizard (`caddy`, `mcp-email-server`; see
+`componentWizards` in `cmd/install.go`). Re-running `install` on something
 already installed says so and jumps straight to configuration. `ctdev configure
 <name>` configures without installing. (Both skipped in `--batch`/`--dry-run`.)
 
@@ -36,6 +37,7 @@ ctdev configure macos           # macOS defaults (Dock/Finder/keyboard) — macO
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
+ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailscale serve)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev backup now                # Run a restic snapshot of this machine now
@@ -74,14 +76,14 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-50 components:
+51 components:
 
-1password, age, bat, beszel, btop, bun, caddy, chrome, cleanmymac, claude-code, claude-desktop, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
+1password, age, bat, beszel, btop, bun, caddy, chrome, cleanmymac, claude-code, claude-desktop, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mcp-email-server, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
 
 ## Profiles
 
 Machine profiles are declarative TOML files (components + configure categories
-applied at recommended values). Built-ins — `pihole-node`, `dev-workstation`,
+applied at recommended values). Built-ins — `pihole-node`, `ai-node`, `dev-workstation`,
 `family-desktop` — are **embedded in the binary** (`ctdev/profile/profiles/`),
 so a fresh machine can `ctdev apply pihole-node` with nothing but the installed
 binary. Local files in `~/.config/ctdev/profiles/<name>.toml` add profiles or
@@ -145,8 +147,8 @@ running Pi-hole behind a Caddy reverse proxy:
   hostname); `ctdev restore …` inspects/restores. **Full restore runbook: `RECOVERY.md`.**
 
 Keeping a node current: `ctdev update` refreshes these compose stacks along with
-system packages. It checks each managed stack (pihole, caddy, beszel, portainer)
-for a newer image by digest — without pulling — and updates the ones you select
+system packages. It checks each managed stack (pihole, caddy, beszel, portainer,
+mcp-email-server) for a newer image by digest — without pulling — and updates the ones you select
 (`docker compose pull && up -d`, or a `build --pull` rebuild for the locally-built
 caddy image). `ctdev update --check` lists what's available read-only.
 
@@ -161,10 +163,108 @@ stored only on the host that needs it; if lost, just reconfigure:
 - **caddy** (domain/ACME email/CF token) → `~/caddy/.env`, written by `ctdev configure caddy`.
 - **pihole** (admin password) → set with `docker exec -it pihole pihole setpassword`.
 - **beszel** (agent KEY/TOKEN) → `~/beszel/.env`, pasted from the hub's "Add System" dialog.
+- **mcp-email-server** (one app-specific password per mailbox) →
+  `~/mcp-email-server/config/config.toml` (0600, cleartext — a headless node has no
+  keyring), written by the container during `ctdev configure mcp-email-server`.
 
 restic snapshots the rendered `~/<svc>/.env` files (they're under the backed-up paths),
 so a restore brings them back; a brand-new node re-enters them from your password manager.
 **Never commit a secret.** See `RECOVERY.md` (disaster recovery).
+
+## AI / MCP nodes
+
+An always-on node that holds credentials so laptops don't have to. Same shape as
+the homelab node — compose it from components; `ctdev apply ai-node` is the
+built-in profile.
+
+- `ctdev install mcp-email-server` — [mcp-email-server](https://github.com/ai-zerolab/mcp-email-server)
+  as a Docker compose stack in `~/mcp-email-server/`, exposing IMAP mailboxes to
+  MCP clients over streamable-HTTP.
+- `ctdev configure mcp-email-server` — adds/removes mailboxes and publishes the
+  service to the tailnet. Also `--show`.
+
+**Upstream ships no authentication.** `mcp-email-server streamable-http` takes
+only `--host` and `--port`; whatever reaches the port reads every mailbox. Three
+invariants carry the whole security model, and all three are load-bearing:
+
+1. **The published port is `127.0.0.1:9557` only.** Never `0.0.0.0`, never a bare
+   mapping — Docker's iptables rules are inserted ahead of UFW, so a bare mapping
+   is LAN-wide even on a firewalled host. `TestMCPEmailServerPublishesOnLoopbackOnly`
+   asserts this against the embedded compose file.
+2. **`tailscale serve` on the host is the security boundary** — TLS from the
+   tailnet's own cert, reachable only by authenticated peers. On the host rather
+   than in a sidecar: the node is already on the tailnet, so a sidecar would add
+   a second node identity plus an auth key to store, and its serve config would
+   die with the container. `serve`, never `funnel`.
+3. **The version is pinned.** `latest` on the process holding mail credentials
+   is a silent-upgrade risk. Bump `mcp-email-server==<x.y.z>` in
+   `component/configs/mcp-email-server/Dockerfile` deliberately.
+
+**Do not serve on 443 next to Caddy.** `ctdev configure caddy` points
+`*.<domain>` at the node's *Tailscale* IP, and Caddy answers there on 443. A
+`tailscale serve --https=443` rule intercepts that port for the node's own
+tailnet addresses, so every homelab site would silently start hitting the email
+server. `MCPEmailServerServePort` therefore returns 8443 when the caddy stack is
+present, 443 otherwise, and an explicit `MCP_SERVE_PORT` in the stack's `.env`
+(written by `--serve-port`) wins over both. It probes for the caddy compose file
+by path rather than through `FindByName`, because the registry references this
+component's uninstaller — reading `Registry` from there is an initialization
+cycle. A bare hostname in `MCP_ALLOWED_HOSTS` covers every port (upstream
+expands it to `<name>` and `<name>:*`), so a non-default port needs no extra
+allowlist entry.
+
+Two non-obvious facts, both verified against the running container rather than
+inferred — change either and tailnet requests break in a way that looks like a
+network fault:
+
+- `tailscale serve` forwards the client's **original Host header**
+  (`r.Out.Host = r.In.Host` in `ipn/ipnlocal/serve.go`), and MCP's DNS-rebinding
+  protection answers **421** for any Host it wasn't told about. So the node's
+  MagicDNS name must be in `MCP_ALLOWED_HOSTS`, which
+  `ctdev configure mcp-email-server` writes into `~/mcp-email-server/.env`.
+  Unconfigured, the compose defaults are loopback-only — it fails closed.
+- **The stack is built, not pulled.** `ghcr.io/ai-zerolab/mcp-email-server` stops
+  at 0.16.0 (44 tags, single page, no 1.x; `manifests/1.4.1` → 404) while PyPI is
+  on 1.x. So the Dockerfile installs the pinned package on `python:3.12-slim`,
+  the same locally-built shape caddy uses (`build: .` + `image: <name>:local`).
+  1.x is also what makes headless setup first-class: `account add
+  --password-stdin` (upstream's own "never place credentials in argv"), `--json`
+  on every command, and `account test` for a real IMAP login check.
+- **The container runs as the invoking user, not root.** 1.x refuses to open its
+  catalog unless the parent directory is owner-only *from the running user's*
+  point of view — a root-run container against a user-owned `./config` fails with
+  "Managed catalog parent must be owner-only". `ctdev install` writes `MCP_UID`/
+  `MCP_GID` into the stack's `.env` before the first `compose up`, and the
+  compose file uses the `${MCP_UID:?}` form so a missing value fails loudly
+  instead of silently reverting to root. `.env` is therefore written by *both*
+  install (uid/gid) and configure (tailnet settings) — `MCPEmailServerSetEnv`
+  merges rather than truncates.
+- **Install must not silently replace another email server.** It did once:
+  `list_available_accounts` came back `[]` with `isError:false`, which reads as
+  "no mailboxes", not "your accounts were orphaned". `mcpEmailServerConflicts`
+  now gates the install on three probes — a container whose `.Config.Image`
+  isn't `mcp-email-server:local` (use `.Config.Image`, not `docker ps`, which
+  reports a bare hash once a local rebuild moves the tag), a non-empty
+  `./config` without `managed.sqlite3`, and a `tailscale serve` handler on the
+  serve port pointing somewhere other than our loopback port. The rules are a
+  pure function over a `mcpEmailServerState` struct so they are testable without
+  docker or a tailnet. `--force` replaces the container (never its volumes) but
+  still keeps `./config`. Install also prints the account count every run, so an
+  empty catalog is stated rather than inferred.
+- **`account remove` needs `--expected-revision` and `--confirm`.** Upstream
+  guards removal with optimistic concurrency; `account remove <name>` alone
+  fails, and failed silently here until it was run against a real server.
+  `MCPEmailServerRemoveAccount` reads the revision back from `account list`
+  first. `account add` rejects a duplicate name outright, so replacing an
+  account is remove-then-add.
+- **Secrets are not encrypted at rest.** The managed catalog stores passwords in
+  cleartext inside `managed.sqlite3` (verified with `strings`); 0600 and the
+  node's isolation are the whole protection. Don't describe it as encrypted.
+
+Credentials live in a **bind mount** (`./config`), not a named volume, so they
+survive `docker compose down` *and* the host can verify the mode without
+entering the container. `ctdev uninstall` stops the stack and keeps the catalog —
+losing it means re-issuing an app password per mailbox.
 
 ## ctdev doctor
 
