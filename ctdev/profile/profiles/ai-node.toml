@@ -1,0 +1,43 @@
+# AI services node (Raspberry Pi today, a Proxmox VM or LXC container later):
+# always-on MCP servers that hold the credentials so laptops never have to.
+# Every service is reached over the tailnet — nothing is published to the LAN.
+#
+# ufw is deliberately NOT configured: Docker's iptables rules are inserted ahead
+# of UFW's, so a default-deny would give a false sense of safety here while the
+# loopback port bindings are what actually keep these services private.
+
+description = "AI/MCP services node behind Tailscale (Raspberry Pi / VM / LXC)"
+
+components = [
+  "zsh",
+  "git",
+  "mosh",
+  "tailscale",
+  "docker",
+  "portainer",
+  "beszel",
+  "restic",
+  "mcp-email-server",
+  "btop",
+]
+
+configure = ["ssh", "locale", "linger", "sleep", "autoupdate"]
+
+notes = """
+Next steps (interactive, in this order):
+  sudo tailscale up                    join the tailnet
+  ctdev configure mcp-email-server     add mailboxes, publish over tailscale serve
+  ctdev configure restic               backup repo, credentials, healthcheck URL
+  ctdev backup paths                   include ~/mcp-email-server so the mailbox
+                                       config is in an encrypted snapshot
+Then point a laptop at the URL that `configure` printed:
+  claude mcp add --transport http email https://<node>.<tailnet>.ts.net/mcp
+On a node that also runs caddy the endpoint carries a port — :8443 — because 443
+on the tailnet address already serves caddy's *.<domain> sites.
+
+Mailbox passwords live only on this node, in the managed catalog at
+~/mcp-email-server/config/managed.sqlite3 (0600, owned by you). They are not
+encrypted at rest, are never copied to a laptop, and are never committed — if the
+node is lost, restore that directory from restic or re-enter the app passwords.
+Verify with: ctdev verify
+"""
