@@ -251,6 +251,7 @@ ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--sh
 ctdev backup now                # Run a restic snapshot of this machine now
 ctdev backup snapshots          # List this machine's restic snapshots
 ctdev backup paths              # Pick what to back up in a local web UI
+ctdev backup paths --listen tailnet  # ...reachable from another device on your tailnet
 ctdev restore ls|files|in-place|check  # Inspect/restore from restic
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev verify                    # Verify the bootstrap installation
