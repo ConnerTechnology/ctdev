@@ -71,7 +71,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Homelab containers (only the stacks installed on this node).
 	var containers []string
-	for _, name := range []string{"pihole", "caddy", "portainer", "beszel"} {
+	for _, name := range []string{"pihole", "caddy", "portainer", "beszel", "mcp-email-server"} {
 		if !compInstalled(name) {
 			continue
 		}
