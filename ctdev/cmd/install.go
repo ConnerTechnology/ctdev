@@ -122,10 +122,17 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// componentWizards are the components whose configuration step is a dedicated
+// wizard rather than a `configure <name>` category from setup.Registry.
+var componentWizards = map[string]func(context.Context) error{
+	"caddy":            configureCaddy,
+	"mcp-email-server": configureMCPEmailServer,
+}
+
 // componentHasConfigure reports whether a component has a configuration step —
-// the caddy wizard or a `configure <name>` category sharing its name.
+// a dedicated wizard or a `configure <name>` category sharing its name.
 func componentHasConfigure(name string) bool {
-	if name == "caddy" {
+	if componentWizards[name] != nil {
 		return true
 	}
 	for _, slug := range slugOrder {
@@ -136,11 +143,11 @@ func componentHasConfigure(name string) bool {
 	return false
 }
 
-// runComponentConfigure runs a component's configuration step — the caddy
+// runComponentConfigure runs a component's configuration step — its dedicated
 // wizard or its `configure <name>` category.
 func runComponentConfigure(ctx context.Context, name string) error {
-	if name == "caddy" {
-		return configureCaddy(ctx)
+	if wizard := componentWizards[name]; wizard != nil {
+		return wizard(ctx)
 	}
 	return runCategoryWizard(ctx, name, false)
 }
