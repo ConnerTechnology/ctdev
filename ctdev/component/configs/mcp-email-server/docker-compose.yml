@@ -1,0 +1,73 @@
+# mcp-email-server — an MCP server that reads mailboxes over IMAP, run on an
+# always-on node so no laptop ever stores an email credential. Deployed to
+# ~/mcp-email-server/ and built from the Dockerfile beside this file. Configure
+# the mailboxes with `ctdev configure mcp-email-server`.
+#
+# UPSTREAM HAS NO AUTHENTICATION. `mcp-email-server streamable-http` accepts
+# only --host and --port (still true in 1.x): anyone who can reach the port
+# reads every configured mailbox in full. Two things keep that safe, and both
+# are load-bearing:
+#
+#   1. The published port is bound to 127.0.0.1. A bare "9557:9557" would be
+#      reachable from the whole LAN even behind UFW, because Docker's iptables
+#      rules are inserted ahead of it. Never widen this mapping.
+#   2. Tailscale is the security boundary. `ctdev configure mcp-email-server`
+#      runs `tailscale serve` on the HOST, which terminates TLS with the
+#      tailnet's own certificate and forwards to this loopback port — so the
+#      only reachable path is from an authenticated tailnet peer. Serve on the
+#      host rather than in a sidecar: the node is already on the tailnet, so a
+#      sidecar would mean a second node identity plus an auth key to store, and
+#      its serve config would die with the container. Use `serve`, never
+#      `funnel` — funnel publishes to the internet.
+#
+# Credentials live in the managed SQLite catalog under ./config, written by the
+# container at mode 0600. They are NOT encrypted at rest — the file mode and the
+# fact that this directory never leaves one tailnet-only host are what protect
+# them. ./config is a bind mount so it survives `docker compose down` and so the
+# host can verify the mode without entering the container.
+services:
+  mcp-email-server:
+    build: .
+    image: mcp-email-server:local
+    container_name: mcp-email-server
+    restart: unless-stopped
+    # Runs as the user who owns the stack directory, not root. 1.x refuses to
+    # open its catalog unless the parent directory is owner-only *from the
+    # running user's point of view*, so a root-run container against a
+    # user-owned ./config fails with "Managed catalog parent must be
+    # owner-only". `ctdev install mcp-email-server` writes these into .env; the
+    # :? form fails loudly rather than silently falling back to root.
+    user: "${MCP_UID:?run 'ctdev install mcp-email-server' to write .env}:${MCP_GID:?run 'ctdev install mcp-email-server' to write .env}"
+    environment:
+      # 0.0.0.0 is the CONTAINER's namespace, not the host's — the loopback
+      # binding is the port mapping below. Binding to 127.0.0.1 in here would
+      # make the published port unreachable.
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "9557"
+      # The image has no home directory for an arbitrary uid; point HOME at the
+      # bind mount so nothing tries to write to a read-only /.
+      HOME: /config
+      MCP_EMAIL_SERVER_CONFIG_PATH: /config/config.toml
+      # MCP's DNS-rebinding protection rejects any Host header it doesn't know
+      # (421). `tailscale serve` forwards the client's original Host, so the
+      # node's MagicDNS name has to be listed or every tailnet request fails.
+      # A bare name covers every port — upstream expands it to "<name>" and
+      # "<name>:*" — so a non-443 serve port needs no extra entry.
+      # `ctdev configure mcp-email-server` writes both into .env; the fallbacks
+      # here are loopback-only, so an unconfigured node fails closed.
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-127.0.0.1,localhost,[::1]}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-http://127.0.0.1,http://localhost}
+    command: ["streamable-http", "--host", "0.0.0.0", "--port", "9557"]
+    ports:
+      - "127.0.0.1:9557:9557"
+    volumes:
+      - ./config:/config
+    healthcheck:
+      # No curl or wget in python:3.12-slim. Any HTTP status proves the ASGI app
+      # is answering (an unauthenticated GET /mcp returns 406), while a dead
+      # server raises on connect.
+      test: ["CMD", "python3", "-c", "import http.client as h; c = h.HTTPConnection('127.0.0.1', 9557, timeout=5); c.request('GET', '/mcp'); c.getresponse()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

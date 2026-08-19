@@ -22,6 +22,22 @@ func ContainerRunning(name string) bool {
 	return strings.TrimSpace(string(out)) == name
 }
 
+// ContainerConfigImage returns the image reference a container was created
+// from, or "" when no such container exists. This is the image as written at
+// create time, so it still identifies the container after a local rebuild has
+// moved the tag to a new image ID — which `docker ps` would report as a bare
+// hash.
+func ContainerConfigImage(ctx context.Context, name string) string {
+	if !CommandExists("docker") {
+		return ""
+	}
+	out, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.Config.Image}}", name).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // PiholeContainerized reports whether Pi-hole runs as a docker container named
 // "pihole" (as opposed to a native host install).
 func PiholeContainerized() bool {
