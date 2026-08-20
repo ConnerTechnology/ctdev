@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.16.1] - 2026-08-20
+
+### Fixed
+- **`ctdev update` no longer offers a caddy rebuild that rebuilds nothing.** On a
+  Pi it would flag `caddy → caddy-homelab:local (rebuild)`, run the rebuild, and
+  flag it again on the next run. The rebuild detector watched the *index* digest
+  of the Dockerfile's base images, and Docker Hub re-pushes an official image's
+  index whenever any architecture is rebuilt — or when only its annotations
+  change. On ctpi01 the `caddy:2-builder` index moved from `c085abfb` to
+  `4bdeabce` while the linux/arm64 manifest both indexes point at stayed
+  identical (`527556fa`), so the rebuild was a total cache hit that produced the
+  same image ID and never recreated the container.
+
+  Base images are now tracked by the digest of the manifest built for the host's
+  platform, which moves only when the image this machine actually runs does. The
+  marker file carries a `# format: 2` stamp and an older marker is re-seeded
+  rather than compared, so upgrading doesn't cost one last phantom rebuild per
+  built stack.
+
+  Pulled-image stacks (pihole, beszel, portainer) still compare index digests —
+  a `docker compose pull` records the new one, so an index re-push costs a single
+  no-op update rather than a loop.
+
 ## [12.16.0] - 2026-08-19
 
 ### Added
