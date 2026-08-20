@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -134,5 +135,62 @@ func TestDigestMarkerRoundTrip(t *testing.T) {
 	// Missing file -> empty map, never nil.
 	if m := readDigestMarker(filepath.Join(t.TempDir(), "nope")); m == nil || len(m) != 0 {
 		t.Errorf("missing marker should be empty map, got %v", m)
+	}
+}
+
+// A base image's index digest moves whenever Docker Hub re-pushes the index —
+// which it does when any architecture is rebuilt, and even when only the index
+// annotations change. Tracking it made `ctdev update` offer a caddy rebuild
+// that rebuilt nothing. What matters is the manifest for this host's platform.
+func TestPickPlatformDigest(t *testing.T) {
+	// Trimmed from `docker buildx imagetools inspect caddy:2-builder --raw`:
+	// two real platforms plus the attestation manifest, which carries
+	// platform unknown/unknown and must never be picked.
+	raw := []byte(`{
+	  "mediaType": "application/vnd.oci.image.index.v1+json",
+	  "manifests": [
+	    {"digest": "sha256:aaa", "platform": {"architecture": "amd64", "os": "linux"}},
+	    {"digest": "sha256:bbb", "platform": {"architecture": "arm64", "os": "linux", "variant": "v8"}},
+	    {"digest": "sha256:ccc", "platform": {"architecture": "unknown", "os": "unknown"}}
+	  ]
+	}`)
+
+	if got := pickPlatformDigest(raw, "linux", "arm64"); got != "sha256:bbb" {
+		t.Errorf("arm64 digest = %q, want sha256:bbb", got)
+	}
+	if got := pickPlatformDigest(raw, "linux", "amd64"); got != "sha256:aaa" {
+		t.Errorf("amd64 digest = %q, want sha256:aaa", got)
+	}
+	// No entry for this platform, and a single-arch image (a bare manifest with
+	// no "manifests" array) both fall back to the index digest.
+	if got := pickPlatformDigest(raw, "linux", "riscv64"); got != "" {
+		t.Errorf("absent platform = %q, want \"\"", got)
+	}
+	single := []byte(`{"mediaType":"application/vnd.oci.image.manifest.v1+json","layers":[]}`)
+	if got := pickPlatformDigest(single, "linux", "arm64"); got != "" {
+		t.Errorf("single manifest = %q, want \"\"", got)
+	}
+	if got := pickPlatformDigest([]byte("not json"), "linux", "arm64"); got != "" {
+		t.Errorf("garbage = %q, want \"\"", got)
+	}
+}
+
+// Markers written before the switch hold index digests, which never match a
+// platform digest. Reading one as empty re-seeds the baseline instead of
+// reporting a rebuild that isn't needed.
+func TestDigestMarkerIgnoresOlderFormat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".ctdev-base-digests")
+	old := "# ctdev: remote base-image digests at last build\ncaddy:2 sha256:old\n"
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readDigestMarker(path); len(got) != 0 {
+		t.Errorf("older-format marker should read as empty, got %v", got)
+	}
+
+	// A marker this version wrote still round-trips.
+	writeDigestMarker(path, map[string]string{"caddy:2": "sha256:new"})
+	if got := readDigestMarker(path)["caddy:2"]; got != "sha256:new" {
+		t.Errorf("round-trip = %q, want sha256:new", got)
 	}
 }

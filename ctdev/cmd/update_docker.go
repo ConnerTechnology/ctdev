@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -24,6 +25,13 @@ import (
 // locally-built image (e.g. caddy) is worth rebuilding — the built image itself
 // carries no registry digest to compare.
 const baseDigestMarker = ".ctdev-base-digests"
+
+// baseDigestMarkerFormat stamps which digest semantics a marker holds. Format 1
+// stored multi-arch index digests; format 2 stores the digest of the manifest
+// for this host's platform (see remoteBaseDigest). A marker in the older format
+// is re-seeded rather than compared, so the switch doesn't cost every built
+// stack one spurious "rebuild available".
+const baseDigestMarkerFormat = "# format: 2"
 
 // dockerStack is an installed docker-compose stack discovered from the
 // component registry (any component whose DetectPath is a docker-compose.yml).
@@ -185,7 +193,7 @@ func builtImageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, 
 	changed := false
 	seeded := false
 	for _, b := range bases {
-		remote, err := remoteIndexDigest(ctx, b)
+		remote, err := remoteBaseDigest(ctx, b)
 		if err != nil || remote == "" {
 			continue // can't determine this base right now; skip it
 		}
@@ -222,6 +230,63 @@ func localIndexDigest(ctx context.Context, img string) (digest string, ok bool) 
 		return "", false
 	}
 	return pickDigest(repoDigests, imageRepo(img))
+}
+
+// remoteBaseDigest returns the digest ctdev tracks for a Dockerfile base image:
+// the manifest for this host's platform when the tag resolves to a multi-arch
+// index, and the index digest itself otherwise.
+//
+// The distinction is the whole point of the marker. Docker Hub re-pushes an
+// official image's index whenever any architecture is rebuilt — and re-pushes
+// it for annotation changes alone — so caddy:2-builder's index digest moves
+// while the linux/arm64 manifest it points at stays byte-identical. Comparing
+// index digests made `ctdev update` offer a caddy rebuild on a Pi that rebuilt
+// nothing (every stage cached, same image ID) and returned on the next run.
+func remoteBaseDigest(ctx context.Context, img string) (string, error) {
+	if raw, err := remoteRawManifest(ctx, img); err == nil {
+		if d := pickPlatformDigest(raw, runtime.GOOS, runtime.GOARCH); d != "" {
+			return d, nil
+		}
+	}
+	// Single-arch image, an index without an entry for us, or a probe that
+	// failed: the index digest is still a usable (if noisier) signal.
+	return remoteIndexDigest(ctx, img)
+}
+
+// remoteRawManifest fetches the raw index/manifest JSON for img (no pull).
+func remoteRawManifest(ctx context.Context, img string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "docker", "buildx", "imagetools", "inspect", img, "--raw").Output()
+	if err != nil {
+		return nil, fmt.Errorf("imagetools inspect --raw: %w", err)
+	}
+	return out, nil
+}
+
+// pickPlatformDigest returns the digest of the manifest in an OCI index (or
+// Docker manifest list) built for goos/goarch. It returns "" for a raw single
+// manifest and for an index with no entry for this platform. Attestation
+// manifests carry platform unknown/unknown, so they never match.
+func pickPlatformDigest(raw []byte, goos, goarch string) string {
+	var idx struct {
+		Manifests []struct {
+			Digest   string `json:"digest"`
+			Platform struct {
+				OS           string `json:"os"`
+				Architecture string `json:"architecture"`
+			} `json:"platform"`
+		} `json:"manifests"`
+	}
+	if err := json.Unmarshal(raw, &idx); err != nil {
+		return ""
+	}
+	for _, m := range idx.Manifests {
+		if m.Platform.OS == goos && m.Platform.Architecture == goarch {
+			return m.Digest
+		}
+	}
+	return ""
 }
 
 // remoteIndexDigest returns the current index digest for img in its registry,
@@ -293,7 +358,7 @@ func refreshBaseDigestMarker(ctx context.Context, s dockerStack) {
 	marker := filepath.Join(s.Dir, baseDigestMarker)
 	m := readDigestMarker(marker)
 	for _, b := range bases {
-		if remote, err := remoteIndexDigest(ctx, b); err == nil && remote != "" {
+		if remote, err := remoteBaseDigest(ctx, b); err == nil && remote != "" {
 			m[b] = remote
 		}
 	}
@@ -396,6 +461,9 @@ func readDigestMarker(path string) map[string]string {
 	if err != nil {
 		return m
 	}
+	if !strings.Contains(string(b), baseDigestMarkerFormat) {
+		return m // digests from an older format mean something else; re-seed
+	}
 	for _, line := range strings.Split(string(b), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -417,6 +485,7 @@ func writeDigestMarker(path string, m map[string]string) {
 	sort.Strings(keys)
 	var b strings.Builder
 	b.WriteString("# ctdev: remote base-image digests at last build; drives rebuild detection in 'ctdev update'\n")
+	b.WriteString(baseDigestMarkerFormat + " (digest of the manifest for this host's platform)\n")
 	for _, k := range keys {
 		fmt.Fprintf(&b, "%s %s\n", k, m[k])
 	}
