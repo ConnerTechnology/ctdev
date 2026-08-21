@@ -110,7 +110,7 @@ func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 			name: fmt.Sprintf("ctdev %s → %s", item.CurrentVer, item.NewVer),
 			run: func(ctx context.Context, o sysutil.Opts) error {
 				return sysutil.Run(ctx, o, "bash", "-c",
-					"curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash")
+					"curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash")
 			},
 		})
 	}

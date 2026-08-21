@@ -324,7 +324,10 @@ Facts that are load-bearing; change any of them and something breaks quietly:
   caps the shipped prompt's length for exactly this reason.
 - **`brain-sync.service` deliberately loads no credential.** Git only, so the
   checkout keeps tracking origin after the token expires and a laptop's `git pull`
-  still receives what the last triage committed.
+  still receives what the last triage committed. `BrainEnableTimers` gates the two
+  separately for the same reason: sync starts as soon as a checkout exists, triage
+  waits for the credential. The half that works is never withheld by the half that
+  does not, and it is the half a phone depends on.
 - **MCP is an allow-list, not a deny-list.** `brain-run` filters the servers the
   repo's setup registered down to `BRAIN_CLAUDE_MCP` (default `email`) and passes
   `--strict-mcp-config`. A deny-list would fail open when a server is added later.

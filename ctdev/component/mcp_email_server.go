@@ -42,7 +42,7 @@ import (
 //	archive_emails            destructive, openWorld
 //	download_attachment       destructive, openWorld
 //
-// ConnerTechnology/AI blocks dangerous tools by EXACT NAME in
+// ConnerTechnology/brain blocks dangerous tools by EXACT NAME in
 // config/settings.json (permissions.deny), so this list is a coupling point:
 // a tool that is added or renamed by a version bump silently escapes that
 // block list. Re-check it whenever the pin in the Dockerfile moves.

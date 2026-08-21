@@ -13,7 +13,7 @@ import (
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
 )
 
-// brain provisions ConnerTechnology/AI — the agent org: knowledge, agents,
+// brain provisions ConnerTechnology/brain — the agent org: knowledge, agents,
 // skills, commands, and accumulated memory — onto an always-on node, and runs
 // its scheduled work there. It is not a compose stack: the repo is a git
 // checkout, and the schedule is two systemd timers.
@@ -77,7 +77,7 @@ const (
 
 	// BrainDefaultRemote is the agent org. Overridable in brain.conf so a
 	// second node, or a fork, needs no code change.
-	BrainDefaultRemote = "git@github.com:ConnerTechnology/AI.git"
+	BrainDefaultRemote = "git@github.com:ConnerTechnology/brain.git"
 	BrainDefaultBranch = "main"
 
 	// brainCredentialID must match LoadCredentialEncrypted= in the unit.
@@ -355,14 +355,28 @@ func BrainEnsureDeployKey(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.SudoRun(ctx, o, "chmod", "0644", BrainDeployKeyPath()+".pub")
 }
 
-// BrainEnableTimers starts the schedule.
+// BrainEnableTimers starts whichever timers this node can actually run, which
+// is not always both.
+//
+// The sync timer needs only a checkout and a working deploy key, so it starts as
+// soon as the checkout exists — it is what keeps the repo current for anyone who
+// SSHes in, and that is how a phone reaches the brain at all, since a
+// tailnet-only service is out of reach of the Claude app but not of Claude Code
+// over SSH. Holding it back until a Claude token arrives would withhold the half
+// of the component that already works.
+//
+// The triage timer does need the credential. Enabling it without one buys two
+// failed units a day and nothing else.
 func BrainEnableTimers(ctx context.Context, o sysutil.Opts) error {
-	for _, t := range brainTimers {
-		if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", t); err != nil {
+	if BrainCheckoutPresent() {
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "brain-sync.timer"); err != nil {
 			return err
 		}
 	}
-	return nil
+	if !BrainCredentialStored() {
+		return nil
+	}
+	return sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "brain-triage.timer")
 }
 
 // BrainDisableTimers stops the schedule. The checkout, memory/, the state
@@ -684,20 +698,22 @@ func brainInstall(ctx context.Context, opts ExecOpts) error {
 		fmt.Fprintln(opts.Stdout, "Scheduled runs will ignore the repo's own .claude/settings.json until it is.")
 	}
 
+	// Self-gating: this starts the sync timer now and the triage timer only
+	// once a credential exists.
+	if err := BrainEnableTimers(ctx, o); err != nil {
+		return err
+	}
+
 	if BrainConfigured() {
-		if err := BrainEnableTimers(ctx, o); err != nil {
-			return err
-		}
 		fmt.Fprintln(opts.Stdout, "\nbrain configured — triage runs 07:03 and 15:07, sync hourly.")
 		return nil
 	}
 
-	fmt.Fprintln(opts.Stdout, "\nbrain installed. Timers are NOT enabled yet — finish with:")
+	fmt.Fprintln(opts.Stdout, "\nCheckout sync is running hourly. The triage timer stays off until a")
+	fmt.Fprintln(opts.Stdout, "Claude credential is stored — finish with:")
 	fmt.Fprintln(opts.Stdout, "  ctdev configure brain")
-	if !BrainCredentialStored() {
-		fmt.Fprintln(opts.Stdout, "It asks for a Claude Code token from `claude setup-token` (run that on a")
-		fmt.Fprintln(opts.Stdout, "machine with a browser, keep it in 1Password) and encrypts it to this host.")
-	}
+	fmt.Fprintln(opts.Stdout, "It asks for a token from `claude setup-token` (run that on a machine with a")
+	fmt.Fprintln(opts.Stdout, "browser, keep the master copy in 1Password) and encrypts it to this host.")
 	return nil
 }
 
@@ -732,7 +748,7 @@ func brainRepoSettingsURL(remote string) string {
 
 func brainDryRun(opts ExecOpts) error {
 	w := opts.Stdout
-	fmt.Fprintln(w, "[dry-run] brain — provision ConnerTechnology/AI and its schedule")
+	fmt.Fprintln(w, "[dry-run] brain — provision ConnerTechnology/brain and its schedule")
 	fmt.Fprintf(w, "[dry-run]   create system user %s:%s (home %s)\n", BrainUser, BrainGroup, BrainStateDir)
 	fmt.Fprintf(w, "[dry-run]   create %s (2770 %s:%s) and %s (0750)\n", BrainRepoDir, BrainUser, BrainGroup, BrainStateDir)
 	fmt.Fprintf(w, "[dry-run]   deploy %s and %s\n", BrainRunner, BrainPromptPath)

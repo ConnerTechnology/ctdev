@@ -1,6 +1,6 @@
 [Unit]
 Description=Keep the brain checkout in step with origin
-Documentation=https://github.com/ConnerTechnology/AI
+Documentation=https://github.com/ConnerTechnology/brain
 Wants=network-online.target
 After=network-online.target
 

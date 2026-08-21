@@ -225,8 +225,8 @@ func TestBrainDeployedFilesStayOutOfTheData(t *testing.T) {
 
 func TestBrainRepoSettingsURL(t *testing.T) {
 	tests := []struct{ remote, want string }{
-		{"git@github.com:ConnerTechnology/AI.git", "https://github.com/ConnerTechnology/AI/settings/keys"},
-		{"https://github.com/ConnerTechnology/AI.git", "https://github.com/ConnerTechnology/AI/settings/keys"},
+		{"git@github.com:ConnerTechnology/brain.git", "https://github.com/ConnerTechnology/brain/settings/keys"},
+		{"https://github.com/ConnerTechnology/brain.git", "https://github.com/ConnerTechnology/brain/settings/keys"},
 		{"git@gitlab.com:someone/thing.git", "git@gitlab.com:someone/thing.git"},
 	}
 	for _, tt := range tests {
@@ -320,5 +320,37 @@ func TestBrainAsUserArgvSpellsOutTheEnvironment(t *testing.T) {
 	}
 	if argv[len(argv)-2] != "-c" || argv[len(argv)-1] != "claude --version" {
 		t.Errorf("script must be the final argument: %v", argv)
+	}
+}
+
+func TestBrainSyncDoesNotDependOnTheClaudeCredential(t *testing.T) {
+	// The two halves of this component fail independently on purpose. Git sync
+	// needs a checkout and a deploy key; only the triage needs a Claude token.
+	// Gating both on the token withholds the half that already works — and it
+	// is the half a phone depends on, since reaching the brain from iOS means
+	// SSHing in and finding a current checkout.
+	//
+	// The unit file is the enforcement (no LoadCredential), asserted separately
+	// in TestBrainSyncUnitHasNoCredential; this pins the enable logic's shape so
+	// the two cannot drift apart.
+	sync := readBrainConfig(t, "brain-sync.service")
+	triage := readBrainConfig(t, "brain-triage.service")
+	if strings.Contains(sync, brainCredentialID) {
+		t.Error("brain-sync.service must not reference the Claude credential")
+	}
+	if !strings.Contains(triage, brainCredentialID) {
+		t.Error("brain-triage.service must load the Claude credential")
+	}
+	// Both timers must still be in the removal list, whatever the enable rules.
+	for _, unit := range []string{"brain-sync.timer", "brain-triage.timer"} {
+		var found bool
+		for _, u := range brainUnits {
+			if u == unit {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s must be in brainUnits so uninstall removes it", unit)
+		}
 	}
 }

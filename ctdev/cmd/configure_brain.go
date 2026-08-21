@@ -122,15 +122,19 @@ func configureBrain(ctx context.Context) error {
 		return nil
 	}
 
+	// Self-gating: the sync timer starts on a checkout alone, the triage timer
+	// only once a credential exists.
+	if err := component.BrainEnableTimers(ctx, o); err != nil {
+		return err
+	}
+	fmt.Println()
 	if component.BrainConfigured() {
-		if err := component.BrainEnableTimers(ctx, o); err != nil {
-			return err
-		}
-		fmt.Println()
-		fmt.Println("brain configured — timers enabled.")
+		fmt.Println("brain configured — both timers enabled.")
 		fmt.Println(styles.Dimmed.Render("  Trigger a run now:  sudo systemctl start brain-triage.service"))
 		fmt.Println(styles.Dimmed.Render("  Watch it:           journalctl -fu brain-triage.service"))
+		return nil
 	}
+	fmt.Println("Checkout sync is enabled; the triage timer waits on a Claude credential.")
 	return nil
 }
 

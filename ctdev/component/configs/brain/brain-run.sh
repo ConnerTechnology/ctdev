@@ -70,17 +70,37 @@ fi
 # ---------------------------------------------------------------------- git --
 git_c() { git -C "$REPO" "$@"; }
 
+# The identity has to be ON THE REPO, not passed per-command.
+#
+# `git commit -c user.name=... -c user.email=...` works, but `git rebase` also
+# writes commits and gets no such flags -- so a rebase that has to replay
+# anything dies with "Committer identity unknown" while committing looks fine.
+# That is not hypothetical: it failed the first scheduled run on 2026-08-21,
+# and reported itself as a merge conflict, which it was not. Setting it once
+# here covers every git command in this script, now and later.
+ensure_identity() {
+	git_c config user.name "$GIT_NAME"
+	git_c config user.email "$GIT_EMAIL"
+}
+
 # rebase_onto_origin brings the checkout to origin/$BRANCH, keeping any local
 # commits on top. A conflict aborts and fails: two disagreeing versions of a
 # memory file need a human, and guessing is exactly the silent divergence this
 # whole arrangement exists to prevent.
+#
+# Distinguish the failure modes. "Conflicted" sends a human looking for a merge
+# conflict, and when the real cause was something else that is a wasted search.
 rebase_onto_origin() {
 	if ! git_c fetch --quiet origin "$BRANCH"; then
 		die "could not reach origin — is this node's deploy key on the repo, with write access?"
 	fi
-	if ! git_c rebase --autostash --quiet "origin/$BRANCH"; then
-		git_c rebase --abort || true
-		die "rebase onto origin/$BRANCH conflicted — resolve it by hand in $REPO"
+	local err
+	if ! err=$(git_c rebase --autostash "origin/$BRANCH" 2>&1); then
+		git_c rebase --abort 2>/dev/null || true
+		if grep -qi "could not apply\|conflict" <<<"$err"; then
+			die "rebase onto origin/$BRANCH conflicted — resolve it by hand in $REPO"
+		fi
+		die "rebase onto origin/$BRANCH failed — $(tr '\n' ' ' <<<"$err" | tail -c 300)"
 	fi
 }
 
@@ -108,6 +128,7 @@ push_local() {
 		die "push still rejected after a rebase — $REPO holds unpushed commits"
 }
 
+ensure_identity
 log "rebasing $REPO onto origin/$BRANCH"
 rebase_onto_origin
 

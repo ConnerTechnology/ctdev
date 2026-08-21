@@ -242,6 +242,11 @@ SSH. Both are `Persistent=true`, so a run missed while the node was down happens
 at boot. Change either with `ctdev configure brain`; it writes a drop-in and
 leaves the shipped unit as the recorded default.
 
+The two are enabled independently. Sync starts as soon as the checkout exists,
+because it needs nothing but git; triage waits until a Claude credential is
+stored, because enabling it earlier would buy two failed units a day. So a node
+with a deploy key but no token yet still keeps its checkout current.
+
 **The scheduled prompt points, it never restates.** It names the agent, the
 skill and the memory file to read, and nothing else — because a prompt with the
 rules copied into it is a snapshot that goes stale silently, and on an unattended

@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.17.1] - 2026-08-21
+
+### Fixed
+- **`brain-run` set no git identity on the checkout, so any rebase that had to replay a
+  commit died.** `commit_local` passed `-c user.name`/`-c user.email` inline, but `git
+  rebase` writes commits too and got no such flags — so committing looked fine while
+  rebasing failed with "Committer identity unknown".
+
+  This broke the very first scheduled run, on 2026-08-21: the triage did its work, the
+  push was rejected because the desktop had pushed meanwhile, the retry rebase died on
+  the missing identity, and the run reported itself as **a merge conflict, which it was
+  not**. The identity is now set once on the repo, covering every git command in the
+  script.
+
+- **Rebase failures no longer all claim "conflicted".** Only an actual conflict says so;
+  anything else reports what git said. A wrong diagnosis sends a human looking for a
+  merge conflict that does not exist.
+
+### Changed
+- **The two timers now enable independently.** Sync starts as soon as a checkout exists,
+  because it needs nothing but git and a deploy key; triage waits until a Claude
+  credential is stored, because enabling it earlier just buys two failed units a day.
+  A node with a key but no token yet still keeps its checkout current — which is how a
+  phone reaches the brain at all, over SSH.
+
+- **Repo references follow two renames.** `ConnerTechnology/dotfiles` → `ctdev` in
+  `install.sh`, `install.ps1`, the self-update in `update_apply.go` and the version check
+  in `update_scan.go`. `ConnerTechnology/AI` → `brain` in the brain component's default
+  remote, the registry description, both systemd unit `Documentation=` lines, and the
+  tests.
+
+  All of these worked via GitHub's rename redirects. Redirects are an invisible
+  dependency, so they are now explicit. **The Go module path is deliberately unchanged** —
+  nothing external imports it, and renaming it touches every file for no gain.
+
 ## [12.17.0] - 2026-08-21
 
 ### Added

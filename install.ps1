@@ -14,11 +14,11 @@
     Linux and macOS.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.ps1 | iex
 
 .EXAMPLE
     # `irm | iex` cannot pass arguments, so wrap the script in a scriptblock:
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.ps1))) -Doctor
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.ps1))) -Doctor
 
 .EXAMPLE
     & ([scriptblock]::Create((irm .../install.ps1))) -Doctor -DoctorArgs '--deep','--report'
@@ -31,7 +31,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Repo = 'ConnerTechnology/dotfiles'
+$Repo = 'ConnerTechnology/ctdev'
 
 # In doctor mode the report owns stdout, so progress goes to the information
 # stream instead — that keeps `| Out-File report.txt` clean.

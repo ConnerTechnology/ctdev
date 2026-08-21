@@ -1,6 +1,6 @@
 [Unit]
 Description=Scheduled brain triage (delegates to the inbox agent)
-Documentation=https://github.com/ConnerTechnology/AI
+Documentation=https://github.com/ConnerTechnology/brain
 Wants=network-online.target
 After=network-online.target tailscaled.service
 

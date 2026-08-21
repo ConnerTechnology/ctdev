@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # Install ctdev - development environment manager
-# Usage: curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash
 #
 # Or, to check a machine without installing anything at all:
 #   curl -fsSL .../install.sh | bash -s -- --doctor
 
-REPO="ConnerTechnology/dotfiles"
+REPO="ConnerTechnology/ctdev"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # EPHEMERAL runs ctdev from a temporary directory and deletes it afterwards,

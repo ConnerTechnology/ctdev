@@ -457,7 +457,7 @@ func scanCtdev(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if version == "" || version == "dev" {
 		return nil, nil
 	}
-	latest, err := sysutil.GitHubLatestVersion(ctx, "ConnerTechnology/dotfiles")
+	latest, err := sysutil.GitHubLatestVersion(ctx, "ConnerTechnology/ctdev")
 	if err != nil {
 		return nil, fmt.Errorf("check latest ctdev: %w", err)
 	}
