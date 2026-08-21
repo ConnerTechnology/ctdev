@@ -1,6 +1,8 @@
 # AI services node (Raspberry Pi today, a Proxmox VM or LXC container later):
-# always-on MCP servers that hold the credentials so laptops never have to.
-# Every service is reached over the tailnet — nothing is published to the LAN.
+# always-on MCP servers that hold the credentials so laptops never have to, plus
+# the brain — the agent org and the scheduled runs that used to die with a laptop's
+# Claude Code session. Every service is reached over the tailnet; nothing is
+# published to the LAN.
 #
 # ufw is deliberately NOT configured: Docker's iptables rules are inserted ahead
 # of UFW's, so a default-deny would give a false sense of safety here while the
@@ -18,6 +20,7 @@ components = [
   "beszel",
   "restic",
   "mcp-email-server",
+  "brain",
   "btop",
 ]
 
@@ -27,9 +30,11 @@ notes = """
 Next steps (interactive, in this order):
   sudo tailscale up                    join the tailnet
   ctdev configure mcp-email-server     add mailboxes, publish over tailscale serve
+  ctdev configure brain                checkout, schedule, and Claude credential
   ctdev configure restic               backup repo, credentials, healthcheck URL
   ctdev backup paths                   include ~/mcp-email-server so the mailbox
-                                       config is in an encrypted snapshot
+                                       config is in an encrypted snapshot, and
+                                       /var/lib/brain for the run digests
 Then point a laptop at the URL that `configure` printed:
   claude mcp add --transport http email https://<node>.<tailnet>.ts.net/mcp
 On a node that also runs caddy the endpoint carries a port — :8443 — because 443
@@ -39,5 +44,13 @@ Mailbox passwords live only on this node, in the managed catalog at
 ~/mcp-email-server/config/managed.sqlite3 (0600, owned by you). They are not
 encrypted at rest, are never copied to a laptop, and are never committed — if the
 node is lost, restore that directory from restic or re-enter the app passwords.
+
+The brain needs two things `apply` cannot do for you, and it prints both:
+  1. Its deploy key added to the agent-org repo WITH WRITE ACCESS. The node
+     pushes what its runs learn; without write access memory/ strands here.
+  2. A Claude Code token from `claude setup-token`, run on a machine that has a
+     browser. Keep the master copy in 1Password; `ctdev configure brain` encrypts
+     it to this host so nothing readable sits on disk. It lasts a year.
+After both: sudo systemctl start brain-triage.service to prove it end to end.
 Verify with: ctdev verify
 """

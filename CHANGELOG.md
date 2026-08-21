@@ -2,6 +2,72 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.17.0] - 2026-08-21
+
+### Added
+- **`brain` — the agent org and its schedule, on the node instead of in a laptop
+  session.** `ctdev install brain` clones ConnerTechnology/AI, runs the repo's own
+  `scripts/setup.sh`, and deploys two systemd timers: a twice-daily triage at
+  **07:03 and 15:07** local, and an hourly checkout sync. `ctdev configure brain`
+  sets the checkout path, the remote, the schedule, and the Claude credential.
+
+  The point is not automation for its own sake. A schedule that lives in a Claude
+  Code session dies with the window, and two laptops both running scheduled agents
+  write to the same `memory/` files and quietly disagree. Making the node the only
+  machine running agents on a schedule removes both, and it removes the automated
+  half of the sync problem immediately.
+
+- **Headless authentication that writes no plaintext.** Claude Code's login is a
+  browser flow. `claude setup-token`, run once on a machine that has one, mints a
+  one-year token against the subscription; `ctdev configure brain` encrypts it to
+  the host with `systemd-creds` and systemd decrypts it into a private in-memory
+  directory readable only by the triage unit. The blob is inert on any other
+  machine — including inside a restic snapshot of `/etc`, since the host key is
+  not in the backup set.
+
+  1Password stays the system of record and `--token-ref` records the `op://` URI,
+  but the node does **not** run `op` unattended: that needs an
+  `OP_SERVICE_ACCOUNT_TOKEN`, which is itself a long-lived secret that would have
+  to sit on the node in plaintext to bootstrap the thing meant to keep secrets off
+  it — and it would add a network round-trip at 07:03 on a box that serves its own
+  DNS.
+
+  The token cannot fetch claude.ai connectors, so Gmail/Calendar/Drive/Notion are
+  unavailable to scheduled runs. Locally-configured MCP servers, including the
+  tailnet mail server, work normally.
+
+- **A deploy key with no bootstrapping problem.** The node generates its own
+  ed25519 key and `install` prints the public half; nothing is ever transported to
+  it. It needs write access, because the node pushes what its runs learn.
+
+- **Paths chosen as an API surface, not an implementation detail.** `/srv/brain`
+  for the checkout, `/var/lib/brain` for state, and `/etc/ctdev/brain.conf` as a
+  world-readable pointer file, so a later service can find the brain without
+  reverse-engineering a systemd unit. The checkout is owned by a dedicated `brain`
+  system user at mode 2770 — a second service account joins the group and reads it
+  without being the timer's user, and neither principal of the household is the
+  automation.
+
+- **Scheduled prompts point rather than restate.** The shipped prompt names the
+  agent, the skill and the memory file to read and carries none of their rules,
+  because a prompt with rules copied into it is a snapshot that goes stale in
+  silence. A `scheduled/triage.md` in the checkout wins over it, so the prompt can
+  live beside the rules it points at.
+
+- **The scheduled session is narrower than an interactive one.** Its built-in tool
+  set is cut to delegation and file access — no shell, no web fetch, no web search
+  — since `brain-run` does the git work itself. MCP access is an allow-list built
+  from what the repo's own setup registered, not a deny-list, so a server added
+  later is not silently in reach of a session that reads attacker-controlled email.
+
+- **`ai-node` now stands the whole node up**, brain included, and its notes name
+  the two steps `apply` cannot do: adding the deploy key and supplying the token.
+
+### Changed
+- `ctdev uninstall brain` stops the timers and removes the units and runner, and
+  keeps the checkout, `memory/`, the state directory, the config and the
+  credential. `memory/` holds accumulated learning that exists nowhere else.
+
 ## [12.16.1] - 2026-08-20
 
 ### Fixed

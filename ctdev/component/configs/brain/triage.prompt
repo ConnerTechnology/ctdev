@@ -1,0 +1,14 @@
+Delegate this to the `inbox` agent.
+
+Tell it to read, at run time: its own instructions, the `triaging-inbox` skill, and
+its memory under `memory/inbox/`. Do not restate any of their rules to it — they
+change, and a copy of them here would be a snapshot that goes stale without
+anyone noticing.
+
+Scope: every mailbox `list_available_accounts` reports, INBOX only.
+
+Report: return the digest exactly as the agent's own report format defines it.
+Add nothing. If a mailbox is missing or unreachable, say which and stop.
+
+Nobody is watching this run. If something needs a human decision, write it down
+where a human will find it rather than choosing for them.

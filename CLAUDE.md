@@ -38,6 +38,7 @@ ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocki
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
 ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailscale serve)
+ctdev configure brain           # brain checkout, schedule, Claude credential — --show
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev backup now                # Run a restic snapshot of this machine now
@@ -77,9 +78,9 @@ See README "Fresh Machine Setup".
 
 ## Components
 
-51 components:
+52 components:
 
-1password, age, bat, beszel, btop, bun, caddy, chrome, cleanmymac, claude-code, claude-desktop, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mcp-email-server, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
+1password, age, bat, beszel, brain, btop, bun, caddy, chrome, cleanmymac, claude-code, claude-desktop, dbeaver, devcontainer, direnv, docker, doctl, earlyoom, fd, fonts, fzf, gh, git, git-spice, go, helm, jq, kubectl, lazygit, linear, logi-options, mcp-email-server, mosh, node, nomachine, pihole, portainer, restic, ripgrep, ruby, shellcheck, slack, smartmontools, solaar, sops, syncthing, tailscale, terraform, tmux, vscode, zoxide, zsh
 
 ## Profiles
 
@@ -266,6 +267,83 @@ Credentials live in a **bind mount** (`./config`), not a named volume, so they
 survive `docker compose down` *and* the host can verify the mode without
 entering the container. `ctdev uninstall` stops the stack and keeps the catalog —
 losing it means re-issuing an app password per mailbox.
+
+## The brain (`brain` component)
+
+`ctdev install brain` provisions **ConnerTechnology/AI** — the agent org — onto an
+always-on node and runs its scheduled work there. A git checkout and two systemd
+timers; **not** a compose stack. `ctdev configure brain` sets the checkout, the
+schedule, and the Claude credential; `--show` reports state.
+
+The reason it exists: a schedule living in a Claude Code session dies with the
+window, and two laptops running scheduled agents write the same `memory/` files
+and disagree. One always-on writer removes both.
+
+**Paths are an API surface**, chosen so a later service (the tailnet app in the AI
+repo's `docs/vision.md`) can find the brain without reading a systemd unit:
+
+```
+/srv/brain                          checkout, brain:brain, 2770 (setgid, no world bit)
+/var/lib/brain                      state: runs/, brain.lock, .ssh/, the account's $HOME
+/etc/ctdev/brain.conf               pointer file — 0644, shell-quoted, NO SECRETS
+/etc/ctdev/brain-claude-token.cred  Claude token, host-encrypted
+/etc/ctdev/brain-triage.prompt      default prompt; <repo>/scheduled/triage.md wins
+/usr/local/bin/brain-run            the one entry point both timers call
+```
+
+**The service account is `brain`**, a system user — deliberately neither Thomas
+nor Le'Anna, who are principals of equal standing. Its commits are attributable to
+the node. A second service account joins group `brain` to read the checkout
+without being the timer's user.
+
+Facts that are load-bearing; change any of them and something breaks quietly:
+
+- **`systemd-creds`, not `op run`, holds the Claude token.** Unattended `op` needs
+  `OP_SERVICE_ACCOUNT_TOKEN`, itself a long-lived secret that would have to sit on
+  the node in plaintext to bootstrap the thing meant to keep plaintext off it —
+  plus a network round-trip at 07:03 on the node that serves the household's DNS.
+  1Password stays the system of record (`BRAIN_TOKEN_REF` records the `op://` URI,
+  which is not secret); what lands here is encrypted to
+  `/var/lib/systemd/credential.secret`. That file is **not** in the restic backup
+  set, which is what makes the `.cred` inert inside a snapshot of `/etc`.
+- **The token comes from `claude setup-token`** (one year, needs Pro/Max/Team/
+  Enterprise). It **cannot fetch claude.ai connectors** — Gmail, Calendar, Drive,
+  Notion are unavailable to scheduled runs. Locally-configured MCP servers work,
+  which is what the tailnet mail server is. The `inbox` agent only uses
+  `mcp__email__*`, so triage is unaffected.
+- **Git auth is a repo deploy key generated on the node.** The only credential in
+  the design with no transport problem. It needs *write* access; without it the
+  node commits and strands.
+- **Nothing is ever force-pushed and no conflict is auto-resolved.** A rejected
+  push rebases and retries once; a real conflict aborts and **fails the unit**, so
+  it surfaces in `systemctl --failed` / `ctdev status`. `brain-run` holds a
+  `flock` so the two timers and a hand run cannot interleave. `brain_test.go`
+  asserts the absence of `push --force`, `reset --hard`, `checkout --theirs`.
+- **The prompt points, it never restates.** A prompt with the rules copied in is a
+  snapshot that goes stale silently — it already happened on 2026-08-20. The test
+  caps the shipped prompt's length for exactly this reason.
+- **`brain-sync.service` deliberately loads no credential.** Git only, so the
+  checkout keeps tracking origin after the token expires and a laptop's `git pull`
+  still receives what the last triage committed.
+- **MCP is an allow-list, not a deny-list.** `brain-run` filters the servers the
+  repo's setup registered down to `BRAIN_CLAUDE_MCP` (default `email`) and passes
+  `--strict-mcp-config`. A deny-list would fail open when a server is added later.
+  `--tools` separately removes Bash, WebFetch and WebSearch from the session —
+  verified against a live session, not assumed.
+- **The workspace is marked trusted in the service account's `~/.claude.json`.**
+  Claude Code ignores a project's `.claude/settings.json` until a trust dialog is
+  accepted, and a timer cannot answer a dialog. Without it the node silently runs
+  with different settings from every laptop.
+- **`Root: RootAlways`.** Every run redeploys units, writes `/etc`, and works as
+  the service account. `DetectPath` is the runner, not the checkout, so a repo
+  cloned by hand does not read as an installed component.
+- **Existence checks go through `brainPathExists`.** `/srv/brain` (2770) and
+  `/var/lib/brain` (0750) are not traversable by the operator's own account, so a
+  bare `os.Stat` reports "missing" for files that are plainly there.
+
+Uninstall stops the timers and removes the units and runner. It **keeps** the
+checkout, `memory/`, the state directory, `brain.conf`, the credential, the
+schedule drop-ins and the account.
 
 ## ctdev doctor
 

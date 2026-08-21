@@ -1,0 +1,17 @@
+[Unit]
+Description=Twice-daily brain triage
+
+[Timer]
+# 07:03 and 15:07 local time. The off-minutes are deliberate: every other timer
+# on the box fires on the hour or the half hour, and a job that reads four
+# mailboxes should not be queued behind apt and restic.
+OnCalendar=*-*-* 07:03:00
+OnCalendar=*-*-* 15:07:00
+# If the node was down at the scheduled time, run once it is back. A triage
+# missed entirely is the failure mode this component exists to remove.
+Persistent=true
+# Deliberately not randomized — see the off-minutes above.
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target

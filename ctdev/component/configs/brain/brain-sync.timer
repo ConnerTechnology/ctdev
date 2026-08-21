@@ -1,0 +1,14 @@
+[Unit]
+Description=Hourly brain checkout sync
+
+[Timer]
+# Hourly, at :23 — clear of both triage minutes so the two never contend for
+# the lock on a normal day. This exists for the SSH-from-a-phone path: an iOS
+# device reaches the brain by running Claude Code on this node, and a checkout
+# twelve hours stale means stale agents and stale knowledge.
+OnCalendar=*-*-* *:23:00
+Persistent=true
+RandomizedDelaySec=2m
+
+[Install]
+WantedBy=timers.target

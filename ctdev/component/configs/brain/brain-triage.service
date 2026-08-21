@@ -1,0 +1,41 @@
+[Unit]
+Description=Scheduled brain triage (delegates to the inbox agent)
+Documentation=https://github.com/ConnerTechnology/AI
+Wants=network-online.target
+After=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+User=brain
+Group=brain
+WorkingDirectory=/srv/brain
+ExecStart=/usr/local/bin/brain-run triage
+
+# The Claude subscription token, encrypted to this host's key and decrypted by
+# systemd into a private ramfs directory readable only by this unit. Written by
+# `ctdev configure brain`; the plaintext never lands on disk.
+LoadCredentialEncrypted=claude-oauth-token:/etc/ctdev/brain-claude-token.cred
+
+# A triage across four mailboxes runs for minutes, not seconds.
+TimeoutStartSec=45min
+
+# New files land group-writable so a second service account in the brain group
+# can take over a file the timer created.
+UMask=0007
+
+# Be gentle on the Pi's SD card while a model run does its file reads.
+Nice=5
+
+# The job needs the network, the checkout, and its own state directory. It needs
+# nothing else, and it reads text written by strangers, so take the rest away.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/srv/brain /var/lib/brain
+
+[Install]
+WantedBy=multi-user.target

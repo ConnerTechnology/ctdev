@@ -1,0 +1,32 @@
+[Unit]
+Description=Keep the brain checkout in step with origin
+Documentation=https://github.com/ConnerTechnology/AI
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=brain
+Group=brain
+WorkingDirectory=/srv/brain
+ExecStart=/usr/local/bin/brain-run sync
+
+# No Claude credential here on purpose: a sync is git only. The checkout keeps
+# tracking origin even when the subscription token has expired, so a laptop's
+# `git pull` still receives whatever the last triage managed to commit.
+TimeoutStartSec=10min
+UMask=0007
+Nice=10
+IOSchedulingClass=idle
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/srv/brain /var/lib/brain
+
+[Install]
+WantedBy=multi-user.target

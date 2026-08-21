@@ -11,6 +11,11 @@ var Registry = []Component{
 	{Name: "beszel", Description: "Beszel server/container monitoring (Docker)", Category: CategoryInfra, SupportedOS: []OS{OSLinux}, Dependencies: []string{"docker"}, DetectPath: "$HOME/beszel/docker-compose.yml", Root: RootNever, GoInstall: beszelInstall, GoUninstall: beszelUninstall, Tags: []string{"docker", "monitoring", "homelab"}},
 	{Name: "btop", Description: "Resource monitor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("btop"), GoUninstall: SimplePackageUninstaller("btop"), Tags: []string{"monitor", "htop"}},
 	{Name: "bat", Description: "cat with syntax highlighting", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: batInstall, GoUninstall: batUninstall, Tags: []string{"cat", "pager"}},
+	// Root is RootAlways: every run redeploys the systemd units, writes
+	// /etc/ctdev, and works as the brain service account — all privileged,
+	// installed or not. DetectPath is the runner rather than the checkout, so
+	// a repo cloned by hand does not read as an installed component.
+	{Name: "brain", Description: "ConnerTechnology/AI agent org + its scheduled runs (systemd)", Category: CategoryInfra, SupportedOS: []OS{OSLinux}, Dependencies: []string{"git"}, DetectPath: "/usr/local/bin/brain-run", Root: RootAlways, GoInstall: brainInstall, GoUninstall: brainUninstall, Tags: []string{"ai", "claude", "agents", "homelab"}},
 	{Name: "bun", Description: "JavaScript runtime and package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Root: RootNever, GoInstall: bunInstall, GoUninstall: bunUninstall, Tags: []string{"javascript", "node"}},
 	{Name: "caddy", Description: "Caddy reverse proxy (Cloudflare DNS-01 wildcard)", Category: CategoryInfra, SupportedOS: []OS{OSLinux}, Dependencies: []string{"docker"}, DetectPath: "$HOME/caddy/docker-compose.yml", Root: RootAlways, GoInstall: caddyInstall, GoUninstall: caddyUninstall, Tags: []string{"caddy", "proxy", "homelab"}},
 	{Name: "chrome", Description: "Google Chrome browser", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, DetectCmd: "google-chrome", DetectApps: []string{"/Applications/Google Chrome.app"}, GoInstall: chromeInstall, GoUninstall: chromeUninstall, Tags: []string{"browser", "web"}},
