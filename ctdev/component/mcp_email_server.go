@@ -281,6 +281,67 @@ func MCPEmailServerRemoveAccount(ctx context.Context, name string) error {
 	return fmt.Errorf("no account named %q", name)
 }
 
+// MCPEmailServerPolicy reads the managed catalog policy — the settings that
+// apply to every mailbox rather than to one account.
+func MCPEmailServerPolicy(ctx context.Context) (map[string]any, error) {
+	return MCPEmailServerCLI(ctx, "", "config", "policy", "--json")
+}
+
+// MCPEmailServerAttachmentDownload reports whether mailboxes may hand an
+// attachment to a client. Upstream defaults it to off.
+func MCPEmailServerAttachmentDownload(ctx context.Context) (bool, error) {
+	policy, err := MCPEmailServerPolicy(ctx)
+	if err != nil {
+		return false, err
+	}
+	enabled, _ := policy["enable_attachment_download"].(bool)
+	return enabled, nil
+}
+
+// MCPEmailServerSetAttachmentDownload turns attachment downloads on or off for
+// every mailbox at once.
+//
+// It has to be the managed policy, not an environment variable:
+// MCP_EMAIL_SERVER_ENABLE_ATTACHMENT_DOWNLOAD only feeds upstream's legacy
+// config path, and an account resolved from the managed catalog ignores it
+// entirely — the container reads "true" from its own environment and still
+// refuses the download. That cost an hour on 2026-08-23.
+//
+// Like account removal, upstream guards the policy with optimistic
+// concurrency, so the current revision has to be read back first. Idempotent:
+// an already-correct policy is left alone rather than burning a revision.
+func MCPEmailServerSetAttachmentDownload(ctx context.Context, enabled bool) error {
+	policy, err := MCPEmailServerPolicy(ctx)
+	if err != nil {
+		return err
+	}
+	args, err := mcpEmailServerPolicyArgs(policy, enabled)
+	if err != nil || args == nil {
+		return err
+	}
+	_, err = MCPEmailServerCLI(ctx, "", args...)
+	return err
+}
+
+// mcpEmailServerPolicyArgs turns a policy document and the state we want into
+// the CLI call that gets there, or nil when the policy already says so.
+// Separated from the container call so the revision guard is testable.
+func mcpEmailServerPolicyArgs(policy map[string]any, enabled bool) ([]string, error) {
+	if current, ok := policy["enable_attachment_download"].(bool); ok && current == enabled {
+		return nil, nil
+	}
+	rev, ok := policy["revision"].(float64) // encoding/json numbers
+	if !ok {
+		return nil, fmt.Errorf("managed policy: no revision in the catalog listing")
+	}
+	flag := "--disable-attachment-download"
+	if enabled {
+		flag = "--enable-attachment-download"
+	}
+	return []string{"config", "update-policy",
+		"--expected-revision", strconv.Itoa(int(rev)), flag, "--json"}, nil
+}
+
 // MCPEmailServerInitCatalog creates the managed catalog on first install.
 // Idempotent: an already-managed node is left alone.
 func MCPEmailServerInitCatalog(ctx context.Context) error {

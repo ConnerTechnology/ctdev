@@ -112,14 +112,21 @@ func printMCPEmailAccounts(accounts []map[string]any) {
 
 // editMCPEmailAccounts loops over add/remove until the user is done.
 func editMCPEmailAccounts(ctx context.Context, accounts []map[string]any) error {
+	// Read once up front rather than per iteration: it costs a throwaway
+	// container, and the loop owns every change made to it after this.
+	attachments, err := component.MCPEmailServerAttachmentDownload(ctx)
+	if err != nil {
+		return err
+	}
 	for {
 		printMCPEmailAccounts(accounts)
 		fmt.Println()
 		fmt.Println("  1) Add or update a mailbox")
 		fmt.Println("  2) Remove a mailbox")
-		fmt.Println("  3) Done")
-		fmt.Printf("  %s ", styles.Dimmed.Render("Choice [3]:"))
-		choice, err := promptChoiceCtx(ctx, 3)
+		fmt.Printf("  3) Attachment downloads: %s\n", styles.Value.Render(onOff(attachments)))
+		fmt.Println("  4) Done")
+		fmt.Printf("  %s ", styles.Dimmed.Render("Choice [4]:"))
+		choice, err := promptChoiceCtx(ctx, 4)
 		if err != nil {
 			return err
 		}
@@ -143,6 +150,30 @@ func editMCPEmailAccounts(ctx context.Context, accounts []map[string]any) error 
 				return err
 			}
 			fmt.Printf("  Removed %s\n", name)
+		case 3:
+			// Off is upstream's default and the safer one: an agent that can
+			// download can write a file out of a mailbox. Turn it on when a
+			// real workflow needs it — the Pinewood nursery rota arrives as a
+			// .doc with an empty message body, so the dates are unreadable
+			// without it.
+			want := !attachments
+			fmt.Println(styles.Dimmed.Render("  On lets any client save an attachment to disk. Off is upstream's default."))
+			confirmed, err := promptYesNoCtx(ctx, fmt.Sprintf("Turn attachment downloads %s?", onOff(want)), want)
+			if err != nil {
+				return err
+			}
+			if !confirmed {
+				break
+			}
+			if flagDryRun {
+				fmt.Printf("  [dry-run] would turn attachment downloads %s\n", onOff(want))
+				break
+			}
+			if err := component.MCPEmailServerSetAttachmentDownload(ctx, want); err != nil {
+				return err
+			}
+			attachments = want
+			fmt.Printf("  Attachment downloads %s\n", onOff(want))
 		default:
 			return nil
 		}
@@ -358,10 +389,26 @@ func showMCPEmailServerConfig(ctx context.Context, accounts []map[string]any) er
 	fmt.Printf("  %s %s\n", label.Render("Listening on:"), styles.Value.Render(fmt.Sprintf("127.0.0.1:%d (loopback only)", component.MCPEmailServerPort)))
 	fmt.Printf("  %s %s\n", label.Render("Accepted Hosts:"), styles.Value.Render(orDash(component.MCPEmailServerReadEnv()["MCP_ALLOWED_HOSTS"])))
 
+	// Worth showing even though it is rarely changed: it applies to every
+	// mailbox at once, and nothing else on the node reveals that it is on.
+	attachments := "—"
+	if enabled, err := component.MCPEmailServerAttachmentDownload(ctx); err == nil {
+		attachments = onOff(enabled)
+	}
+	fmt.Printf("  %s %s\n", label.Render("Attachment downloads:"), styles.Value.Render(attachments))
+
 	endpoint := "—"
 	if dnsName := component.MCPEmailServerTailscaleDNSName(ctx); dnsName != "" {
 		endpoint = component.MCPEmailServerURL(dnsName, component.MCPEmailServerServePort())
 	}
 	fmt.Printf("  %s %s\n", label.Render("Tailnet endpoint:"), styles.Value.Render(endpoint))
 	return nil
+}
+
+// onOff labels a policy toggle the way the menu and --show both read it.
+func onOff(v bool) string {
+	if v {
+		return "on"
+	}
+	return "off"
 }

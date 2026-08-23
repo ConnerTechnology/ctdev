@@ -311,3 +311,38 @@ func TestMCPEmailServerEnsureConfigDirNeverTouchesExisting(t *testing.T) {
 		t.Errorf("catalog mode changed: %v %v", fi.Mode().Perm(), err)
 	}
 }
+
+// The policy is revision-guarded, so a change has to quote the revision it saw.
+// Getting this wrong fails as a silent no-op, which is how the setting looked
+// enabled while every download was still refused.
+func TestMCPEmailServerPolicyArgs(t *testing.T) {
+	policy := map[string]any{"revision": float64(9), "enable_attachment_download": false}
+
+	args, err := mcpEmailServerPolicyArgs(policy, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"config", "update-policy", "--expected-revision", "9", "--enable-attachment-download", "--json"}
+	if !slices.Equal(args, want) {
+		t.Errorf("args = %v, want %v", args, want)
+	}
+
+	if args, err := mcpEmailServerPolicyArgs(policy, false); err != nil || args != nil {
+		t.Errorf("no change needed should return nil args, got %v (%v)", args, err)
+	}
+
+	on := map[string]any{"revision": float64(9), "enable_attachment_download": true}
+	args, err = mcpEmailServerPolicyArgs(on, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(args, "--disable-attachment-download") {
+		t.Errorf("turning it off should disable, got %v", args)
+	}
+
+	// A policy document with no revision cannot be updated safely — refuse
+	// rather than guessing a revision the server will reject.
+	if _, err := mcpEmailServerPolicyArgs(map[string]any{}, true); err == nil {
+		t.Error("expected an error when the policy has no revision")
+	}
+}

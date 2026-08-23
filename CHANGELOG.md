@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.18.0] - 2026-08-23
+
+### Added
+- **`ctdev configure mcp-email-server` can turn attachment downloads on and off**, and
+  `--show` reports the current state. Upstream defaults it to off, and until now the only
+  way to change it was `docker exec` into the container by hand — so a node that needed it
+  lost the setting on the next redeploy and nobody knew why.
+
+  It is a **managed-catalog policy**, not an environment variable. The container reads
+  `MCP_EMAIL_SERVER_ENABLE_ATTACHMENT_DOWNLOAD` only on upstream's legacy config path; an
+  account resolved from the managed catalog ignores it completely, so the variable can read
+  `true` inside the container while every download is still refused. That is what happened
+  on 2026-08-23 and it is recorded in the code comment so the next person skips the hour.
+
+  The update is revision-guarded like account removal — it quotes the revision it read — and
+  it is idempotent, so re-running configure on a correct node burns no revision.
+
+  **It applies to every mailbox at once**, which is why `--show` lists it: nothing else on
+  the node reveals that it is on.
+
 ## [12.17.1] - 2026-08-21
 
 ### Fixed
