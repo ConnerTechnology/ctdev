@@ -80,6 +80,7 @@ func zshInstall(ctx context.Context, opts ExecOpts) error {
 	deploys := []struct{ src, dst string }{
 		{"configs/zsh/.zshrc", filepath.Join(home, ".zshrc")},
 		{"configs/zsh/aliases.zsh", filepath.Join(omzDir, "custom", "aliases.zsh")},
+		{"configs/zsh/claude.zsh", filepath.Join(omzDir, "custom", "claude.zsh")},
 		{"configs/zsh/exports.zsh", filepath.Join(omzDir, "custom", "exports.zsh")},
 		{"configs/zsh/path.zsh", filepath.Join(home, ".zsh", "path.zsh")},
 	}
@@ -140,6 +141,7 @@ func zshUninstall(ctx context.Context, opts ExecOpts) error {
 
 	toRemove := []string{
 		filepath.Join(omzCustom, "aliases.zsh"),
+		filepath.Join(omzCustom, "claude.zsh"),
 		filepath.Join(omzCustom, "exports.zsh"),
 		filepath.Join(omzCustom, "path.zsh"),
 		filepath.Join(omzCustom, "exports.local.zsh"),
