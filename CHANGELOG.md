@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.19.0] - 2026-09-03
+
+### Added
+- **Every `claude` session now runs inside a memory-capped systemd scope.** The zsh
+  component deploys `~/.oh-my-zsh/custom/claude.zsh`, a `claude` function that wraps the
+  binary in `systemd-run --user --scope` with `MemoryMax` and `MemorySwapMax=0`, so a
+  runaway test suite is OOM-killed inside the cap instead of freezing the desktop. The cap
+  is a fixed target per installed RAM size (8 GB → 4G, 16 GB → 8G, 32 GB → 16G,
+  64 GB → 24G, 128 GB → 48G, up to 256 GB → 96G), snapped to the nearest known size
+  since the kernel reports a little under nominal. `CLAUDE_MEMORY_MAX` in
+  `exports.local.zsh` overrides it. On macOS, or in a session with no user systemd bus,
+  the function runs Claude uncapped. Sessions already open are not covered until restarted.
+
 ## [12.18.0] - 2026-08-23
 
 ### Added
