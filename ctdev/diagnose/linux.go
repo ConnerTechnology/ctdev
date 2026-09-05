@@ -4,13 +4,60 @@ import (
 	"context"
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 )
 
 func linuxChecks(info platform.Info, f Facts) []Check {
-	return nil
+	var checks []Check
+	// Only worth asking on a machine that runs containers — the controller is
+	// irrelevant otherwise, and a row saying so is noise.
+	if commandExists("docker") {
+		checks = append(checks, Check{
+			ID:    "sys.memcgroup",
+			Name:  "Memory cgroup",
+			Group: GroupSystem,
+			Run:   checkMemoryCgroup,
+		})
+	}
+	return checks
+}
+
+// checkMemoryCgroup reports whether the kernel exposes the memory controller.
+//
+// Without it Docker reports every per-container CPU, memory *and* network
+// figure as zero — the stats path gives up on the first bad memory read rather
+// than degrading to partial data, and Beszel's agent aborts its whole
+// container-stats block for the same reason (henrygd/beszel#144). Flat zeros
+// read as "idle containers", not "broken instrumentation", which is how this
+// hides: ctpi01 ran nine days of a 125 MB/day leak with every Docker panel a
+// flat line at zero. `mem_limit` in a compose file is silently ignored too, so
+// the backstop that should have caught the leak was never armed either.
+//
+// Raspberry Pi OS prepends cgroup_disable=memory to the device-tree bootargs,
+// so a stock Pi always lands here until cmdline.txt overrides it.
+func checkMemoryCgroup(_ context.Context, _ Facts) Result {
+	b, err := os.ReadFile("/sys/fs/cgroup/cgroup.controllers")
+	if err != nil {
+		// cgroup v1, or a kernel without unified hierarchy. Not a fault, and
+		// not something this check can speak to.
+		return skipf("no cgroup v2 controller list at /sys/fs/cgroup/cgroup.controllers")
+	}
+	return memoryCgroupVerdict(strings.Fields(string(b)))
+}
+
+// memoryCgroupVerdict is the rule, split out so it is testable without a
+// particular kernel underneath.
+func memoryCgroupVerdict(controllers []string) Result {
+	if slices.Contains(controllers, "memory") {
+		return okf("memory controller enabled — per-container stats and mem_limit work")
+	}
+	return warnf(
+		`Append "cgroup_enable=memory cgroup_memory=1" to the end of /boot/firmware/cmdline.txt, keeping it a single line, then reboot. The firmware prepends cgroup_disable=memory, so yours has to come last to win. Verify with: cat /sys/fs/cgroup/cgroup.controllers`,
+		"memory controller missing (have: %s) — per-container CPU, memory and network all report zero, and mem_limit is ignored",
+		strings.Join(controllers, " "))
 }
 
 func linuxGateway(ctx context.Context) netip.Addr {
