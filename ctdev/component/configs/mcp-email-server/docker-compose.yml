@@ -31,6 +31,16 @@ services:
     image: mcp-email-server:local
     container_name: mcp-email-server
     restart: unless-stopped
+    # A backstop, not a tuning knob: the steady state is ~85 MB, so this is 6x
+    # headroom and invisible in normal operation. It exists because this process
+    # holds mail credentials and talks to an SDK whose session bookkeeping has
+    # already leaked once (see the healthcheck comment) — paired with the
+    # restart policy above, a runaway gets OOM-killed and restarted instead of
+    # slowly squeezing every other container on the node. Requires the memory
+    # cgroup controller: Raspberry Pi OS prepends cgroup_disable=memory, so
+    # /boot/firmware/cmdline.txt needs "cgroup_enable=memory cgroup_memory=1"
+    # appended (last value wins) or Docker ignores this silently.
+    mem_limit: 512m
     # Runs as the user who owns the stack directory, not root. 1.x refuses to
     # open its catalog unless the parent directory is owner-only *from the
     # running user's point of view*, so a root-run container against a
@@ -64,9 +74,18 @@ services:
       - ./config:/config
     healthcheck:
       # No curl or wget in python:3.12-slim. Any HTTP status proves the ASGI app
-      # is answering (an unauthenticated GET /mcp returns 406), while a dead
-      # server raises on connect.
-      test: ["CMD", "python3", "-c", "import http.client as h; c = h.HTTPConnection('127.0.0.1', 9557, timeout=5); c.request('GET', '/mcp'); c.getresponse()"]
+      # is answering, while a dead server raises on connect.
+      #
+      # PROBE AN UNROUTED PATH, NEVER /mcp. A GET /mcp registers a new
+      # streamable-HTTP transport in the SDK's session manager *before* it
+      # rejects the missing text/event-stream Accept header with 406, and the
+      # only reaper runs inside the server task that request never reaches
+      # (mcp 1.29.1 streamable_http_manager.py:301; session_idle_timeout
+      # defaults to None, so nothing ages them out either). At one probe per
+      # 30s that left 25,825 orphaned transports and 1.07 GB of RSS on ctpi01
+      # in nine days. /healthz is unrouted, so it 404s straight out of the ASGI
+      # router and proves the same thing at zero cost.
+      test: ["CMD", "python3", "-c", "import http.client as h; c = h.HTTPConnection('127.0.0.1', 9557, timeout=5); c.request('GET', '/healthz'); c.getresponse()"]
       interval: 30s
       timeout: 10s
       retries: 3

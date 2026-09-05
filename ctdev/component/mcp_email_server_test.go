@@ -53,6 +53,30 @@ func TestMCPEmailServerPackageIsPinned(t *testing.T) {
 	}
 }
 
+// A GET /mcp registers a new streamable-HTTP transport in the SDK's session
+// manager before it rejects the missing text/event-stream Accept header with
+// 406, and the only reaper runs inside the server task that request never
+// reaches. Probing it on an interval leaks a transport per tick: ctpi01 held
+// 25,825 of them and 1.07 GB of RSS after nine days at one probe per 30s. Any
+// unrouted path 404s out of the ASGI router and proves liveness just as well.
+func TestMCPEmailServerHealthcheckDoesNotOpenSessions(t *testing.T) {
+	line := regexp.MustCompile(`(?m)^\s+test: \[.*\]$`).FindString(mcpEmailServerCompose(t))
+	if line == "" {
+		t.Fatal("no healthcheck test line found — the regexp or the compose file changed shape")
+	}
+	if strings.Contains(line, "/mcp'") {
+		t.Errorf("healthcheck probes /mcp, which leaks a transport per run: %s", strings.TrimSpace(line))
+	}
+}
+
+// A leak in the process holding mail credentials should hit a ceiling and get
+// restarted, not squeeze every other container on the node.
+func TestMCPEmailServerHasMemoryLimit(t *testing.T) {
+	if !regexp.MustCompile(`(?m)^\s+mem_limit:\s*\S+`).MatchString(mcpEmailServerCompose(t)) {
+		t.Error("compose file must set mem_limit as a backstop against runaway memory")
+	}
+}
+
 // Every file the installer deploys has to exist in the embedded configs, or the
 // stack only breaks on a real node.
 func TestMCPEmailServerStackFilesAreEmbedded(t *testing.T) {
