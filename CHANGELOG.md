@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.20.0] - 2026-09-05
+
+### Fixed
+- **The `mcp-email-server` healthcheck no longer leaks an MCP session per probe.** It
+  polled `GET /mcp` every 30 seconds, and the SDK's session manager registers a new
+  streamable-HTTP transport *before* it rejects the missing `text/event-stream` Accept
+  header with 406 (`mcp` 1.29.1, `streamable_http_manager.py:301`). The only reaper runs
+  inside the server task that request never reaches, and nothing ages the orphans out
+  either — `session_idle_timeout` defaults to `None`. On ctpi01 that was 25,825 orphaned
+  transports and 1.07 GB of RSS in nine days, roughly 125 MB a day, which showed up as a
+  slow system-wide climb with no container to blame. The probe now hits `/healthz`, which
+  is unrouted and 404s straight out of the ASGI router — the same proof that the ASGI app
+  is answering, at no cost. A test asserts the healthcheck never names `/mcp` again.
+
+  **A node installed before this release keeps the leaking file** until `ctdev install
+  mcp-email-server` redeploys it. The compose file is embedded in the binary, so upgrading
+  ctdev alone does not rewrite what is already on disk.
+
+### Added
+- **`mem_limit: 512m` on the `mcp-email-server` stack.** Steady state is ~85 MB, so this is
+  6x headroom and invisible in normal operation. Paired with `restart: unless-stopped`, a
+  runaway is OOM-killed and restarted instead of slowly squeezing every other container on
+  the node. It needs the memory cgroup controller below, or Docker ignores it silently.
+- **`ctdev doctor` checks for the kernel memory cgroup** on any Linux host running Docker.
+  Without that controller Docker reports every per-container CPU, memory *and* network
+  figure as zero — the stats path gives up on the first bad memory read, and Beszel's agent
+  aborts its whole container-stats block for the same reason (henrygd/beszel#144). Flat
+  zeros read as idle containers rather than as broken instrumentation, which is exactly how
+  the leak above stayed invisible for nine days. Raspberry Pi OS prepends
+  `cgroup_disable=memory` to the device-tree bootargs, so a stock Pi always lands here:
+  append `cgroup_enable=memory cgroup_memory=1` to `/boot/firmware/cmdline.txt`, keeping it
+  a single line so yours comes last and wins, then reboot.
+
 ## [12.19.0] - 2026-09-03
 
 ### Added
