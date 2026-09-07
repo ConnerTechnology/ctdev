@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [12.21.0] - 2026-09-07
 
 ### Added
 - **`ctdev configure pihole` gains a "host resolver" setting.** A Pi-hole node that
