@@ -56,7 +56,7 @@ ctdev apply pihole-node                  # ← the whole block below in one comm
 ctdev install zsh git tailscale          # whatever base tools you want
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker
-ctdev configure pihole                   # upstreams, listening mode, blocking
+ctdev configure pihole                   # upstreams, listening mode, blocking, host resolver
 ctdev install docker                     # caddy needs docker
 ctdev configure caddy --domain example.com --acme-email you@example.com
                                          # prompts for the Cloudflare token (masked); or pass it
@@ -106,6 +106,16 @@ itself in your password manager, since restic can't restore its own credentials.
 present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
 set that Tailscale IP as a Global Nameserver (Override on) in the Tailscale admin
 console, and `sudo pihole setpassword` for the admin UI.
+
+**Say yes to "Pi-hole host resolver" in `ctdev configure pihole`.** A node that
+accepts Tailscale DNS resolves through MagicDNS, whose nameserver is its own
+Pi-hole — so while the container is down the host can't pull the image to fix
+it or reach its backups. The setting points the host at Pi-hole on loopback
+with Quad9 as an instant fallback, and forwards tailnet (MagicDNS) names
+through Pi-hole so they keep resolving on the node and, as a side effect, on
+every LAN device. `ctdev doctor` then checks that the resolver validates DNSSEC
+and that Unbound reaches the root servers directly (an ISP transparent DNS
+proxy answering in their place is what silently breaks both).
 
 **Skip `ctdev configure ufw` on a DNS/proxy host** — UFW's default-deny blocks
 DNS (53) and the proxy (80/443) unless you open those ports first.
@@ -344,7 +354,7 @@ ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
 ctdev configure ssh             # SSH server + key-based auth hardening
 ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
-ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
+ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
 ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailscale serve)

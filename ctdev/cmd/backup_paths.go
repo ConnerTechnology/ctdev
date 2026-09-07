@@ -582,29 +582,13 @@ func pickerBind(ctx context.Context, mode string) (bindHost, reachHost string, e
 		// certificate and a human's memory both use, and it survives an IP
 		// change mid-session.
 		reach := ip
-		if name := magicDNSName(ctx); name != "" {
+		if name := sysutil.TailscaleDNS(ctx).DNSName; name != "" {
 			reach = name
 		}
 		return ip, reach, nil
 	default:
 		return "", "", fmt.Errorf("--listen must be loopback or tailnet, got %q", mode)
 	}
-}
-
-// magicDNSName returns this node's MagicDNS name without the trailing dot, or
-// "" when Tailscale isn't up or MagicDNS is off.
-func magicDNSName(ctx context.Context) string {
-	out := commandOutput(ctx, "tailscale", "status", "--json")
-	if out == "" {
-		return ""
-	}
-	var st struct {
-		Self struct{ DNSName string }
-	}
-	if json.Unmarshal([]byte(out), &st) != nil {
-		return ""
-	}
-	return strings.TrimSuffix(st.Self.DNSName, ".")
 }
 
 // printPickerRemoteHint explains how to reach a loopback-bound picker from
@@ -618,7 +602,7 @@ func printPickerRemoteHint(ctx context.Context, port string) {
 		fmt.Printf("    %s\n", styles.Value.Render("ctdev backup paths --listen tailnet"))
 	}
 	host := hostLabel()
-	if name := magicDNSName(ctx); name != "" {
+	if name := sysutil.TailscaleDNS(ctx).DNSName; name != "" {
 		host = name
 	}
 	fmt.Println(styles.Dimmed.Render("  Or forward the port from your laptop (the port changes every run):"))

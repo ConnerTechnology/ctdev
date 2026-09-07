@@ -50,6 +50,20 @@ func sharedChecks(f Facts) []Check {
 			Run:     checkDNSHijack,
 		},
 		{
+			ID:      "dns.dnssec",
+			Name:    "DNSSEC validation",
+			Group:   GroupInternet,
+			Network: true,
+			Run:     checkDNSSEC,
+		},
+		{
+			ID:      "dns.roots",
+			Name:    "Root server reach",
+			Group:   GroupInternet,
+			Network: true,
+			Run:     checkRootReach,
+		},
+		{
 			ID:      "net.icmp",
 			Name:    "Internet by address",
 			Group:   GroupInternet,

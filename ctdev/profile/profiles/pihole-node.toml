@@ -27,7 +27,7 @@ configure = ["ssh", "locale", "linger", "sleep", "autoupdate"]
 notes = """
 Next steps (interactive, in this order):
   sudo tailscale up                join the tailnet
-  ctdev configure pihole           upstreams, listening mode, blocking
+  ctdev configure pihole           upstreams, listening mode, blocking, host resolver
   ctdev configure caddy            domain, ACME email, Cloudflare token
   ctdev configure restic           backup repo, credentials, healthcheck URL
   ctdev backup paths               pick what restic backs up

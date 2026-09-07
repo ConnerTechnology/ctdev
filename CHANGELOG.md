@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`ctdev configure pihole` gains a "host resolver" setting.** A Pi-hole node that
+  accepts Tailscale DNS resolves through MagicDNS, whose global nameserver is the
+  node's own Pi-hole — so the moment the container stops, the host loses DNS and
+  cannot pull the image to fix it, reach its restic repository, or run the brain.
+  The setting stops Tailscale and NetworkManager rewriting `/etc/resolv.conf`,
+  writes it as loopback first and Quad9 second (a stopped FTL refuses the
+  connection, so the fallback is instant rather than a timeout), and adds a dnsmasq
+  drop-in forwarding the tailnet's MagicDNS suffix to `100.100.100.100`, since
+  Unbound cannot resolve `.ts.net` names and the brain dials the mail server by
+  one. That forward also gives every LAN client tailnet names. Shown only on
+  NetworkManager hosts without systemd-resolved; `ctdev reset` undoes it.
+- **`ctdev doctor` checks DNSSEC validation and root-server reach.** "DNSSEC
+  validation" asks the configured resolver for `dnssec-failed.org`, which a
+  validating resolver must refuse; an answer is a warning on a node whose Pi-hole
+  forwards to Unbound and informational elsewhere. "Root server reach" runs only on
+  such a node and asks a root server directly, non-recursively: a genuine root
+  answers authoritatively, while an ISP transparent DNS proxy answering in its
+  place cannot — the exact failure that silently defeats a recursive resolver and
+  breaks DNSSEC on random domains. Both speak DNS on the wire directly, since the
+  standard library hides the flags the verdicts depend on.
+
+### Changed
+- The MagicDNS name/suffix reader and the Pi-hole dnsmasq drop-in writer now live in
+  `sysutil` (`TailscaleDNS`, `PiholeWriteDnsmasq`), replacing two private copies in
+  `cmd` and `component`.
+- **`sysutil.SudoWriteFileMode`** writes a root-owned file with an explicit mode via
+  `install -m`. `SudoWriteFile` has always produced 0600 files — `cp` carries the
+  temp file's mode across — which every existing caller happens to tolerate (root-read
+  drop-ins, secrets). `/etc/resolv.conf` does not: unreadable to users, glibc silently
+  falls back to loopback, so the host resolver *looked* fine while its fallback was
+  dead. Found on ctpi01 during verification; the resolver files now install as 0644.
+
 ## [12.20.0] - 2026-09-05
 
 ### Fixed

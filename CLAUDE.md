@@ -34,7 +34,7 @@ ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
 ctdev configure autoupdate      # Automatic security updates + apt-daily job timeout
 ctdev configure macos           # macOS defaults (Dock/Finder/keyboard) — macOS only
-ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking)
+ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
 ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailscale serve, attachment policy)
@@ -105,6 +105,18 @@ running Pi-hole behind a Caddy reverse proxy:
   networking) deployed to `~/pihole/`; config/lists persist in `./etc-pihole`.
 - `ctdev configure pihole` — upstream resolvers, listening mode, blocking on/off
   (runs against the container via `docker exec`, or a native install if present).
+  Its **host resolver** setting exists because a node that accepts Tailscale DNS
+  resolves through MagicDNS, whose global nameserver is this same Pi-hole: with
+  FTL down the host cannot pull the image, reach B2, or run the brain. It runs
+  `tailscale set --accept-dns=false`, drops `dns=none` for NetworkManager, writes a
+  static `/etc/resolv.conf` (127.0.0.1, then 9.9.9.9 — a stopped FTL *refuses*, so
+  the fallback is instant) and a `03-tailnet.conf` dnsmasq drop-in forwarding the
+  MagicDNS suffix to `100.100.100.100`. The forward is load-bearing: the brain dials
+  the mail server by its `.ts.net` name, which Unbound cannot resolve (NXDOMAIN,
+  verified). tailscaled keeps answering on 100.100.100.100 with `--accept-dns=false`;
+  that flag only governs who writes resolv.conf. Gated to NetworkManager hosts
+  without systemd-resolved; never batch-applied by a profile (`pihole` defaults
+  would also flip the upstream to Cloudflare).
   The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
   served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
   Pi-hole's lists, settings, and gravity.db persist in `~/pihole/etc-pihole`, which
@@ -367,6 +379,14 @@ leaves the machine beyond the diagnostic probes themselves.
   closures, built as a function of `platform.Info` + `Facts` — the same shape as
   `cleanup.Task`. Gate at construction time so a wired machine has no Wi-Fi rows
   rather than a column of "n/a".
+- **`dns.dnssec` and `dns.roots`** (`dnssec.go`) speak DNS on the wire by hand
+  because `net.Resolver` hides the response flags and both verdicts *are* flags.
+  DNSSEC is judged by the bogus name (`dnssec-failed.org` must SERVFAIL), never
+  by the AD bit — stubs in the path (systemd-resolved, MagicDNS) strip AD but pass
+  SERVFAIL through. Root reach runs only when Pi-hole's upstream is on loopback
+  (Unbound) and asks a root server non-recursively: only a real root sets AA; a
+  transparent ISP proxy cannot, and that is the failure mode that broke DNSSEC in
+  the Spencer's Desk Pi-hole write-up ctpi01 was compared against on 2026-09-07.
 - **`Check.Network`** marks a check that does network I/O; `ctdev status` reuses
   the same catalog filtered to `!Network && !Deep`, which is what keeps its
   "no network calls" contract honest. **`Check.Deep`** marks slow or third-party

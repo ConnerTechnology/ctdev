@@ -2,6 +2,8 @@ package setup
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -134,4 +136,127 @@ func applyPiholeBlocking(ctx context.Context, o sysutil.Opts, value string) erro
 // group so it runs at most once per configure run.
 func applyPiholeRestart(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.PiholeReload(ctx, o)
+}
+
+// ── Host resolver ──────────────────────────────────────────────────────────
+//
+// A Pi-hole node that accepts Tailscale DNS resolves through MagicDNS, whose
+// global nameserver is this very Pi-hole. The host's own DNS then lives and
+// dies with the container: with FTL down the node cannot pull the image to
+// fix it, reach its backup repository, or run the brain. The host resolver
+// setting breaks that dependency — loopback first, so the host's own lookups
+// stay filtered and logged, and a public validating resolver second, which
+// glibc reaches instantly because a stopped FTL refuses the connection
+// rather than timing out.
+//
+// Tailnet names still have to resolve on this host (the brain dials the mail
+// server by its MagicDNS name), so Pi-hole forwards the tailnet suffix to
+// tailscaled's resolver at 100.100.100.100, which keeps answering MagicDNS
+// queries even when it is no longer allowed to write resolv.conf. That
+// forward reaches every LAN client too.
+
+const (
+	// hostResolverFallback answers when FTL is down. Quad9 validates DNSSEC
+	// and is not the ISP; the router would usually be the ISP.
+	hostResolverFallback = "9.9.9.9"
+	hostResolverMarker   = "# ctdev: Pi-hole host resolver — managed by `ctdev configure pihole`"
+	hostResolvConfPath   = "/etc/resolv.conf"
+	// hostResolverNMConf tells NetworkManager to leave resolv.conf alone.
+	hostResolverNMConf = "/etc/NetworkManager/conf.d/ctdev-pihole-resolver.conf"
+	// hostResolverDnsmasq is the Pi-hole drop-in forwarding tailnet names.
+	hostResolverDnsmasq = "03-tailnet.conf"
+	magicDNSResolver    = "100.100.100.100"
+)
+
+func hostResolvConf() string {
+	return hostResolverMarker + "\n" +
+		"# Loopback is Pi-hole; when it is down the fallback answers immediately.\n" +
+		"nameserver 127.0.0.1\n" +
+		"nameserver " + hostResolverFallback + "\n" +
+		"options timeout:2 attempts:1\n"
+}
+
+// detectHostResolverContent tells a ctdev-managed resolv.conf from anything
+// else — Tailscale's, NetworkManager's, or a hand edit — by its marker.
+func detectHostResolverContent(content string) string {
+	if strings.Contains(content, hostResolverMarker) {
+		return "applied"
+	}
+	return "not applied"
+}
+
+func detectHostResolver(_ context.Context) string {
+	b, err := os.ReadFile(hostResolvConfPath)
+	if err != nil {
+		return "not applied"
+	}
+	return detectHostResolverContent(string(b))
+}
+
+// magicDNSForwardRecord forwards one tailnet suffix to tailscaled's resolver.
+func magicDNSForwardRecord(suffix string) string {
+	if suffix == "" {
+		return ""
+	}
+	return "# Tailnet names resolve via tailscaled's MagicDNS resolver (ctdev-managed).\n" +
+		"server=/" + suffix + "/" + magicDNSResolver + "\n"
+}
+
+// gatePiholeHostResolver shows the setting only where it can work: a Pi-hole
+// node whose resolv.conf NetworkManager owns. Under systemd-resolved the
+// stub at 127.0.0.53 owns the file and a static one would be overwritten.
+func gatePiholeHostResolver() bool {
+	if !piholeInstalled() || !gateNetworkManager() {
+		return false
+	}
+	target, err := os.Readlink(hostResolvConfPath)
+	return err != nil || !strings.Contains(target, "systemd")
+}
+
+func applyPiholeHostResolver(ctx context.Context, o sysutil.Opts) error {
+	if sysutil.CommandExists("tailscale") {
+		if err := sysutil.SudoRun(ctx, o, "tailscale", "set", "--accept-dns=false"); err != nil {
+			return fmt.Errorf("stop Tailscale managing resolv.conf: %w", err)
+		}
+	}
+	if err := sysutil.SudoWriteFileMode(ctx, o, "[main]\ndns=none\n", hostResolverNMConf, "0644"); err != nil {
+		return err
+	}
+	if sysutil.CommandExists("nmcli") {
+		_ = sysutil.SudoRun(ctx, o, "nmcli", "general", "reload")
+	}
+	// NetworkManager may have left a symlink; install would write through it.
+	// World-readable on purpose: every process on the host reads this file.
+	_ = sysutil.SudoRun(ctx, o, "rm", "-f", hostResolvConfPath)
+	if err := sysutil.SudoWriteFileMode(ctx, o, hostResolvConf(), hostResolvConfPath, "0644"); err != nil {
+		return err
+	}
+
+	suffix := sysutil.TailscaleDNS(ctx).MagicDNSSuffix
+	if suffix == "" {
+		fmt.Fprintln(o.Stdout, "  Tailscale not up — tailnet names will not resolve on this host until 'ctdev configure pihole' is re-run")
+	}
+	if err := sysutil.PiholeWriteDnsmasq(ctx, o, hostResolverDnsmasq, magicDNSForwardRecord(suffix)); err != nil {
+		return err
+	}
+	return sysutil.PiholeReload(ctx, o)
+}
+
+// resetPiholeHostResolver hands resolv.conf back to NetworkManager and
+// Tailscale. Best-effort, like the rest of reset.
+func resetPiholeHostResolver(ctx context.Context, o sysutil.Opts) {
+	if _, err := os.Stat(hostResolverNMConf); err != nil {
+		return
+	}
+	_ = sysutil.SudoRun(ctx, o, "rm", "-f", hostResolverNMConf)
+	if sysutil.CommandExists("nmcli") {
+		_ = sysutil.SudoRun(ctx, o, "nmcli", "general", "reload")
+	}
+	if sysutil.CommandExists("tailscale") {
+		_ = sysutil.SudoRun(ctx, o, "tailscale", "set", "--accept-dns=true")
+	}
+	if sysutil.PiholeAvailable() {
+		_ = sysutil.PiholeWriteDnsmasq(ctx, o, hostResolverDnsmasq, "")
+		_ = sysutil.PiholeReload(ctx, o)
+	}
 }

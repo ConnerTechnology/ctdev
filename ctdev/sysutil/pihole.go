@@ -2,7 +2,10 @@ package sysutil
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -79,4 +82,47 @@ func PiholeReload(ctx context.Context, o Opts) error {
 		return Run(ctx, o, "docker", "restart", PiholeContainer)
 	}
 	return SudoRun(ctx, o, "systemctl", "restart", "pihole-FTL")
+}
+
+// PiholeDnsmasqDir is where Pi-hole's dnsmasq drop-ins live: the bind-mounted
+// ~/pihole/etc-dnsmasq.d for the container stack (no sudo needed), or
+// /etc/dnsmasq.d for a native install.
+func PiholeDnsmasqDir() string {
+	if PiholeContainerized() {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "pihole", "etc-dnsmasq.d")
+	}
+	return "/etc/dnsmasq.d"
+}
+
+// PiholeWriteDnsmasq writes (or, with empty content, removes) one dnsmasq
+// drop-in by file name. Pi-hole reads the directory on restart — call
+// PiholeReload afterwards.
+func PiholeWriteDnsmasq(ctx context.Context, o Opts, name, content string) error {
+	dest := filepath.Join(PiholeDnsmasqDir(), name)
+	if content == "" {
+		if o.DryRun {
+			fmt.Fprintf(o.Stdout, "[dry-run] remove %s\n", dest)
+			return nil
+		}
+		if PiholeContainerized() {
+			err := os.Remove(dest)
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		return SudoRun(ctx, o, "rm", "-f", dest)
+	}
+	if PiholeContainerized() {
+		if o.DryRun {
+			fmt.Fprintf(o.Stdout, "[dry-run] write dnsmasq drop-in → %s\n", dest)
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(dest, []byte(content), 0o644)
+	}
+	return SudoWriteFile(ctx, o, content, dest)
 }

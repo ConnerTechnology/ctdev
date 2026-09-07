@@ -31,22 +31,51 @@ func ServiceStart(ctx context.Context, o Opts, name string) error {
 }
 
 // SudoWriteFile writes content to a root-owned path via a temp file and sudo cp.
+// The result is root-only (0600): cp carries the temp file's mode across. That
+// suits drop-ins only root reads and secrets like restic.env — for a file
+// every process must read, use SudoWriteFileMode.
 func SudoWriteFile(ctx context.Context, o Opts, content, path string) error {
 	if o.DryRun {
 		fmt.Fprintf(o.Stdout, "[dry-run] write %s\n", path)
 		return nil
 	}
-	tmp, err := os.CreateTemp("", "ctdev-write-*")
+	tmp, err := stageTempFile(content)
 	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(content); err != nil {
-		tmp.Close()
 		return err
 	}
+	defer os.Remove(tmp)
+	return SudoRun(ctx, o, "cp", tmp, path)
+}
+
+// SudoWriteFileMode is SudoWriteFile with an explicit mode (e.g. "0644"),
+// installed atomically-enough via install(1). Use it for anything read by
+// unprivileged processes — /etc/resolv.conf unreadable by the user looks like
+// "DNS works" because glibc silently falls back to loopback.
+func SudoWriteFileMode(ctx context.Context, o Opts, content, path, mode string) error {
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "[dry-run] write %s (mode %s)\n", path, mode)
+		return nil
+	}
+	tmp, err := stageTempFile(content)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+	return SudoRun(ctx, o, "install", "-m", mode, tmp, path)
+}
+
+func stageTempFile(content string) (string, error) {
+	tmp, err := os.CreateTemp("", "ctdev-write-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", err
+	}
 	tmp.Close()
-	return SudoRun(ctx, o, "cp", tmp.Name(), path)
+	return tmp.Name(), nil
 }
 
 // SafeSymlink creates a symlink at dst pointing to src.

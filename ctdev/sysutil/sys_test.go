@@ -89,3 +89,15 @@ func TestHumanKB(t *testing.T) {
 		}
 	}
 }
+
+func TestSudoWriteFileModeDryRun(t *testing.T) {
+	var out bytes.Buffer
+	o := Opts{Stdout: &out, DryRun: true}
+	if err := SudoWriteFileMode(context.Background(), o, "nameserver 127.0.0.1\n", "/etc/resolv.conf", "0644"); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !bytes.Contains([]byte(got), []byte("/etc/resolv.conf")) || !bytes.Contains([]byte(got), []byte("0644")) {
+		t.Errorf("dry-run should name the path and the mode, got %q", got)
+	}
+}

@@ -134,23 +134,11 @@ func CaddyWirePihole(ctx context.Context, o sysutil.Opts, domain string) error {
 	return sysutil.PiholeReload(ctx, o)
 }
 
-// writeDnsmasqRecord writes Pi-hole's dnsmasq drop-in. For a containerized
-// Pi-hole it lands in the bind-mounted ~/pihole/etc-dnsmasq.d (no sudo); for a
-// host install, in /etc/dnsmasq.d (sudo).
+// writeDnsmasqRecord writes the homelab wildcard into Pi-hole's dnsmasq
+// drop-in directory (bind mount for the container stack, /etc/dnsmasq.d for
+// a native install).
 func writeDnsmasqRecord(ctx context.Context, o sysutil.Opts, record string) error {
-	if sysutil.PiholeContainerized() {
-		home, _ := os.UserHomeDir()
-		dest := filepath.Join(home, "pihole", "etc-dnsmasq.d", "02-homelab.conf")
-		if o.DryRun {
-			fmt.Fprintf(o.Stdout, "[dry-run] write dnsmasq record → %s\n", dest)
-			return nil
-		}
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(dest, []byte(record), 0o644)
-	}
-	return sysutil.SudoWriteFile(ctx, o, record, "/etc/dnsmasq.d/02-homelab.conf")
+	return sysutil.PiholeWriteDnsmasq(ctx, o, "02-homelab.conf", record)
 }
 
 func caddyTailscaleIP(ctx context.Context) string {

@@ -212,6 +212,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 	if _, err := os.Stat(nmConf); err == nil {
 		_ = sysutil.SudoRun(ctx, o, "rm", "-f", nmConf)
 	}
+	resetPiholeHostResolver(ctx, o)
 	if sysutil.CommandExists("ufw") {
 		_ = sysutil.SudoRun(ctx, o, "ufw", "--force", "disable")
 	}

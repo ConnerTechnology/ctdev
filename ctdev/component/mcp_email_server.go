@@ -359,22 +359,7 @@ func MCPEmailServerInitCatalog(ctx context.Context) error {
 // MCPEmailServerTailscaleDNSName returns this node's MagicDNS name (no trailing
 // dot), or "" when Tailscale isn't up yet.
 func MCPEmailServerTailscaleDNSName(ctx context.Context) string {
-	if !sysutil.CommandExists("tailscale") {
-		return ""
-	}
-	out, err := captureOutput(ctx, "tailscale", "status", "--json")
-	if err != nil {
-		return ""
-	}
-	var status struct {
-		Self struct {
-			DNSName string
-		}
-	}
-	if err := json.Unmarshal([]byte(out), &status); err != nil {
-		return ""
-	}
-	return strings.TrimSuffix(status.Self.DNSName, ".")
+	return sysutil.TailscaleDNS(ctx).DNSName
 }
 
 // MCPEmailServerServe puts `tailscale serve` in front of the loopback port:

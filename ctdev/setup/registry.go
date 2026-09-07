@@ -690,6 +690,24 @@ var Registry = []Setting{
 		ApplyFunc:   applyPiholeBlocking,
 		HardwareFn:  piholeInstalled,
 	},
+	{
+		Name:     "Pi-hole host resolver",
+		Slug:     "pihole",
+		Category: "Pi-hole DNS",
+		Description: "Makes this node's own DNS survive a stopped Pi-hole: stops Tailscale and " +
+			"NetworkManager rewriting resolv.conf, points it at Pi-hole on loopback with Quad9 " +
+			"as fallback, and forwards tailnet (MagicDNS) names through Pi-hole so they keep " +
+			"resolving here and on the LAN. Without it the host resolves through its own " +
+			"container and cannot pull images or reach backups while Pi-hole is down.",
+		Control:    ControlToggle,
+		OneWay:     true,
+		Default:    "applied",
+		DetectFunc: detectHostResolver,
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
+			return applyPiholeHostResolver(ctx, o)
+		},
+		HardwareFn: gatePiholeHostResolver,
+	},
 
 	// ── macOS ────────────────────────────────────────────────────────────
 
