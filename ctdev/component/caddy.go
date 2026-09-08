@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
@@ -172,6 +173,37 @@ func captureOutput(ctx context.Context, name string, args ...string) (string, er
 		return "", err
 	}
 	return out.String(), nil
+}
+
+// mergeEnvFile rewrites a dotenv file with values merged over its current
+// keys, sorted, at perm. Several writers share these files (install, configure,
+// and the hand-pasted Beszel credentials), so a plain overwrite would lose
+// someone else's keys.
+func mergeEnvFile(path string, values map[string]string, perm os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	env := map[string]string{}
+	if b, err := os.ReadFile(path); err == nil {
+		env = parseEnv(string(b))
+	}
+	for k, v := range values {
+		env[k] = v
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&b, "%s=%s\n", k, env[k])
+	}
+	if err := os.WriteFile(path, []byte(b.String()), perm); err != nil {
+		return err
+	}
+	// WriteFile only applies perm on create; an existing file keeps its mode.
+	return os.Chmod(path, perm)
 }
 
 // parseEnv turns KEY=VALUE dotenv lines into a map, ignoring blanks/comments.

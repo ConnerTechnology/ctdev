@@ -12,7 +12,8 @@
 # Bootstrap (one-time): the agent needs KEY + TOKEN issued by the hub. `ctdev
 # install beszel` brings the hub up; then create the admin account, click "Add
 # System", put the shown KEY/TOKEN in ~/beszel/.env, and re-run the install (or
-# `docker compose up -d`) to start the agent.
+# `docker compose up -d`) to start the agent. ~/beszel/.env also carries
+# BESZEL_APP_URL, which ctdev writes and re-running the install refreshes.
 #
 # Note: per-container MEMORY stats require the kernel memory cgroup; some nodes
 # (e.g. a customized Raspberry Pi image booting with cgroup_disable=memory in the
@@ -32,6 +33,12 @@ services:
     ports:
       - "127.0.0.1:8090:8090"
       - "172.17.0.1:8090:8090"
+    # The hub builds the links in its alerts from APP_URL; without it every
+    # push notification's "View Beszel" opens localhost on the phone. ctdev
+    # install writes BESZEL_APP_URL (https://beszel.<domain>) once Caddy is
+    # configured.
+    environment:
+      APP_URL: ${BESZEL_APP_URL:-http://localhost:8090}
     volumes:
       - ./beszel_data:/beszel_data
       - ./beszel_socket:/beszel_socket

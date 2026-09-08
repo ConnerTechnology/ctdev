@@ -103,23 +103,7 @@ func MCPEmailServerReadEnv() map[string]string {
 // the uid/gid and configure writes the tailnet settings, so neither may clobber
 // the other's keys.
 func MCPEmailServerSetEnv(values map[string]string) error {
-	if err := os.MkdirAll(MCPEmailServerDir(), 0o755); err != nil {
-		return err
-	}
-	env := MCPEmailServerReadEnv()
-	for k, v := range values {
-		env[k] = v
-	}
-	keys := make([]string, 0, len(env))
-	for k := range env {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var b strings.Builder
-	for _, k := range keys {
-		fmt.Fprintf(&b, "%s=%s\n", k, env[k])
-	}
-	return os.WriteFile(MCPEmailServerEnvPath(), []byte(b.String()), 0o644)
+	return mergeEnvFile(MCPEmailServerEnvPath(), values, 0o644)
 }
 
 // MCPEmailServerWriteTailnetEnv records which Host headers the MCP transport
