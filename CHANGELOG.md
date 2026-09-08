@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.22.0] - 2026-09-08
+
+### Fixed
+- **Beszel alert links open the hub, not localhost.** The hub builds the "View
+  Beszel" link in every push notification from its `APP_URL`, which defaulted to
+  `http://localhost:8090` — useless on the phone the alert was pushed to. `ctdev
+  install beszel` now writes `BESZEL_APP_URL=https://beszel.<domain>` into
+  `~/beszel/.env` from the Caddy domain, and the compose file passes it to the hub
+  (falling back to the old default until Caddy is configured). Re-run the install
+  on an existing node to pick it up; the hand-pasted KEY/TOKEN are preserved.
+
+### Changed
+- The dotenv merge that `configure mcp-email-server` used is now shared
+  (`mergeEnvFile`) and also fixes the file mode on rewrite, so a re-run cannot
+  leave Beszel's credentials world-readable.
+
 ## [12.21.0] - 2026-09-07
 
 ### Added
