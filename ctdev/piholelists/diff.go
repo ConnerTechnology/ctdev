@@ -37,6 +37,51 @@ type Change struct {
 	Live  *Entry
 }
 
+// Detail says why the change exists, in one line: for an add or a remove the
+// entry's own comment and group, for an update only the fields that differ. It
+// is what the picker shows beside the domain and what --dry-run prints.
+func (inst Change) Detail() string {
+	var parts []string
+	if inst.Op != Update {
+		if inst.Entry.Comment != "" {
+			parts = append(parts, inst.Entry.Comment)
+		}
+		if !isDefaultGroups(inst.Entry.Groups) {
+			parts = append(parts, "groups "+groupNames(inst.Entry.Groups))
+		}
+		return strings.Join(parts, "; ")
+	}
+
+	live := inst.Live
+	if live == nil {
+		return ""
+	}
+	if inst.Entry.Comment != live.Comment {
+		parts = append(parts, fmt.Sprintf("comment %q → %q", live.Comment, inst.Entry.Comment))
+	}
+	if !sameGroups(inst.Entry.Groups, live.Groups) {
+		parts = append(parts, "groups "+groupNames(live.Groups)+" → "+groupNames(inst.Entry.Groups))
+	}
+	if inst.Entry.Enabled != live.Enabled {
+		parts = append(parts, "enabled → "+onOff(inst.Entry.Enabled))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func groupNames(groups []string) string {
+	if len(groups) == 0 {
+		return "none"
+	}
+	return strings.Join(groups, "+")
+}
+
+func onOff(enabled bool) string {
+	if enabled {
+		return "on"
+	}
+	return "off"
+}
+
 type entryID struct {
 	kind Kind
 	key  string

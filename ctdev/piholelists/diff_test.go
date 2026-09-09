@@ -129,6 +129,27 @@ func TestNeedsGravityOnlyForAdlists(t *testing.T) {
 	}
 }
 
+func TestChangeDetailNamesWhatDiffers(t *testing.T) {
+	live := Entry{Kind: Allow, Key: "a.example", Comment: "old", Groups: []string{"Default"}, Enabled: true}
+	cases := []struct {
+		name   string
+		change Change
+		want   string
+	}{
+		{"add with comment", Change{Op: Add, Entry: Entry{Kind: Allow, Key: "a.example", Comment: "why", Groups: []string{"Default"}, Enabled: true}}, "why"},
+		{"add in a group", Change{Op: Add, Entry: Entry{Kind: Deny, Key: "a.example", Groups: []string{"Kids"}, Enabled: true}}, "groups Kids"},
+		{"comment change", Change{Op: Update, Entry: Entry{Kind: Allow, Key: "a.example", Comment: "new", Groups: []string{"Default"}, Enabled: true}, Live: &live}, `comment "old" → "new"`},
+		{"group change", Change{Op: Update, Entry: Entry{Kind: Allow, Key: "a.example", Comment: "old", Groups: []string{"Kids"}, Enabled: true}, Live: &live}, "groups Default → Kids"},
+		{"disabled", Change{Op: Update, Entry: Entry{Kind: Allow, Key: "a.example", Comment: "old", Groups: []string{"Default"}}, Live: &live}, "enabled → off"},
+		{"remove", Change{Op: Remove, Entry: live, Live: &live}, "old"},
+	}
+	for _, c := range cases {
+		if got := c.change.Detail(); got != c.want {
+			t.Errorf("%s: Detail() = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestApplyRunsOneScriptAndSkipsEmptyChanges(t *testing.T) {
 	ex := &fakeExec{}
 	if err := Apply(context.Background(), ex, nil, nil); err != nil {

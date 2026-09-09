@@ -44,6 +44,7 @@ var (
 	Unselected lipgloss.Style
 	Cursor     lipgloss.Style
 
+	BadgeInfo   lipgloss.Style
 	BadgeWarn   lipgloss.Style
 	BadgeDanger lipgloss.Style
 
@@ -106,6 +107,7 @@ func rebuild() {
 
 	// Severity badges. The uppercase label stays inside the colored block so the
 	// meaning survives without color (accessibility); contrast is tuned per bg.
+	BadgeInfo = lipgloss.NewStyle().Foreground(lipgloss.Color("#0d1117")).Background(Blue).Bold(true).Padding(0, 1)
 	BadgeWarn = lipgloss.NewStyle().Foreground(lipgloss.Color("#0d1117")).Background(Yellow).Bold(true).Padding(0, 1)
 	BadgeDanger = lipgloss.NewStyle().Foreground(fixedBright).Background(Red).Bold(true).Padding(0, 1)
 
@@ -140,8 +142,9 @@ func rebuildPlain() {
 	Unselected = plain.SetString("○")
 	Cursor = plain.Reverse(true)
 
-	BadgeWarn = plain.Bold(true).Padding(0, 1).Reverse(true)
-	BadgeDanger = BadgeWarn
+	BadgeInfo = plain.Bold(true).Padding(0, 1).Reverse(true)
+	BadgeWarn = BadgeInfo
+	BadgeDanger = BadgeInfo
 
 	Header = plain.Bold(true)
 	CategoryHeader = Header
