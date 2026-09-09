@@ -36,3 +36,12 @@ ctdev/dist/
 !*.example.env
 keys.txt
 *.age.key
+
+# Dashboard build artifacts
+web/node_modules/
+web/dist/
+web/dev-dist/
+web/coverage/
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
