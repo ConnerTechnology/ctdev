@@ -15,7 +15,7 @@ export function StatusTiles({
     {
       title: 'Status',
       value: machine.currentActionId ? (
-        <StatusDot status="busy" label="Busy" />
+        <StatusDot status="busy" />
       ) : (
         <StatusDot status={machine.status} />
       ),

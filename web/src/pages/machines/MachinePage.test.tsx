@@ -27,7 +27,7 @@ test('running doctor streams into the console and lands in the action log', asyn
   await user.click(screen.getByRole('button', { name: /Thomas Conner/ }));
   await screen.findByRole('heading', { name: 'ctpi01' });
   await user.click(screen.getByRole('button', { name: 'Run doctor' }));
-  expect(await screen.findByText('Running')).toBeInTheDocument();
+  expect((await screen.findAllByText('Running')).length).toBeGreaterThan(0);
   await vi.advanceTimersByTimeAsync(12_000);
   const log = screen.getByRole('log', { name: 'ctdev doctor output' });
   expect(log).toHaveTextContent('8 checks: 7 pass, 1 warn');

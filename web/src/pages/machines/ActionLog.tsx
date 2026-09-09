@@ -55,7 +55,7 @@ export function ActionLog({
                   )}
                 >
                   {r.state === 'running'
-                    ? 'Running…'
+                    ? 'Running'
                     : r.state === 'succeeded'
                       ? 'Succeeded'
                       : `Failed, exit ${r.exitCode}`}
