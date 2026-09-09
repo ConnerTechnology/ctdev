@@ -139,14 +139,13 @@ func runPiholeSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("apply changes: %w", err)
 	}
 
-	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 	// Gravity is a full re-download of every adlist, so only pay for it when an
 	// adlist actually changed; domainlist edits reload in under a second.
 	if piholelists.NeedsGravity(picked.Selected) {
 		fmt.Println("Rebuilding gravity (pihole -g)...")
-		err = sysutil.PiholeRun(ctx, o, "pihole", "-g")
+		err = sysutil.PiholeRun(ctx, ex.o, "pihole", "-g")
 	} else {
-		err = sysutil.PiholeRun(ctx, o, "pihole", "reloadlists")
+		err = sysutil.PiholeRun(ctx, ex.o, "pihole", "reloadlists")
 	}
 	if err != nil {
 		return fmt.Errorf("reload Pi-hole: %w", err)
