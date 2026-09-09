@@ -1,0 +1,65 @@
+# Pi-hole lists — managed by `ctdev pihole sync` (apply) and `ctdev pihole export` (record).
+# Groups other than Default are created if missing; which clients belong to a group is set in the web UI.
+
+adlists = [
+  { url = "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt", comment = "AdGuard Smart TV blocklist" },
+  { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/gambling.txt", comment = "hagezi gambling" },
+  { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/nsfw.txt", comment = "hagezi NSFW — household decision 2026-09-07" },
+  { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/pro.plus.txt", comment = "hagezi Pro++, the primary all-round list" },
+  { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/spam-tlds-adblock.txt", comment = "hagezi spam TLDs" },
+  { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.txt", comment = "hagezi threat intelligence feeds" },
+  { url = "https://gitlab.com/hagezi/mirror/-/raw/main/dns-blocklists/adblock/hoster.txt", comment = "hagezi hoster" },
+  { url = "https://hostfiles.frogeye.fr/firstparty-trackers-hosts.txt", comment = "frogeye first-party trackers" },
+  { url = "https://raw.githubusercontent.com/StevenBlack/hosts/master/extensions/fakenews/hosts", comment = "StevenBlack fake news" },
+  { url = "https://threatfox.abuse.ch/downloads/hostfile/", comment = "ThreatFox malware hosts" },
+  { url = "https://urlhaus.abuse.ch/downloads/hostfile/", comment = "URLhaus malware distribution hosts" },
+]
+
+allow = [
+  { domain = "ads-fa-darwin.hulustream.com" },
+  { domain = "arc.msn.com" },
+  { domain = "client.rave-api.com" },
+  { domain = "s1.sentry-cdn.com", comment = "Sentry dashboard static assets" },
+  { domain = "stats.gc.apple.com", comment = "Apple Game Center, caught by the stats regex" },
+  { domain = "traffic.libsyn.com" },
+  { domain = "wl.spotify.com" },
+  { domain = "www.twilio.com", comment = "Added from Query Log" },
+]
+
+deny = [
+]
+
+allow_regex = [
+  { pattern = '(\.|^)flemingisland\.cps\.golf$' },
+  { pattern = '(\.|^)googletagmanager\.com$', comment = "Sites load their own scripts through Tag Manager" },
+  { pattern = '(\.|^)rockstargames\.com$' },
+  { pattern = '(\.|^)unity3d\.com$' },
+  { pattern = '^([a-z0-9-]+\.)?sentry\.io$', comment = "Sentry dashboard only, ingest hosts stay blocked" },
+  { pattern = '^(ext|web)\.chtbl\.com$' },
+  { pattern = '^(ping|trace\.svc)\.ui\.com$' },
+  { pattern = '^ads-[a-z]-darwin\.hulustream\.com$' },
+  { pattern = '^beacons([0-9])?\.(gcp\.)?gvt([0-9])\.com$' },
+  { pattern = '^traffic\.(|va[0-9]\.)megaphone\.(fm|cloud)$' },
+]
+
+deny_regex = [
+  { pattern = '(\.|^)redd\.it$', groups = ["Kids"] },
+  { pattern = '(\.|^)reddit\.com$', groups = ["Kids"] },
+  { pattern = '(\.|^)redditmedia\.com$', groups = ["Kids"] },
+  { pattern = '(\.|^)redditstatic\.com$', groups = ["Kids"] },
+  { pattern = '^(.+[_.-])?adse?rv(er?|ice)?s?[0-9]*[_.-]' },
+  { pattern = '^(.+[_.-])?telemetry[_.-]' },
+  { pattern = '^(ads|logs|cloudservices).roku.com$' },
+  { pattern = '^ad([sxv]?[0-9]*|system)[_.-]([^.[:space:]]+\.){1,}|[_.-]ad([sxv]?[0-9]*|system)[_.-]' },
+  { pattern = '^adim(age|g)s?[0-9]*[_.-]' },
+  { pattern = '^adtrack(er|ing)?[0-9]*[_.-]' },
+  { pattern = '^advert(s|is(ing|ements?))?[0-9]*[_.-]' },
+  { pattern = '^aff(iliat(es?|ion))?[_.-]' },
+  { pattern = '^analytics?[_.-]' },
+  { pattern = '^banners?[_.-]' },
+  { pattern = '^beacons?[0-9]*[_.-]' },
+  { pattern = '^count(ers?)?[0-9]*[_.-]' },
+  { pattern = '^mads\.' },
+  { pattern = '^pixels?[-.]' },
+  { pattern = '^stat(s|istics)?[0-9]*[_.-]' },
+]
