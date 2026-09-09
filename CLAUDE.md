@@ -41,6 +41,9 @@ ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailsca
 ctdev configure brain           # brain checkout, schedule, Claude credential — --show
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
+ctdev pihole sync               # Apply the version-controlled lists.toml to this Pi-hole (interactive)
+ctdev pihole sync --dry-run     # Show what would change, apply nothing
+ctdev pihole export             # Write this Pi-hole's current lists back into lists.toml
 ctdev backup now                # Run a restic snapshot of this machine now
 ctdev backup test               # Check backups are set up correctly (config, connection, paths)
 ctdev backup disable            # Pause scheduled backups (config + snapshots kept)
@@ -120,8 +123,18 @@ running Pi-hole behind a Caddy reverse proxy:
   The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
   served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
   Pi-hole's lists, settings, and gravity.db persist in `~/pihole/etc-pihole`, which
-  restic backs up — there is no separate per-service config export. Set the admin
-  password with `docker exec -it pihole pihole setpassword`.
+  restic backs up. A restic snapshot restores a Pi-hole but doesn't show what its
+  lists contain, so the allow/deny/regex lists and adlists are *also* version
+  controlled as `component/configs/pihole/lists.toml` (one entry per line, with
+  its comment and group): `ctdev pihole sync` diffs that file against gravity.db
+  and applies what you check, `ctdev pihole export` records the live state back
+  into it. Additions and updates are checked by default; **removals are not** —
+  an unchecked removal keeps the entry on the Pi-hole, which is what makes a
+  domain someone allowed in the web UI survive a sync. Writes are one SQL
+  transaction against gravity.db (the `pihole allow --delete` CLI is broken on
+  v6.4.3), then `pihole reloadlists`, or the much slower `pihole -g` only when an
+  adlist changed. Set the admin password with
+  `docker exec -it pihole pihole setpassword`.
 - `ctdev install caddy` — deploys the Caddy stack from `component/configs/caddy/`
   to `~/caddy/` and runs `docker compose up`. The stack is generic; the domain,
   ACME email, and Cloudflare token come from `~/caddy/.env`.

@@ -120,6 +120,32 @@ proxy answering in their place is what silently breaks both).
 **Skip `ctdev configure ufw` on a DNS/proxy host** — UFW's default-deny blocks
 DNS (53) and the proxy (80/443) unless you open those ports first.
 
+### Pi-hole lists in git
+
+Every domain you allow, deny, or match with a regex — and every adlist you
+subscribe to — lives in Pi-hole's `gravity.db` and nowhere else. restic backs
+that file up, but a snapshot won't tell you *why* `stats.gc.apple.com` is on the
+allowlist. So the lists are also kept as text, in
+`ctdev/component/configs/pihole/lists.toml`: one entry per line with its comment
+and its group, embedded in the binary.
+
+```bash
+ctdev pihole sync --dry-run   # what differs between the file and this Pi-hole
+ctdev pihole sync             # pick what to apply
+ctdev pihole export           # record this Pi-hole's lists into lists.toml
+```
+
+`sync` opens a picker, grouped by list. **Additions and updates are checked;
+removals are not** — an entry that is on the Pi-hole but not in the file is
+offered for deletion *unchecked*, so pressing Enter keeps it. That is the case
+that matters: a domain someone allowed from the query log in the web UI is not
+silently undone by a sync. When you leave removals unchecked, sync tells you to
+run `export` and commit, which is how those entries get recorded.
+
+Applying is one SQL transaction against `gravity.db`, followed by
+`pihole reloadlists` — or a full `pihole -g` gravity rebuild only when an adlist
+changed, since that re-downloads every list and is slow on a Pi.
+
 **Adding a service:** add the container to `~/caddy/docker-compose.yml` and a
 route snippet in `~/caddy/sites/<svc>.caddy`, then `ctdev install caddy` (or
 `sudo docker compose -f ~/caddy/docker-compose.yml up -d`). The wildcard DNS +
@@ -359,6 +385,8 @@ ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF to
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
 ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailscale serve)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
+ctdev pihole sync               # Apply the version-controlled lists.toml to this Pi-hole
+ctdev pihole export             # Record this Pi-hole's lists back into lists.toml
 ctdev backup now                # Run a restic snapshot of this machine now
 ctdev backup snapshots          # List this machine's restic snapshots
 ctdev backup paths              # Pick what to back up in a local web UI

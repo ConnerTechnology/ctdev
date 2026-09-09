@@ -1,7 +1,7 @@
 # Pi-hole network-wide DNS ad blocker, run as a container with host networking
 # so it owns the host's :53 (DNS) and :80 (web, reverse-proxied by Caddy on 443),
 # alongside an Unbound recursive resolver (sidecar). Lists and config persist in
-# ./etc-pihole; reproduce them with `ctdev pihole import` and `ctdev configure
+# ./etc-pihole; reproduce them with `ctdev pihole sync` and `ctdev configure
 # pihole`. Upstreams and listening mode are intentionally NOT set here so that
 # `ctdev configure pihole` owns them (persisted in ./etc-pihole). Optional
 # per-node values (TZ, admin password) come from ./.env.
