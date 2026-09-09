@@ -26,3 +26,10 @@ test('the theme switch toggles the dark class on the root', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
   expect(document.documentElement).toHaveClass('dark');
 });
+
+test('the rail orders after the content on small screens and before it from sm up', () => {
+  renderWithProviders(<AppShell breadcrumb={[]}>body</AppShell>);
+  const rail = screen.getByRole('navigation', { name: 'Sections' });
+  expect(rail).toHaveClass('order-last');
+  expect(rail).toHaveClass('sm:order-first');
+});

@@ -51,7 +51,7 @@ export function AppShell({
       <Rail />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar breadcrumb={breadcrumb} actions={actions} />
-        <main className="mx-auto w-full max-w-[1280px] flex-1 px-6 py-6">{children}</main>
+        <main className="w-full max-w-[1280px] flex-1 px-6 py-6">{children}</main>
       </div>
     </div>
   );

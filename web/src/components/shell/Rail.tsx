@@ -14,7 +14,7 @@ export function Rail() {
   return (
     <nav
       aria-label="Sections"
-      className="flex shrink-0 items-center gap-1 border-t border-sidebar-border bg-sidebar px-2 py-1 sm:w-14 sm:flex-col sm:border-t-0 sm:border-r sm:py-3"
+      className="order-last flex shrink-0 items-center gap-1 border-t border-sidebar-border bg-sidebar px-2 py-1 sm:order-first sm:w-14 sm:flex-col sm:border-t-0 sm:border-r sm:py-3"
     >
       <a
         href="/machines"
