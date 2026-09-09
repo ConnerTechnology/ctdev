@@ -127,6 +127,15 @@ func TestNeedsGravityOnlyForAdlists(t *testing.T) {
 	if !NeedsGravity(append(domainOnly, Change{Op: Remove, Entry: Entry{Kind: Adlist, Key: "https://x"}})) {
 		t.Error("an adlist change needs gravity rebuilt")
 	}
+	live := Entry{Kind: Adlist, Key: "https://x", Comment: "old", Enabled: true}
+	commentOnly := []Change{{Op: Update, Entry: Entry{Kind: Adlist, Key: "https://x", Comment: "new", Enabled: true}, Live: &live}}
+	if NeedsGravity(commentOnly) {
+		t.Error("renaming an adlist's comment does not change what gravity downloads")
+	}
+	disabled := []Change{{Op: Update, Entry: Entry{Kind: Adlist, Key: "https://x", Comment: "old", Enabled: false}, Live: &live}}
+	if !NeedsGravity(disabled) {
+		t.Error("disabling an adlist changes what gravity downloads")
+	}
 }
 
 func TestChangeDetailNamesWhatDiffers(t *testing.T) {

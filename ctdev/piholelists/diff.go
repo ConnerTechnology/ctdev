@@ -132,11 +132,16 @@ func sameGroups(a, b []string) bool {
 	return slices.Equal(normalizeGroups(a), normalizeGroups(b))
 }
 
-// NeedsGravity reports whether the changes require `pihole -g`. Only adlists do;
-// domainlist edits are picked up by the much cheaper `pihole reloadlists`.
+// NeedsGravity reports whether the changes require `pihole -g`. Only a change
+// to which adlists are downloaded does: adding, removing, enabling or disabling
+// one. A comment rename, and every domainlist edit, is picked up by the much
+// cheaper `pihole reloadlists` — gravity re-fetches every list, minutes on a Pi.
 func NeedsGravity(changes []Change) bool {
 	for _, c := range changes {
-		if c.Entry.Kind == Adlist {
+		if c.Entry.Kind != Adlist {
+			continue
+		}
+		if c.Op != Update || c.Live == nil || c.Live.Enabled != c.Entry.Enabled {
 			return true
 		}
 	}
