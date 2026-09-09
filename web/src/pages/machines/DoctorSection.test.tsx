@@ -13,6 +13,9 @@ test('shows the verdict, then every check of the latest run with its outcome', (
   const list = screen.getByRole('list', { name: 'Checks' });
   expect(within(list).getAllByRole('listitem')).toHaveLength(8);
   expect(within(list).getByText('Disk pressure').closest('li')).toHaveTextContent('Warn');
+  expect(screen.getByText('1 day ago').closest('div')).toHaveTextContent('Warn');
+  const historyButton = screen.getByRole('button', { name: /2 days ago/ });
+  expect(historyButton.getAttribute('title')).toMatch(/Pass/);
 });
 
 test('history lets you open an earlier run', async () => {

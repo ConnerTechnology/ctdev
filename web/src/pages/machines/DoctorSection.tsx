@@ -30,6 +30,7 @@ export function DoctorSection({ runs }: { runs: DoctorRun[] }) {
               <button
                 key={r.id}
                 type="button"
+                title={`Run ${relativeTime(r.at)}, ${outcome[worst(r)].label}`}
                 aria-label={`Run ${relativeTime(r.at)}, ${outcome[worst(r)].label}`}
                 aria-pressed={r.id === run?.id}
                 onClick={() => setSelectedId(r.id)}
@@ -51,7 +52,12 @@ export function DoctorSection({ runs }: { runs: DoctorRun[] }) {
       ) : (
         <div className="rounded-md border bg-card">
           <div className="border-b px-4 py-3 text-sm">
-            <div className="text-muted-foreground">{relativeTime(run.at)}</div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span aria-hidden className={cn('h-2 w-2 rounded-full', outcome[worst(run)].dot)} />
+              <span>{outcome[worst(run)].label}</span>
+              <span>·</span>
+              <span>{relativeTime(run.at)}</span>
+            </div>
             {run.verdicts.length === 0 ? (
               <p className="mt-1">No verdicts. Everything passed.</p>
             ) : (
