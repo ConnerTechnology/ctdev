@@ -78,3 +78,93 @@ test('a built-in role cannot be saved, a copy can', async () => {
   });
   expect((await api.listRoles()).find((r) => r.id === 'night-operator')).toEqual(copy);
 });
+
+test('runAction rejects a second action while the machine is busy', async () => {
+  const api = new FakeApi();
+  await api.runAction('ctpi01', 'doctor', 'thomas@example.invalid');
+  await expect(api.runAction('ctpi01', 'status', 'thomas@example.invalid')).rejects.toThrow(
+    'is busy',
+  );
+});
+
+test('a successful update clears pendingUpdates; a failed backup exits 1 and frees the machine', async () => {
+  const api = new FakeApi();
+  const update = await api.runAction('ctpi01', 'update', 'thomas@example.invalid');
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect((await api.listActions('ctpi01')).find((r) => r.id === update.id)?.state).toBe(
+    'succeeded',
+  );
+  expect((await api.getMachine('ctpi01'))?.pendingUpdates).toBe(0);
+
+  const backup = await api.runAction('ctpi01', 'backup', 'thomas@example.invalid');
+  await vi.advanceTimersByTimeAsync(20_000);
+  const backupRun = (await api.listActions('ctpi01')).find((r) => r.id === backup.id);
+  expect(backupRun?.state).toBe('failed');
+  expect(backupRun?.exitCode).toBe(1);
+  expect((await api.getMachine('ctpi01'))?.currentActionId).toBeNull();
+});
+
+test('subscribeAction on a finished run replays every line and calls onDone immediately', async () => {
+  const api = new FakeApi();
+  const run = await api.runAction('ctpi01', 'status', 'thomas@example.invalid');
+  await vi.advanceTimersByTimeAsync(20_000);
+
+  const lines: ActionLine[] = [];
+  let done: ActionRun | null = null;
+  api.subscribeAction(
+    run.id,
+    (l) => lines.push(l),
+    (r) => (done = r),
+  );
+  expect(lines.length).toBeGreaterThan(0);
+  expect(done).not.toBeNull();
+  expect(done!.state).toBe('succeeded');
+});
+
+test('unsubscribing mid-stream stops further onLine calls', async () => {
+  const api = new FakeApi();
+  const run = await api.runAction('ctpi01', 'doctor', 'thomas@example.invalid');
+  const lines: ActionLine[] = [];
+  const unsubscribe = api.subscribeAction(
+    run.id,
+    (l) => lines.push(l),
+    () => {},
+  );
+  await vi.advanceTimersByTimeAsync(400);
+  const countAtUnsubscribe = lines.length;
+  expect(countAtUnsubscribe).toBeGreaterThan(0);
+  unsubscribe();
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(lines.length).toBe(countAtUnsubscribe);
+});
+
+test('inviteUser refuses an email that already exists', async () => {
+  const api = new FakeApi();
+  await expect(
+    api.inviteUser({
+      email: 'thomas@example.invalid',
+      roleId: 'viewer',
+      scope: { kind: 'organisation' },
+    }),
+  ).rejects.toThrow('already a user');
+});
+
+test('listDoctorRuns is newest first per machine, listPermissions has 14, listActions is scoped and newest first', async () => {
+  const api = new FakeApi();
+  expect((await api.listDoctorRuns('ctpi01')).map((r) => r.id)).toEqual([
+    'dr-ctpi01-1',
+    'dr-ctpi01-2',
+  ]);
+  expect(await api.listDoctorRuns('ai-node')).toEqual([]);
+  expect(await api.listPermissions()).toHaveLength(14);
+
+  const first = await api.runAction('ctpi01', 'status', 'thomas@example.invalid');
+  await vi.advanceTimersByTimeAsync(20_000);
+  const onOtherMachine = await api.runAction('ai-node', 'status', 'thomas@example.invalid');
+  await vi.advanceTimersByTimeAsync(20_000);
+  const second = await api.runAction('ctpi01', 'doctor', 'thomas@example.invalid');
+  await vi.advanceTimersByTimeAsync(20_000);
+
+  expect((await api.listActions('ai-node')).map((r) => r.id)).toEqual([onOtherMachine.id]);
+  expect((await api.listActions('ctpi01')).map((r) => r.id)).toEqual([second.id, first.id]);
+});
