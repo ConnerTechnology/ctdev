@@ -2,6 +2,13 @@ import { Link } from 'react-router-dom';
 import { Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useSession } from '@/session/SessionContext';
 import { useTheme } from './AppShell';
 
 export interface Crumb {
@@ -11,6 +18,7 @@ export interface Crumb {
 
 export function TopBar({ breadcrumb, actions }: { breadcrumb: Crumb[]; actions?: ReactNode }) {
   const { theme, setTheme } = useTheme();
+  const { user, signOut } = useSession();
   const dark = theme === 'dark';
   const trail: Crumb[] = [{ label: 'Conner Technology', href: '/machines' }, ...breadcrumb];
   return (
@@ -37,6 +45,14 @@ export function TopBar({ breadcrumb, actions }: { breadcrumb: Crumb[]; actions?:
       </nav>
       <div className="flex items-center gap-2">
         {actions}
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost">{user.name}</Button>} />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Button
           variant="ghost"
           size="icon"

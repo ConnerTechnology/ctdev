@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { ThemeProvider } from '@/components/shell/AppShell';
 import { ApiProvider } from '@/api/context';
+import { SessionProvider } from '@/session/SessionContext';
 import type { Api } from '@/api/types';
 import { FakeApi } from '@/fake/api';
 
@@ -16,9 +17,11 @@ export function renderWithProviders(
     return (
       <QueryClientProvider client={client}>
         <ApiProvider api={api}>
-          <ThemeProvider>
-            <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
-          </ThemeProvider>
+          <SessionProvider>
+            <ThemeProvider>
+              <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+            </ThemeProvider>
+          </SessionProvider>
         </ApiProvider>
       </QueryClientProvider>
     );

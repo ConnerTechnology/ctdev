@@ -6,6 +6,7 @@ import '@/styles/index.css';
 import { App } from '@/App';
 import { ThemeProvider } from '@/components/shell/AppShell';
 import { ApiProvider } from '@/api/context';
+import { SessionProvider } from '@/session/SessionContext';
 import { FakeApi } from '@/fake/api';
 
 const client = new QueryClient();
@@ -14,11 +15,13 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={client}>
       <ApiProvider api={new FakeApi()}>
-        <ThemeProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
-        </ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </ThemeProvider>
+        </SessionProvider>
       </ApiProvider>
     </QueryClientProvider>
   </StrictMode>,
