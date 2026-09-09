@@ -1,3 +1,11 @@
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { NotFoundPage } from '@/pages/NotFoundPage';
+
 export function App() {
-  return <h1 className="p-6 text-2xl">ctdev</h1>;
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/machines" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
 }

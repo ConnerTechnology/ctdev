@@ -1,7 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderWithProviders } from '@/test/render';
 import { App } from '@/App';
 
-test('the app renders its name', () => {
-  render(<App />);
-  expect(screen.getByRole('heading', { name: 'ctdev' })).toBeInTheDocument();
+test('an unknown address shows the not-found page', () => {
+  renderWithProviders(<App />, { route: '/nowhere' });
+  expect(
+    screen.getByRole('heading', { name: 'There is nothing at this address' }),
+  ).toBeInTheDocument();
 });
