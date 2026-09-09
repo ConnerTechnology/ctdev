@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.23.0] - 2026-09-09
+
+### Added
+- **`ctdev pihole sync` and `ctdev pihole export` put the Pi-hole lists in git.** The
+  allow, deny, regex and adlist tables that lived only in gravity.db (and were last
+  version-controlled before the restic rewrite) now come from one embedded
+  `ctdev/component/configs/pihole/lists.toml`, one line per entry with its comment and
+  group. `sync` diffs the file against the live Pi-hole and opens a picker: additions
+  and updates are checked, removals are not, so an unchecked removal keeps what was
+  added on the node itself. It writes in one transaction and then runs
+  `pihole reloadlists`, or a gravity rebuild only when the set of adlists changed.
+  `export` writes the live state back into a checkout to record what was kept. Both
+  run on the node; `--dry-run` prints the diff and changes nothing. The file is seeded
+  from ctpi01 after the 2026-09-08 allowlist cleanup.
+
+### Changed
+- The Pi-hole compose file no longer points at the removed `ctdev pihole import`.
+
 ## [12.22.0] - 2026-09-08
 
 ### Fixed
