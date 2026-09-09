@@ -6,6 +6,16 @@ import { cn } from '@/lib/utils';
 export function Console({ run, lines }: { run: ActionRun | null; lines: ActionLine[] }) {
   const endRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(() => new Date());
+  const [seenRunId, setSeenRunId] = useState(run?.id ?? null);
+
+  // A run selected later than mount would otherwise show elapsed time frozen
+  // at whatever `now` was seeded with, until the interval below ticks once.
+  // Reset it as soon as the selected run changes (render-time adjustment,
+  // same pattern as useActionStream's reset — not an effect).
+  if (seenRunId !== (run?.id ?? null)) {
+    setSeenRunId(run?.id ?? null);
+    setNow(new Date());
+  }
 
   useEffect(() => {
     if (run?.state !== 'running') return;

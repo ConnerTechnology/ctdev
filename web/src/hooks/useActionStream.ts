@@ -21,13 +21,22 @@ export function useActionStream(runId: string | null) {
 
   useEffect(() => {
     if (!runId) return;
+    // Each subscription accumulates into its own local buffer, scoped to this
+    // effect run, rather than appending onto whatever `state.lines` already
+    // holds. A re-subscribe to the same runId (say, the Api instance changes)
+    // would otherwise double up on the lines `subscribeAction` replays.
+    let lines: ActionLine[] = [];
+    let run: ActionRun | null = null;
     return api.subscribeAction(
       runId,
-      (line) =>
-        setState((prev) =>
-          prev.runId === runId ? { ...prev, lines: [...prev.lines, line] } : prev,
-        ),
-      (finished) => setState((prev) => (prev.runId === runId ? { ...prev, run: finished } : prev)),
+      (line) => {
+        lines = [...lines, line];
+        setState({ runId, lines, run });
+      },
+      (finished) => {
+        run = finished;
+        setState({ runId, lines, run });
+      },
     );
   }, [api, runId]);
 

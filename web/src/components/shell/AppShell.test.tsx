@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/render';
 import { AppShell } from '@/components/shell/AppShell';
@@ -19,6 +19,8 @@ test('the breadcrumb shows the trail with the organisation first', () => {
   const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
   expect(nav).toHaveTextContent('Conner Technology');
   expect(nav).toHaveTextContent('ctpi01');
+  expect(within(nav).getByText('ctpi01')).toHaveAttribute('aria-current', 'page');
+  expect(within(nav).getByText('Conner Technology')).not.toHaveAttribute('aria-current');
 });
 
 test('the theme switch toggles the dark class on the root', async () => {

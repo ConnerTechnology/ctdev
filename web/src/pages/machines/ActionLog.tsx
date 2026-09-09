@@ -42,12 +42,16 @@ export function ActionLog({
               </TableRow>
             )}
             {runs.map((r) => (
-              <TableRow
-                key={r.id}
-                className={cn('cursor-pointer', r.id === selectedId && 'bg-accent')}
-                onClick={() => onSelect(r.id)}
-              >
-                <TableCell className="font-mono text-xs">{r.command}</TableCell>
+              <TableRow key={r.id} data-state={r.id === selectedId ? 'selected' : undefined}>
+                <TableCell className="p-0 font-mono text-xs">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(r.id)}
+                    className="block w-full px-2 py-2 text-left focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {r.command}
+                  </button>
+                </TableCell>
                 <TableCell
                   className={cn(
                     r.state === 'failed' && 'text-danger',
