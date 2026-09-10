@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -213,17 +215,49 @@ func itemNames(items []checklist.UpdateItem) []string {
 	return names
 }
 
-var aptKeyRefreshers = map[string]struct {
+// aptKeyRefresher describes one third-party APT repository whose signing key
+// ctdev can re-download. KeyringPath is what this repo's installer writes and
+// is only the fallback: the key is refreshed into whatever keyring the source
+// files on disk actually name for RepoURL, because vendors rewrite those files
+// themselves (vscode's package migrates vscode.list to a .sources file naming
+// microsoft.gpg; GitHub's install instructions use /etc/apt/keyrings). Writing
+// only the installer's path on such a machine leaves APT reading the stale key.
+type aptKeyRefresher struct {
 	KeyURL      string
 	KeyringPath string
-}{
-	"gh": {KeyURL: "https://cli.github.com/packages/githubcli-archive-keyring.gpg", KeyringPath: "/usr/share/keyrings/githubcli-archive-keyring.gpg"},
-	// KeyringPath must match what vscodeInstall writes.
-	"vscode":    {KeyURL: "https://packages.microsoft.com/keys/microsoft.asc", KeyringPath: "/usr/share/keyrings/microsoft-archive-keyring.gpg"},
-	"1password": {KeyURL: "https://downloads.1password.com/linux/keys/1password.asc", KeyringPath: "/usr/share/keyrings/1password-archive-keyring.gpg"},
-	"terraform": {KeyURL: "https://apt.releases.hashicorp.com/gpg", KeyringPath: "/usr/share/keyrings/hashicorp-archive-keyring.gpg"},
-	"tailscale": {KeyURL: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg", KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg"},
+	RepoURL     string
 }
+
+var aptKeyRefreshers = map[string]aptKeyRefresher{
+	"gh": {
+		KeyURL:      "https://cli.github.com/packages/githubcli-archive-keyring.gpg",
+		KeyringPath: "/usr/share/keyrings/githubcli-archive-keyring.gpg",
+		RepoURL:     "https://cli.github.com/packages",
+	},
+	// KeyringPath must match what vscodeInstall writes.
+	"vscode": {
+		KeyURL:      "https://packages.microsoft.com/keys/microsoft.asc",
+		KeyringPath: "/usr/share/keyrings/microsoft-archive-keyring.gpg",
+		RepoURL:     "https://packages.microsoft.com/repos/code",
+	},
+	"1password": {
+		KeyURL:      "https://downloads.1password.com/linux/keys/1password.asc",
+		KeyringPath: "/usr/share/keyrings/1password-archive-keyring.gpg",
+		RepoURL:     "https://downloads.1password.com/linux/debian",
+	},
+	"terraform": {
+		KeyURL:      "https://apt.releases.hashicorp.com/gpg",
+		KeyringPath: "/usr/share/keyrings/hashicorp-archive-keyring.gpg",
+		RepoURL:     "https://apt.releases.hashicorp.com",
+	},
+	"tailscale": {
+		KeyURL:      "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg",
+		KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg",
+		RepoURL:     "https://pkgs.tailscale.com/stable",
+	},
+}
+
+const aptSourcesDir = "/etc/apt/sources.list.d"
 
 func refreshAPTKeys(ctx context.Context, components []string) {
 	if _, err := exec.LookPath("apt"); err != nil {
@@ -232,7 +266,7 @@ func refreshAPTKeys(ctx context.Context, components []string) {
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 	targets := aptKeyRefreshers
 	if len(components) > 0 {
-		targets = make(map[string]struct{ KeyURL, KeyringPath string })
+		targets = make(map[string]aptKeyRefresher)
 		for _, name := range components {
 			if r, ok := aptKeyRefreshers[name]; ok {
 				targets[name] = r
@@ -240,9 +274,120 @@ func refreshAPTKeys(ctx context.Context, components []string) {
 		}
 	}
 	for name, r := range targets {
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("  Refreshing %s key...", name)))
-		if err := sysutil.AddAPTKeyring(ctx, o, r.KeyURL, r.KeyringPath); err != nil {
-			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("Warning: %s key refresh failed: %v", name, err)))
+		for _, keyring := range aptKeyringTargets(aptSourcesDir, r) {
+			fmt.Println(styles.Dimmed.Render(fmt.Sprintf("  Refreshing %s key → %s", name, keyring)))
+			if err := sysutil.AddAPTKeyring(ctx, o, r.KeyURL, keyring); err != nil {
+				fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("Warning: %s key refresh failed: %v", name, err)))
+			}
 		}
 	}
+}
+
+// aptKeyringTargets returns the keyrings to refresh for one repo: every
+// signed-by path a source file names for it, or the installer's own path when
+// no source file references the repo at all.
+func aptKeyringTargets(sourcesDir string, r aptKeyRefresher) []string {
+	if paths := aptSignedByPaths(sourcesDir, r.RepoURL); len(paths) > 0 {
+		return paths
+	}
+	return []string{r.KeyringPath}
+}
+
+// aptSignedByPaths scans every .list and .sources file in sourcesDir and
+// returns, sorted and deduplicated, the signed-by keyring paths of entries
+// whose URI starts with repoURL. Commented-out lines are ignored, as is a
+// deb822 Signed-By that embeds the key inline instead of naming a file.
+func aptSignedByPaths(sourcesDir, repoURL string) []string {
+	entries, err := os.ReadDir(sourcesDir)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(sourcesDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var found []string
+		switch filepath.Ext(e.Name()) {
+		case ".list":
+			found = oneLineSignedBy(string(data), repoURL)
+		case ".sources":
+			found = deb822SignedBy(string(data), repoURL)
+		}
+		for _, p := range found {
+			seen[p] = true
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(seen))
+	for p := range seen {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+// oneLineSignedBy handles the classic format:
+//
+//	deb [arch=amd64 signed-by=/path.gpg] https://host/repo suite component
+func oneLineSignedBy(content, repoURL string) []string {
+	var paths []string
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "deb ") && !strings.HasPrefix(line, "deb-src ") {
+			continue
+		}
+		lb, rb := strings.Index(line, "["), strings.Index(line, "]")
+		if lb < 0 || rb < lb {
+			continue
+		}
+		rest := strings.Fields(line[rb+1:])
+		if len(rest) == 0 || !strings.HasPrefix(rest[0], repoURL) {
+			continue
+		}
+		for _, opt := range strings.Fields(line[lb+1 : rb]) {
+			if p, ok := strings.CutPrefix(opt, "signed-by="); ok && strings.HasPrefix(p, "/") {
+				paths = append(paths, p)
+			}
+		}
+	}
+	return paths
+}
+
+// deb822SignedBy handles the stanza format: blank-line-separated blocks of
+// "Field: value" lines, where URIs may list several and Signed-By may hold an
+// inline key on continuation lines rather than a path.
+func deb822SignedBy(content, repoURL string) []string {
+	var paths []string
+	for _, stanza := range strings.Split(content, "\n\n") {
+		var matches bool
+		var signedBy string
+		for _, line := range strings.Split(stanza, "\n") {
+			field, value, ok := strings.Cut(line, ":")
+			if !ok || strings.HasPrefix(line, "#") || strings.HasPrefix(line, " ") {
+				continue
+			}
+			value = strings.TrimSpace(value)
+			switch strings.ToLower(field) {
+			case "uris":
+				for _, uri := range strings.Fields(value) {
+					if strings.HasPrefix(uri, repoURL) {
+						matches = true
+					}
+				}
+			case "signed-by":
+				signedBy = value
+			}
+		}
+		if matches && strings.HasPrefix(signedBy, "/") {
+			paths = append(paths, signedBy)
+		}
+	}
+	return paths
 }
