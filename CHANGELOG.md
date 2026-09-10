@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.23.1] - 2026-09-10
+
+### Fixed
+- **`ctdev update --refresh-keys` now writes the keyring APT actually reads.** It used
+  to write only the path the ctdev installer chose, but vendors rewrite their own
+  source files: the vscode package migrates `vscode.list` to a `.sources` file naming
+  `microsoft.gpg`, and a `gh` set up from GitHub's instructions points at
+  `/etc/apt/keyrings`. On such a machine the refresh landed in a file nobody read and
+  the expired key stayed. The refresher now scans `/etc/apt/sources.list.d` (both the
+  one-line and deb822 formats, skipping comments and inline keys) for every `signed-by`
+  path naming the repo's URL and refreshes each, falling back to the installer's path
+  only when no source file references the repo. Surfaced by the GitHub CLI key
+  expiring on 2026-09-04 and HashiCorp rotating to a new key on 2026-09-06.
+
 ## [12.23.0] - 2026-09-09
 
 ### Added
