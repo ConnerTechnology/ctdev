@@ -154,10 +154,19 @@ func sudoPlan(access sysutil.SudoAccess, batch bool) (needPrompt bool, warn stri
 // ctdev refusing to do the part of the run that never needed it. Only a prompt
 // the user fails or cancels is an error.
 func ensureSudo(ctx context.Context) error {
+	return ensureSudoFor(ctx, "Anything that needs it ("+rootHint()+") will report a failure.")
+}
+
+// ensureSudoFor is ensureSudo with the consequence named by the caller. What
+// unreachable root actually costs differs by command, and the install-shaped
+// default is wrong in doctor: nothing there fails, a few checks report Skipped
+// and say why. A warning that predicts the wrong outcome is the same defect as
+// a skip that names a command the operator cannot run.
+func ensureSudoFor(ctx context.Context, consequence string) error {
 	access := sysutil.CheckSudoAccess(ctx)
 	needPrompt, warn := sudoPlan(access, isBatchMode())
 	if warn != "" {
-		warnNoRoot(warn)
+		warnNoRoot(warn, consequence)
 		return nil
 	}
 	if !needPrompt {
@@ -197,9 +206,9 @@ func rootHint() string {
 	return "packages, /usr/local, systemd"
 }
 
-func warnNoRoot(reason string) {
+func warnNoRoot(reason, consequence string) {
 	fmt.Println(styles.Warning.Render("Continuing without root: " + reason + "."))
-	fmt.Println(styles.Dimmed.Render("  Anything that needs it (" + rootHint() + ") will report a failure."))
+	fmt.Println(styles.Dimmed.Render("  " + consequence))
 }
 
 // resetTerminal cleans up escape sequences that Bubble Tea v2 may leak on exit

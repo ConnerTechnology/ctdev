@@ -185,12 +185,12 @@ func checkDockerLogs(ctx context.Context, f Facts) Result {
 	}
 	if !f.Root {
 		// The log files are root-owned; say so rather than guessing.
-		return skipf("needs root — re-run with sudo to measure container logs")
+		return needsRootSkip("to measure container logs")
 	}
 
 	out, gotRoot := sudoCapture(ctx, "du", "-sk", "/var/lib/docker/containers")
 	if !gotRoot {
-		return skipf("needs root — re-run with sudo to measure container logs")
+		return needsRootSkip("to measure container logs")
 	}
 
 	kb := parseLeadingKB(out)

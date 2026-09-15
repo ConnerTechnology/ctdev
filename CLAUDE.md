@@ -57,6 +57,7 @@ ctdev verify                    # Verify the bootstrap installation
 ctdev doctor                    # Diagnose any machine: network, hardware, OS, security
 ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint
 ctdev doctor --network          # network and internet checks only
+ctdev doctor --root             # prompt once for sudo so root-only checks run
 ctdev doctor --report [path]    # also write a shareable Markdown report
 ctdev doctor --redact           # mask SSID/MAC/public IP so the report can be shared
 ctdev doctor --strict           # exit non-zero on failure (for cron)
@@ -388,6 +389,21 @@ built for diagnosing hardware you did not set up. Every check is read-only, root
 is never required (checks needing it report Skipped and say so), and no data
 leaves the machine beyond the diagnostic probes themselves.
 
+- **`--root` is how root-only checks run, and it is opt-in.** Never *requiring*
+  root hardened into never *asking*, which silently cost SMART health, ufw
+  status, container log sizes and the authoritative `sshd -T` read on machines
+  where the operator would gladly have typed a password. `--root` calls
+  `ensureSudo` in `runDoctor` **before** `GatherFacts`, which settles
+  `Facts.Root` once for the whole run — never inside `GatherFacts`, because
+  `ctdev status` shares it and must stay silent. Default off: doctor is pointed
+  at machines we do not manage, and demanding a stranger's password uninvited is
+  the behavior the package doc promises it does not have.
+- **A skip never says "re-run with sudo".** ctdev installs to `~/.local/bin`,
+  which sudo's `secure_path` excludes on stock Debian/Mint, so `sudo ctdev
+  doctor` dies with "command not found" — advice the operator cannot follow.
+  `needsRootSkip` is the single place that wording lives, and it names
+  `ctdev doctor --root`. A check that root cannot unlock (CPU temperature off
+  Linux) must not mention root at all.
 - **Checks** live in `ctdev/diagnose/` as a catalog of struct literals with
   closures, built as a function of `platform.Info` + `Facts` — the same shape as
   `cleanup.Task`. Gate at construction time so a wired machine has no Wi-Fi rows

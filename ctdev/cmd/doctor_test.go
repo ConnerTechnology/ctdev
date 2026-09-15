@@ -59,3 +59,16 @@ func TestNoKeyMeansNoIntegration(t *testing.T) {
 
 // flagDoctorBatch keeps the one-shot prompt from blocking a test run.
 func flagDoctorBatch() { flagBatch = true }
+
+// Doctor is built to diagnose machines we do not manage, so it must never ask a
+// stranger for their password on its own initiative. Root is opt-in, and the
+// default is the half of that contract worth pinning.
+func TestDoctorRootFlagDefaultsOff(t *testing.T) {
+	f := doctorCmd.Flags().Lookup("root")
+	if f == nil {
+		t.Fatal("doctor has no --root flag")
+	}
+	if f.DefValue != "false" {
+		t.Errorf("--root default = %q, want %q", f.DefValue, "false")
+	}
+}

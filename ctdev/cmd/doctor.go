@@ -21,6 +21,7 @@ var (
 	flagDoctorStrict  bool
 	flagDoctorRedact  bool
 	flagDoctorReport  string
+	flagDoctorRoot    bool
 
 	flagDoctorUnifi          string
 	flagDoctorUnifiUser      string
@@ -39,8 +40,9 @@ var doctorCmd = &cobra.Command{
 		"reachability, disks, memory, and thermals — each with a plain-English\n" +
 		"recommendation.\n\n" +
 		"Nothing is changed. Every check is read-only, root is never required (checks\n" +
-		"that need it are skipped and say so), no telemetry is sent, and no data\n" +
-		"leaves the machine beyond the diagnostic probes themselves.",
+		"that need it are skipped and say so, and --root offers a password for them),\n" +
+		"no telemetry is sent, and no data leaves the machine beyond the diagnostic\n" +
+		"probes themselves.",
 	RunE: runDoctor,
 }
 
@@ -53,6 +55,11 @@ func init() {
 		"only run the network and internet checks")
 	doctorCmd.Flags().BoolVar(&flagDoctorStrict, "strict", false,
 		"exit non-zero when a check fails")
+	// Off by default: doctor diagnoses machines we do not manage, and demanding
+	// a stranger's password uninvited is the behavior the package promises not
+	// to have. Opting in buys SMART health, ufw status, and container log sizes.
+	doctorCmd.Flags().BoolVar(&flagDoctorRoot, "root", false,
+		"prompt for a sudo password so the root-only checks can run")
 	doctorCmd.Flags().BoolVar(&flagDoctorRedact, "redact", false,
 		"mask the SSID, MAC addresses, and public IP so the report is safe to share")
 	// NoOptDefVal lets --report stand alone and pick its own filename, while
@@ -153,6 +160,18 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Gathering is quick but not instant, and a blank terminal reads as a hang.
 	fmt.Fprintln(os.Stderr, styles.Dimmed.Render("Diagnosing… (nothing is changed)"))
+
+	// Before GatherFacts, which settles Facts.Root once for the whole run — and
+	// before any check starts, so a password prompt never lands mid-report.
+	// Deliberately not inside GatherFacts: `ctdev status` shares it and must
+	// stay silent. ensureSudo no-ops when we already have root and warns rather
+	// than errors when nothing can type a password, so --root in cron degrades
+	// instead of failing.
+	if flagDoctorRoot {
+		if err := ensureSudoFor(ctx, "The checks that need root will be skipped and say so."); err != nil {
+			return err
+		}
+	}
 
 	started := time.Now()
 	facts := diagnose.GatherFacts(ctx, info)

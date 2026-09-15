@@ -430,9 +430,10 @@ func parseLoadavg(s string) (float64, bool) {
 // fan, and the silicon quietly halving its own clock to survive.
 func checkTemperature(ctx context.Context, f Facts) Result {
 	if f.Platform.OS != platform.Linux {
-		// macOS needs root for powermetrics, and Windows exposes nothing
-		// consistent without vendor drivers.
-		return skipf("CPU temperature needs root on this platform")
+		// macOS would need powermetrics (root) and Windows exposes nothing
+		// consistent without vendor drivers. Neither is read here, so --root
+		// would not help and the skip must not imply it would.
+		return skipf("CPU temperature is not read on this platform")
 	}
 	name, milliC, found := linuxCPUTemp()
 	if !found {
@@ -592,8 +593,9 @@ func checkSMART(ctx context.Context, f Facts) Result {
 	}
 	if !f.Root {
 		// Degrade rather than prompt: on a machine we're visiting, a password
-		// prompt inside a report is the wrong thing to do.
-		return skipf("needs root — re-run with sudo for disk health")
+		// prompt inside a report is the wrong thing to do. --root is how the
+		// operator asks for one when the machine is their own.
+		return needsRootSkip("for disk health")
 	}
 
 	devices := smartDevices(ctx)
@@ -605,7 +607,7 @@ func checkSMART(ctx context.Context, f Facts) Result {
 	for _, dev := range devices {
 		out, gotRoot := sudoCapture(ctx, "smartctl", "-H", "-A", dev)
 		if !gotRoot {
-			return skipf("needs root — re-run with sudo for disk health")
+			return needsRootSkip("for disk health")
 		}
 		switch smartVerdict(out) {
 		case smartFailing:

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
 )
 
 func TestSeverityRank(t *testing.T) {
@@ -186,5 +188,40 @@ func TestDescribeLink(t *testing.T) {
 		if got := describeLink(tt.f); got != tt.want {
 			t.Errorf("describeLink(%+v) = %q, want %q", tt.f, got, tt.want)
 		}
+	}
+}
+
+// The skip used to read "re-run with sudo", which is advice that cannot be
+// followed wherever ctdev lives in ~/.local/bin: sudo's secure_path excludes it,
+// so `sudo ctdev doctor` dies with "command not found". A skip naming a command
+// the operator cannot run is worse than one naming nothing.
+func TestNeedsRootSkipNamesTheRootFlag(t *testing.T) {
+	got := needsRootSkip("for disk health")
+
+	if got.Severity != Skipped {
+		t.Errorf("severity = %v, want Skipped", got.Severity)
+	}
+	if !strings.Contains(got.Detail, "--root") {
+		t.Errorf("detail = %q, want it to name the --root flag", got.Detail)
+	}
+	if !strings.Contains(got.Detail, "for disk health") {
+		t.Errorf("detail = %q, want it to say what could not be checked", got.Detail)
+	}
+	if strings.Contains(got.Detail, "sudo ctdev") {
+		t.Errorf("detail = %q, still sends the operator to `sudo ctdev`, which secure_path breaks", got.Detail)
+	}
+}
+
+// --root cannot turn this check on: checkTemperature returns before it reads
+// anything on a non-Linux host, so nothing a password unlocks is involved. A
+// skip that blames root sends the operator to a flag that will not help.
+func TestTemperatureSkipDoesNotBlameRoot(t *testing.T) {
+	got := checkTemperature(context.Background(), Facts{Platform: platform.Info{OS: platform.MacOS}})
+
+	if got.Severity != Skipped {
+		t.Errorf("severity = %v, want Skipped", got.Severity)
+	}
+	if strings.Contains(got.Detail, "root") {
+		t.Errorf("detail = %q, blames root for a limit that --root cannot lift", got.Detail)
 	}
 }

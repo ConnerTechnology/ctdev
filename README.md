@@ -396,6 +396,7 @@ ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; -
 ctdev verify                    # Verify the bootstrap installation
 ctdev doctor                    # Diagnose this machine's network and hardware
 ctdev doctor --deep             # + vendor APIs, Wi-Fi scan, path trace
+ctdev doctor --root             # prompt for sudo so root-only checks run
 ctdev doctor --report           # also write a shareable Markdown report
 ctdev doctor --redact           # mask SSID, MACs, and public IP before sharing
 

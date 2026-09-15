@@ -165,6 +165,16 @@ func skipf(format string, a ...any) Result {
 	return Result{Severity: Skipped, Detail: fmt.Sprintf(format, a...)}
 }
 
+// needsRootSkip is the one place a "couldn't look without root" skip is worded,
+// so every such check names the same way in. It must not say "re-run with sudo":
+// ctdev normally installs to ~/.local/bin, which sudo's secure_path excludes, so
+// `sudo ctdev doctor` fails with "command not found" on a stock Debian or Mint
+// box. `ctdev doctor --root` prompts once up front and elevates only the checks
+// that need it. what completes the sentence — "for disk health".
+func needsRootSkip(what string) Result {
+	return skipf("needs root — re-run with 'ctdev doctor --root' %s", what)
+}
+
 // Facts are the prerequisites shared by many checks, resolved once up front so
 // checks don't each re-derive them and don't need a dependency graph between
 // them. Gathering is serial and local; the checks themselves then run

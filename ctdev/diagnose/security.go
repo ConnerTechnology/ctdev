@@ -29,7 +29,7 @@ func checkFirewall(ctx context.Context, f Facts) Result {
 				}
 				return infof("ufw installed but inactive")
 			}
-			return skipf("ufw status needs root — re-run with sudo")
+			return needsRootSkip("to read ufw status")
 		case commandExists("firewall-cmd"):
 			if strings.TrimSpace(capture(ctx, "firewall-cmd", "--state")) == "running" {
 				return okf("firewalld running")
@@ -136,7 +136,7 @@ func checkSSHExposure(ctx context.Context, f Facts) Result {
 	// commonly root-only, and an unreadable file that happens to disable
 	// password auth would otherwise be reported as the opposite.
 	if !complete && state == authUnset {
-		return skipf("needs root — part of the SSH config is not readable")
+		return needsRootSkip("to read the whole SSH config")
 	}
 	if state == authYes || state == authUnset {
 		return warnf("Switch to key-based login and set PasswordAuthentication no, especially if port 22 is reachable from outside.",
