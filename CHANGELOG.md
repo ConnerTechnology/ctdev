@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.25.0] - 2026-09-15
+
+### Added
+- **`ctdev doctor --root` runs the checks that need root.** Doctor never *requires*
+  root, and that hardened into never *asking* — so SMART drive health, `ufw status`,
+  Docker container log sizes and the authoritative `sshd -T` read reported Skipped on
+  machines whose owner would gladly have typed a password. `--root` prompts once
+  through `ensureSudo` before the facts are gathered, so nothing interrupts a report
+  mid-flow, and elevates only the probes that need it; every other check still runs as
+  the invoking user. It stays opt-in because doctor is pointed at machines we do not
+  manage, and asking a stranger for their password uninvited is the behavior the
+  package deliberately does not have. With no terminal to prompt on (`--batch`, cron)
+  it warns and carries on rather than failing.
+
+### Fixed
+- **Root-only skips no longer tell you to run `sudo ctdev doctor`, which cannot work.**
+  ctdev installs to `~/.local/bin`, which sudo's `secure_path` excludes on a stock
+  Debian or Mint box, so that advice fails with "command not found" — a dead end
+  printed by four separate checks. All of them now name `ctdev doctor --root`, worded
+  once in `needsRootSkip`.
+- **The CPU temperature skip no longer blames root.** Off Linux the check returns
+  before reading anything, so no password unlocks it; it said "needs root on this
+  platform" anyway, which now reads as a promise `--root` cannot keep.
+- **`--root` with nothing to prompt on no longer predicts the wrong outcome.** The
+  shared warning announced that "anything that needs it (packages, /usr/local,
+  systemd) will report a failure", which is wrong twice over in a read-only report.
+  Callers now name the consequence; doctor's says the affected checks are skipped.
+
 ## [12.24.0] - 2026-09-15
 
 ### Added
