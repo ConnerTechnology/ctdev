@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.24.0] - 2026-09-15
+
+### Added
+- **`tradingview` component: the TradingView desktop app.** Removed in March in favour
+  of the Chrome web app; the desktop app is the preference again. macOS installs the
+  Homebrew cask and strips the quarantine attribute, without which the Electron app
+  hangs on Gatekeeper's first-launch check. Linux installs the amd64 `.deb` from
+  TradingView's package CDN (`/opt/TradingView`, symlinked to `/usr/bin/tradingview`)
+  rather than the snap the site also offers, because Linux Mint pins snapd out of APT
+  on purpose and the `.deb` needs no change to that policy. 53 components.
+
 ## [12.23.1] - 2026-09-10
 
 ### Fixed
