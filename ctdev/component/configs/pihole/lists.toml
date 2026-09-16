@@ -18,6 +18,7 @@ adlists = [
 allow = [
   { domain = "ads-fa-darwin.hulustream.com" },
   { domain = "arc.msn.com" },
+  { domain = "cdn.mxpnl.com", comment = "Mixpanel login and app assets, also serves the tracking library but ingest stays blocked" },
   { domain = "client.rave-api.com" },
   { domain = "s1.sentry-cdn.com", comment = "Sentry dashboard static assets" },
   { domain = "stats.gc.apple.com", comment = "Apple Game Center, caught by the stats regex" },
@@ -34,6 +35,7 @@ allow_regex = [
   { pattern = '(\.|^)googletagmanager\.com$', comment = "Sites load their own scripts through Tag Manager" },
   { pattern = '(\.|^)rockstargames\.com$' },
   { pattern = '(\.|^)unity3d\.com$' },
+  { pattern = '^((www|eu|in|docs|help|community|developer|university)\.)?mixpanel\.com$', comment = "Mixpanel site, docs and US/EU/IN dashboards, api and decide ingest hosts stay blocked" },
   { pattern = '^([a-z0-9-]+\.)?sentry\.io$', comment = "Sentry dashboard only, ingest hosts stay blocked" },
   { pattern = '^(ext|web)\.chtbl\.com$' },
   { pattern = '^(ping|trace\.svc)\.ui\.com$' },
