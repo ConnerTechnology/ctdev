@@ -3,7 +3,7 @@ package setup
 import (
 	"context"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 func init() {

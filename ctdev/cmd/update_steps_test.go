@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 )
 
 func TestBuildUpdateSteps_GroupsAndOrders(t *testing.T) {

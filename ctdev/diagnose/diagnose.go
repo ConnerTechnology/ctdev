@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // Severity ranks a finding by how much it demands attention.

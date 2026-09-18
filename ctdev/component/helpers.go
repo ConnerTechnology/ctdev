@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // execOpts converts component ExecOpts to sysutil Opts.

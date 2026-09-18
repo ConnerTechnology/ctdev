@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/diagnose"
+	"github.com/ConnerTechnology/ctdev/ctdev/diagnose"
 )
 
 // The set-up instructions promise that setting CTDEV_UNIFI_API_KEY is enough.

@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 )
 
 // baseDigestMarker is written into a built stack's directory recording the

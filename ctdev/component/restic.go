@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // resticCheckTimerInstalled reports whether the monthly integrity-check timer

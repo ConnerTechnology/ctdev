@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/piholelists"
+	"github.com/ConnerTechnology/ctdev/ctdev/piholelists"
 )
 
 // The embedded lists.toml is what `ctdev pihole sync` applies to a Pi-hole, so

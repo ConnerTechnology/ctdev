@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/spf13/cobra"
 )
 

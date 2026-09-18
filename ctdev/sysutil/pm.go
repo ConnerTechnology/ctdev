@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // ErrUnsupportedPM marks package operations on a package manager we don't

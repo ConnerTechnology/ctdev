@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/profile"
+	"github.com/ConnerTechnology/ctdev/ctdev/profile"
 )
 
 func TestProfileStats(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // grubVarArgs returns the sed command args to set a GRUB variable.
@@ -321,7 +321,7 @@ func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
 	return nil
 }
 
-// applyWireplumberLDAC copies the WirePlumber LDAC config from the dotfiles repo.
+// applyWireplumberLDAC copies the WirePlumber LDAC config from the ctdev repo.
 func applyWireplumberLDAC(ctx context.Context, o sysutil.Opts) error {
 	confDir := "/etc/wireplumber/wireplumber.conf.d"
 	confDst := filepath.Join(confDir, "51-ldac-hq.conf")

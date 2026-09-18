@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/setup"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 

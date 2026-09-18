@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 

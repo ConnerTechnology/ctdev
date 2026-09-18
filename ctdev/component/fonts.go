@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 var nerdFonts = []string{"FiraCode", "JetBrainsMono"}

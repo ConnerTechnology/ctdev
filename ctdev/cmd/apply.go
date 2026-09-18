@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/profile"
-	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
-	"github.com/ConnerTechnology/dotfiles/ctdev/state"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	comp "github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/profile"
+	"github.com/ConnerTechnology/ctdev/ctdev/setup"
+	"github.com/ConnerTechnology/ctdev/ctdev/state"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/progress"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 

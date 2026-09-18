@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +28,7 @@ var configureBrainCmd = &cobra.Command{
 		"Claude Code subscription token they authenticate with.\n\n" +
 		"The token comes from `claude setup-token`, run once on a machine that has a " +
 		"browser, and belongs in 1Password. It is stored here encrypted to this host's " +
-		"key — never in plaintext on disk, never in the dotfiles repo, and never fetched " +
+		"key — never in plaintext on disk, never in the ctdev repo, and never fetched " +
 		"over the network at run time.",
 	RunE: runConfigureBrain,
 }

@@ -8,12 +8,12 @@ import (
 	"sync"
 
 	"charm.land/lipgloss/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/profile"
-	"github.com/ConnerTechnology/dotfiles/ctdev/state"
-	tuiinfo "github.com/ConnerTechnology/dotfiles/ctdev/tui/info"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/profile"
+	"github.com/ConnerTechnology/ctdev/ctdev/state"
+	tuiinfo "github.com/ConnerTechnology/ctdev/ctdev/tui/info"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
@@ -49,8 +49,14 @@ func dotfilesRoot() string {
 			cachedDotfilesRoot = candidate
 			return
 		}
+		// The checkout was called "dotfiles" before the repo was renamed; machines
+		// that have not moved the folder yet still have it there.
 		home, _ := os.UserHomeDir()
-		cachedDotfilesRoot = filepath.Join(home, "Repos", "github.com", "ConnerTechnology", "dotfiles")
+		org := filepath.Join(home, "Repos", "github.com", "ConnerTechnology")
+		cachedDotfilesRoot = filepath.Join(org, "ctdev")
+		if _, err := os.Stat(cachedDotfilesRoot); err != nil {
+			cachedDotfilesRoot = filepath.Join(org, "dotfiles")
+		}
 	})
 	return cachedDotfilesRoot
 }

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // Wi-Fi signal thresholds in dBm. These are the numbers a wireless installer

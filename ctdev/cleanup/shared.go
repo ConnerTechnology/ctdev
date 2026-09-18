@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // dockerTask prunes dangling images, stopped containers, unused networks, and

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
+	comp "github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/progress"
 )
 
 type progressOperation struct {

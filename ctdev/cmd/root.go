@@ -10,8 +10,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // Risk tiers a task by how safe it is to run unattended.

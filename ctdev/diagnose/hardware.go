@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // Thresholds. These are the points at which a person notices, not the points

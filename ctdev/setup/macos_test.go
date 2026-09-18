@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 func TestApplyMacOSDefaultsDryRun(t *testing.T) {

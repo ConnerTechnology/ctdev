@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
+	comp "github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/spf13/cobra"
 )
 

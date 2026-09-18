@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +21,7 @@ var configureMCPEmailServerCmd = &cobra.Command{
 	Long: "Add the IMAP mailboxes mcp-email-server exposes to MCP clients, and publish it to " +
 		"the tailnet with `tailscale serve`. Mailbox passwords are entered here and stored " +
 		"only on this host, in ~/mcp-email-server/config/config.toml (owner-only) — they are " +
-		"never written to a laptop, an environment variable, or the dotfiles repo.\n\n" +
+		"never written to a laptop, an environment variable, or the ctdev repo.\n\n" +
 		"Upstream's `ui` subcommand needs a browser, so this walks the same setup over SSH.",
 	RunE: runConfigureMCPEmailServer,
 }

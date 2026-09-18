@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
+	"github.com/ConnerTechnology/ctdev/ctdev/setup"
 )
 
 // captureStdout runs fn with os.Stdout redirected to a buffer and returns

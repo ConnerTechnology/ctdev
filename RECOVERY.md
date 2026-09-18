@@ -6,7 +6,7 @@ jump to the scenario you need. The same model applies to any machine that runs
 `ctdev configure restic` — only the paths and node name differ.
 
 > **TL;DR of the model.** Recovery has two halves:
-> 1. **Structure & config** comes from this **dotfiles repo** via `ctdev install …`
+> 1. **Structure & config** comes from this **ctdev repo** via `ctdev install …`
 >    (compose files, Caddyfile, systemd units — all version-controlled).
 > 2. **Data & secrets** come from **restic backups** (Let's Encrypt certs,
 >    Portainer/Beszel databases, Pi-hole history/gravity, and the `.env` files that
@@ -26,7 +26,7 @@ restic can't restore its own password. Keep them off-device:
 |---|---|---|
 | **restic repo password** | `/etc/restic/restic.env` on the node (lost with the Pi) → **also in 1Password** | Decrypts the restic repository. **No password = no recovery.** |
 | **backend credentials** | same env file → **also in 1Password** (B2 keyID/applicationKey, or S3 keys, etc.) | Lets restic reach the offsite repository |
-| GitHub access to `ConnerTechnology/dotfiles` | your account | Reinstall ctdev to rebuild structure |
+| GitHub access to `ConnerTechnology/ctdev` | your account | Reinstall ctdev to rebuild structure |
 
 > 🔐 **Do this now, before you ever need it:** save the restic repository password
 > and backend keys in 1Password. `ctdev configure restic` can generate the password
@@ -143,7 +143,7 @@ This rebuilds the whole node from scratch. Estimated time: ~30–45 min.
 
 ### Step 2 — Install ctdev
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash
 # ensure ~/.local/bin is on PATH (the installer prints this if not):
 export PATH="$HOME/.local/bin:$PATH"
 ctdev --version

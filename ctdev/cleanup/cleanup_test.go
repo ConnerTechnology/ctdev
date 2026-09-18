@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 func TestParseSize(t *testing.T) {

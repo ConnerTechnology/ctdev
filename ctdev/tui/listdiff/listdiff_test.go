@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/piholelists"
+	"github.com/ConnerTechnology/ctdev/ctdev/piholelists"
 )
 
 func testChanges() []piholelists.Change {

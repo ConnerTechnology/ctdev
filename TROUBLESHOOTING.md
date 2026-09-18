@@ -3,7 +3,7 @@
 ## ctdev not found
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -34,7 +34,7 @@ This replaces old symlinks (pointing to deleted `components/` directory) with re
 
 ```bash
 ctdev uninstall <component...>   # Remove specific components
-curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/uninstall.sh | bash
 ```
 
 Or manually: `rm ~/.local/bin/ctdev`

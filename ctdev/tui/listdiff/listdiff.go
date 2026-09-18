@@ -9,9 +9,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/piholelists"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/multiselect"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/piholelists"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/multiselect"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
 type Model struct {

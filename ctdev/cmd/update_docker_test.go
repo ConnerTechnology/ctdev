@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
 )
 
 // The compose stacks ctdev manages (pihole, caddy, beszel, portainer) are all

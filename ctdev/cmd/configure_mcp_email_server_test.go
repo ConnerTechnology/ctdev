@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
 )
 
 func TestConfigureMCPEmailServerIsRegistered(t *testing.T) {

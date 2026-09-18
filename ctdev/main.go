@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/cmd"
+	"github.com/ConnerTechnology/ctdev/ctdev/cmd"
 )
 
 var (

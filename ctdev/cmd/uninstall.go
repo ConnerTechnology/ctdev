@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
-	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/picker"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	comp "github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/picker"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/progress"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/spf13/cobra"
 )
 

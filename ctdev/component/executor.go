@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 type ExecResult struct {

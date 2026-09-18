@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
 func scanAll(ctx context.Context) []checklist.UpdateItem {

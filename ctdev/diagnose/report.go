@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
 )
 

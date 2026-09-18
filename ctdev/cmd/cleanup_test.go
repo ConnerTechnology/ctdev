@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/cleanup"
+	"github.com/ConnerTechnology/ctdev/ctdev/cleanup"
 )
 
 func TestHasWork(t *testing.T) {
