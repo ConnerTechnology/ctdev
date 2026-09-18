@@ -49,8 +49,14 @@ func dotfilesRoot() string {
 			cachedDotfilesRoot = candidate
 			return
 		}
+		// The checkout was called "dotfiles" before the repo was renamed; machines
+		// that have not moved the folder yet still have it there.
 		home, _ := os.UserHomeDir()
-		cachedDotfilesRoot = filepath.Join(home, "Repos", "github.com", "ConnerTechnology", "dotfiles")
+		org := filepath.Join(home, "Repos", "github.com", "ConnerTechnology")
+		cachedDotfilesRoot = filepath.Join(org, "ctdev")
+		if _, err := os.Stat(cachedDotfilesRoot); err != nil {
+			cachedDotfilesRoot = filepath.Join(org, "dotfiles")
+		}
 	})
 	return cachedDotfilesRoot
 }

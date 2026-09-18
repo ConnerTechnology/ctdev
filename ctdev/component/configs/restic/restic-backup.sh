@@ -5,7 +5,7 @@
 # Run as root via the restic-backup.service systemd unit (needs to read Docker
 # volume dirs and other root-owned paths).
 #
-# Config (all root-only, NONE in the dotfiles repo):
+# Config (all root-only, NONE in the ctdev repo):
 #   /etc/restic/restic.env       repo locations, credentials, RESTIC_PASSWORD
 #   /etc/restic/backup-paths     one path per line to snapshot ('#' comments)
 #   /etc/restic/backup-excludes  optional restic --exclude patterns, one per line
