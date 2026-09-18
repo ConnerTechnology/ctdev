@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/piholelists"
+	"github.com/ConnerTechnology/ctdev/ctdev/piholelists"
 )
 
 func TestLoadListsReadsTheEmbeddedFileByDefault(t *testing.T) {

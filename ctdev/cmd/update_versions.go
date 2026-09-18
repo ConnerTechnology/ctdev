@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // fetchGitHubReleaseTags returns release tags from newest to oldest (excludes pre-releases).

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 func ghInstall(ctx context.Context, opts ExecOpts) error {

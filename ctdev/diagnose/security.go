@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // The security checks report; they never change anything. On a machine you're

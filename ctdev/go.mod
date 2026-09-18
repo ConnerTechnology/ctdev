@@ -1,4 +1,4 @@
-module github.com/ConnerTechnology/dotfiles/ctdev
+module github.com/ConnerTechnology/ctdev/ctdev
 
 go 1.26.1
 

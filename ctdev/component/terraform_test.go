@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // On CI boxes terraform isn't installed, so the uninstall path through any

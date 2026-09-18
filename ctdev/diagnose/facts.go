@@ -6,8 +6,8 @@ import (
 	"net/netip"
 	"os"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // GatherFacts resolves the prerequisites shared by many checks. It runs before

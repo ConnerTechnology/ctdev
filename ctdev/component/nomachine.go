@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // NoMachine ships no apt repo, and its "latest" download alias resolves to the

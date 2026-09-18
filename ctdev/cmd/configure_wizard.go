@@ -7,9 +7,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/setup"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
 // slugDescriptions maps slugs to human-readable descriptions for the wizard header.

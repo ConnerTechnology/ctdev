@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	comp "github.com/ConnerTechnology/dotfiles/ctdev/component"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/progress"
+	comp "github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/progress"
 )
 
 // captureSender records the progress messages runOneComponent emits so tests

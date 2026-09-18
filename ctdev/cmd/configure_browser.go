@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/setup"
-	tuisettings "github.com/ConnerTechnology/dotfiles/ctdev/tui/settings"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/setup"
+	tuisettings "github.com/ConnerTechnology/ctdev/ctdev/tui/settings"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
 // runSettingsBrowser is the interactive path behind a bare `ctdev configure`:

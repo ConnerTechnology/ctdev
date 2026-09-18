@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // Pi-hole settings (the `configure pihole` category) read and write Pi-hole's

@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/user"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // removeGrubCmdlineParam removes a kernel cmdline parameter from /etc/default/grub

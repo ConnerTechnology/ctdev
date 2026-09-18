@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // grubVarArgs returns the sed command args to set a GRUB variable.

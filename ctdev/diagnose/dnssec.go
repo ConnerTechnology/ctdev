@@ -10,7 +10,7 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // Two checks the standard library's resolver cannot express: net.Resolver

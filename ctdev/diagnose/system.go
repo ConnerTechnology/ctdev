@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // checkRebootPending catches the machine that has been patched but never

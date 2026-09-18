@@ -9,8 +9,8 @@ import (
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/multiselect"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/multiselect"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
 type UpdateItem struct {

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/gpu"
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
 // GPU/NVIDIA driver signing lives under `ctdev configure gpu` (see

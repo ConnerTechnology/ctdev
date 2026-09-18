@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 )
 
 // updateStep is one unit of the update apply phase — a labeled action run

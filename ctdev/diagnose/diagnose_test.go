@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 func TestSeverityRank(t *testing.T) {

@@ -3,8 +3,8 @@ package cmd
 import (
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/checklist"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 )
 
 func TestSudoPlan(t *testing.T) {

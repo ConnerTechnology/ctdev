@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
 )
 
 func testComponents() []component.Component {

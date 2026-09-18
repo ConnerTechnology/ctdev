@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/ConnerTechnology/dotfiles/ctdev/diagnose"
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/tui/styles"
+	"github.com/ConnerTechnology/ctdev/ctdev/diagnose"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
 )

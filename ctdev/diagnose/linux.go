@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 func linuxChecks(info platform.Info, f Facts) []Check {

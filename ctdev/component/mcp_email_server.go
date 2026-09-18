@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // mcp-email-server reads mailboxes over IMAP and exposes them to MCP clients,

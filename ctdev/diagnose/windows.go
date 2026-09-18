@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 func windowsChecks(info platform.Info, f Facts) []Check {

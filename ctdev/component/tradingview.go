@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // TradingView's desktop app: a Homebrew cask on macOS, a .deb on apt. The

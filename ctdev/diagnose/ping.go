@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // PingResult summarizes a short ping run.

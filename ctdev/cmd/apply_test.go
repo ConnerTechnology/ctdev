@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/profile"
+	"github.com/ConnerTechnology/ctdev/ctdev/profile"
 )
 
 func TestValidateProfile_BuiltinsAreValid(t *testing.T) {

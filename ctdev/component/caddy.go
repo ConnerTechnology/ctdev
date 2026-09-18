@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // The stack files are generic — the Caddyfile and compose file read the

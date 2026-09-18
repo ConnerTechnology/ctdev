@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ConnerTechnology/dotfiles/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 // Confidence is how sure a fingerprint is. A guess presented as a fact wastes
