@@ -20,6 +20,11 @@ Issues, specs and design docs for this repo live in **Linear**, team **Conner Te
   review and commits on its worktree branch; the coordinator runs `/code-review main` on that
   branch in a fresh context, with the ticket as the spec. When Thomas types `/implement` himself,
   the skill's own order (review before commit) holds.
+- **A QA plan is a checklist in the ticket description.** One checkbox per thing to verify; under
+  it the exact actions as numbered sub-steps, then a **See:** line. Thomas ticks the box when he
+  saw it; an item that needs a reading kept says **Paste:** and he adds it as a comment. An
+  unticked box with a note under it is a finding, and becomes a linked issue. The coordinator
+  reads the boxes, not the chat, to know the walk is done.
 - **Who takes it next** is a label: `ready-for-agent` or `ready-for-human` (see `triage-labels.md`).
 - **Branch names**: the one Linear gives the issue (`gitBranchName`), so the GitHub integration
   can move it.
