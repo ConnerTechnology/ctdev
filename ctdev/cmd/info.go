@@ -19,8 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var dotfilesOnce sync.Once
-var cachedDotfilesRoot string
+var repoOnce sync.Once
+var cachedRepoRoot string
 
 var infoCmd = &cobra.Command{
 	Use:   "info",
@@ -32,37 +32,42 @@ func init() {
 	rootCmd.AddCommand(infoCmd)
 }
 
-func dotfilesRoot() string {
-	dotfilesOnce.Do(func() {
+func repoRoot() string {
+	repoOnce.Do(func() {
 		if root := os.Getenv("DOTFILES_ROOT"); root != "" {
-			cachedDotfilesRoot = root
+			cachedRepoRoot = root
 			return
 		}
-		if dotfilesPath != "" {
-			cachedDotfilesRoot = dotfilesPath
+		if repoPath != "" {
+			cachedRepoRoot = repoPath
 			return
 		}
 		// Try relative to executable (works when running from repo: ./ctdev)
 		exe, _ := os.Executable()
 		candidate := filepath.Dir(filepath.Dir(exe))
 		if _, err := os.Stat(filepath.Join(candidate, "CLAUDE.md")); err == nil {
-			cachedDotfilesRoot = candidate
+			cachedRepoRoot = candidate
 			return
 		}
-		// The checkout was called "dotfiles" before the repo was renamed; machines
-		// that have not moved the folder yet still have it there.
 		home, _ := os.UserHomeDir()
-		org := filepath.Join(home, "Repos", "github.com", "ConnerTechnology")
-		cachedDotfilesRoot = filepath.Join(org, "ctdev")
-		if _, err := os.Stat(cachedDotfilesRoot); err != nil {
-			cachedDotfilesRoot = filepath.Join(org, "dotfiles")
-		}
+		cachedRepoRoot = checkoutUnder(filepath.Join(home, "Repos", "github.com", "ConnerTechnology"))
 	})
-	return cachedDotfilesRoot
+	return cachedRepoRoot
+}
+
+// checkoutUnder returns the checkout inside the org folder. The checkout was
+// called "dotfiles" before the repo was renamed; machines that have not moved
+// the folder yet still have it there.
+func checkoutUnder(org string) string {
+	root := filepath.Join(org, "ctdev")
+	if _, err := os.Stat(root); err != nil {
+		return filepath.Join(org, "dotfiles")
+	}
+	return root
 }
 
 func runInfo(cmd *cobra.Command, args []string) error {
-	sysInfo := platform.GatherSystemInfo(dotfilesRoot())
+	sysInfo := platform.GatherSystemInfo(repoRoot())
 
 	osType := component.OS(sysInfo.Platform.OS)
 	filtered := component.FilterByOS(component.Registry, osType)
