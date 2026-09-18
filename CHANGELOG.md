@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.26.1] - 2026-09-18
+
+### Fixed
+- **`rm`, `cp` and `mv` work again from tools and scripts.** oh-my-zsh's `common-aliases`
+  plugin turns all three into their `-i` forms, and the deployed `.zshrc` is sourced by
+  shells with nobody at the keyboard too — Claude Code's tool shell among them. There the
+  prompt went unanswered, nothing was removed or overwritten, and the command still exited
+  clean. The plugin stays, since its `ls` and `grep` aliases are in daily use; the three
+  aliases are dropped when the shell is not interactive, so a person at a terminal keeps
+  the confirmation prompts. Run `ctdev install zsh` to deploy it.
+
+### Changed
+- **The repo's guidance for Claude Code sessions is small and checked.** The root
+  `CLAUDE.md` is orientation only (35 KB down to 3 KB); each component's facts moved
+  verbatim into `.claude/rules/`, scoped by path so they load when that component's files
+  are opened; the command list, directory map and component template live in `docs/`.
+  `scripts/check-guidance.sh` runs in CI and fails on a byte ceiling passed, a rule
+  without `paths:`, or a named repo path that does not exist. `docs/superpowers/` is gone;
+  its content lives in Linear. No change to the binary's behavior.
+
 ## [12.26.0] - 2026-09-18
 
 ### Changed
