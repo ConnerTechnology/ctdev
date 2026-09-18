@@ -3,6 +3,7 @@
 
 adlists = [
   { url = "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt", comment = "AdGuard Smart TV blocklist" },
+  { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/doh.txt", comment = "hagezi encrypted DNS bypass — DoH servers only, not VPNs or Tor" },
   { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/gambling.txt", comment = "hagezi gambling" },
   { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/nsfw.txt", comment = "hagezi NSFW — household decision 2026-09-07" },
   { url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/pro.plus.txt", comment = "hagezi Pro++, the primary all-round list" },
