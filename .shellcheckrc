@@ -1,4 +1,4 @@
-# ShellCheck configuration for dotfiles
+# ShellCheck configuration for ctdev
 # https://www.shellcheck.net/
 
 # Enable checking of sourced files

@@ -1,4 +1,4 @@
-# dotfiles
+# ctdev
 
 Modular dotfiles for macOS and Linux. Managed via the `ctdev` CLI.
 
@@ -9,7 +9,7 @@ path) or compose the machine by hand from components and `configure` categories.
 
 ```bash
 # 1. install ctdev
-curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash
 
 # 2a. the fast path: apply a profile (built in — no repo clone needed)
 ctdev apply                      # list profiles: dev-workstation, pihole-node, ai-node, family-desktop
@@ -335,7 +335,7 @@ credential — `memory/` is accumulated learning that exists nowhere else.
 ## Install (ctdev only)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash
 ```
 
 ## Diagnose a machine without installing anything
@@ -346,12 +346,12 @@ Nothing is installed, no PATH is changed, and sudo is never used.
 
 ```bash
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.sh | bash -s -- --doctor
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash -s -- --doctor
 ```
 
 ```powershell
 # Windows — `irm | iex` cannot pass arguments, so wrap it in a scriptblock
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/install.ps1))) -Doctor
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.ps1))) -Doctor
 ```
 
 ## Getting Started
@@ -419,8 +419,8 @@ Add to your VS Code `settings.json`:
 
 ```json
 {
-  "dotfiles.repository": "https://github.com/ConnerTechnology/dotfiles.git",
-  "dotfiles.targetPath": "~/dotfiles",
+  "dotfiles.repository": "https://github.com/ConnerTechnology/ctdev.git",
+  "dotfiles.targetPath": "~/ctdev",
   "dotfiles.installCommand": "./devcontainer.sh"
 }
 ```
@@ -438,7 +438,7 @@ systems report as skipped.
 
 ```bash
 ctdev uninstall <component...>   # Remove specific components
-curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/dotfiles/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/uninstall.sh | bash
 ```
 
 ## License
