@@ -33,7 +33,7 @@ jobs:
 
       - name: Check syntax
         run: |
-          for f in install.sh uninstall.sh devcontainer.sh; do
+          for f in install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh; do
             bash -n "$f" || exit 1
           done
 
@@ -41,7 +41,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Run ShellCheck
-        run: shellcheck install.sh uninstall.sh devcontainer.sh
+        run: shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh
+
+      # CLAUDE.md, the path-scoped rules and docs/agents/ are claims about the tree that
+      # nothing else compiles — this holds them to their byte budgets and to paths that exist.
+      - name: Check guidance
+        run: scripts/check-guidance.sh
 
   powershell-lint:
     name: PowerShell Lint

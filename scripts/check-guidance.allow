@@ -1,0 +1,14 @@
+# Repo paths the guidance files name on purpose although they do not exist, one per line.
+# `path: <value>` — spelled exactly as the backticked token is spelled.
+
+# docs/agents/domain.md names both of these to say they are created on first use, and that a
+# session finding them missing should proceed silently.
+path: CONTEXT.md
+path: docs/decisions/
+
+# docs/agents/triage-labels.md names this to say there is no such folder here — the mattpocock
+# skills' `wontfix` role maps onto Linear's Canceled state instead.
+path: .out-of-scope/
+
+# .claude/rules/brain.md points at the ConnerTechnology/AI repo's own docs/vision.md, not ours.
+path: docs/vision.md

@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	version      string
-	dotfilesPath string // set via SetDotfilesPath at startup
+	version  string
+	repoPath string // set via SetRepoPath at startup
 
 	flagVerbose bool
 	flagDryRun  bool
@@ -31,8 +31,8 @@ func SetVersion(v string) {
 	version = v
 }
 
-func SetDotfilesPath(p string) {
-	dotfilesPath = p
+func SetRepoPath(p string) {
+	repoPath = p
 }
 
 var rootCmd = &cobra.Command{
