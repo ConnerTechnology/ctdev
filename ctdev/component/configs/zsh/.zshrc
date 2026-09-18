@@ -43,6 +43,11 @@ command -v bundle &>/dev/null && plugins+=(bundler)
 
 source $ZSH/oh-my-zsh.sh
 
+# common-aliases turns rm, cp and mv into their -i forms. Tools and scripts source
+# this file too, and with nobody to answer the prompt the command does nothing and
+# still exits clean. Keep the prompts for a person at a terminal only.
+[[ -o interactive ]] || unalias rm cp mv 2>/dev/null
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Pure Prompt ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 PURE_GIT_PULL=0
