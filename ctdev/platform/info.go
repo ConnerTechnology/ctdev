@@ -36,13 +36,13 @@ type DriveInfo struct {
 }
 
 type SystemInfo struct {
-	Platform    Info
-	Hostname    string
-	Shell       string
-	DotfilesDir string
-	CPUModel    string
-	CPUThreads  int
-	MemoryGB    int
+	Platform   Info
+	Hostname   string
+	Shell      string
+	RepoDir    string
+	CPUModel   string
+	CPUThreads int
+	MemoryGB   int
 	// MemUsedKB/MemTotalKB are live consumption, distinct from MemoryGB (the
 	// installed capacity). Both are 0 where /proc/meminfo isn't available.
 	MemUsedKB  int64
@@ -54,11 +54,11 @@ type SystemInfo struct {
 	Network    []NetworkAdapter
 }
 
-func GatherSystemInfo(dotfilesDir string) SystemInfo {
+func GatherSystemInfo(repoDir string) SystemInfo {
 	info := SystemInfo{
-		Platform:    Detect(),
-		DotfilesDir: dotfilesDir,
-		CPUThreads:  runtime.NumCPU(),
+		Platform:   Detect(),
+		RepoDir:    repoDir,
+		CPUThreads: runtime.NumCPU(),
 	}
 	info.Hostname, _ = os.Hostname()
 	info.Shell = filepath.Base(os.Getenv("SHELL"))

@@ -68,7 +68,7 @@ func Render(sysInfo platform.SystemInfo, version string, components []ComponentI
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Architecture"), valueStyle.Render(sysInfo.Platform.Arch)))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Package Manager"), valueStyle.Render(sysInfo.Platform.PackageManager)))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Shell"), valueStyle.Render(sysInfo.Shell)))
-	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Dotfiles"), valueStyle.Render(sysInfo.DotfilesDir)))
+	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Repo"), valueStyle.Render(sysInfo.RepoDir)))
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("ctdev"), valueStyle.Render(version)))
 	if sysInfo.Uptime > 0 {
 		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Uptime"), valueStyle.Render(humanUptime(sysInfo.Uptime))))

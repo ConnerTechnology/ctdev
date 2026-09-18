@@ -8,13 +8,13 @@ import (
 )
 
 var (
-	version      = "dev"
-	dotfilesRoot = "" // set via -ldflags at build time
+	version  = "dev"
+	repoRoot = "" // can be pinned with -ldflags; no build does today, so the lookup in cmd/info.go decides
 )
 
 func main() {
 	cmd.SetVersion(version)
-	cmd.SetDotfilesPath(dotfilesRoot)
+	cmd.SetRepoPath(repoRoot)
 	// rootCmd sets SilenceErrors, so this is the single place errors print.
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
