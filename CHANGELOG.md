@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.26.0] - 2026-09-18
+
+### Changed
+- **The repo is called ctdev everywhere, not just on GitHub.** The GitHub repository
+  was renamed to `ConnerTechnology/ctdev` some time ago, but the Go module path, the
+  README and the recovery docs still said dotfiles, and the one-liner install URLs only
+  worked through GitHub's rename redirect. The module path is now
+  `github.com/ConnerTechnology/ctdev/ctdev`, the docs point at the real URLs, and the
+  messages that promised a secret is "never in the dotfiles repo" name the ctdev repo.
+  "dotfiles" still means what it should: the zsh, tmux and git configs ctdev deploys.
+- **`ctdev info` finds the checkout under either folder name.** Its last-resort path was
+  hardcoded to `~/Repos/github.com/ConnerTechnology/dotfiles`. It now looks for
+  `…/ctdev` first and falls back to `…/dotfiles`, so the same binary is right before
+  and after a machine's checkout folder is renamed.
+
+### Added
+- **Pi-hole lists: the hagezi encrypted-DNS-bypass adlist.** DoH servers only, not VPNs
+  or Tor, so a device cannot step around the Pi-hole by resolving over HTTPS.
+- **Pi-hole lists: the Mixpanel site and dashboards are allowed.** The site, docs and
+  the US/EU/IN dashboards resolve, along with the asset host the login page needs; the
+  `api` and `decide` ingest hosts stay blocked.
+
 ## [12.25.0] - 2026-09-15
 
 ### Added
