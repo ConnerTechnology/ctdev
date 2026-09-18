@@ -1,5 +1,7 @@
 # Claude Code
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/rules/
 
 # macOS
 .DS_Store
