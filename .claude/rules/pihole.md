@@ -35,5 +35,6 @@ paths:
   domain someone allowed in the web UI survive a sync. Writes are one SQL
   transaction against gravity.db (the `pihole allow --delete` CLI is broken on
   v6.4.3), then `pihole reloadlists`, or the much slower `pihole -g` only when an
-  adlist changed. Set the admin password with
+  adlist changed. Keep semicolons out of entry comments: the `pihole` CLI rejected
+  them (2026-09-08), and nobody has tried one through `sync`. Set the admin password with
   `docker exec -it pihole pihole setpassword`.
