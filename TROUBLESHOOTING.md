@@ -7,6 +7,15 @@ curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+**Not found over ssh, but found when logged in:** ctdev installs to `~/.local/bin`, which a
+login shell puts on `PATH` and a one-off `ssh host command` does not. Run it through a login
+shell, or by its full path:
+
+```bash
+ssh ctpi01 'zsh -lc "ctdev doctor"'
+ssh ctpi01 '~/.local/bin/ctdev doctor'
+```
+
 ## Permission denied
 
 ctdev uses sudo automatically for operations that need root. If prompted for sudo fails, ensure your user is in the sudo group.
