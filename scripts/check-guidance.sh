@@ -4,7 +4,8 @@
 # CLAUDE.md, the path-scoped rules and the agent docs are claims about this repo, and nothing
 # compiles them. Two things go wrong on their own: they grow until every session pays for facts
 # it does not need, and they name a path that has since moved. Both are mechanical, so they are
-# a check rather than something a reader is expected to notice.
+# a check rather than something a reader is expected to notice. The README and the docs tree
+# make the same kind of claim with every relative link, so those are checked here too.
 #
 # Checks:
 #   1. session start: the root CLAUDE.md is the only file loaded before anyone types, so its
@@ -13,6 +14,8 @@
 #   3. each rule is path-scoped — a rule with no paths: key loads at every session start
 #   4. every backticked repo path in CLAUDE.md, a rule, or docs/agents/ exists, is gitignored,
 #      or is allowlisted because the file names it on purpose to say it is not there
+#   5. every relative Markdown link in README.md or under docs/ points at a file or directory
+#      that exists, and its heading anchor, where it has one, is a heading in that file
 #
 # Usage: scripts/check-guidance.sh   (exit 1 on any failure, all failures listed)
 
@@ -86,6 +89,104 @@ for f in $(guidance_files); do
     | grep -vE '^/|^\./|\.\.\.' \
     | grep -E '^(ctdev|docs|scripts)/|^\.[^/]*/|^[^/]+\.md$' \
     | sort -u)
+done
+
+# 5. Links ------------------------------------------------------------------------------
+# The README is a table of contents, so a link that goes nowhere is the one way it can be
+# wrong. Only what this tree can answer is checked: anything with a scheme (https:, mailto:)
+# is skipped, because a run that fails when someone else's site is down is noise. A link
+# that is dead on purpose goes in the allowlist as `link: <target>`, spelled as the link
+# spells it.
+link_files() {
+  ls README.md 2>/dev/null
+  find docs -name '*.md' 2>/dev/null | sort
+}
+
+# The file with fenced code blocks blanked rather than dropped, so a reported line number is
+# still the line in the file. A fence closes only on the marker that opened it, which is what
+# lets a ~~~ block show a ``` block.
+prose() { # prose <file>
+  # SC2016: the backticks are the fence marker being matched, not a command substitution.
+  # shellcheck disable=SC2016
+  awk '
+    match($0, /^ ? ? ?(```|~~~)/) {
+      mark = substr($0, RSTART + RLENGTH - 3, 3)
+      if (fence == "") fence = mark
+      else if (mark == fence) fence = ""
+      print ""
+      next
+    }
+    { print (fence == "" ? $0 : "") }
+  ' "$1"
+}
+
+# "<line> <target>" for every inline link, image and reference definition. Matching on the
+# `](target)` tail alone means link text that wraps across lines, as the README's does, is
+# still found. Inline code is removed first: a link inside backticks is an example.
+#
+# This is a pattern match, not a Markdown parser, and it errs toward the file's own habits:
+# a target with a ) in it, a link in an indented code block or an HTML comment, and an
+# <a href> are not understood. The first two fail loudly and can be allowlisted; an <a href>
+# is not checked at all.
+links() { # links <file>
+  local text
+  # shellcheck disable=SC2016
+  text=$(prose "$1" | sed 's/`[^`]*`//g')
+  {
+    grep -noE '\]\([^)]+\)' <<<"$text" | sed -E 's/^([0-9]+):\]\(/\1 /; s/\)$//'
+    grep -noE '^ ? ? ?\[[^]^][^]]*\]:[[:space:]]*[^[:space:]]+' <<<"$text" \
+      | sed -E 's/^([0-9]+):[^]]*\]:[[:space:]]*/\1 /'
+  } | sed -E -e 's/^([0-9]+) <([^>]*)>.*/\1 \2/' -e t -e 's/^([0-9]+) ([^[:space:]]+).*/\1 \2/'
+}
+
+# The anchors GitHub gives a file's headings: lowercased, everything but letters, digits,
+# spaces, - and _ dropped, each space a hyphen, and a repeated heading numbered -1, -2.
+# The UTF-8 locale is what makes an em dash count as punctuation rather than as three bytes
+# sed has no opinion on; the headings here use them. Explicit <a name="..."> and id="..."
+# anchors count too. Only ATX (#) headings are read.
+anchors() { # anchors <file>
+  # shellcheck disable=SC2016
+  prose "$1" | grep -E '^ ? ? ?#{1,6}[[:space:]]' \
+    | sed -E 's/^ *#+[[:space:]]+//; s/[[:space:]]+#*[[:space:]]*$//; s/\[([^]]*)\]\([^)]*\)/\1/g' \
+    | tr '[:upper:]' '[:lower:]' \
+    | LC_ALL=C.UTF-8 sed 's/[^[:alnum:] _-]//g' \
+    | tr ' ' '-' \
+    | awk '{ n = seen[$0]++; print (n ? $0 "-" n : $0) }'
+  prose "$1" | grep -oE '(name|id)="[^"]+"' | sed -E 's/^[a-z]+="//; s/"$//'
+}
+
+for f in $(link_files); do
+  dir=$(dirname "$f")
+  while read -r line target; do
+    [ -z "$target" ] && continue
+    [[ $target =~ ^[A-Za-z][A-Za-z0-9+.-]*: ]] && continue
+    allowed link "$target" && continue
+    path=${target%%#*}
+    anchor=
+    [ "$path" != "$target" ] && anchor=${target#*#}
+    # A bare #anchor points into the file it is in; a leading / is the repo root, as GitHub
+    # reads it; anything else is relative to the file.
+    case $path in
+      '') dest=$f ;;
+      /*) dest=${path#/} ;;
+      *) dest=$dir/$path ;;
+    esac
+    dest=${dest#./}
+    if [ ! -e "$dest" ]; then
+      bad "$f:$line links to $target, but $dest does not exist"
+      continue
+    fi
+    [ -n "$anchor" ] || continue
+    # Only Markdown has headings to check; an anchor into anything else (file.go#L10) is
+    # GitHub's business.
+    [[ -f $dest && $dest == *.md ]] || continue
+    # Not `anchors | grep -q`: under pipefail that pipeline fails whenever anchors does, and
+    # anchors ends on a grep that finds nothing in most files, so every heading would read
+    # as missing.
+    if ! grep -qxF -- "$anchor" <<<"$(anchors "$dest")"; then
+      bad "$f:$line links to $target, but $dest has no heading that makes #$anchor"
+    fi
+  done < <(links "$f")
 done
 
 if [ "$fail" -eq 0 ]; then say "guidance check: ok"; fi
