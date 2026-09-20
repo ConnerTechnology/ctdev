@@ -44,7 +44,8 @@ jobs:
         run: shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh
 
       # CLAUDE.md, the path-scoped rules and docs/agents/ are claims about the tree that
-      # nothing else compiles — this holds them to their byte budgets and to paths that exist.
+      # nothing else compiles — this holds them to their byte budgets and to paths that exist,
+      # and holds the README and docs/ to relative links that go somewhere.
       - name: Check guidance
         run: scripts/check-guidance.sh
 

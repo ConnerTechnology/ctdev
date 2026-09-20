@@ -51,8 +51,10 @@ These hold everywhere in the repo.
 
 `scripts/check-guidance.sh` runs in CI. It holds this file to a byte ceiling, holds each rule to
 6,000 bytes, requires every rule to be path-scoped, and verifies that every repo path named in a
-backticked token here, in a rule, or in `docs/agents/` actually exists. A path that is named on
-purpose although it does not exist goes in `scripts/check-guidance.allow` with a reason.
+backticked token here, in a rule, or in `docs/agents/` actually exists. It also verifies that
+every relative link in `README.md` and under `docs/` points at a file that exists, and that a
+link's `#anchor` is a heading in it. A path or link that is dead on purpose goes in `scripts/check-guidance.allow` with a
+reason.
 
 ## Working with the skills
 

@@ -38,3 +38,6 @@ ctdev/dist/
 !*.example.env
 keys.txt
 *.age.key
+
+# Scratch output from the Playwright MCP server
+.playwright-mcp/
