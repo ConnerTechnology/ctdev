@@ -16,6 +16,7 @@
 #      or is allowlisted because the file names it on purpose to say it is not there
 #   5. every relative Markdown link in README.md or under docs/ points at a file or directory
 #      that exists, and its heading anchor, where it has one, is a heading in that file
+#   6. the README stays a table of contents rather than growing back into the manual
 #
 # Usage: scripts/check-guidance.sh   (exit 1 on any failure, all failures listed)
 
@@ -188,6 +189,18 @@ for f in $(link_files); do
     fi
   done < <(links "$f")
 done
+
+# 6. README size ------------------------------------------------------------------------
+# Measured 2026-09-20, right after CON-56 cut the README to a table of contents: 5,597 bytes
+# (it was 23,997). The ceiling is that plus about 15%, the same way the session-start ceiling
+# is set. Hitting it means a section has grown into a page of its own — put it under docs/ and
+# leave a paragraph and a link behind. Raising it is allowed, in its own commit, with the new
+# measurement and the reason.
+README_CEILING=6400
+readme=$(bytes README.md)
+if [ "$readme" -gt "$README_CEILING" ]; then
+  bad "README.md is $readme bytes; the ceiling is $README_CEILING. It is a table of contents: move the detail to a page under docs/ and link it"
+fi
 
 if [ "$fail" -eq 0 ]; then say "guidance check: ok"; fi
 exit "$fail"

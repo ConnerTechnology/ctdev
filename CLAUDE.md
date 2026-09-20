@@ -14,6 +14,8 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | --- | --- |
 | This file | Orientation, and the conventions that bind everywhere |
 | `.claude/rules/` | The facts about one component or one directory. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, mcp-email-server, the brain, doctor, profiles, the install scripts, the Go conventions inside the module |
+| `docs/README.md` | The human-facing docs: one page per capability, in README order |
+| `CONTEXT.md` | The glossary — device, managed and unmanaged, machine, fleet, network |
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
 | `docs/architecture.md` | The directory map of the Go module |
 | `docs/adding-a-component.md` | The template for a new component, plus the `Root` / Phase 1-2 / `.deb` rules |
