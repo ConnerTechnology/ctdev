@@ -35,12 +35,12 @@ needed it fails with its own error.
 | `~/.local/bin/ctdev` | The binary, as the install script places it |
 | `~/.config/ctdev/` | Configuration, including your own machine profiles |
 | `~/.local/state/ctdev/` | State ctdev keeps between runs |
-| `~/.cache/ctdev/` | Disposable working files, when a run needs any |
 
-Those are what `uninstall.sh` removes. Individual components put their own
-files where that software normally lives — a package manager's paths, a
-`docker-compose.yml` under `$HOME`, a systemd unit under `/etc`. Each
-component's page or `--help` says which.
+`uninstall.sh` removes those three, and `~/.cache/ctdev` if anything has left
+one there. Individual components put their own files where that software
+normally lives — a package manager's paths, a `docker-compose.yml` under
+`$HOME`, a systemd unit under `/etc`. Each component's page or `--help` says
+which.
 
 The XDG variables are honored: set `XDG_CONFIG_HOME` or `XDG_STATE_HOME` and
 ctdev follows them, as the uninstaller does for `XDG_CACHE_HOME`.
@@ -94,9 +94,9 @@ today.
 
 ## What ctdev does not do
 
-- It does not configure network gear. It diagnoses any network, and it builds
-  the machines that serve one, but it does not log into a router, a switch or an
-  access point to change settings.
+- It does not configure an unmanaged device. It diagnoses any network, and it
+  builds the machines that serve one, but it does not log into a router, a
+  switch or an access point to change settings.
 - It does not report anywhere. There is no central service, no telemetry, and no
   remote control channel; a machine running ctdev talks to package repositories
   and to the services you configured, and to nothing of ours.

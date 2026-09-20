@@ -56,11 +56,12 @@ plain-English verdict for each finding. It assumes nothing about the machine,
 so it works on one ctdev did not set up, and it can run from a temporary
 directory without installing anything.
 
-ctdev's network job is two things. It **diagnoses any network**, including gear
-it cannot be installed on, reading a UniFi, Synology or Proxmox API when given a
-read-only key. And it **builds the machines that serve a network** — a DNS node,
-a reverse proxy, a monitoring stack. It does not configure network gear: it will
-not log into a router, a switch or an access point to change a setting.
+ctdev's network job is two things. It **diagnoses any network**, including the
+unmanaged devices it cannot be installed on, reading a UniFi, Synology or
+Proxmox API when given a read-only key. And it **builds the machines that serve
+a network** — a DNS node, a reverse proxy, a monitoring stack. It does not
+configure an unmanaged device: it will not log into a router, a switch or an
+access point to change a setting.
 
 ## Node recipes
 

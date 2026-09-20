@@ -112,6 +112,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `earlyoom` | Early OOM killer for Linux | Linux |
 | `smartmontools` | SMART disk-health monitoring (smartd) | Linux |
 | `solaar` | Logitech Unifying/Bolt receiver manager | Linux |
+
 ## Adding one
 
 The template, the `Root` rules and the two-phase install contract are in

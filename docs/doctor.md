@@ -49,7 +49,8 @@ validation, whether a resolver reaches the root servers directly — a transpare
 ISP DNS proxy answering in their place is what silently breaks both — routing,
 and the path out.
 
-`--deep` additionally reads vendor APIs for gear it cannot log into normally:
+`--deep` additionally reads vendor APIs for the unmanaged devices it cannot be
+installed on:
 UniFi, Synology, Proxmox. Those integrations are read-only by construction and
 credentials are **never written to the machine being diagnosed**. Give it a
 read-only UniFi key and it will report radar events, airtime and mesh uplinks:

@@ -2,8 +2,10 @@
 
 `install.sh` installs just the `ctdev` binary: it downloads the latest release
 for this platform, verifies it against the release's `SHA256SUMS`, and moves it
-into place. There is no source-build path, nothing else is installed, and the
-script never calls `sudo`.
+into place. There is no source-build path and nothing else is installed. It
+never sits on a password prompt: the one privileged thing it does — clearing a
+stale `ctdev` out of `/usr/local/bin` that an older install left there — uses
+`sudo -n` and warns instead of asking if that is not already allowed.
 
 ## Install (ctdev only)
 
