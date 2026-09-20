@@ -1,6 +1,6 @@
 # Pi-hole homelab node (e.g. Raspberry Pi): network-wide DNS behind a Caddy
 # reverse proxy, with container management, monitoring, backups, and disk
-# health. Matches the README "Pi-hole / Homelab Node" flow.
+# health. Matches the docs/node-recipes/pihole-node.md flow.
 #
 # ufw is deliberately NOT configured — its default-deny blocks DNS (53) and the
 # proxy (80/443) unless those ports are opened first.

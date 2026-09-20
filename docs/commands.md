@@ -63,3 +63,7 @@ ctdev doctor --no-integrations  # never call a vendor API, even with credentials
 CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep
 ctdev doctor --deep --unifi https://10.2.2.1   # when it isn't the gateway
 ```
+
+**Flags that work on any command:** `--help`, `--dry-run`, `--verbose`, `--force`, `--batch`, `--version`
+
+Run `ctdev install` with no arguments for an interactive component picker.
