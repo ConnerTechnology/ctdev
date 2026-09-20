@@ -6,6 +6,8 @@ Where ctdev is going. One page per idea:
   taking commands from it.
 - [The phone app](phone-app.md): so a phone can be a managed device.
 - [UniFi network setup](unifi-network-setup.md): ctdev sets up a UniFi network to a standard.
+- [AI capabilities](ai-capabilities.md): ctdev reasons about situations it was not programmed for,
+  without a new release.
 - [The docs site](docs-site.md): this repo's Markdown, published as a website.
 
 Each page says what the idea is and why ctdev wants it, and links to its Linear project where one
