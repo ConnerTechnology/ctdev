@@ -4,6 +4,12 @@ Issues, specs and design docs for this repo live in **Linear**, team **CTDev** (
 sub-team of Conner Technology. Use the Linear MCP tools (`mcp__linear__*`) for every operation;
 GitHub Issues are not used. Issues moved from `CON` on 2026-09-24; their old IDs still resolve.
 
+Sessions reach Linear as the **Claude Code app**, not as Thomas: `.mcp.json` gives the `linear`
+server a `headersHelper`, `scripts/linear-app.sh --mcp-headers`, which trades the app's client ID
+and secret from `~/.secrets` for a token. The app's comments and status changes notify Thomas the
+way a teammate's would. The app sees only teams it can reach. `scripts/linear-app.sh graphql`
+sends one request as the app, for what the MCP has no tool for.
+
 ## Conventions
 
 - **Every ticket that changes the repo carries one kind label**: `bug` or `enhancement`. Wayfinder
