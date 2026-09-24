@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # The unit test for the guidance itself.
 #
-# CLAUDE.md, the path-scoped rules and the agent docs are claims about this repo, and nothing
+# AGENTS.md, the path-scoped rules and the agent docs are claims about this repo, and nothing
 # compiles them. Two things go wrong on their own: they grow until every session pays for facts
 # it does not need, and they name a path that has since moved. Both are mechanical, so they are
 # a check rather than something a reader is expected to notice. The README and the docs tree
 # make the same kind of claim with every relative link, so those are checked here too.
 #
 # Checks:
-#   1. session start: the root CLAUDE.md is the only file loaded before anyone types, so its
-#      size is the whole session-start budget
+#   1. session start: the root CLAUDE.md and the AGENTS.md it imports are the only files loaded
+#      before anyone types, so their size is the whole session-start budget
 #   2. each .claude/rules/*.md stays small enough to be cheap when its glob matches
 #   3. each rule is path-scoped — a rule with no paths: key loads at every session start
-#   4. every backticked repo path in CLAUDE.md, a rule, or docs/agents/ exists, is gitignored,
+#   4. every backticked repo path in AGENTS.md, a rule, or docs/agents/ exists, is gitignored,
 #      or is allowlisted because the file names it on purpose to say it is not there
 #   5. every relative Markdown link in README.md or under docs/ points at a file or directory
 #      that exists, and its heading anchor, where it has one, is a heading in that file
@@ -36,13 +36,15 @@ bytes() { wc -c < "$1" | tr -d ' '; }
 
 # 1. Session start ----------------------------------------------------------------------
 # Measured 2026-09-18, right after CON-37 cut the root file to orientation: 3,121 bytes
-# (it was 34,981). The ceiling is that plus about 15%. Hitting it means a fact belongs in a
-# path-scoped rule or in docs/ — see the "Where knowledge lives" table. Raising it is allowed,
-# in its own commit, with the new measurement and the reason.
-SESSION_START_CEILING=3600
-root=$(bytes CLAUDE.md)
+# (it was 34,981). Raised 2026-09-24 by CON-86, which moved the text into AGENTS.md (CLAUDE.md
+# is the one line that imports it) and added the working agreement from repo-template: 5,606
+# bytes. The ceiling is that plus about 15%. Hitting it means a fact belongs in a path-scoped
+# rule or in docs/ — see the "Where knowledge lives" table. Raising it is allowed, in its own
+# commit, with the new measurement and the reason.
+SESSION_START_CEILING=6400
+root=$(( $(bytes CLAUDE.md) + $(bytes AGENTS.md) ))
 if [ "$root" -gt "$SESSION_START_CEILING" ]; then
-  bad "CLAUDE.md is $root bytes; the ceiling is $SESSION_START_CEILING. Move something to the home it belongs in (CLAUDE.md, 'Where knowledge lives')"
+  bad "CLAUDE.md and AGENTS.md are $root bytes; the ceiling is $SESSION_START_CEILING. Move something to the home it belongs in (AGENTS.md, 'Where knowledge lives')"
 fi
 
 # 2 and 3. Rules ------------------------------------------------------------------------
@@ -69,7 +71,7 @@ done
 # Markdown filename. A bare filename resolves next to the file that names it as well as at
 # the repo root, so a rule pointing at a sibling rule is checked.
 guidance_files() {
-  ls CLAUDE.md .claude/rules/*.md docs/agents/*.md 2>/dev/null
+  ls AGENTS.md .claude/rules/*.md docs/agents/*.md 2>/dev/null
 }
 
 for f in $(guidance_files); do

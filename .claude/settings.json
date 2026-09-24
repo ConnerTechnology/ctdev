@@ -1,28 +1,92 @@
 {
+  "allowedMcpServers": [
+    {
+      "serverUrl": "https://mcp.linear.app/*"
+    },
+    {
+      "serverUrl": "https://mcp.context7.com/*"
+    }
+  ],
+  "enabledMcpjsonServers": [
+    "linear"
+  ],
+  "deniedMcpServers": [
+    {
+      "serverName": "claude-in-chrome"
+    }
+  ],
+  "disableClaudeAiConnectors": true,
   "enabledPlugins": {
-    "mattpocock-skills@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": false,
-    "feature-dev@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": false,
-    "stripe@claude-plugins-official": false,
+    "context7@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "gopls-lsp@claude-plugins-official": true,
+    "last30days@last30days-skill": false,
+    "mattpocock-skills@claude-plugins-official": false,
+    "security-guidance@claude-plugins-official": false,
     "sentry@claude-plugins-official": false,
-    "typescript-lsp@claude-plugins-official": false,
-    "last30days@last30days-skill": false
+    "stripe@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": false,
+    "typescript-lsp@claude-plugins-official": false
   },
   "disableBundledSkills": true,
   "skillOverrides": {
-    "anthropic-skills:brand-guidelines": "off",
-    "anthropic-skills:doc-coauthoring": "off",
-    "anthropic-skills:docs": "off",
-    "anthropic-skills:docx": "off",
-    "anthropic-skills:import-memory": "off",
-    "anthropic-skills:internal-comms": "off",
-    "anthropic-skills:morning": "off",
-    "anthropic-skills:pdf": "off",
-    "anthropic-skills:pptx": "off",
-    "anthropic-skills:skill-creator": "off",
-    "anthropic-skills:xlsx": "off"
+    "brand-guidelines": "off",
+    "doc-coauthoring": "off",
+    "docs": "off",
+    "docx": "off",
+    "humanizer": "off",
+    "import-memory": "off",
+    "internal-comms": "off",
+    "morning": "off",
+    "pdf": "off",
+    "pptx": "off",
+    "skill-creator": "off",
+    "xlsx": "off"
   },
-  "autoMemoryEnabled": false
+  "autoMemoryEnabled": false,
+  "claudeMdExcludes": [
+    "**/.claude/CLAUDE.md",
+    "**/Repos/github.com/ConnerTechnology/AI/config/CLAUDE.md",
+    "**/Repos/github.com/ConnerTechnology/CLAUDE.md"
+  ],
+  "disableWorkflows": true,
+  "enableArtifact": false,
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(shellcheck:*)",
+      "Bash(scripts/check-guidance.sh)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/credentials*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-plugins"
+          }
+        ]
+      }
+    ]
+  }
 }

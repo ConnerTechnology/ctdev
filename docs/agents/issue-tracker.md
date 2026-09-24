@@ -1,16 +1,23 @@
 # Issue tracker: Linear
 
-Issues, specs and design docs for this repo live in **Linear**, team **Conner Technology** (key
-`CON`). Use the Linear MCP tools (`mcp__linear__*`) for every operation; GitHub Issues are not used.
+Issues, specs and design docs for this repo live in **Linear**, team **CTDev** (key `CTD`), a
+sub-team of Conner Technology. Use the Linear MCP tools (`mcp__linear__*`) for every operation;
+GitHub Issues are not used. Issues moved from `CON` on 2026-09-24; their old IDs still resolve.
+
+Sessions reach Linear as the **Claude Code app**, not as Thomas: `.mcp.json` gives the `linear`
+server a `headersHelper`, `scripts/linear-app.sh --mcp-headers`, which trades the app's client ID
+and secret from `~/.secrets` for a token. The app's comments and status changes notify Thomas the
+way a teammate's would. The app sees only teams it can reach. `scripts/linear-app.sh graphql`
+sends one request as the app, for what the MCP has no tool for.
 
 ## Conventions
 
-- **Every issue from this repo carries the `ctdev` label** and one kind: `Bug`, `Feature` or
-  `Improvement`. The team is shared with other work, so the label is how this repo's issues are found.
-- **Create an issue**: `save_issue` with `team: "Conner Technology"`, the `project`, the labels
-  above, and `blockedBy` / `blocks` for the edges. Titles say the outcome, not the task.
+- **Every ticket that changes the repo carries one kind label**: `bug` or `enhancement`. Wayfinder
+  and other planning tickets carry their `wayfinder:*` label instead.
+- **Create an issue**: `save_issue` with `team: "CTDev"`, the `project`, the kind label, and
+  `blockedBy` / `blocks` for the edges. Titles say the outcome, not the task.
 - **Read an issue**: `get_issue` with relations, then `list_comments` for the history.
-- **List issues**: `list_issues` filtered by `label: "ctdev"` plus `project` or `state`.
+- **List issues**: `list_issues` with `team: "CTDev"`, plus `project`, `state` or `label`.
 - **States**: Backlog → Todo → In Progress → In Review (the pull request is open) → **Done**
   (merged to `main`; comment the merge commit hash). Canceled and Duplicate close without work.
 - **`/implement` and builders never close a ticket.** The coordinator moves it to Done after
@@ -43,7 +50,7 @@ branches. The repo is public, but outside contributions are not solicited.
 
 ## When a skill says "fetch the relevant ticket"
 
-`get_issue` with the `CON-123` identifier, then `list_comments`.
+`get_issue` with the `CTD-123` identifier, then `list_comments`.
 
 ## Wayfinding operations
 

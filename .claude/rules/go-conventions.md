@@ -4,7 +4,8 @@ paths:
 ---
 # Conventions
 
-- Use `inst` as the Go receiver name (not single letters)
+- Follow standard Go style (Effective Go, Go Code Review Comments). Receiver names are short and the same across a type's methods, so methods added to an existing type use the receiver it already has
+- No sleeps for timing in tests: synchronize goroutines with channels and `sync.WaitGroup`
 - Every `sysutil` shell-out takes `(ctx context.Context, o sysutil.Opts, ...)` — thread `ctx` from the caller so Ctrl-C cancels in-flight work
 - Build `sysutil.Opts` via `execOpts(opts)` — one-liner that copies Stdout and DryRun
 - Use `alreadyInstalled("<name>")` for install-time "already present?" checks (delegates to the registry's `IsInstalled()`) instead of re-checking paths/commands inline

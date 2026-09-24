@@ -8,8 +8,8 @@ codebase. Single-context: one glossary, one ADR directory.
 - **`CONTEXT.md`** at the repo root — the glossary. It does not exist until the first term is
   settled; if it is missing, **proceed silently**. `/domain-modeling` creates it when a term
   actually gets resolved.
-- **`docs/decisions/`** — the ADRs (`ADR-0001-...md`). This repo's ADR home — not the plugin's
-  default ADR folder. Created with the first ADR; if it is missing, proceed silently.
+- **`docs/adr/`** — the ADRs (`0001-...md`). Created with the first ADR; if it is
+  missing, proceed silently.
 
 ## Use the glossary's vocabulary
 

@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Warn at session start about plugins and skills this repo hasn't made a decision on.
+
+Claude Code can't default-deny plugins from a repo (ADR on the tool allowlist), so every installed
+plugin needs an explicit entry in enabledPlugins and every personal or synced skill an explicit
+entry in skillOverrides. Anything installed after /setup-skills ran has no entry and loads by
+default; this check names it so it gets pinned.
+"""
+import glob, json, os, sys
+
+config = os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude"))
+project = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+
+def load(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+def skill_name(skill_md):
+    try:
+        with open(skill_md) as f:
+            for line in f:
+                if line.startswith("name:"):
+                    return line.split(":", 1)[1].strip().strip("\"'")
+    except OSError:
+        pass
+    return os.path.basename(os.path.dirname(skill_md))
+
+settings = [load(os.path.join(project, ".claude", n)) for n in ("settings.json", "settings.local.json")]
+pinned_plugins = {k for s in settings for k in (s.get("enabledPlugins") or {})}
+pinned_skills = {k for s in settings for k in (s.get("skillOverrides") or {})}
+
+installed = set((load(os.path.join(config, "plugins", "installed_plugins.json")).get("plugins") or {}))
+user_skills = {skill_name(p) for p in glob.glob(os.path.join(config, "skills", "*", "SKILL.md"))}
+user_skills |= {skill_name(p) for p in glob.glob(os.path.join(config, "skills", "synced", "*", "*", "SKILL.md"))}
+
+plugins = sorted(installed - pinned_plugins)
+skills = sorted(user_skills - pinned_skills)
+if not plugins and not skills:
+    sys.exit(0)
+
+lines = []
+if plugins:
+    lines.append("Plugins installed but not pinned in enabledPlugins: " + ", ".join(plugins))
+if skills:
+    lines.append("Skills installed but not listed in skillOverrides: " + ", ".join(skills))
+lines.append("They load in this repo until .claude/settings.json gives each one an explicit value.")
+msg = "\n".join(lines)
+print(json.dumps({
+    "systemMessage": msg,
+    "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": msg},
+}))
