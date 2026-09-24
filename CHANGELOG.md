@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- **ctdev no longer installs the brain.** The `brain` component, its `configure brain`
+  wizard, its systemd units and runner, and its entry in the `ai-node` profile are gone,
+  along with their docs. There is no uninstall path: a node that had it installed is
+  cleaned up by hand. The Pi-hole host resolver keeps forwarding tailnet names, now so
+  that `.ts.net` names keep resolving on the node and its LAN clients.
+
 ## [12.26.1] - 2026-09-18
 
 ### Fixed

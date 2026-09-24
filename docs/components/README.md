@@ -20,14 +20,14 @@ Most components declare nothing and take the default: root is needed to put the
 software in place — a package manager, `/usr/local`, a systemd unit — while
 re-running over one already installed only re-syncs files under `$HOME`. A few
 declare otherwise: the ones that do privileged work on every run (`restic`,
-`caddy`, `nomachine`, `smartmontools`, `brain`) and the ones that never need it
+`caddy`, `nomachine`, `smartmontools`) and the ones that never need it
 at all, because they install entirely inside `$HOME` or through the Docker
 socket. ctdev asks for a sudo password only when something in the run is
 actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-53 components, counted in `ctdev/component/registry.go` on 2026-09-20. A
+52 components, counted in `ctdev/component/registry.go` on 2026-09-24. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -97,7 +97,6 @@ component unsupported on this OS reports as skipped rather than failing.
 | Component | What it is | Platforms |
 | --- | --- | --- |
 | `beszel` | Beszel server/container monitoring (Docker) | Linux |
-| `brain` | ConnerTechnology/brain agent org + its scheduled runs (systemd) | Linux |
 | `caddy` | Caddy reverse proxy (Cloudflare DNS-01 wildcard) | Linux |
 | `mcp-email-server` | MCP server exposing your mailboxes over IMAP (Docker) | Linux |
 | `pihole` | Pi-hole network-wide DNS ad blocker (Docker) | Linux |
