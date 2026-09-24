@@ -2,6 +2,8 @@
 .claude/*
 !.claude/settings.json
 !.claude/rules/
+!.claude/skills/
+!.claude/hooks/
 
 # macOS
 .DS_Store
@@ -34,6 +36,8 @@ ctdev/dist/
 
 # Secrets are never committed. They're entered at `ctdev configure <svc>` time and
 # stored only on the host (e.g. /etc/restic/restic.env, ~/<svc>/.env).
+.env
+.env.*
 *.env
 !*.example.env
 keys.txt
