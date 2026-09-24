@@ -209,10 +209,11 @@ fi
 # The repo is public and carries no real family or client data (AGENTS.md, "Guardrails"). A
 # real tailnet's MagicDNS suffix is tail<hex>.ts.net, so the pattern catches any tailnet
 # without this script naming ours. Examples use tailnet-example.ts.net, which it does not
-# match. CHANGELOG.md is excluded because its past entries record what shipped (CTD-52).
+# match. CHANGELOG.md is excluded because its past entries record what shipped. A hit is
+# reported by file and line only, so a real name never reaches the public CI log.
 while IFS= read -r hit; do
   bad "$hit names a real tailnet (tail<hex>.ts.net); use tailnet-example.ts.net instead"
-done < <(git grep -nIoE 'tail[0-9a-f]+\.ts\.net' -- ':!CHANGELOG.md')
+done < <(git grep -nIE 'tail[0-9a-f]+\.ts\.net' -- ':!CHANGELOG.md' | cut -d: -f1,2)
 
 if [ "$fail" -eq 0 ]; then say "guidance check: ok"; fi
 exit "$fail"
