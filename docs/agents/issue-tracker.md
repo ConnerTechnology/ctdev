@@ -27,6 +27,10 @@ sends one request as the app, for what the MCP has no tool for.
   review and commits on its worktree branch; the coordinator runs `/code-review main` on that
   branch in a fresh context, with the ticket as the spec. When Thomas types `/implement` himself,
   the skill's own order (review before commit) holds.
+- **A builder runs unattended, so it's told not to stop early.** Its prompt ends with the
+  instruction under "Keeping implementers working" in `.claude/skills/implement-spec/SKILL.md`.
+  If its run ends with acceptance criteria still open and no blocker named, the coordinator sends
+  it one message naming them, at most twice, and then raises it with Thomas.
 - **A QA plan is a checklist in the ticket description.** One checkbox per thing to verify; under
   it the exact actions as numbered sub-steps, then a **See:** line. Thomas ticks the box when he
   saw it; an item that needs a reading kept says **Paste:** and he adds it as a comment. An
