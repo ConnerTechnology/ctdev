@@ -22,11 +22,11 @@ sends one request as the app, for what the MCP has no tool for.
   (merged to `main`; comment the merge commit hash). Canceled and Duplicate close without work.
 - **`/implement` and builders never close a ticket.** The coordinator moves it to Done after
   reviewing the diff and the evidence, and Thomas merges.
-- **A dispatched ticket is reviewed by the coordinator before merge.** A builder is a sub-agent
-  and cannot spawn the two sub-agents `/code-review` needs. It follows `/implement` minus the
-  review and commits on its worktree branch; the coordinator runs `/code-review main` on that
-  branch in a fresh context, with the ticket as the spec. When Thomas types `/implement` himself,
-  the skill's own order (review before commit) holds.
+- **A dispatched ticket is reviewed by the coordinator before merge.** A builder doesn't review
+  its own work, so the review judges the diff and the evidence rather than the builder's report.
+  The builder follows `/implement` minus the review and commits on its worktree branch; the
+  coordinator runs `/code-review main` on that branch in a fresh context, with the ticket as the
+  spec. When Thomas types `/implement` himself, the skill's own order (review before commit) holds.
 - **A builder runs unattended, so it's told not to stop early.** Its prompt ends with the
   instruction under "Keeping implementers working" in `.claude/skills/implement-spec/SKILL.md`.
   If its run ends with acceptance criteria still open and no blocker named, the coordinator sends
