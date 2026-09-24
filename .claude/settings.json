@@ -47,6 +47,11 @@
     "xlsx": "off"
   },
   "autoMemoryEnabled": false,
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
+    }
+  },
   "claudeMdExcludes": [
     "**/.claude/CLAUDE.md",
     "**/Repos/github.com/ConnerTechnology/AI/config/CLAUDE.md",
