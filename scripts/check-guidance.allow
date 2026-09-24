@@ -3,11 +3,6 @@
 # `link: <target>` — a relative link in the README or docs/ that is dead on purpose, spelled
 # exactly as the link's target is spelled, anchor included.
 
-# docs/agents/domain.md names both of these to say they are created on first use, and that a
-# session finding them missing should proceed silently.
-path: CONTEXT.md
-path: docs/decisions/
-
 # docs/agents/triage-labels.md names this to say there is no such folder here — the mattpocock
 # skills' `wontfix` role maps onto Linear's Canceled state instead.
 path: .out-of-scope/
