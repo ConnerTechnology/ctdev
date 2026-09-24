@@ -6,6 +6,3 @@
 # docs/agents/triage-labels.md names this to say there is no such folder here — the mattpocock
 # skills' `wontfix` role maps onto Linear's Canceled state instead.
 path: .out-of-scope/
-
-# .claude/rules/brain.md points at the ConnerTechnology/AI repo's own docs/vision.md, not ours.
-path: docs/vision.md

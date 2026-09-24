@@ -20,7 +20,7 @@ them is plain Markdown with relative links, readable on GitHub as it stands.
 ## Node recipes
 
 - [Pi-hole / homelab node](node-recipes/pihole-node.md) — Pi-hole behind Caddy, with a wildcard cert
-- [AI / MCP node](node-recipes/ai-node.md) — tailnet-only MCP servers, and the brain
+- [AI / MCP node](node-recipes/ai-node.md) — tailnet-only MCP servers
 
 ## Trust
 
