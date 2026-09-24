@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
@@ -164,7 +164,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
@@ -205,7 +205,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
@@ -290,7 +290,7 @@ jobs:
           fi
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
