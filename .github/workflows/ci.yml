@@ -338,7 +338,8 @@ jobs:
           # Publish a checksums file so install.sh can verify the binary it
           # downloads. It catches a corrupted or truncated download; it does
           # not defend against tampering, since anyone who can replace a
-          # binary can replace SHA256SUMS too. Authenticity is CTD-21.
+          # binary can replace SHA256SUMS too. Signed provenance is on the roadmap
+          # (docs/security.md).
           ( cd dist && sha256sum ctdev-* > SHA256SUMS )
           gh release create "$TAG_NAME" dist/ctdev-* dist/SHA256SUMS \
             --title "$TAG_NAME" \
