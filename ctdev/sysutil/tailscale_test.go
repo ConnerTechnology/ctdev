@@ -7,15 +7,15 @@ func TestParseTailscaleStatus(t *testing.T) {
 	// a trailing dot the callers never want, and the suffix sits at top level.
 	raw := []byte(`{
 	  "BackendState": "Running",
-	  "Self": {"DNSName": "ctpi01.tail3c73d9.ts.net.", "HostName": "ctpi01"},
-	  "MagicDNSSuffix": "tail3c73d9.ts.net",
+	  "Self": {"DNSName": "pi-01.tailnet-example.ts.net.", "HostName": "pi-01"},
+	  "MagicDNSSuffix": "tailnet-example.ts.net",
 	  "Peer": {}
 	}`)
 	got := ParseTailscaleStatus(raw)
-	if got.DNSName != "ctpi01.tail3c73d9.ts.net" {
+	if got.DNSName != "pi-01.tailnet-example.ts.net" {
 		t.Errorf("DNSName = %q", got.DNSName)
 	}
-	if got.MagicDNSSuffix != "tail3c73d9.ts.net" {
+	if got.MagicDNSSuffix != "tailnet-example.ts.net" {
 		t.Errorf("MagicDNSSuffix = %q", got.MagicDNSSuffix)
 	}
 }

@@ -11,8 +11,8 @@ import (
 // node's own MagicDNS name and the tailnet's suffix. Both come back "" when
 // Tailscale is absent, not running, or has MagicDNS off.
 type TailscaleStatus struct {
-	DNSName        string // e.g. ctpi01.tail3c73d9.ts.net (no trailing dot)
-	MagicDNSSuffix string // e.g. tail3c73d9.ts.net
+	DNSName        string // e.g. pi-01.tailnet-example.ts.net (no trailing dot)
+	MagicDNSSuffix string // e.g. tailnet-example.ts.net
 }
 
 // ParseTailscaleStatus extracts the DNS facts from the daemon's JSON status.

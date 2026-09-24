@@ -32,7 +32,7 @@ func linuxChecks(info platform.Info, f Facts) []Check {
 // than degrading to partial data, and Beszel's agent aborts its whole
 // container-stats block for the same reason (henrygd/beszel#144). Flat zeros
 // read as "idle containers", not "broken instrumentation", which is how this
-// hides: ctpi01 ran nine days of a 125 MB/day leak with every Docker panel a
+// hides: pi-01 ran nine days of a 125 MB/day leak with every Docker panel a
 // flat line at zero. `mem_limit` in a compose file is silently ignored too, so
 // the backstop that should have caught the leak was never armed either.
 //

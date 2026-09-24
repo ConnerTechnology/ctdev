@@ -44,8 +44,8 @@ func TestDetectHostResolverContent(t *testing.T) {
 }
 
 func TestMagicDNSForwardRecord(t *testing.T) {
-	got := magicDNSForwardRecord("tail3c73d9.ts.net")
-	if !strings.Contains(got, "server=/tail3c73d9.ts.net/100.100.100.100") {
+	got := magicDNSForwardRecord("tailnet-example.ts.net")
+	if !strings.Contains(got, "server=/tailnet-example.ts.net/100.100.100.100") {
 		t.Errorf("record = %q", got)
 	}
 	if got := magicDNSForwardRecord(""); got != "" {

@@ -82,7 +82,7 @@ services:
       # only reaper runs inside the server task that request never reaches
       # (mcp 1.29.1 streamable_http_manager.py:301; session_idle_timeout
       # defaults to None, so nothing ages them out either). At one probe per
-      # 30s that left 25,825 orphaned transports and 1.07 GB of RSS on ctpi01
+      # 30s that left 25,825 orphaned transports and 1.07 GB of RSS on pi-01
       # in nine days. /healthz is unrouted, so it 404s straight out of the ASGI
       # router and proves the same thing at zero cost.
       test: ["CMD", "python3", "-c", "import http.client as h; c = h.HTTPConnection('127.0.0.1', 9557, timeout=5); c.request('GET', '/healthz'); c.getresponse()"]
