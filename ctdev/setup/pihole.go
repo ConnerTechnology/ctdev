@@ -143,17 +143,18 @@ func applyPiholeRestart(ctx context.Context, o sysutil.Opts) error {
 // A Pi-hole node that accepts Tailscale DNS resolves through MagicDNS, whose
 // global nameserver is this very Pi-hole. The host's own DNS then lives and
 // dies with the container: with FTL down the node cannot pull the image to
-// fix it, reach its backup repository, or run the brain. The host resolver
-// setting breaks that dependency — loopback first, so the host's own lookups
-// stay filtered and logged, and a public validating resolver second, which
-// glibc reaches instantly because a stopped FTL refuses the connection
-// rather than timing out.
+// fix it or reach its backup repository. The host resolver setting breaks
+// that dependency — loopback first, so the host's own lookups stay filtered
+// and logged, and a public validating resolver second, which glibc reaches
+// instantly because a stopped FTL refuses the connection rather than timing
+// out.
 //
-// Tailnet names still have to resolve on this host (the brain dials the mail
-// server by its MagicDNS name), so Pi-hole forwards the tailnet suffix to
-// tailscaled's resolver at 100.100.100.100, which keeps answering MagicDNS
-// queries even when it is no longer allowed to write resolv.conf. That
-// forward reaches every LAN client too.
+// Taking resolv.conf away from Tailscale also takes MagicDNS away from this
+// host, and tailnet names do not resolve in public DNS (Unbound answers
+// NXDOMAIN), so Pi-hole forwards the tailnet suffix to tailscaled's resolver
+// at 100.100.100.100, which keeps answering MagicDNS queries even when it is
+// no longer allowed to write resolv.conf. That forward reaches every LAN
+// client too.
 
 const (
 	// hostResolverFallback answers when FTL is down. Quad9 validates DNSSEC
