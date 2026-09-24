@@ -334,13 +334,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          if gh release view "$TAG_NAME" > /dev/null 2>&1; then
-            echo "Release $TAG_NAME already exists, replacing with new build"
-            gh release delete "$TAG_NAME" --yes
-          fi
           chmod +x dist/ctdev-*
           # Publish a checksums file so install.sh can verify the binary it
-          # downloads (defends the self-update path against a tampered asset).
+          # downloads. It catches a corrupted or truncated download; it does
+          # not defend against tampering, since anyone who can replace a
+          # binary can replace SHA256SUMS too. Signed provenance is on the roadmap
+          # (docs/security.md).
           ( cd dist && sha256sum ctdev-* > SHA256SUMS )
           gh release create "$TAG_NAME" dist/ctdev-* dist/SHA256SUMS \
             --title "$TAG_NAME" \
