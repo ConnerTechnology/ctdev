@@ -2,7 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [12.27.0] - 2026-09-30
+
+### Added
+- **`ccusage` installs as a component.** `ctdev install ccusage` runs
+  `npm install -g ccusage` for Claude Code token usage and cost reports, on macOS and
+  Linux, and pulls in `node` first. It is skipped when `ccusage` is already on PATH unless
+  `--force` is given. `ctdev uninstall ccusage` runs `npm uninstall -g ccusage`, and
+  reports an error when npm is missing or the uninstall fails rather than claiming success.
+
+### Fixed
+- **A release tag that is already published fails the build instead of being replaced.**
+  CI used to delete an existing GitHub Release and upload a fresh build under the same
+  tag, so a published version could silently change under anyone who had installed it.
+- **Releases build with the go1.27.1 toolchain.** `go.mod` pins it, and a weekly CI job
+  fails when the pin falls behind the current Go release.
+
+### Changed
+- **Dependencies are current and kept that way.** lipgloss, bubbles, go-toml,
+  charmbracelet/x/ansi and golang.org/x/sys are bumped, as are the `checkout` and
+  `setup-go` actions; Dependabot now opens these updates for Go modules and GitHub Actions.
+- **The public repo names no real tailnet or device.** Code comments, tests and the
+  recovery and troubleshooting docs use example names, and the guidance check fails CI on
+  a real tailnet name or a dead relative link in the README or docs. No change to the
+  binary's behavior.
+- **Agent guidance moved into `AGENTS.md`, with a glossary and ADRs.** Claude Code
+  sessions in the repo reach Linear as the Claude Code app, work from the CTDev team, and
+  run with auto memory off. No change to the binary's behavior.
 
 ### Removed
 - **ctdev no longer installs the brain.** The `brain` component, its `configure brain`
