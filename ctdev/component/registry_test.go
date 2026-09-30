@@ -2,9 +2,9 @@ package component
 
 import "testing"
 
-func TestRegistryHas53Components(t *testing.T) {
-	if len(Registry) != 53 {
-		t.Errorf("expected 53 components, got %d", len(Registry))
+func TestRegistryHas54Components(t *testing.T) {
+	if len(Registry) != 54 {
+		t.Errorf("expected 54 components, got %d", len(Registry))
 	}
 }
 
@@ -43,6 +43,19 @@ func TestHelmDependsOnKubectl(t *testing.T) {
 	}
 	if len(c.Dependencies) != 1 || c.Dependencies[0] != "kubectl" {
 		t.Errorf("expected helm to depend on kubectl, got %v", c.Dependencies)
+	}
+}
+
+func TestCcusageInstallsThroughNode(t *testing.T) {
+	c := FindByName("ccusage")
+	if c == nil {
+		t.Fatal("ccusage component missing from registry")
+	}
+	if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
+		t.Errorf("expected ccusage to depend on node, got %v", c.Dependencies)
+	}
+	if c.Root != RootNever {
+		t.Errorf("ccusage installs with npm under $HOME and must declare RootNever, got %v", c.Root)
 	}
 }
 

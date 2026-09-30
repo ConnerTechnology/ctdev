@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-53 components, counted in `ctdev/component/registry.go` on 2026-09-20. A
+54 components, counted in `ctdev/component/registry.go` on 2026-09-30. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -37,6 +37,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `bat` | cat with syntax highlighting | Linux, macOS |
 | `btop` | Resource monitor | Linux, macOS |
 | `bun` | JavaScript runtime and package manager | Linux, macOS |
+| `ccusage` | Claude Code token usage and cost reports | Linux, macOS |
 | `claude-code` | Claude Code CLI and configuration | Linux, macOS |
 | `devcontainer` | Dev Containers CLI + dx wrapper | Linux, macOS |
 | `direnv` | Per-directory environment variables | Linux, macOS |
