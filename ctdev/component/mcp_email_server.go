@@ -42,10 +42,10 @@ import (
 //	archive_emails            destructive, openWorld
 //	download_attachment       destructive, openWorld
 //
-// ConnerTechnology/brain blocks dangerous tools by EXACT NAME in
-// config/settings.json (permissions.deny), so this list is a coupling point:
-// a tool that is added or renamed by a version bump silently escapes that
-// block list. Re-check it whenever the pin in the Dockerfile moves.
+// A client that blocks tools by exact name (a Claude Code permissions.deny
+// list, say) is coupled to this list: a tool that is added or renamed by a
+// version bump silently escapes that block list. Re-check it whenever the pin
+// in the Dockerfile moves.
 
 // MCPEmailServerPort is the loopback port the stack publishes and the port
 // `tailscale serve` forwards to.

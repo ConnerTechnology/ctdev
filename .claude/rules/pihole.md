@@ -12,13 +12,14 @@ paths:
   (runs against the container via `docker exec`, or a native install if present).
   Its **host resolver** setting exists because a node that accepts Tailscale DNS
   resolves through MagicDNS, whose global nameserver is this same Pi-hole: with
-  FTL down the host cannot pull the image, reach B2, or run the brain. It runs
+  FTL down the host cannot pull the image or reach B2. It runs
   `tailscale set --accept-dns=false`, drops `dns=none` for NetworkManager, writes a
   static `/etc/resolv.conf` (127.0.0.1, then 9.9.9.9 — a stopped FTL *refuses*, so
   the fallback is instant) and a `03-tailnet.conf` dnsmasq drop-in forwarding the
-  MagicDNS suffix to `100.100.100.100`. The forward is load-bearing: the brain dials
-  the mail server by its `.ts.net` name, which Unbound cannot resolve (NXDOMAIN,
-  verified). tailscaled keeps answering on 100.100.100.100 with `--accept-dns=false`;
+  MagicDNS suffix to `100.100.100.100`. Without the forward, `.ts.net` names stop
+  resolving on the host once MagicDNS no longer writes resolv.conf, because Unbound
+  cannot resolve them (NXDOMAIN, verified); it also gives every LAN client tailnet
+  names. tailscaled keeps answering on 100.100.100.100 with `--accept-dns=false`;
   that flag only governs who writes resolv.conf. Gated to NetworkManager hosts
   without systemd-resolved; never batch-applied by a profile (`pihole` defaults
   would also flip the upstream to Cloudflare).

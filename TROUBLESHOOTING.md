@@ -12,8 +12,8 @@ login shell puts on `PATH` and a one-off `ssh host command` does not. Run it thr
 shell, or by its full path:
 
 ```bash
-ssh ctpi01 'zsh -lc "ctdev doctor"'
-ssh ctpi01 '~/.local/bin/ctdev doctor'
+ssh pi-01 'zsh -lc "ctdev doctor"'
+ssh pi-01 '~/.local/bin/ctdev doctor'
 ```
 
 ## Permission denied

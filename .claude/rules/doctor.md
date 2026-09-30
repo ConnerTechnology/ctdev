@@ -36,7 +36,7 @@ leaves the machine beyond the diagnostic probes themselves.
   SERVFAIL through. Root reach runs only when Pi-hole's upstream is on loopback
   (Unbound) and asks a root server non-recursively: only a real root sets AA; a
   transparent ISP proxy cannot, and that is the failure mode that broke DNSSEC in
-  the Spencer's Desk Pi-hole write-up ctpi01 was compared against on 2026-09-07.
+  the Spencer's Desk Pi-hole write-up pi-01 was compared against on 2026-09-07.
 - **`Check.Network`** marks a check that does network I/O; `ctdev status` reuses
   the same catalog filtered to `!Network && !Deep`, which is what keeps its
   "no network calls" contract honest. **`Check.Deep`** marks slow or third-party

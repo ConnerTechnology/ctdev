@@ -1,6 +1,6 @@
-# RECOVERY.md — Homelab Disaster Recovery (ctpi01)
+# RECOVERY.md — Homelab Disaster Recovery (pi-01)
 
-This is the step-by-step runbook for restoring the home Raspberry Pi (`ctpi01`)
+This is the step-by-step runbook for restoring the home Raspberry Pi (`pi-01`)
 and its services from backups. Follow it top to bottom for a full rebuild, or
 jump to the scenario you need. The same model applies to any machine that runs
 `ctdev configure restic` — only the paths and node name differ.
@@ -36,8 +36,8 @@ restic can't restore its own password. Keep them off-device:
 > when standing up a node *before* its first restore.
 
 ### What's in a backup
-Each snapshot is tagged with the machine's hostname (`ctpi01`) and the tag `ctdev`,
-and contains whatever `/etc/restic/backup-paths` lists. For ctpi01 that's:
+Each snapshot is tagged with the machine's hostname (`pi-01`) and the tag `ctdev`,
+and contains whatever `/etc/restic/backup-paths` lists. For pi-01 that's:
 
 ```
 /home/ctadmin             home (incl. ~/caddy ~/pihole ~/portainer ~/beszel + their .env files)
@@ -50,8 +50,8 @@ and contains whatever `/etc/restic/backup-paths` lists. For ctpi01 that's:
 ### The repositories
 | Name | `restic.env` variable | Use |
 |---|---|---|
-| **primary** | `RESTIC_REPOSITORY` (e.g. `b2:ctpi01-backups:ctpi01`) | Primary for disaster recovery (survives the house) |
-| **local** | `RESTIC_REPOSITORY_LOCAL` (e.g. `/mnt/backup/restic/ctpi01`) | Optional fast restores when the USB drive is attached |
+| **primary** | `RESTIC_REPOSITORY` (e.g. `b2:pi-01-backups:pi-01`) | Primary for disaster recovery (survives the house) |
+| **local** | `RESTIC_REPOSITORY_LOCAL` (e.g. `/mnt/backup/restic/pi-01`) | Optional fast restores when the USB drive is attached |
 
 ---
 
@@ -128,13 +128,13 @@ This rebuilds the whole node from scratch. Estimated time: ~30–45 min.
 ### Step 1 — Flash and boot a fresh OS
 1. Flash **Raspberry Pi OS Lite (64-bit)** to a new SD card (or SSD) with
    Raspberry Pi Imager. In the imager's settings, set:
-   - hostname: `ctpi01`
+   - hostname: `pi-01`
    - username: `ctadmin`
    - enable SSH (your public key)
    - your Wi-Fi/locale if needed
 2. Boot the Pi, then SSH in:
    ```bash
-   ssh ctadmin@ctpi01.local        # or its LAN IP
+   ssh ctadmin@pi-01.local        # or its LAN IP
    ```
 3. Update the base system:
    ```bash
@@ -167,7 +167,7 @@ and (since the repo already exists) leaves its existing snapshots intact.
 ```bash
 ctdev install restic
 ctdev configure restic
-#   Repository:        paste RESTIC_REPOSITORY from 1Password (e.g. b2:ctpi01-backups:ctpi01)
+#   Repository:        paste RESTIC_REPOSITORY from 1Password (e.g. b2:pi-01-backups:pi-01)
 #   B2 keyID / key:    paste from 1Password
 #   Repository password: paste the SAME password from 1Password (NOT a new one)
 ```

@@ -17,6 +17,7 @@
 #   5. every relative Markdown link in README.md or under docs/ points at a file or directory
 #      that exists, and its heading anchor, where it has one, is a heading in that file
 #   6. the README stays a table of contents rather than growing back into the manual
+#   7. no tracked file but CHANGELOG.md names a real tailnet (a tail<hex>.ts.net MagicDNS name)
 #
 # Usage: scripts/check-guidance.sh   (exit 1 on any failure, all failures listed)
 
@@ -203,6 +204,16 @@ readme=$(bytes README.md)
 if [ "$readme" -gt "$README_CEILING" ]; then
   bad "README.md is $readme bytes; the ceiling is $README_CEILING. It is a table of contents: move the detail to a page under docs/ and link it"
 fi
+
+# 7. Tailnet names ----------------------------------------------------------------------
+# The repo is public and carries no real family or client data (AGENTS.md, "Guardrails"). A
+# real tailnet's MagicDNS suffix is tail<hex>.ts.net, so the pattern catches any tailnet
+# without this script naming ours. Examples use tailnet-example.ts.net, which it does not
+# match. CHANGELOG.md is excluded because its past entries record what shipped. A hit is
+# reported by file and line only, so a real name never reaches the public CI log.
+while IFS= read -r hit; do
+  bad "$hit names a real tailnet (tail<hex>.ts.net); use tailnet-example.ts.net instead"
+done < <(git grep -nIE 'tail[0-9a-f]+\.ts\.net' -- ':!CHANGELOG.md' | cut -d: -f1,2)
 
 if [ "$fail" -eq 0 ]; then say "guidance check: ok"; fi
 exit "$fail"

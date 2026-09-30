@@ -56,7 +56,7 @@ func TestMCPEmailServerPackageIsPinned(t *testing.T) {
 // A GET /mcp registers a new streamable-HTTP transport in the SDK's session
 // manager before it rejects the missing text/event-stream Accept header with
 // 406, and the only reaper runs inside the server task that request never
-// reaches. Probing it on an interval leaks a transport per tick: ctpi01 held
+// reaches. Probing it on an interval leaks a transport per tick: pi-01 held
 // 25,825 of them and 1.07 GB of RSS after nine days at one probe per 30s. Any
 // unrouted path 404s out of the ASGI router and proves liveness just as well.
 func TestMCPEmailServerHealthcheckDoesNotOpenSessions(t *testing.T) {
@@ -92,18 +92,18 @@ func TestMCPEmailServerStackFilesAreEmbedded(t *testing.T) {
 // node's MagicDNS name makes every tailnet request fail.
 func TestMCPEmailServerWriteEnvAllowsTailnetHost(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := MCPEmailServerWriteTailnetEnv("ctpi01.tailnet.ts.net", 8443); err != nil {
+	if err := MCPEmailServerWriteTailnetEnv("pi-01.tailnet-example.ts.net", 8443); err != nil {
 		t.Fatalf("write env: %v", err)
 	}
 
 	env := MCPEmailServerReadEnv()
 	hosts := strings.Split(env["MCP_ALLOWED_HOSTS"], ",")
-	for _, want := range []string{"127.0.0.1", "ctpi01.tailnet.ts.net"} {
+	for _, want := range []string{"127.0.0.1", "pi-01.tailnet-example.ts.net"} {
 		if !slices.Contains(hosts, want) {
 			t.Errorf("MCP_ALLOWED_HOSTS = %q, want it to include %q", env["MCP_ALLOWED_HOSTS"], want)
 		}
 	}
-	if !strings.Contains(env["MCP_ALLOWED_ORIGINS"], "https://ctpi01.tailnet.ts.net") {
+	if !strings.Contains(env["MCP_ALLOWED_ORIGINS"], "https://pi-01.tailnet-example.ts.net") {
 		t.Errorf("MCP_ALLOWED_ORIGINS = %q, want the tailnet https origin", env["MCP_ALLOWED_ORIGINS"])
 	}
 }

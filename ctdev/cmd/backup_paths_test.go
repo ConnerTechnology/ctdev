@@ -323,7 +323,7 @@ func TestPickerBindModes(t *testing.T) {
 // for anything else.
 func TestPickerOriginAllowed(t *testing.T) {
 	loopbackOnly := &pathPicker{}
-	tailnet := &pathPicker{extraOrigin: "ctpi01.tail3c73d9.ts.net"}
+	tailnet := &pathPicker{extraOrigin: "pi-01.tailnet-example.ts.net"}
 
 	cases := []struct {
 		origin           string
@@ -332,11 +332,11 @@ func TestPickerOriginAllowed(t *testing.T) {
 	}{
 		{"http://127.0.0.1:41949", true, true},
 		{"http://localhost:41949", true, true},
-		{"http://ctpi01.tail3c73d9.ts.net:41949", false, true},
+		{"http://pi-01.tailnet-example.ts.net:41949", false, true},
 		{"http://evil.example.com", false, false},
 		// Must not match on a suffix or prefix of the allowed host.
-		{"http://ctpi01.tail3c73d9.ts.net.evil.com", false, false},
-		{"http://notctpi01.tail3c73d9.ts.net", false, false},
+		{"http://pi-01.tailnet-example.ts.net.evil.com", false, false},
+		{"http://notpi-01.tailnet-example.ts.net", false, false},
 		{"file:///etc/passwd", false, false},
 	}
 	for _, tc := range cases {
