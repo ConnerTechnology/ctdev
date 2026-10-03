@@ -10,6 +10,7 @@ ctdev/                 Go module root
   component/           Component registry, installers, and embedded config files
     configs/           Config files deployed by installers (go:embed)
   gpu/                 GPU/NVIDIA signing management
+  linear/              Linear app credentials per workspace, app tokens, a repo's .mcp.json wiring
   platform/            OS/arch detection
   profile/             Machine profiles (embedded TOML + ~/.config/ctdev/profiles)
   setup/               System settings (Linux dconf/GRUB, macOS defaults)

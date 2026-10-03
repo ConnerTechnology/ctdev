@@ -41,3 +41,22 @@ func TestStateDirXDGOverride(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, got)
 	}
 }
+
+func TestCacheDir(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "")
+	dir := CacheDir()
+	home, _ := os.UserHomeDir()
+	expected := filepath.Join(home, ".cache", "ctdev")
+	if dir != expected {
+		t.Errorf("expected %s, got %s", expected, dir)
+	}
+}
+
+func TestCacheDirXDGOverride(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "/tmp/custom-cache")
+	got := CacheDir()
+	expected := filepath.Join("/tmp/custom-cache", "ctdev")
+	if got != expected {
+		t.Errorf("expected %s, got %s", expected, got)
+	}
+}
