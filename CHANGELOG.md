@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.29.0] - 2026-10-03
+
+### Added
+- **Installing `ccstatusline` turns it on in Claude Code.** `ctdev install ccstatusline`
+  sets the `statusLine` entry in `~/.claude/settings.json`, creating the file when it is
+  missing, so the status line shows without a hand edit. Only that key is touched: other
+  values are kept exactly, a symlinked file is written through to its target, the file's
+  permissions are kept, and a file that already has the entry is not rewritten. A file that
+  isn't a JSON object is left alone with a warning. `ctdev uninstall ccstatusline` removes
+  `statusLine` only when it runs ccstatusline. `ctdev install claude-code` still replaces
+  the whole settings file and drops the entry; re-running `ctdev install ccstatusline`
+  restores it.
+
 ## [12.28.0] - 2026-10-03
 
 ### Added
