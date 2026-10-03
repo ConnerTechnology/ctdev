@@ -34,6 +34,7 @@ ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocki
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
 ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailscale serve, attachment policy)
+ctdev configure linear          # this repo's Linear MCP server, as this computer's Linear app (--show)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev pihole sync               # Apply the version-controlled lists.toml to this Pi-hole (interactive)

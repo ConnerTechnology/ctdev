@@ -37,6 +37,27 @@ by `apply`.
 
 Every category, with what each one does, is listed in [Commands](commands.md).
 
+## Linear for Claude Code
+
+`ctdev configure linear` acts on the git repo you run it in, not on the machine.
+It points that repo's Claude Code at Linear's MCP server as an OAuth app, so what
+a session does in Linear shows up as the app and notifies you. You create one app
+per computer. The wizard prints the steps, then checks the client ID and secret
+with Linear before it saves them.
+
+- Credentials are kept per Linear workspace, in
+  `~/.config/ctdev/linear/<workspace>.env` (owner-only). The app token is cached
+  in `~/.cache/ctdev/linear/<workspace>.json`.
+- The repo gets a `linear` server in `.mcp.json` whose `headersHelper` is
+  `ctdev linear mcp-headers --workspace <workspace>`, and the server is
+  pre-approved in `.claude/settings.local.json`.
+- In your own repo you commit `.mcp.json`. In someone else's, the wizard adds it
+  to the repo's git exclude file so it stays local.
+
+`ctdev configure linear --show` reports the repo's workspace, whether its
+credentials are saved, and who the app connects as. Restart Claude Code in the
+repo after setting it up.
+
 ## Secrets
 
 Anything secret a wizard asks for is stored on that machine only and is never
