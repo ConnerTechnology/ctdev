@@ -144,8 +144,8 @@ func Workspaces() ([]string, error) {
 	return names, nil
 }
 
-// writePrivate writes data to path through a temp file and a rename, so a
-// reader never sees half a file. The directory is made 0700 and the file 0600.
+// writePrivate writes a secret file atomically. The directory is made 0700
+// and the file 0600.
 func writePrivate(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -154,13 +154,21 @@ func writePrivate(path string, data []byte) error {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return err
 	}
+	return WriteFileAtomic(path, data, 0o600)
+}
+
+// WriteFileAtomic writes data to path through a temp file in the same
+// directory and a rename, so a reader never sees half a file. The file gets
+// mode; the directory must exist.
+func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
 	if err != nil {
 		return err
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName) // no-op after a successful rename
-	if err := tmp.Chmod(0o600); err != nil {
+	if err := tmp.Chmod(mode); err != nil {
 		tmp.Close()
 		return err
 	}

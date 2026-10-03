@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/state"
 )
 
 // Scope is the one scope set every caller asks for. Asking Linear for a
@@ -46,12 +48,16 @@ type Client struct {
 	Now        func() time.Time
 }
 
+// httpTimeout backstops the per-request deadlines above, so no request can
+// outlive the longest of them even if a caller forgets a context deadline.
+const httpTimeout = 10 * time.Second
+
 // NewClient returns a Client for the real Linear API.
 func NewClient() *Client {
 	return &Client{
 		TokenURL:   defaultTokenURL,
 		GraphQLURL: defaultGraphQLURL,
-		HTTP:       http.DefaultClient,
+		HTTP:       &http.Client{Timeout: httpTimeout},
 		Now:        time.Now,
 	}
 }
@@ -65,14 +71,7 @@ type CachedToken struct {
 
 // CacheDir is $XDG_CACHE_HOME/ctdev/linear, or ~/.cache/ctdev/linear.
 func CacheDir() string {
-	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" {
-		return filepath.Join(dir, "ctdev", "linear")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.Getenv("HOME")
-	}
-	return filepath.Join(home, ".cache", "ctdev", "linear")
+	return filepath.Join(state.CacheDir(), "linear")
 }
 
 // CachePath is one workspace's token cache file.
@@ -256,9 +255,16 @@ func (c *Client) Token(ctx context.Context, workspace string) (string, error) {
 	return t.AccessToken, nil
 }
 
+// ErrInvalidVariables means the GraphQL variables are not valid JSON.
+var ErrInvalidVariables = errors.New("VARIABLES_JSON is not valid JSON")
+
 // GraphQL sends one request as the app and returns the response body and the
-// HTTP status. variables may be nil.
+// HTTP status. variables may be nil. Invalid variables are ErrInvalidVariables,
+// reported before any token is fetched.
 func (c *Client) GraphQL(ctx context.Context, workspace, query string, variables json.RawMessage) ([]byte, int, error) {
+	if variables != nil && !json.Valid(variables) {
+		return nil, 0, ErrInvalidVariables
+	}
 	token, err := c.Token(ctx, workspace)
 	if err != nil {
 		return nil, 0, err
@@ -266,12 +272,10 @@ func (c *Client) GraphQL(ctx context.Context, workspace, query string, variables
 	return c.graphQLWithToken(ctx, token, query, variables)
 }
 
+// graphQLWithToken posts one request. variables must be nil or valid JSON.
 func (c *Client) graphQLWithToken(ctx context.Context, token, query string, variables json.RawMessage) ([]byte, int, error) {
 	if variables == nil {
 		variables = json.RawMessage("null")
-	}
-	if !json.Valid(variables) {
-		return nil, 0, errors.New("VARIABLES_JSON is not valid JSON")
 	}
 	payload, err := json.Marshal(struct {
 		Query     string          `json:"query"`

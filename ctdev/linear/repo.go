@@ -77,21 +77,49 @@ type MCPPlan struct {
 	Changed bool
 }
 
-// PlanMCPJSON merges the linear server for a workspace into an existing
-// .mcp.json (nil or empty for a new file). Every other server and key, and
-// their order, is kept.
-func PlanMCPJSON(existing []byte, workspace string) (MCPPlan, error) {
-	root := &orderedObject{}
+// parseMCPJSON reads a .mcp.json (nil or empty for none) into its top-level
+// object and its mcpServers object.
+func parseMCPJSON(existing []byte) (root, servers *orderedObject, err error) {
+	root, servers = &orderedObject{}, &orderedObject{}
 	if len(bytes.TrimSpace(existing)) > 0 {
 		if err := json.Unmarshal(existing, root); err != nil {
-			return MCPPlan{}, fmt.Errorf("%s is not a JSON object: %w", MCPJSONFile, err)
+			return nil, nil, fmt.Errorf("%s is not a valid JSON object: %w", MCPJSONFile, err)
 		}
 	}
-	servers := &orderedObject{}
 	if raw, ok := root.get("mcpServers"); ok {
 		if err := json.Unmarshal(raw, servers); err != nil {
-			return MCPPlan{}, fmt.Errorf("%s: mcpServers is not a JSON object: %w", MCPJSONFile, err)
+			return nil, nil, fmt.Errorf("%s: mcpServers is not a valid JSON object: %w", MCPJSONFile, err)
 		}
+	}
+	return root, servers, nil
+}
+
+// ValidateMCPJSON checks that an existing .mcp.json (nil or empty for none) is
+// one ctdev can merge into: a JSON object whose mcpServers, if present, is an
+// object too.
+func ValidateMCPJSON(existing []byte) error {
+	_, _, err := parseMCPJSON(existing)
+	return err
+}
+
+// HasLinearServer reports whether a .mcp.json has a linear server of any kind,
+// ctdev's or not.
+func HasLinearServer(existing []byte) bool {
+	_, servers, err := parseMCPJSON(existing)
+	if err != nil {
+		return false
+	}
+	_, ok := servers.get(ServerName)
+	return ok
+}
+
+// PlanMCPJSON merges the linear server for a workspace into an existing
+// .mcp.json (nil or empty for a new file). Every other server and key, their
+// order and their values, is kept.
+func PlanMCPJSON(existing []byte, workspace string) (MCPPlan, error) {
+	root, servers, err := parseMCPJSON(existing)
+	if err != nil {
+		return MCPPlan{}, err
 	}
 	entry := MCPEntry(workspace)
 	plan := MCPPlan{Changed: true}
@@ -100,7 +128,7 @@ func PlanMCPJSON(existing []byte, workspace string) (MCPPlan, error) {
 		plan.Changed = !jsonEqual(prev, entry)
 	}
 	servers.set(ServerName, entry)
-	serversJSON, err := json.Marshal(servers)
+	serversJSON, err := marshalLiteral(servers, "")
 	if err != nil {
 		return MCPPlan{}, err
 	}
@@ -134,7 +162,7 @@ func MergeSettingsLocal(existing []byte) (content []byte, changed bool, err erro
 	}
 	name, _ := json.Marshal(ServerName)
 	enabled = append(enabled, name)
-	list, err := json.Marshal(enabled)
+	list, err := marshalLiteral(enabled, "")
 	if err != nil {
 		return nil, false, err
 	}
@@ -143,12 +171,28 @@ func MergeSettingsLocal(existing []byte) (content []byte, changed bool, err erro
 	return content, true, err
 }
 
+// indentJSON is the file form: 2-space indent and a trailing newline.
 func indentJSON(v any) ([]byte, error) {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
+	return marshalLiteral(v, "  ")
+}
+
+// marshalLiteral encodes without HTML escaping, so a preserved value with &,
+// < or > in it comes back out as written rather than as & and friends.
+// indent "" gives compact output with no trailing newline.
+func marshalLiteral(v any, indent string) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if indent != "" {
+		enc.SetIndent("", indent)
+	}
+	if err := enc.Encode(v); err != nil {
 		return nil, err
 	}
-	return append(b, '\n'), nil
+	if indent == "" {
+		return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+	}
+	return buf.Bytes(), nil
 }
 
 func jsonEqual(a, b json.RawMessage) bool {
@@ -217,7 +261,7 @@ func (o orderedObject) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		kb, err := json.Marshal(k)
+		kb, err := marshalLiteral(k, "")
 		if err != nil {
 			return nil, err
 		}
@@ -273,13 +317,33 @@ type Repo struct {
 	Root string
 }
 
-// RepoRoot finds the top of the git work tree dir is in.
+// ErrNotARepo means the directory is not inside a git work tree.
+var ErrNotARepo = errors.New("not inside a git repository (run this from the repo you want to connect to Linear)")
+
+// RepoRoot finds the top of the git work tree dir is in. Outside a work tree
+// it returns ErrNotARepo; any other failure (git missing, say) comes back as
+// itself.
 func RepoRoot(ctx context.Context, dir string) (Repo, error) {
-	out, err := gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--show-toplevel").Output()
 	if err != nil {
-		return Repo{}, fmt.Errorf("not inside a git repository (run this from the repo you want to connect to Linear)")
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			stderr := strings.TrimSpace(string(ee.Stderr))
+			if strings.Contains(stderr, "not a git repository") {
+				return Repo{}, ErrNotARepo
+			}
+			if stderr != "" {
+				return Repo{}, fmt.Errorf("git rev-parse --show-toplevel: %s", stderr)
+			}
+		}
+		return Repo{}, fmt.Errorf("cannot run git: %w", err)
 	}
-	return Repo{Root: strings.TrimSpace(out)}, nil
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		// A bare repository, or inside .git: there is no work tree to set up.
+		return Repo{}, ErrNotARepo
+	}
+	return Repo{Root: root}, nil
 }
 
 // Path joins a repo-relative path onto the root.

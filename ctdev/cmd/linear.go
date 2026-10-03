@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -86,10 +87,10 @@ func linearGraphQL(cmd *cobra.Command, workspace, query string, vars json.RawMes
 	if err := linear.ValidateWorkspace(workspace); err != nil {
 		return linearHelperError(workspace, err)
 	}
-	if vars != nil && !json.Valid(vars) {
-		return fmt.Errorf("VARIABLES_JSON is not valid JSON")
-	}
 	body, status, err := newLinearClient().GraphQL(cmdContext(cmd), workspace, query, vars)
+	if errors.Is(err, linear.ErrInvalidVariables) {
+		return err // the caller's input, not the credentials
+	}
 	if err != nil {
 		return linearHelperError(workspace, err)
 	}

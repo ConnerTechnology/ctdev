@@ -39,9 +39,14 @@ func runConfigureLinear(cmd *cobra.Command, args []string) error {
 func configureLinear(ctx context.Context) error {
 	if isBatchMode() && !flagConfigShow {
 		// The client secret can only come from the person who created the app.
-		return fmt.Errorf("Linear credentials must be entered interactively")
+		return errors.New("Linear credentials must be entered interactively")
 	}
+	return linearWizard(ctx)
+}
 
+// linearWizard is configureLinear past the batch-mode gate, which tests call
+// directly because a test's stdout is never a terminal.
+func linearWizard(ctx context.Context) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -55,6 +60,16 @@ func configureLinear(ctx context.Context) error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	// Checked before any prompt, so a broken file stops the run before
+	// credentials are saved for a repo that can't then be wired up.
+	if err := linear.ValidateMCPJSON(existing); err != nil {
+		return fmt.Errorf("%s: %w; fix or remove it, then run this again", mcpPath, err)
+	}
+	if !flagConfigShow {
+		if err := validateSettingsLocal(repo); err != nil {
+			return err
+		}
+	}
 	current, hasCurrent := linear.CurrentWorkspace(existing)
 	client := newLinearClient()
 
@@ -67,7 +82,7 @@ func configureLinear(ctx context.Context) error {
 		printLinearStatus(st)
 	} else {
 		fmt.Printf("  %s %s\n", styles.Label(14).Render("Workspace:"), styles.Dimmed.Render("not set up in this repo"))
-		if plan, err := linear.PlanMCPJSON(existing, "x"); err == nil && plan.Previous != nil {
+		if linear.HasLinearServer(existing) {
 			fmt.Println(styles.Dimmed.Render("  .mcp.json has a linear server that doesn't use ctdev; setting up offers to replace it."))
 		}
 	}
@@ -339,8 +354,7 @@ func writeLinearRepoFiles(ctx context.Context, repo linear.Repo, existing []byte
 
 	settingsPath := repo.Path(linear.SettingsLocalFile)
 	settings, err := os.ReadFile(settingsPath)
-	created := errors.Is(err, fs.ErrNotExist)
-	if err != nil && !created {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return false, err
 	}
 	merged, changed, err := linear.MergeSettingsLocal(settings)
@@ -357,9 +371,15 @@ func writeLinearRepoFiles(ctx context.Context, repo linear.Repo, existing []byte
 	if err != nil {
 		return false, err
 	}
-	if created && !repo.IsIgnored(ctx, linear.SettingsLocalFile) {
+	// Every run, not just when ctdev created it: settings.local.json is
+	// per-machine by design, and one that git would track is a leak waiting to
+	// be committed whoever made it.
+	if !repo.IsIgnored(ctx, linear.SettingsLocalFile) {
 		if err := addExclude(exclude, linear.SettingsLocalFile); err != nil {
 			return false, err
+		}
+		if repo.IsTracked(ctx, linear.SettingsLocalFile) {
+			fmt.Println(styles.Warning.Render("  " + linear.SettingsLocalFile + " is already committed in this repo; excluding it won't untrack it (git rm --cached it)."))
 		}
 	}
 
@@ -395,7 +415,25 @@ func addExclude(exclude, line string) error {
 	return nil
 }
 
-// writeRepoFile writes a repo file, keeping its mode when it exists.
+// validateSettingsLocal checks the repo's settings.local.json can be merged
+// into, before anything is prompted for or saved.
+func validateSettingsLocal(repo linear.Repo) error {
+	path := repo.Path(linear.SettingsLocalFile)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, _, err := linear.MergeSettingsLocal(data); err != nil {
+		return fmt.Errorf("%s: %w; fix or remove it, then run this again", path, err)
+	}
+	return nil
+}
+
+// writeRepoFile writes a repo file atomically, keeping its mode when it
+// exists and 0644 when it is new.
 func writeRepoFile(path string, data []byte) error {
 	if flagDryRun {
 		fmt.Printf("  [dry-run] would write %s:\n%s", path, indentBlock(string(data), "    "))
@@ -409,7 +447,7 @@ func writeRepoFile(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, mode); err != nil {
+	if err := linear.WriteFileAtomic(path, data, mode); err != nil {
 		return err
 	}
 	fmt.Println(styles.Success.Render("  Wrote " + path))

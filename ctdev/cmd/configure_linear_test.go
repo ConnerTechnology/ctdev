@@ -322,6 +322,85 @@ func TestWriteLinearRepoFilesOwnRepo(t *testing.T) {
 	}
 }
 
+// A settings.local.json someone else made, and git would track, gets excluded
+// too: the check runs on every write, not only when ctdev creates the file.
+func TestWriteLinearRepoFilesExcludesExistingUnignoredSettings(t *testing.T) {
+	repo := tempGitRepo(t)
+	r := linear.Repo{Root: repo}
+	ctx := context.Background()
+	if err := os.MkdirAll(r.Path(".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(r.Path(".claude/settings.local.json"), []byte(`{"permissions":{"allow":["Bash(ls)"]}}`), 0o600)
+	if r.IsIgnored(ctx, ".claude/settings.local.json") {
+		t.Fatal("precondition: the file should not be ignored yet")
+	}
+
+	var err error
+	captureStdout(t, func() { _, err = writeLinearRepoFiles(ctx, r, nil, "acme", true) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.IsIgnored(ctx, ".claude/settings.local.json") {
+		t.Error("a pre-existing settings.local.json should end up git-ignored")
+	}
+	settings, _ := os.ReadFile(r.Path(".claude/settings.local.json"))
+	if !strings.Contains(string(settings), "Bash(ls)") || !strings.Contains(string(settings), `"linear"`) {
+		t.Errorf("settings.local.json:\n%s", settings)
+	}
+	fi, _ := os.Stat(r.Path(".claude/settings.local.json"))
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode %o; the existing mode should be kept", fi.Mode().Perm())
+	}
+}
+
+func writeBrokenMCPJSON(t *testing.T) string {
+	t.Helper()
+	repo := tempGitRepo(t)
+	t.Chdir(repo)
+	_ = os.WriteFile(filepath.Join(repo, ".mcp.json"), []byte(`{"mcpServers": {`), 0o644)
+	return repo
+}
+
+func TestConfigureLinearShowRejectsInvalidMCPJSON(t *testing.T) {
+	isolateLinear(t)
+	fakeLinearAPI(t)
+	flagConfigShow = true
+	t.Cleanup(func() { flagConfigShow = false })
+	writeBrokenMCPJSON(t)
+
+	var err error
+	out := captureStdout(t, func() { err = configureLinear(context.Background()) })
+	if err == nil || !strings.Contains(err.Error(), ".mcp.json") {
+		t.Fatalf("got %v, want an error naming .mcp.json", err)
+	}
+	if strings.Contains(out, "not set up") {
+		t.Errorf("should stop before reporting status:\n%s", out)
+	}
+}
+
+// The wizard must stop before its first prompt, so nothing (credentials
+// included) is saved for a repo it then can't write to.
+func TestLinearWizardRejectsInvalidMCPJSONBeforePrompting(t *testing.T) {
+	isolateLinear(t)
+	fakeLinearAPI(t)
+	writeBrokenMCPJSON(t)
+	// Answers that would create a workspace and save credentials, if asked.
+	feedStdin(t, "acme\n"+fakeLinearID+"\n"+fakeLinearSecret+"\n\n")
+
+	var err error
+	out := captureStdout(t, func() { err = linearWizard(context.Background()) })
+	if err == nil || !strings.Contains(err.Error(), ".mcp.json") {
+		t.Fatalf("got %v, want an error naming .mcp.json", err)
+	}
+	if strings.Contains(out, "Workspace name") || strings.Contains(out, "Client ID") {
+		t.Errorf("prompted before validating:\n%s", out)
+	}
+	if ws, _ := linear.Workspaces(); len(ws) != 0 {
+		t.Errorf("credentials were saved: %v", ws)
+	}
+}
+
 func TestWriteLinearRepoFilesConfirmsReplacingOtherEntry(t *testing.T) {
 	repo := tempGitRepo(t)
 	r := linear.Repo{Root: repo}

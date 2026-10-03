@@ -3,6 +3,7 @@ package linear
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,6 +118,87 @@ func TestPlanMCPJSONUnchanged(t *testing.T) {
 	}
 }
 
+// Re-encoding must not HTML-escape what it preserves: a URL with & in it, or
+// a shell command with < and >, comes out exactly as written.
+func TestPlanMCPJSONKeepsOtherValuesLiteral(t *testing.T) {
+	notion := `{"type": "http", "url": "https://mcp.example.invalid/a?b=1&c=2", "note": "<keep> & é \"q\""}`
+	existing := `{"mcpServers": {"notion": ` + notion + `, "a&b": {"command": "sh", "args": ["-c", "x < y > z && w"]}}}`
+	plan, err := PlanMCPJSON([]byte(existing), "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(plan.Content)
+	for _, want := range []string{
+		`"url": "https://mcp.example.invalid/a?b=1&c=2"`,
+		`"note": "<keep> & é \"q\""`,
+		`"a&b": {`,
+		`"x < y > z && w"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("output should contain %s byte for byte:\n%s", want, s)
+		}
+	}
+	// encoding/json writes &, < and > as backslash-u00XX escapes.
+	if strings.Contains(s, "\\"+"u00") {
+		t.Errorf("output is HTML-escaped:\n%s", s)
+	}
+
+	out, _, err := MergeSettingsLocal([]byte(`{"permissions": {"allow": ["Bash(a && b)", "Bash(x > y)"]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `"Bash(a && b)"`) || !strings.Contains(string(out), `"Bash(x > y)"`) {
+		t.Errorf("settings.local.json values escaped:\n%s", out)
+	}
+}
+
+func TestValidateMCPJSON(t *testing.T) {
+	for _, ok := range []string{"", "  \n", `{}`, `{"mcpServers":{}}`, `{"other":1}`} {
+		if err := ValidateMCPJSON([]byte(ok)); err != nil {
+			t.Errorf("%q should be valid: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{`{nope`, `[1]`, `"str"`, `{"mcpServers":[1]}`, `{"mcpServers":"x"}`} {
+		err := ValidateMCPJSON([]byte(bad))
+		if err == nil || !strings.Contains(err.Error(), MCPJSONFile) {
+			t.Errorf("%q: got %v, want an error naming %s", bad, err, MCPJSONFile)
+		}
+	}
+}
+
+func TestHasLinearServer(t *testing.T) {
+	cases := map[string]bool{
+		`{"mcpServers":{"linear":{"headersHelper":"./scripts/linear-app.sh --mcp-headers"}}}`:  true,
+		`{"mcpServers":{"linear":{"headersHelper":"ctdev linear mcp-headers --workspace a"}}}`: true,
+		`{"mcpServers":{"notion":{}}}`: false,
+		``:                             false,
+		`{nope`:                        false,
+	}
+	for doc, want := range cases {
+		if got := HasLinearServer([]byte(doc)); got != want {
+			t.Errorf("%s: got %v, want %v", doc, got, want)
+		}
+	}
+}
+
+func TestWriteFileAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f.json")
+	if err := WriteFileAtomic(path, []byte("one\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFileAtomic(path, []byte("two\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "two\n" {
+		t.Errorf("content %q", data)
+	}
+	assertMode(t, path, 0o640)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("temp files left behind: %d entries", len(entries))
+	}
+}
+
 func TestPlanMCPJSONRejectsNonObject(t *testing.T) {
 	if _, err := PlanMCPJSON([]byte(`[1]`), "acme"); err == nil {
 		t.Error("expected an error for a non-object .mcp.json")
@@ -185,8 +267,21 @@ func TestRepoRootOutsideRepo(t *testing.T) {
 		t.Skip("git not installed")
 	}
 	t.Setenv("GIT_CEILING_DIRECTORIES", os.TempDir())
-	if _, err := RepoRoot(context.Background(), t.TempDir()); err == nil || !strings.Contains(err.Error(), "git repository") {
-		t.Errorf("got %v", err)
+	if _, err := RepoRoot(context.Background(), t.TempDir()); !errors.Is(err, ErrNotARepo) {
+		t.Errorf("got %v, want ErrNotARepo", err)
+	}
+}
+
+// Anything other than "not a repo" is reported as itself, not dressed up as
+// one: here git is not on PATH at all.
+func TestRepoRootGitMissing(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	_, err := RepoRoot(context.Background(), t.TempDir())
+	if err == nil || errors.Is(err, ErrNotARepo) {
+		t.Fatalf("got %v, want a real error", err)
+	}
+	if !errors.Is(err, exec.ErrNotFound) {
+		t.Errorf("error should wrap exec.ErrNotFound: %v", err)
 	}
 }
 
