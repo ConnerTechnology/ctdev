@@ -187,11 +187,3 @@ func symlinkOrDryRun(o sysutil.Opts, src, dst string) error {
 	}
 	return sysutil.SafeSymlink(src, dst)
 }
-
-func deployOrDryRun(o sysutil.Opts, srcEmbed, dst string) error {
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] deploy %s → %s\n", filepath.Base(srcEmbed), dst)
-		return nil
-	}
-	return sysutil.DeployFileFromFS(Configs, srcEmbed, dst)
-}
