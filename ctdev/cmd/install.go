@@ -126,6 +126,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 // wizard rather than a `configure <name>` category from setup.Registry.
 var componentWizards = map[string]func(context.Context) error{
 	"caddy":            configureCaddy,
+	"claude-code":      configureClaudeCode,
 	"mcp-email-server": configureMCPEmailServer,
 }
 
