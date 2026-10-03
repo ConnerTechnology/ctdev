@@ -13,12 +13,17 @@ into itself. Two tools writing the same files left neither one in charge of what
 ## Consequences
 
 Claude Code writes to the root file itself (`/model`, `/effort`, `/config`), so the file drifts.
-Drift is shown, not silently reverted: after `ctdev install claude-code`, the configure step
-prints a diff for each owned file that differs (or is a symlink) and asks before it backs the
-file up with a dated name and replaces it. With no terminal the file is left alone and reported;
-`--force` replaces without asking. A setting worth keeping goes into the baseline in this repo.
+Drift is shown, not silently reverted. The install writes a missing file and never touches one
+that differs; after the progress screen, a review runs whenever the install included
+`claude-code` (and as `ctdev configure claude-code`). For each owned file that differs, or is a
+symlink, it prints a diff and asks before it backs the file up with a dated name and replaces it.
+A symlink is removed and the file it pointed to is left alone. With no terminal the file is left
+and reported; `--force` replaces without asking; `--dry-run` shows the diff and writes nothing.
+Every question comes before any write. A setting worth keeping goes into the baseline in this repo.
 
-`~/.claude/settings.local.json` is backed up and removed on install: Claude Code reads
+`~/.claude/settings.local.json` is backed up and removed by that review: Claude Code reads
 `settings.local.json` only inside a project, so one at the root looked real and did nothing.
 
-The baseline's `statusLine` runs ccstatusline, so `claude-code` depends on `ccstatusline`.
+ccstatusline is part of the `claude-code` component, not a component of its own: it does nothing
+without Claude Code, and the baseline's `statusLine` is what turns it on. It no longer edits
+`~/.claude/settings.json` (which CTD-72 had it do), so the file has one writer.

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -30,43 +29,35 @@ func claudeCodeInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
-	// Always deploy config files (keeps dotfiles in sync)
-	if err := deployClaudeCodeConfigs(opts); err != nil {
-		fmt.Fprintf(opts.Stdout, "warning: could not deploy claude-code configs: %v\n", err)
+	if err := installCcstatusline(ctx, opts); err != nil {
+		return err
 	}
 
-	return nil
+	return writeMissingClaudeCodeFiles(opts)
 }
 
-// deployClaudeCodeConfigs writes a missing baseline file and leaves an
-// identical one alone. A drifted file is only replaced with --force; otherwise
-// it's reported, and the configure step shows the diff and asks.
-func deployClaudeCodeConfigs(opts ExecOpts) error {
+// writeMissingClaudeCodeFiles writes the baseline where it's missing. A file
+// that differs is never touched here: the install runs under the progress
+// screen, which can't show a diff or ask, so the drift review runs after it
+// (reviewClaudeCode in cmd).
+func writeMissingClaudeCodeFiles(opts ExecOpts) error {
 	drifts, err := ClaudeCodeDrift()
 	if err != nil {
 		return err
 	}
 	for _, d := range drifts {
-		switch {
-		case d.Missing && opts.DryRun:
+		if !d.Missing {
+			continue
+		}
+		if opts.DryRun {
 			fmt.Fprintf(opts.Stdout, "[dry-run] write %s\n", d.Path)
-		case d.Missing:
-			if _, err := ReplaceClaudeCodeFile(d); err != nil {
-				return err
-			}
-		case opts.DryRun:
-			fmt.Fprintf(opts.Stdout, "[dry-run] %s has drifted from ctdev's copy:\n%s", d.Path, d.Diff)
-		case opts.Force:
-			backup, err := ReplaceClaudeCodeFile(d)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(opts.Stdout, "Replaced %s with ctdev's copy%s\n", d.Path, d.ReplacedNote(backup))
-		default:
-			fmt.Fprintf(opts.Stdout, "%s has drifted from ctdev's copy; left unchanged. Run ctdev install claude-code in a terminal to review.\n", d.Path)
+			continue
+		}
+		if _, err := ReplaceClaudeCodeFile(d); err != nil {
+			return err
 		}
 	}
-	return removeClaudeCodeSettingsLocal(opts)
+	return nil
 }
 
 // ClaudeCodeFileDrift is one owned file that doesn't match ctdev's baseline.
@@ -106,7 +97,10 @@ func ClaudeCodeDrift() ([]ClaudeCodeFileDrift, error) {
 			d.LinkTarget, _ = os.Readlink(d.Path)
 		}
 		// Follows a symlink; a dangling one reads as empty.
-		have, _ := os.ReadFile(d.Path)
+		have, err := os.ReadFile(d.Path)
+		if err != nil && !(d.LinkTarget != "" && errors.Is(err, os.ErrNotExist)) {
+			return nil, fmt.Errorf("read %s: %w", d.Path, err)
+		}
 		if d.LinkTarget == "" && bytes.Equal(have, want) {
 			continue
 		}
@@ -134,44 +128,40 @@ func ReplaceClaudeCodeFile(d ClaudeCodeFileDrift) (backup string, err error) {
 		if fi, err := os.Stat(d.Path); err == nil {
 			mode = fi.Mode().Perm()
 		}
-		if backup, err = backupFile(d.Path); err != nil {
+		if backup, err = BackupFile(d.Path); err != nil {
 			return "", err
 		}
 	}
 	if err := os.WriteFile(d.Path, d.content, mode); err != nil {
-		return backup, err
+		// Put the old file back rather than leave nothing in its place.
+		if backup != "" {
+			_ = os.Rename(backup, d.Path)
+		}
+		return "", err
 	}
 	return backup, os.Chmod(d.Path, mode)
 }
 
-// removeClaudeCodeSettingsLocal backs up and removes ~/.claude/settings.local.json:
+// ClaudeCodeSettingsLocalPath is ~/.claude/settings.local.json when it exists.
 // Claude Code reads settings.local.json only inside a project, so one at the
-// user level looks real but does nothing.
-func removeClaudeCodeSettingsLocal(opts ExecOpts) error {
+// user level looks real but does nothing; ctdev backs it up and removes it.
+func ClaudeCodeSettingsLocalPath() (string, bool, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	path := filepath.Join(home, ".claude", "settings.local.json")
 	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-		return nil
+		return path, false, nil
+	} else if err != nil {
+		return path, false, err
 	}
-	if opts.DryRun {
-		fmt.Fprintf(opts.Stdout, "[dry-run] back up and remove %s (Claude Code never reads it)\n", path)
-		return nil
-	}
-	backup, err := backupFile(path)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(opts.Stdout, "Removed %s (Claude Code never reads it); backup at %s\n", path, backup)
-	return nil
+	return path, true, nil
 }
 
-// backupFile renames path to <path>.<YYYY-MM-DDTHH-MM-SS>.bak, the name
-// sysutil.DeployFile gives its backups.
-func backupFile(path string) (string, error) {
-	backup := fmt.Sprintf("%s.%s.bak", path, time.Now().Format("2006-01-02T15-04-05"))
+// BackupFile renames path to its dated backup name and returns that name.
+func BackupFile(path string) (string, error) {
+	backup := sysutil.BackupPath(path)
 	if err := os.Rename(path, backup); err != nil {
 		return "", fmt.Errorf("back up %s: %w", path, err)
 	}
@@ -255,6 +245,12 @@ func lineDiff(a, b string) string {
 		}
 		fmt.Fprintf(&out, "%c %s\n", l.op, l.text)
 	}
+	if out.Len() == 0 {
+		return "  (only the trailing newline differs)\n"
+	}
+	if skipped {
+		out.WriteString("  ...\n")
+	}
 	return out.String()
 }
 
@@ -273,6 +269,10 @@ func claudeCodeUninstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.Run(ctx, o, "rm", "-f", claudeBin); err != nil {
 			return err
 		}
+	}
+
+	if err := uninstallCcstatusline(ctx, opts); err != nil {
+		return err
 	}
 
 	// Remove deployed config files (preserve ~/.claude directory)

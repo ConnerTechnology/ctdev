@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestRegistryHas54Components(t *testing.T) {
-	if len(Registry) != 54 {
-		t.Errorf("expected 54 components, got %d", len(Registry))
+func TestRegistryHas53Components(t *testing.T) {
+	if len(Registry) != 53 {
+		t.Errorf("expected 53 components, got %d", len(Registry))
 	}
 }
 
@@ -59,19 +59,6 @@ func TestCcusageInstallsThroughNode(t *testing.T) {
 	}
 	if c.Root != RootNever {
 		t.Errorf("ccusage installs with npm under $HOME and must declare RootNever, got %v", c.Root)
-	}
-}
-
-func TestCcstatuslineInstallsThroughNode(t *testing.T) {
-	c := FindByName("ccstatusline")
-	if c == nil {
-		t.Fatal("ccstatusline component missing from registry")
-	}
-	if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
-		t.Errorf("expected ccstatusline to depend on node, got %v", c.Dependencies)
-	}
-	if c.Root != RootNever {
-		t.Errorf("ccstatusline installs with npm under $HOME and must declare RootNever, got %v", c.Root)
 	}
 }
 

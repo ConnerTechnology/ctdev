@@ -97,6 +97,21 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// claude-code's drift review runs whenever it was part of this install, in
+	// every mode: it's how --dry-run shows the diff and --force says where the
+	// backup went, which the progress screen above can't.
+	for _, name := range resolved {
+		if name == "claude-code" {
+			if err := reviewClaudeCode(cmd.Context(), claudeCodeReview{
+				dryRun:      flagDryRun,
+				force:       flagForce,
+				interactive: !isBatchMode(),
+			}); err != nil {
+				return cancelToClean(err)
+			}
+		}
+	}
+
 	// install = install + configure: after installing, run each requested
 	// component's configuration step when it has one. `ctdev configure <x>`
 	// alone still configures without installing. Skipped in batch/dry-run
@@ -126,7 +141,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 // wizard rather than a `configure <name>` category from setup.Registry.
 var componentWizards = map[string]func(context.Context) error{
 	"caddy":            configureCaddy,
-	"claude-code":      configureClaudeCode,
 	"mcp-email-server": configureMCPEmailServer,
 }
 

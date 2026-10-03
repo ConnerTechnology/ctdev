@@ -35,12 +35,12 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 	}
 }
 
-func runDeploy(t *testing.T, opts ExecOpts) string {
+func runWriteMissing(t *testing.T, opts ExecOpts) string {
 	t.Helper()
 	var out bytes.Buffer
 	opts.Stdout = &out
-	if err := deployClaudeCodeConfigs(opts); err != nil {
-		t.Fatalf("deploy: %v", err)
+	if err := writeMissingClaudeCodeFiles(opts); err != nil {
+		t.Fatalf("write missing: %v", err)
 	}
 	return out.String()
 }
@@ -51,82 +51,86 @@ func backups(t *testing.T, path string) []string {
 	return b
 }
 
-func TestClaudeCodeDeployWritesMissingFiles(t *testing.T) {
+func TestClaudeCodeInstallWritesMissingFiles(t *testing.T) {
 	dir := claudeHome(t)
-	runDeploy(t, ExecOpts{})
+	runWriteMissing(t, ExecOpts{})
 	for _, name := range []string{"settings.json", "CLAUDE.md"} {
 		if data, _ := os.ReadFile(filepath.Join(dir, name)); !bytes.Equal(data, baseline(t, name)) {
 			t.Errorf("%s not written from the baseline", name)
 		}
 	}
-}
-
-func TestClaudeCodeDeployIdenticalIsNoOp(t *testing.T) {
-	dir := claudeHome(t)
-	runDeploy(t, ExecOpts{})
-	out := runDeploy(t, ExecOpts{})
-	if out != "" {
-		t.Errorf("identical files produced output: %q", out)
-	}
-	if b := backups(t, filepath.Join(dir, "settings.json")); len(b) != 0 {
-		t.Errorf("identical file was backed up: %v", b)
+	drifts, err := ClaudeCodeDrift()
+	if err != nil || len(drifts) != 0 {
+		t.Errorf("after writing, drift = %v, %v", drifts, err)
 	}
 }
 
-func TestClaudeCodeDeployLeavesDriftWithoutForce(t *testing.T) {
+// The install runs under the progress screen; a drifted file is the review
+// step's business, so install must leave it exactly as it is, even with --force.
+func TestClaudeCodeInstallLeavesDriftedFile(t *testing.T) {
 	dir := claudeHome(t)
 	path := filepath.Join(dir, "settings.json")
 	writeFile(t, path, `{"model": "sonnet"}`, 0o644)
 
-	out := runDeploy(t, ExecOpts{})
+	runWriteMissing(t, ExecOpts{Force: true})
 	if data, _ := os.ReadFile(path); string(data) != `{"model": "sonnet"}` {
 		t.Errorf("drifted file was changed: %q", data)
 	}
-	if !strings.Contains(out, "settings.json has drifted from ctdev's copy; left unchanged") {
-		t.Errorf("drift not reported: %q", out)
+	if b := backups(t, path); len(b) != 0 {
+		t.Errorf("drifted file was backed up: %v", b)
 	}
 }
 
-func TestClaudeCodeDeployForceBacksUpAndReplaces(t *testing.T) {
+func TestClaudeCodeInstallDryRunWritesNothing(t *testing.T) {
+	dir := claudeHome(t)
+	out := runWriteMissing(t, ExecOpts{DryRun: true})
+	if _, err := os.Stat(filepath.Join(dir, "settings.json")); !os.IsNotExist(err) {
+		t.Error("dry-run wrote settings.json")
+	}
+	if !strings.Contains(out, "[dry-run] write") {
+		t.Errorf("dry-run did not report: %q", out)
+	}
+}
+
+func TestClaudeCodeReplaceKeepsModeAndBacksUp(t *testing.T) {
 	dir := claudeHome(t)
 	path := filepath.Join(dir, "settings.json")
 	writeFile(t, path, `{"model": "sonnet"}`, 0o600)
 
-	runDeploy(t, ExecOpts{Force: true})
+	drifts, err := ClaudeCodeDrift()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range drifts {
+		if d.Path != path {
+			continue
+		}
+		backup, err := ReplaceClaudeCodeFile(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if data, _ := os.ReadFile(backup); string(data) != `{"model": "sonnet"}` {
+			t.Errorf("backup content = %q", data)
+		}
+	}
 	if data, _ := os.ReadFile(path); !bytes.Equal(data, baseline(t, "settings.json")) {
 		t.Errorf("not replaced: %q", data)
-	}
-	b := backups(t, path)
-	if len(b) != 1 {
-		t.Fatalf("expected one dated backup, got %v", b)
-	}
-	if data, _ := os.ReadFile(b[0]); string(data) != `{"model": "sonnet"}` {
-		t.Errorf("backup content = %q", data)
 	}
 	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v, want 0600 kept", fi.Mode().Perm())
 	}
 }
 
-func TestClaudeCodeDeployDryRunWritesNothing(t *testing.T) {
+func TestClaudeCodeDriftReportsUnreadableFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads any file")
+	}
 	dir := claudeHome(t)
 	path := filepath.Join(dir, "settings.json")
-	writeFile(t, path, `{"model": "sonnet"}`, 0o644)
-	local := filepath.Join(dir, "settings.local.json")
-	writeFile(t, local, `{}`, 0o644)
+	writeFile(t, path, `{}`, 0o000)
 
-	out := runDeploy(t, ExecOpts{DryRun: true, Force: true})
-	if data, _ := os.ReadFile(path); string(data) != `{"model": "sonnet"}` {
-		t.Errorf("dry-run changed settings.json: %q", data)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "CLAUDE.md")); !os.IsNotExist(err) {
-		t.Error("dry-run wrote CLAUDE.md")
-	}
-	if _, err := os.Stat(local); err != nil {
-		t.Error("dry-run removed settings.local.json")
-	}
-	if !strings.Contains(out, "has drifted") || !strings.Contains(out, `- {"model": "sonnet"}`) {
-		t.Errorf("dry-run did not report the drift and diff: %q", out)
+	if _, err := ClaudeCodeDrift(); err == nil {
+		t.Error("an unreadable file must be an error, not an empty file")
 	}
 }
 
@@ -165,31 +169,18 @@ func TestClaudeCodeSymlinkIsDriftAndTargetUntouched(t *testing.T) {
 	}
 }
 
-func TestClaudeCodeSettingsLocalIsBackedUpAndRemoved(t *testing.T) {
-	dir := claudeHome(t)
-	local := filepath.Join(dir, "settings.local.json")
-	writeFile(t, local, `{"permissions": {"allow": ["WebSearch"]}}`, 0o644)
-
-	runDeploy(t, ExecOpts{})
-	if _, err := os.Stat(local); !os.IsNotExist(err) {
-		t.Error("settings.local.json still present")
+// ccstatusline does nothing without Claude Code, so it ships as part of the
+// claude-code component instead of being installable on its own.
+func TestCcstatuslineIsPartOfClaudeCode(t *testing.T) {
+	if FindByName("ccstatusline") != nil {
+		t.Error("ccstatusline must not be a component of its own")
 	}
-	b := backups(t, local)
-	if len(b) != 1 {
-		t.Fatalf("expected one dated backup, got %v", b)
-	}
-	if data, _ := os.ReadFile(b[0]); string(data) != `{"permissions": {"allow": ["WebSearch"]}}` {
-		t.Errorf("backup content = %q", data)
-	}
-}
-
-func TestClaudeCodeDependsOnCcstatusline(t *testing.T) {
 	c := FindByName("claude-code")
 	if c == nil {
 		t.Fatal("claude-code missing from registry")
 	}
-	if len(c.Dependencies) != 1 || c.Dependencies[0] != "ccstatusline" {
-		t.Errorf("expected claude-code to depend on ccstatusline, got %v", c.Dependencies)
+	if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
+		t.Errorf("claude-code installs ccstatusline with npm and must depend on node, got %v", c.Dependencies)
 	}
 }
 
@@ -203,9 +194,13 @@ func TestClaudeCodeBaselineRunsCcstatusline(t *testing.T) {
 }
 
 func TestLineDiff(t *testing.T) {
-	got := lineDiff("a\nb\nc\n", "a\nB\nc\n")
-	want := "  a\n- b\n+ B\n  c\n"
-	if got != want {
-		t.Errorf("lineDiff =\n%s\nwant\n%s", got, want)
+	for _, tc := range []struct{ name, a, b, want string }{
+		{"change", "a\nb\nc\n", "a\nB\nc\n", "  a\n- b\n+ B\n  c\n"},
+		{"skips far context", "1\n2\n3\n4\n5\n6\n7\n", "1\n2\n3\nX\n5\n6\n7\n", "  ...\n  2\n  3\n- 4\n+ X\n  5\n  6\n  ...\n"},
+		{"trailing newline only", "a\n", "a", "  (only the trailing newline differs)\n"},
+	} {
+		if got := lineDiff(tc.a, tc.b); got != tc.want {
+			t.Errorf("%s: lineDiff =\n%s\nwant\n%s", tc.name, got, tc.want)
+		}
 	}
 }

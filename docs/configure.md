@@ -31,7 +31,7 @@ sliders on both Cinnamon and macOS.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 
-**Component wizards** — `pihole`, `caddy`, `claude-code`, `restic`,
+**Component wizards** — `pihole`, `caddy`, `restic`,
 `mcp-email-server`. These belong to a component and mostly run for you when you install
 it; running `configure` directly reconfigures without reinstalling. They are
 the ones that ask for secrets, which is why they are never run non-interactively
