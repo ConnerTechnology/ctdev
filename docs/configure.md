@@ -37,6 +37,10 @@ it; running `configure` directly reconfigures without reinstalling. They are
 the ones that ask for secrets, which is why they are never run non-interactively
 by `apply`.
 
+**Claude Code** — `claude-code` isn't a wizard: `ctdev configure claude-code` diffs
+`~/.claude/settings.json` and `CLAUDE.md` against ctdev's baseline and asks before replacing
+either. It also runs after any install that includes `claude-code`.
+
 Every category, with what each one does, is listed in [Commands](commands.md).
 
 ## Linear for Claude Code

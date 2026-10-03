@@ -162,8 +162,12 @@ func applyProfile(ctx context.Context, name string) error {
 			return fmt.Errorf("sudo required: %w", err)
 		}
 	}
-	if err := runWithProgress(ctx, progressOperation{mode: progress.ModeInstall, names: resolved}); err != nil {
-		return err
+	installErr := runWithProgress(ctx, progressOperation{mode: progress.ModeInstall, names: resolved})
+	if err := reviewClaudeCodeAfterInstall(ctx, resolved); err != nil {
+		return cancelToClean(err)
+	}
+	if installErr != nil {
+		return installErr
 	}
 
 	// Batch-configure, continuing past a failing category so one bad apply
