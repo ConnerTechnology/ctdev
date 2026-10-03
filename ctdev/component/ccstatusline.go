@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -41,7 +42,7 @@ func ccstatuslineInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	// Turn it on in Claude Code. A settings file we can't parse is left alone.
-	if err := updateClaudeStatusLine(o, true); err != nil {
+	if err := enableClaudeStatusLine(o); err != nil {
 		fmt.Fprintf(opts.Stdout, "warning: could not enable the Claude Code status line: %v\n", err)
 	}
 	return nil
@@ -59,7 +60,7 @@ func ccstatuslineUninstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("npm uninstall ccstatusline: %w", err)
 	}
 
-	if err := updateClaudeStatusLine(o, false); err != nil {
+	if err := disableClaudeStatusLine(o); err != nil {
 		fmt.Fprintf(opts.Stdout, "warning: could not remove the Claude Code status line: %v\n", err)
 	}
 
@@ -94,45 +95,76 @@ var ccstatuslineStatusLine = map[string]any{
 	"refreshInterval": 10,
 }
 
-// updateClaudeStatusLine sets (enable) or removes the statusLine key in
-// ~/.claude/settings.json, leaving every other key as it is.
-func updateClaudeStatusLine(o sysutil.Opts, enable bool) error {
+// enableClaudeStatusLine points Claude Code's statusLine at ccstatusline.
+func enableClaudeStatusLine(o sysutil.Opts) error {
+	want, err := json.Marshal(ccstatuslineStatusLine)
+	if err != nil {
+		return err
+	}
+	return editClaudeSettings(o, "set statusLine", true, func(settings map[string]json.RawMessage) bool {
+		if sameJSON(settings["statusLine"], want) {
+			return false
+		}
+		settings["statusLine"] = want
+		return true
+	})
+}
+
+// disableClaudeStatusLine removes Claude Code's statusLine key.
+func disableClaudeStatusLine(o sysutil.Opts) error {
+	return editClaudeSettings(o, "remove statusLine", false, func(settings map[string]json.RawMessage) bool {
+		if _, ok := settings["statusLine"]; !ok {
+			return false
+		}
+		delete(settings, "statusLine")
+		return true
+	})
+}
+
+// editClaudeSettings applies edit to ~/.claude/settings.json and writes the
+// result only when edit reports a change. Other values are kept byte-exact,
+// a symlinked file is written through to its target, and the file's mode is
+// kept. A file that isn't a JSON object is left alone.
+func editClaudeSettings(o sysutil.Opts, action string, create bool, edit func(map[string]json.RawMessage) bool) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 	path := filepath.Join(home, ".claude", "settings.json")
 
-	settings := map[string]any{}
-	data, err := os.ReadFile(path)
-	switch {
+	mode := os.FileMode(0o644)
+	settings := map[string]json.RawMessage{}
+	switch info, err := os.Stat(path); {
 	case errors.Is(err, os.ErrNotExist):
-		if !enable {
+		if !create {
 			return nil
 		}
 	case err != nil:
 		return err
-	case len(bytes.TrimSpace(data)) > 0:
-		if err := json.Unmarshal(data, &settings); err != nil {
-			return fmt.Errorf("%s is not valid JSON, left unchanged: %w", path, err)
+	default:
+		if path, err = filepath.EvalSymlinks(path); err != nil {
+			return err
+		}
+		mode = info.Mode().Perm()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if len(bytes.TrimSpace(data)) > 0 {
+			if !json.Valid(data) {
+				return fmt.Errorf("%s is not valid JSON, left unchanged", path)
+			}
+			if err := json.Unmarshal(data, &settings); err != nil || settings == nil {
+				return fmt.Errorf("%s is not a JSON object, left unchanged", path)
+			}
 		}
 	}
 
-	if enable {
-		settings["statusLine"] = ccstatuslineStatusLine
-	} else {
-		if _, ok := settings["statusLine"]; !ok {
-			return nil
-		}
-		delete(settings, "statusLine")
+	if !edit(settings) {
+		return nil
 	}
-
 	if o.DryRun {
-		action := "set"
-		if !enable {
-			action = "remove"
-		}
-		fmt.Fprintf(o.Stdout, "[dry-run] %s statusLine in %s\n", action, path)
+		fmt.Fprintf(o.Stdout, "[dry-run] %s in %s\n", action, path)
 		return nil
 	}
 
@@ -143,5 +175,20 @@ func updateClaudeStatusLine(o sysutil.Opts, enable bool) error {
 	if err := enc.Encode(settings); err != nil {
 		return err
 	}
-	return sysutil.DeployFile(buf.Bytes(), path)
+	if err := sysutil.DeployFile(buf.Bytes(), path); err != nil {
+		return err
+	}
+	return os.Chmod(path, mode)
+}
+
+// sameJSON reports whether two JSON values are equal, ignoring layout and key order.
+func sameJSON(a, b []byte) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }

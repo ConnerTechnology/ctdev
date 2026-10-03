@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -56,7 +57,7 @@ var quietOpts = sysutil.Opts{Stdout: io.Discard}
 func TestClaudeStatusLineCreatesMissingFile(t *testing.T) {
 	path := claudeSettingsPath(t)
 
-	if err := updateClaudeStatusLine(quietOpts, true); err != nil {
+	if err := enableClaudeStatusLine(quietOpts); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
 	wantCcstatuslineStatusLine(t, readClaudeSettings(t, path))
@@ -66,7 +67,7 @@ func TestClaudeStatusLineKeepsOtherKeys(t *testing.T) {
 	path := claudeSettingsPath(t)
 	writeClaudeSettings(t, path, `{"model": "opus", "env": {"EXAMPLE": "a<b>&c"}}`)
 
-	if err := updateClaudeStatusLine(quietOpts, true); err != nil {
+	if err := enableClaudeStatusLine(quietOpts); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
 	settings := readClaudeSettings(t, path)
@@ -83,7 +84,7 @@ func TestClaudeStatusLineReplacesExistingEntry(t *testing.T) {
 	path := claudeSettingsPath(t)
 	writeClaudeSettings(t, path, `{"statusLine": {"type": "command", "command": "other-tool"}}`)
 
-	if err := updateClaudeStatusLine(quietOpts, true); err != nil {
+	if err := enableClaudeStatusLine(quietOpts); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
 	wantCcstatuslineStatusLine(t, readClaudeSettings(t, path))
@@ -93,7 +94,7 @@ func TestClaudeStatusLineLeavesInvalidJSONAlone(t *testing.T) {
 	path := claudeSettingsPath(t)
 	writeClaudeSettings(t, path, `{"model": "opus",`)
 
-	if err := updateClaudeStatusLine(quietOpts, true); err == nil {
+	if err := enableClaudeStatusLine(quietOpts); err == nil {
 		t.Error("expected an error for invalid JSON")
 	}
 	if data, _ := os.ReadFile(path); string(data) != `{"model": "opus",` {
@@ -104,7 +105,7 @@ func TestClaudeStatusLineLeavesInvalidJSONAlone(t *testing.T) {
 func TestClaudeStatusLineDryRunWritesNothing(t *testing.T) {
 	path := claudeSettingsPath(t)
 
-	if err := updateClaudeStatusLine(sysutil.Opts{Stdout: io.Discard, DryRun: true}, true); err != nil {
+	if err := enableClaudeStatusLine(sysutil.Opts{Stdout: io.Discard, DryRun: true}); err != nil {
 		t.Fatalf("dry-run enable: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -116,7 +117,7 @@ func TestClaudeStatusLineRemoveKeepsOtherKeys(t *testing.T) {
 	path := claudeSettingsPath(t)
 	writeClaudeSettings(t, path, `{"model": "opus", "statusLine": {"type": "command", "command": "ccstatusline"}}`)
 
-	if err := updateClaudeStatusLine(quietOpts, false); err != nil {
+	if err := disableClaudeStatusLine(quietOpts); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
 	settings := readClaudeSettings(t, path)
@@ -131,10 +132,98 @@ func TestClaudeStatusLineRemoveKeepsOtherKeys(t *testing.T) {
 func TestClaudeStatusLineRemoveWithoutFileIsNoOp(t *testing.T) {
 	path := claudeSettingsPath(t)
 
-	if err := updateClaudeStatusLine(quietOpts, false); err != nil {
+	if err := disableClaudeStatusLine(quietOpts); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("remove created %s", path)
+	}
+}
+
+func TestClaudeStatusLineLeavesNonObjectAlone(t *testing.T) {
+	for _, content := range []string{`null`, `[]`, `"x"`} {
+		path := claudeSettingsPath(t)
+		writeClaudeSettings(t, path, content)
+
+		if err := enableClaudeStatusLine(quietOpts); err == nil {
+			t.Errorf("%s: expected an error", content)
+		}
+		if data, _ := os.ReadFile(path); string(data) != content {
+			t.Errorf("%s: settings were rewritten: %q", content, data)
+		}
+	}
+}
+
+func TestClaudeStatusLineKeepsOtherValuesExact(t *testing.T) {
+	path := claudeSettingsPath(t)
+	writeClaudeSettings(t, path, `{"big": 9007199254740993, "ratio": 1.0}`)
+
+	if err := enableClaudeStatusLine(quietOpts); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	for _, want := range []string{`"big": 9007199254740993`, `"ratio": 1.0`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("settings lost %s:\n%s", want, data)
+		}
+	}
+}
+
+// A file that already has the entry is not rewritten, so its key order and
+// layout survive and no backup piles up.
+func TestClaudeStatusLineAlreadySetIsNoOp(t *testing.T) {
+	path := claudeSettingsPath(t)
+	content := `{"statusLine": {"type": "command", "command": "ccstatusline", "padding": 0, "refreshInterval": 10}, "model": "opus"}`
+	writeClaudeSettings(t, path, content)
+
+	var out strings.Builder
+	if err := enableClaudeStatusLine(sysutil.Opts{Stdout: &out, DryRun: true}); err != nil {
+		t.Fatalf("dry-run enable: %v", err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("dry-run reported a change: %q", out.String())
+	}
+	if err := enableClaudeStatusLine(quietOpts); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != content {
+		t.Errorf("settings were rewritten: %q", data)
+	}
+}
+
+func TestClaudeStatusLineWritesThroughSymlink(t *testing.T) {
+	path := claudeSettingsPath(t)
+	target := filepath.Join(t.TempDir(), "dotfiles-settings.json")
+	if err := os.WriteFile(target, []byte(`{"model": "opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := enableClaudeStatusLine(quietOpts); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if fi, err := os.Lstat(path); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("symlink was replaced: %v", err)
+	}
+	wantCcstatuslineStatusLine(t, readClaudeSettings(t, target))
+}
+
+func TestClaudeStatusLineKeepsFileMode(t *testing.T) {
+	path := claudeSettingsPath(t)
+	writeClaudeSettings(t, path, `{"model": "opus"}`)
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := enableClaudeStatusLine(quietOpts); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
 	}
 }
