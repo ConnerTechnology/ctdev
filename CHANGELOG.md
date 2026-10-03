@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.28.0] - 2026-10-03
+
+### Added
+- **`ccstatusline` installs as a component, with a shared layout.** `ctdev install
+  ccstatusline` runs `npm install -g ccstatusline` for the Claude Code status line, on
+  macOS and Linux, and pulls in `node` first. It is skipped when `ccstatusline` is already
+  on PATH unless `--force` is given. Every install deploys the layout (model, context %,
+  owner/repo, branch) to `~/.config/ccstatusline/settings.json`, backing up a different
+  file first. `ctdev uninstall ccstatusline` runs `npm uninstall -g ccstatusline` and
+  removes the layout only once that succeeds. Turning the status line on in Claude Code
+  is still a `statusLine` entry in `~/.claude/settings.json`.
+
 ## [12.27.0] - 2026-09-30
 
 ### Added
