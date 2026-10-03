@@ -50,7 +50,7 @@
   "powerline": {
     "enabled": false,
     "separators": [
-      "�"
+      ""
     ],
     "separatorInvertBackground": [
       false
@@ -59,9 +59,5 @@
     "endCaps": [],
     "autoAlign": false,
     "continueThemeAcrossLines": false
-  },
-  "installation": {
-    "method": "pinned",
-    "installedVersion": "2.2.29"
   }
 }
