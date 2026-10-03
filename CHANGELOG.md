@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.30.0] - 2026-10-03
+
+### Added
+- **`ctdev configure linear` sets up a repo's Linear connection for Claude Code.** Run it
+  in a clone. It reports whether the repo's Linear server can get a token, and takes a new
+  client ID and secret when it can't, printing the steps to create this computer's Linear
+  app. The secret is entered masked and checked with Linear before it is saved, to
+  `~/.config/ctdev/linear/<workspace>.env` (owner-only). Each workspace has its own
+  credentials and token cache. The wizard writes the repo's `.mcp.json` `linear` entry,
+  keeping other servers, and pre-approves it in the git-ignored
+  `.claude/settings.local.json`. For a repo that isn't yours, it lists `.mcp.json` in
+  `.git/info/exclude` instead of leaving it to be committed. Claude Code gets its token
+  from the hidden `ctdev linear mcp-headers --workspace <name>`. When that fails, its
+  error says to run `ctdev configure linear`. `scripts/linear-app.sh` and `~/.secrets` are
+  no longer used in this repo.
+- **macOS key repeat is set in `ctdev configure keyboard`.** On macOS, two sliders, in ms at
+  macOS's 15 ms steps, set the repeat delay (default 195 ms) and the time between repeats
+  (default 30 ms, about 33 per second). A note says the change takes effect after logging
+  out.
+- **`configure macos` turns off the common animations, and holding a key repeats it.**
+  Window open animations are off. The Dock hides with no delay and slides faster, minimizes
+  with the scale effect, and Mission Control is faster. The accent popup on a held key is
+  off. Reduce Motion is left alone.
+- **The `dev-workstation` profile runs `configure macos`** on macOS.
+
+### Fixed
+- **`ctdev configure macos` applies its defaults when Dock auto-hide is already on.** It
+  used to check only that one key, so a Mac where auto-hide was set by hand reported
+  "applied" and nothing else was written. It now reads back every default it manages.
+- **A configure slider with no current value takes the recommended value on Enter.**
 ## [12.29.0] - 2026-10-03
 
 ### Added
