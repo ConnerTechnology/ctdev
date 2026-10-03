@@ -329,14 +329,23 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 		styles.Dimmed.Render("Valid"),
 		formatSliderVal(r.Min, r.Step), formatSliderVal(r.Max, r.Step), unit,
 		formatSliderVal(r.Step, r.Step))
-	fmt.Printf("  %s [%s]: ", styles.Dimmed.Render("Value"), state.CurrentValue)
+	// Enter keeps the current value; when nothing is set yet there is nothing
+	// to keep, so Enter takes the recommended value instead.
+	enterValue := state.CurrentValue
+	if enterValue == "" {
+		enterValue = state.DesiredValue
+		if enterValue == "" {
+			enterValue = s.Default
+		}
+	}
+	fmt.Printf("  %s [%s]: ", styles.Dimmed.Render("Value"), enterValue)
 
 	input, ok := readLineCtx(ctx)
 	if !ok {
 		return "", errPromptCancelled
 	}
 	if input == "" {
-		return state.CurrentValue, nil
+		return enterValue, nil
 	}
 
 	val, err := strconv.ParseFloat(input, 64)

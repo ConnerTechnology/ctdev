@@ -9,6 +9,7 @@ import (
 func init() {
 	PostApplyHooks["grub"] = applyUpdateGrub
 	PostApplyHooks["pihole-ftl"] = applyPiholeRestart
+	PostApplyHooks[macKeyRepeatGroup] = macKeyRepeatNote
 }
 
 // Registry is the single source of truth for all setup settings.
@@ -234,6 +235,38 @@ var Registry = []Setting{
 		},
 		// applyKeyRepeat writes org.cinnamon gsettings, so Cinnamon only.
 		HardwareFn: gateCinnamon,
+	},
+	{
+		Name:     "Key repeat delay",
+		Slug:     "keyboard",
+		Category: "Keyboard",
+		Description: "How long a key must be held before it starts repeating. " +
+			"macOS stores this in 15 ms steps; takes effect after logging out and back in.",
+		Control:    ControlSlider,
+		Default:    macKeyRepeatDelayDefaultMs,
+		Slider:     &SliderRange{Min: 120, Max: 1800, Step: keyRepeatUnitMs, Unit: "ms"},
+		DetectFunc: func(ctx context.Context) string { return detectMacKeyRepeat(ctx, "InitialKeyRepeat") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacKeyRepeat(ctx, o, "InitialKeyRepeat", v)
+		},
+		ApplyGroup: macKeyRepeatGroup,
+		HardwareFn: gateMacOS,
+	},
+	{
+		Name:     "Key repeat interval",
+		Slug:     "keyboard",
+		Category: "Keyboard",
+		Description: "Time between repeated characters while a key is held: 15 ms ≈ 67/s, 30 ms ≈ 33/s. " +
+			"macOS stores this in 15 ms steps; takes effect after logging out and back in.",
+		Control:    ControlSlider,
+		Default:    macKeyRepeatIntervalDefaultMs,
+		Slider:     &SliderRange{Min: 15, Max: 120, Step: keyRepeatUnitMs, Unit: "ms"},
+		DetectFunc: func(ctx context.Context) string { return detectMacKeyRepeat(ctx, "KeyRepeat") },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacKeyRepeat(ctx, o, "KeyRepeat", v)
+		},
+		ApplyGroup: macKeyRepeatGroup,
+		HardwareFn: gateMacOS,
 	},
 	{
 		Name:        "NumLock on boot",
@@ -715,10 +748,12 @@ var Registry = []Setting{
 		Name:     "macOS defaults",
 		Slug:     "macos",
 		Category: "macOS",
-		Description: "Applies opinionated macOS defaults: Dock auto-hide (no launch animation or recents), " +
+		Description: "Applies opinionated macOS defaults: Dock auto-hide with no delay and a fast slide (no launch animation or recents), " +
+			"scale minimize, fast Mission Control, no window open/close animations, " +
 			"Finder path/status bars with list view and current-folder search, no .DS_Store on network/USB drives, " +
-			"smart quotes/dashes/autocorrect/auto-capitalize off, fast key repeat, expanded save/print dialogs, " +
-			"and password required immediately after screensaver. Restarts Dock and Finder.",
+			"smart quotes/dashes/autocorrect/auto-capitalize off, key repeat instead of the press-and-hold accent popup, " +
+			"expanded save/print dialogs, and password required immediately after screensaver. Restarts Dock and Finder. " +
+			"Key repeat speed is in the keyboard category.",
 		Control:    ControlToggle,
 		OneWay:     true,
 		Default:    "applied",

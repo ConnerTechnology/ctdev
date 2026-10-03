@@ -24,7 +24,7 @@ components = [
   "smartmontools",
 ]
 
-configure = ["autoupdate"]
+configure = ["autoupdate", "macos"]
 
 notes = """
 Next steps (interactive):
