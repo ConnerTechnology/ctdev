@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -83,4 +84,13 @@ func SimplePackageUninstaller(name string) func(context.Context, ExecOpts) error
 		fmt.Fprintf(opts.Stdout, "Removing %s...\n", name)
 		return sysutil.RemovePackage(ctx, o, name)
 	}
+}
+
+// deployOrDryRun deploys an embedded config file, or reports it under --dry-run.
+func deployOrDryRun(o sysutil.Opts, srcEmbed, dst string) error {
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "[dry-run] deploy %s → %s\n", filepath.Base(srcEmbed), dst)
+		return nil
+	}
+	return sysutil.DeployFileFromFS(Configs, srcEmbed, dst)
 }

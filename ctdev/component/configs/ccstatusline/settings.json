@@ -1,0 +1,67 @@
+{
+  "version": 4,
+  "lines": [
+    [
+      {
+        "id": "c31e6f78-0d67-434d-9838-7983038cf6a2",
+        "type": "model",
+        "color": "brightCyan"
+      },
+      {
+        "id": "7e04e825-7da9-49b6-8bc5-a7e642da8429",
+        "type": "separator"
+      },
+      {
+        "id": "b219e4fd-de71-47c5-9aad-51792700cc6a",
+        "type": "context-percentage",
+        "color": "brightYellow"
+      },
+      {
+        "id": "50c00af3-4e76-4af8-8d60-81fba07606a4",
+        "type": "separator"
+      },
+      {
+        "id": "2b60c8dd-2ddb-4631-a6c3-aa39830c81fb",
+        "type": "git-origin-owner-repo",
+        "color": "brightRed"
+      },
+      {
+        "id": "d4d4f878-2de2-42d1-96ca-9afdb4178784",
+        "type": "separator"
+      },
+      {
+        "id": "1ca7e99a-c289-4688-9cf5-6854cf3947ef",
+        "type": "git-branch",
+        "color": "brightMagenta",
+        "metadata": {
+          "hide": "no-git"
+        }
+      }
+    ]
+  ],
+  "flexMode": "full-minus-40",
+  "compactThreshold": 60,
+  "colorLevel": 2,
+  "defaultPaddingSide": "both",
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "gitCacheTtlSeconds": 5,
+  "terminalWidthCacheTtlSeconds": 5,
+  "customCommandCacheTtlSeconds": 0,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": false,
+    "separators": [
+      ""
+    ],
+    "separatorInvertBackground": [
+      false
+    ],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": false,
+    "continueThemeAcrossLines": false,
+    "theme": "nord-aurora"
+  },
+  "defaultPadding": ""
+}
