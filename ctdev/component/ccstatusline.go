@@ -110,10 +110,14 @@ func enableClaudeStatusLine(o sysutil.Opts) error {
 	})
 }
 
-// disableClaudeStatusLine removes Claude Code's statusLine key.
+// disableClaudeStatusLine removes Claude Code's statusLine key when it runs
+// ccstatusline. A status line pointed at another tool is left alone.
 func disableClaudeStatusLine(o sysutil.Opts) error {
 	return editClaudeSettings(o, "remove statusLine", false, func(settings map[string]json.RawMessage) bool {
-		if _, ok := settings["statusLine"]; !ok {
+		var sl struct {
+			Command string `json:"command"`
+		}
+		if json.Unmarshal(settings["statusLine"], &sl) != nil || sl.Command != "ccstatusline" {
 			return false
 		}
 		delete(settings, "statusLine")

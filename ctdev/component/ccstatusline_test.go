@@ -227,3 +227,16 @@ func TestClaudeStatusLineKeepsFileMode(t *testing.T) {
 		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
 	}
 }
+
+func TestClaudeStatusLineRemoveLeavesOtherToolAlone(t *testing.T) {
+	path := claudeSettingsPath(t)
+	content := `{"statusLine": {"type": "command", "command": "my-own-script.sh"}}`
+	writeClaudeSettings(t, path, content)
+
+	if err := disableClaudeStatusLine(quietOpts); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != content {
+		t.Errorf("another tool's statusLine was changed: %q", data)
+	}
+}
