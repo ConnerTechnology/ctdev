@@ -3,9 +3,12 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -27,8 +30,35 @@ func runConfigureClaudeCode(cmd *cobra.Command, args []string) error {
 	return cancelToClean(reviewClaudeCode(cmdContext(cmd), claudeCodeReview{
 		dryRun:      flagDryRun,
 		force:       flagForce,
-		interactive: !isBatchMode(),
+		interactive: canPromptClaudeCode(),
 	}))
+}
+
+// canPromptClaudeCode reports whether someone is there to answer: a terminal on
+// both ends and no --batch. Unlike isBatchMode it ignores ACCESSIBLE, since the
+// review is plain lines a screen reader handles fine.
+func canPromptClaudeCode() bool {
+	return !flagBatch && term.IsTerminal(os.Stdin.Fd()) && term.IsTerminal(os.Stdout.Fd())
+}
+
+// reviewClaudeCodeAfterInstall runs the review when claude-code was part of an
+// install and is now there (or this is a dry run), even if something else in
+// the same run failed.
+func reviewClaudeCodeAfterInstall(ctx context.Context, resolved []string) error {
+	for _, name := range resolved {
+		if name != "claude-code" {
+			continue
+		}
+		if c := component.FindByName(name); !flagDryRun && (c == nil || !c.IsInstalled()) {
+			return nil
+		}
+		return reviewClaudeCode(ctx, claudeCodeReview{
+			dryRun:      flagDryRun,
+			force:       flagForce,
+			interactive: canPromptClaudeCode(),
+		})
+	}
+	return nil
 }
 
 type claudeCodeReview struct {
@@ -58,12 +88,12 @@ func reviewClaudeCode(ctx context.Context, r claudeCodeReview) error {
 			continue
 		}
 
-		fmt.Println()
-		fmt.Println(styles.Warning.Render(fmt.Sprintf("%s has drifted from ctdev's copy.", d.Path)))
 		if !r.dryRun && !r.force && !r.interactive {
-			fmt.Println("  Left unchanged. Run ctdev install claude-code in a terminal to review it.")
+			fmt.Printf("%s has drifted from ctdev's copy; run ctdev install claude-code to review\n", d.Path)
 			continue
 		}
+		fmt.Println()
+		fmt.Println(styles.Warning.Render(fmt.Sprintf("%s has drifted from ctdev's copy.", d.Path)))
 		if d.LinkTarget != "" {
 			fmt.Printf("  It is a link to %s; replacing it leaves that file untouched.\n", d.LinkTarget)
 		}
@@ -108,7 +138,7 @@ func reviewClaudeCode(ctx context.Context, r claudeCodeReview) error {
 		if r.dryRun {
 			fmt.Printf("[dry-run] back up and remove %s (Claude Code never reads it)\n", local)
 		} else {
-			backup, err := component.BackupFile(local)
+			backup, err := sysutil.BackupFile(local)
 			if err != nil {
 				return err
 			}

@@ -42,17 +42,15 @@ func installCcstatusline(ctx context.Context, opts ExecOpts) error {
 
 func uninstallCcstatusline(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
-	if !sysutil.CommandExists("ccstatusline") {
-		return nil
-	}
-	fmt.Fprintln(opts.Stdout, "Removing ccstatusline...")
-
-	npm, err := npmPath()
-	if err != nil {
-		return err
-	}
-	if err := sysutil.Run(ctx, o, npm, "uninstall", "-g", "ccstatusline"); err != nil {
-		return fmt.Errorf("npm uninstall ccstatusline: %w", err)
+	if sysutil.CommandExists("ccstatusline") {
+		fmt.Fprintln(opts.Stdout, "Removing ccstatusline...")
+		npm, err := npmPath()
+		if err != nil {
+			return err
+		}
+		if err := sysutil.Run(ctx, o, npm, "uninstall", "-g", "ccstatusline"); err != nil {
+			return fmt.Errorf("npm uninstall ccstatusline: %w", err)
+		}
 	}
 
 	// Remove the layout only once the package is gone

@@ -143,7 +143,7 @@ func TestReviewClaudeCodeNoTerminalLeavesFileAndSays(t *testing.T) {
 	if readString(settings) != driftedSettings {
 		t.Error("no-terminal review changed the file")
 	}
-	if !strings.Contains(out, "has drifted from ctdev's copy") || !strings.Contains(out, "Run ctdev install claude-code in a terminal") {
+	if !strings.Contains(out, "has drifted from ctdev's copy") || !strings.Contains(out, "run ctdev install claude-code to review") {
 		t.Errorf("drift not reported:\n%s", out)
 	}
 }
@@ -209,11 +209,17 @@ func TestReviewClaudeCodeMatchSaysSo(t *testing.T) {
 	if _, err := runReview(t, claudeCodeReview{}); err != nil {
 		t.Fatal(err)
 	}
+	settings := filepath.Join(home, ".claude", "settings.json")
+	before, _ := os.Stat(settings)
 	out, err := runReview(t, claudeCodeReview{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.TrimSpace(out) != "Claude Code settings match ctdev's copy." {
 		t.Errorf("output = %q", out)
+	}
+	after, _ := os.Stat(settings)
+	if !after.ModTime().Equal(before.ModTime()) || len(dotBaks(settings)) != 0 {
+		t.Error("an identical file was rewritten or backed up")
 	}
 }

@@ -30,9 +30,8 @@ func DeployFile(content []byte, dest string) error {
 		if bytes.Equal(existing, content) {
 			return nil
 		}
-		backup := BackupPath(dest)
-		if err := os.Rename(dest, backup); err != nil {
-			return fmt.Errorf("backup %s: %w", dest, err)
+		if _, err := BackupFile(dest); err != nil {
+			return err
 		}
 	}
 
@@ -43,6 +42,15 @@ func DeployFile(content []byte, dest string) error {
 // <dest>.<YYYY-MM-DDTHH-MM-SS>.bak.
 func BackupPath(dest string) string {
 	return fmt.Sprintf("%s.%s.bak", dest, time.Now().Format("2006-01-02T15-04-05"))
+}
+
+// BackupFile renames path to its BackupPath and returns that name.
+func BackupFile(path string) (string, error) {
+	backup := BackupPath(path)
+	if err := os.Rename(path, backup); err != nil {
+		return "", fmt.Errorf("back up %s: %w", path, err)
+	}
+	return backup, nil
 }
 
 // DeployFileFromFS reads a file from an embedded FS and deploys it to dest.

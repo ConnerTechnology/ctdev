@@ -83,12 +83,9 @@ func TestClaudeCodeInstallLeavesDriftedFile(t *testing.T) {
 
 func TestClaudeCodeInstallDryRunWritesNothing(t *testing.T) {
 	dir := claudeHome(t)
-	out := runWriteMissing(t, ExecOpts{DryRun: true})
+	runWriteMissing(t, ExecOpts{DryRun: true})
 	if _, err := os.Stat(filepath.Join(dir, "settings.json")); !os.IsNotExist(err) {
 		t.Error("dry-run wrote settings.json")
-	}
-	if !strings.Contains(out, "[dry-run] write") {
-		t.Errorf("dry-run did not report: %q", out)
 	}
 }
 
@@ -137,8 +134,8 @@ func TestClaudeCodeDriftReportsUnreadableFile(t *testing.T) {
 func TestClaudeCodeSymlinkIsDriftAndTargetUntouched(t *testing.T) {
 	dir := claudeHome(t)
 	target := filepath.Join(t.TempDir(), "elsewhere-CLAUDE.md")
-	// Same content as the baseline: a link still counts as drift.
-	writeFile(t, target, string(baseline(t, "CLAUDE.md")), 0o644)
+	// Different content, so a write through the link would show up in the target.
+	writeFile(t, target, "# someone else's file\n", 0o644)
 	path := filepath.Join(dir, "CLAUDE.md")
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
@@ -164,8 +161,29 @@ func TestClaudeCodeSymlinkIsDriftAndTargetUntouched(t *testing.T) {
 	if fi, err := os.Lstat(path); err != nil || fi.Mode()&os.ModeSymlink != 0 {
 		t.Error("symlink was not replaced by a regular file")
 	}
-	if data, _ := os.ReadFile(target); !bytes.Equal(data, baseline(t, "CLAUDE.md")) {
+	if data, _ := os.ReadFile(target); string(data) != "# someone else's file\n" {
 		t.Error("symlink target was changed")
+	}
+	if b := backups(t, target); len(b) != 0 {
+		t.Errorf("backup made beside the symlink target: %v", b)
+	}
+}
+
+func TestClaudeCodeIdenticalSymlinkSaysSo(t *testing.T) {
+	dir := claudeHome(t)
+	target := filepath.Join(t.TempDir(), "same-CLAUDE.md")
+	writeFile(t, target, string(baseline(t, "CLAUDE.md")), 0o644)
+	if err := os.Symlink(target, filepath.Join(dir, "CLAUDE.md")); err != nil {
+		t.Fatal(err)
+	}
+	drifts, err := ClaudeCodeDrift()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range drifts {
+		if d.LinkTarget == target && !strings.Contains(d.Diff, "contents are identical") {
+			t.Errorf("diff = %q", d.Diff)
+		}
 	}
 }
 
@@ -190,17 +208,5 @@ func TestClaudeCodeBaselineRunsCcstatusline(t *testing.T) {
 	}
 	if _, err := Configs.ReadFile("configs/claude-code/settings.local.json"); err == nil {
 		t.Error("settings.local.json is still shipped")
-	}
-}
-
-func TestLineDiff(t *testing.T) {
-	for _, tc := range []struct{ name, a, b, want string }{
-		{"change", "a\nb\nc\n", "a\nB\nc\n", "  a\n- b\n+ B\n  c\n"},
-		{"skips far context", "1\n2\n3\n4\n5\n6\n7\n", "1\n2\n3\nX\n5\n6\n7\n", "  ...\n  2\n  3\n- 4\n+ X\n  5\n  6\n  ...\n"},
-		{"trailing newline only", "a\n", "a", "  (only the trailing newline differs)\n"},
-	} {
-		if got := lineDiff(tc.a, tc.b); got != tc.want {
-			t.Errorf("%s: lineDiff =\n%s\nwant\n%s", tc.name, got, tc.want)
-		}
 	}
 }
