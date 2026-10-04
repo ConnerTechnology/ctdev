@@ -28,10 +28,6 @@ func claudeCodeInstall(ctx context.Context, opts ExecOpts) error {
 		}
 	}
 
-	if err := installCcstatusline(ctx, opts); err != nil {
-		return err
-	}
-
 	return writeMissingClaudeCodeFiles(opts)
 }
 
@@ -187,10 +183,6 @@ func claudeCodeUninstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.Run(ctx, o, "rm", "-f", claudeBin); err != nil {
 			return err
 		}
-	}
-
-	if err := uninstallCcstatusline(ctx, opts); err != nil {
-		return err
 	}
 
 	// Remove deployed config files (preserve ~/.claude directory)

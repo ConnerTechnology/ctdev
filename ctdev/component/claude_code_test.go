@@ -187,18 +187,15 @@ func TestClaudeCodeIdenticalSymlinkSaysSo(t *testing.T) {
 	}
 }
 
-// ccstatusline does nothing without Claude Code, so it ships as part of the
-// claude-code component instead of being installable on its own.
-func TestCcstatuslineIsPartOfClaudeCode(t *testing.T) {
-	if FindByName("ccstatusline") != nil {
-		t.Error("ccstatusline must not be a component of its own")
-	}
+// ccstatusline does nothing without Claude Code, so claude-code makes sure it
+// is installed; the baseline's statusLine is what turns it on.
+func TestClaudeCodeDependsOnCcstatusline(t *testing.T) {
 	c := FindByName("claude-code")
 	if c == nil {
 		t.Fatal("claude-code missing from registry")
 	}
-	if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
-		t.Errorf("claude-code installs ccstatusline with npm and must depend on node, got %v", c.Dependencies)
+	if len(c.Dependencies) != 1 || c.Dependencies[0] != "ccstatusline" {
+		t.Errorf("expected claude-code to depend on ccstatusline, got %v", c.Dependencies)
 	}
 }
 

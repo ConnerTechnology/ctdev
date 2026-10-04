@@ -25,6 +25,8 @@ Every question comes before any write. A setting worth keeping goes into the bas
 `~/.claude/settings.local.json` is backed up and removed by that review: Claude Code reads
 `settings.local.json` only inside a project, so one at the root looked real and did nothing.
 
-ccstatusline is part of the `claude-code` component, not a component of its own: it does nothing
-without Claude Code, and the baseline's `statusLine` is what turns it on. It no longer edits
-`~/.claude/settings.json` (which CTD-72 had it do), so the file has one writer.
+Only the `claude-code` component writes `~/.claude/settings.json`. `ccstatusline` stays a
+component (`ctdev install ccstatusline` installs the tool and its layout), but it does nothing
+without Claude Code: `claude-code` depends on it, and the baseline's `statusLine` is what turns it
+on. ccstatusline no longer edits `~/.claude/settings.json` (which CTD-72 had it do), so the file
+has one writer.

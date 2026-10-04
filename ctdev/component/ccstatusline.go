@@ -10,15 +10,16 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-// ccstatusline renders the Claude Code status line. It is part of the
-// claude-code component, not a component of its own: on its own it does
-// nothing, and the baseline settings.json is what points Claude Code at it.
-// Installed from npm on every OS so there is one code path; the layout ships
-// with it.
-func installCcstatusline(ctx context.Context, opts ExecOpts) error {
+// ccstatusline renders the Claude Code status line. Installed from npm on
+// every OS so there is one code path; the layout ships with it. On its own it
+// does nothing: claude-code depends on it, and the claude-code baseline
+// settings.json is what points Claude Code at it. ccstatusline never writes
+// ~/.claude/settings.json, so that file has one writer.
+func ccstatuslineInstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 
-	if opts.Force || !sysutil.CommandExists("ccstatusline") {
+	// Phase 1: install the binary (skip if present unless --force)
+	if opts.Force || !alreadyInstalled("ccstatusline") {
 		fmt.Fprintln(opts.Stdout, "Installing ccstatusline...")
 		npm, err := npmPath()
 		if err != nil {
@@ -27,9 +28,11 @@ func installCcstatusline(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.Run(ctx, o, npm, "install", "-g", "ccstatusline"); err != nil {
 			return fmt.Errorf("npm install ccstatusline: %w", err)
 		}
+	} else {
+		fmt.Fprintln(opts.Stdout, "ccstatusline already installed")
 	}
 
-	// Always deploy the layout (keeps dotfiles in sync)
+	// Phase 2: always deploy the layout (keeps dotfiles in sync)
 	dst, err := ccstatuslineConfigPath()
 	if err != nil {
 		return err
@@ -40,17 +43,16 @@ func installCcstatusline(ctx context.Context, opts ExecOpts) error {
 	return nil
 }
 
-func uninstallCcstatusline(ctx context.Context, opts ExecOpts) error {
+func ccstatuslineUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
-	if sysutil.CommandExists("ccstatusline") {
-		fmt.Fprintln(opts.Stdout, "Removing ccstatusline...")
-		npm, err := npmPath()
-		if err != nil {
-			return err
-		}
-		if err := sysutil.Run(ctx, o, npm, "uninstall", "-g", "ccstatusline"); err != nil {
-			return fmt.Errorf("npm uninstall ccstatusline: %w", err)
-		}
+	fmt.Fprintln(opts.Stdout, "Removing ccstatusline...")
+
+	npm, err := npmPath()
+	if err != nil {
+		return err
+	}
+	if err := sysutil.Run(ctx, o, npm, "uninstall", "-g", "ccstatusline"); err != nil {
+		return fmt.Errorf("npm uninstall ccstatusline: %w", err)
 	}
 
 	// Remove the layout only once the package is gone
