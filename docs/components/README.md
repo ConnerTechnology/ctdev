@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-54 components, counted in `ctdev/component/registry.go` on 2026-10-03. A
+55 components, counted in `ctdev/component/registry.go` on 2026-10-04. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -64,6 +64,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | Component | What it is | Platforms |
 | --- | --- | --- |
 | `1password` | 1Password password manager | Linux, macOS |
+| `betterbird` | Betterbird email client (Thunderbird fork) | Linux |
 | `chrome` | Google Chrome browser | Linux, macOS |
 | `claude-desktop` | Claude desktop application | macOS |
 | `cleanmymac` | CleanMyMac system cleaner | macOS |
