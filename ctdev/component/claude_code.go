@@ -12,7 +12,7 @@ import (
 )
 
 // claudeCodeFiles are the files ctdev owns under ~/.claude: one baseline,
-// identical on every computer (docs/adr/0008-ctdev-owns-root-claude-config.md).
+// identical on every computer (docs/adr/0009-ctdev-owns-root-claude-config.md).
 var claudeCodeFiles = []struct{ src, name string }{
 	{"configs/claude-code/settings.json", "settings.json"},
 	{"configs/claude-code/CLAUDE.md", "CLAUDE.md"},
