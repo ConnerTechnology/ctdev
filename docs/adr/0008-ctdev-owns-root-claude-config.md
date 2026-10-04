@@ -14,7 +14,7 @@ into itself. Two tools writing the same files left neither one in charge of what
 
 Claude Code writes to the root file itself (`/model`, `/effort`, `/config`), so the file drifts.
 Drift is shown, not silently reverted. The install writes a missing file and never touches one
-that differs; after the progress screen, a review runs whenever the install (or `apply`) included
+that differs; after the progress screen, a review runs whenever the install included
 `claude-code` and it is installed, even if another component in the run failed (and as
 `ctdev configure claude-code`). For each owned file that differs, or is a
 symlink, it prints a diff and asks before it backs the file up with a dated name and replaces it.
