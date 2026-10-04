@@ -274,3 +274,38 @@ func TestProgressModelUninstallMode(t *testing.T) {
 		t.Errorf("expected 'Uninstall complete' in summary, got: %s", summary)
 	}
 }
+
+// A component whose dependency failed is shown as skipped with the reason,
+// counted as skipped rather than failed, and named in the Retry line next to
+// the dependency so one command retries both.
+func TestProgressModelBlockedByFailedDependency(t *testing.T) {
+	val := New([]string{"node", "ccstatusline"}, ModeInstall, false)
+	m := &val
+
+	updated, _ := m.Update(InstallFailMsg{Name: "node", Error: "brew lock", Duration: time.Second})
+	m = updated.(*Model)
+	updated, cmd := m.Update(InstallBlockedMsg{Name: "ccstatusline", Reason: "node failed"})
+	m = updated.(*Model)
+	if cmd == nil {
+		t.Error("expected a progress-bar SetPercent command on blocked")
+	}
+
+	done, failed, skipped, notRun := m.Counts()
+	if done != 0 || failed != 1 || skipped != 1 || notRun != 0 {
+		t.Errorf("Counts() = %d,%d,%d,%d; want 0,1,1,0", done, failed, skipped, notRun)
+	}
+
+	if got := m.viewProgress(); !strings.Contains(got, "skipped: node failed") {
+		t.Errorf("expected the skip reason on the progress screen, got:\n%s", got)
+	}
+	summary := m.viewSummary()
+	if !strings.Contains(summary, "finished with 1 failure") {
+		t.Errorf("expected one failure in the header, got:\n%s", summary)
+	}
+	if !strings.Contains(summary, "Retry: ctdev install node ccstatusline") {
+		t.Errorf("expected the Retry line to list both, got:\n%s", summary)
+	}
+	if report := m.SummaryReport(); !strings.Contains(report, "ccstatusline") || !strings.Contains(report, "skipped: node failed") {
+		t.Errorf("expected the skip reason in the report, got:\n%s", report)
+	}
+}

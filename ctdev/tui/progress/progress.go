@@ -20,6 +20,10 @@ const (
 	StatusDone
 	StatusFailed
 	StatusSkipped
+	// StatusBlocked is a component that never ran because a dependency failed
+	// (or was itself blocked) earlier in the run. It counts as skipped, and the
+	// Retry line names it next to the dependency.
+	StatusBlocked
 )
 
 type ComponentState struct {
@@ -27,6 +31,7 @@ type ComponentState struct {
 	Status    ComponentStatus
 	Output    []string
 	Error     string
+	Reason    string // why a blocked component didn't run, e.g. "node failed"
 	Duration  time.Duration
 	StartedAt time.Time
 }
@@ -51,6 +56,10 @@ type InstallFailMsg struct {
 	Duration    time.Duration
 }
 type InstallSkipMsg struct{ Name string }
+
+// InstallBlockedMsg marks a component that wasn't run because a dependency
+// didn't install; Reason says which, e.g. "node failed".
+type InstallBlockedMsg struct{ Name, Reason string }
 type AllDoneMsg struct{}
 
 type Mode int
@@ -120,7 +129,7 @@ func (inst *Model) Counts() (done, failed, skipped, notRun int) {
 			done++
 		case StatusFailed:
 			failed++
-		case StatusSkipped:
+		case StatusSkipped, StatusBlocked:
 			skipped++
 		default:
 			notRun++
@@ -192,6 +201,16 @@ func (inst *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i := range inst.components {
 			if inst.components[i].Name == msg.Name {
 				inst.components[i].Status = StatusSkipped
+				break
+			}
+		}
+		cmd := inst.progressBar.SetPercent(inst.donePercent())
+		return inst, cmd
+	case InstallBlockedMsg:
+		for i := range inst.components {
+			if inst.components[i].Name == msg.Name {
+				inst.components[i].Status = StatusBlocked
+				inst.components[i].Reason = msg.Reason
 				break
 			}
 		}
@@ -293,6 +312,12 @@ func (inst *Model) viewProgress() string {
 				styles.Warning.Render("–"),
 				styles.Dimmed.Render(c.Name),
 				styles.Dimmed.Render("skipped"),
+			))
+		case StatusBlocked:
+			b.WriteString(fmt.Sprintf("  %s %s %s\n",
+				styles.Warning.Render("–"),
+				styles.Dimmed.Render(c.Name),
+				styles.Dimmed.Render("skipped: "+c.Reason),
 			))
 		case StatusWaiting:
 			b.WriteString(fmt.Sprintf("  %s %s\n",
@@ -396,7 +421,7 @@ func (inst *Model) viewSummary() string {
 			if inst.mode == ModeUninstall {
 				retryCmd = "uninstall"
 			}
-			b.WriteString(fmt.Sprintf("\n  Retry: ctdev %s %s\n", retryCmd, strings.Join(failedNames, " ")))
+			b.WriteString(fmt.Sprintf("\n  Retry: ctdev %s %s\n", retryCmd, strings.Join(inst.retryNames(), " ")))
 		}
 	}
 
@@ -408,6 +433,18 @@ func (inst *Model) FailedNames() []string {
 	var names []string
 	for _, c := range inst.components {
 		if c.Status == StatusFailed {
+			names = append(names, c.Name)
+		}
+	}
+	return names
+}
+
+// retryNames lists the components a retry should cover, in run order: the ones
+// that failed and the ones blocked behind them.
+func (inst *Model) retryNames() []string {
+	var names []string
+	for _, c := range inst.components {
+		if c.Status == StatusFailed || c.Status == StatusBlocked {
 			names = append(names, c.Name)
 		}
 	}
@@ -450,6 +487,11 @@ func (inst *Model) SummaryReport() string {
 				styles.Warning.Render("–"), c.Name,
 				styles.Dimmed.Render("skipped (unsupported OS)"),
 			))
+		case StatusBlocked:
+			b.WriteString(fmt.Sprintf("  %s %s %s\n",
+				styles.Warning.Render("–"), c.Name,
+				styles.Dimmed.Render("skipped: "+c.Reason),
+			))
 		}
 	}
 	if b.Len() == 0 {
@@ -469,7 +511,7 @@ func (inst *Model) donePercent() float64 {
 func (inst *Model) countDone() int {
 	count := 0
 	for _, c := range inst.components {
-		if c.Status == StatusDone || c.Status == StatusFailed || c.Status == StatusSkipped {
+		if c.Status == StatusDone || c.Status == StatusFailed || c.Status == StatusSkipped || c.Status == StatusBlocked {
 			count++
 		}
 	}

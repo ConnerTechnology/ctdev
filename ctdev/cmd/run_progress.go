@@ -43,12 +43,7 @@ func runWithProgress(parent context.Context, op progressOperation) error {
 	go func() {
 		defer close(workerDone)
 		defer p.Send(progress.AllDoneMsg{})
-		for _, name := range op.names {
-			if ctx.Err() != nil {
-				return
-			}
-			runOneComponent(ctx, p, op, name)
-		}
+		runComponents(ctx, p, op)
 	}()
 
 	_, err := p.Run()
@@ -114,12 +109,54 @@ func streamThrough(send msgSender, name string, fn func(pw *os.File)) error {
 	return nil
 }
 
-// runOneComponent runs install/uninstall for a single named component and
-// streams its output through `send`.
-func runOneComponent(ctx context.Context, send msgSender, op progressOperation, name string) {
+// runComponents runs op's components in order, stopping on cancel. On install,
+// a component whose dependency didn't install earlier in the run is reported
+// as blocked instead of run.
+func runComponents(ctx context.Context, send msgSender, op progressOperation) {
+	notInstalled := map[string]string{}
+	for _, name := range op.names {
+		if ctx.Err() != nil {
+			return
+		}
+		if op.mode == progress.ModeInstall {
+			if reason := unmetDependency(name, notInstalled); reason != "" {
+				send.Send(progress.InstallBlockedMsg{Name: name, Reason: reason})
+				notInstalled[name] = "skipped"
+				continue
+			}
+		}
+		if failed := runOneComponent(ctx, send, op, name); failed {
+			notInstalled[name] = "failed"
+		}
+	}
+}
+
+// unmetDependency reports why name can't be installed: the first of its
+// dependencies that failed or was skipped earlier in this run, as "node failed"
+// or "ccstatusline skipped". notInstalled maps those components to their
+// outcome. Empty when every dependency is fine (or wasn't in the run).
+//
+// Install only: uninstall runs whatever was selected, since a dependency that
+// failed to uninstall is no reason to keep its dependents.
+func unmetDependency(name string, notInstalled map[string]string) string {
 	c := comp.FindByName(name)
 	if c == nil {
-		return
+		return ""
+	}
+	for _, dep := range c.Dependencies {
+		if outcome, ok := notInstalled[dep]; ok {
+			return dep + " " + outcome
+		}
+	}
+	return ""
+}
+
+// runOneComponent runs install/uninstall for a single named component and
+// streams its output through `send`. It reports whether the component failed.
+func runOneComponent(ctx context.Context, send msgSender, op progressOperation, name string) (failed bool) {
+	c := comp.FindByName(name)
+	if c == nil {
+		return false
 	}
 
 	send.Send(progress.InstallStartMsg{Name: name})
@@ -145,7 +182,7 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 		}
 	}); err != nil {
 		send.Send(progress.InstallFailMsg{Name: name, Error: err.Error(), Duration: time.Since(start)})
-		return
+		return true
 	}
 
 	duration := time.Since(start)
@@ -155,9 +192,11 @@ func runOneComponent(ctx context.Context, send msgSender, op progressOperation, 
 		send.Send(progress.InstallSkipMsg{Name: name})
 	case result.Err != nil:
 		send.Send(progress.InstallFailMsg{Name: name, Error: result.Err.Error(), Duration: duration})
+		return true
 	default:
 		send.Send(progress.InstallDoneMsg{Name: name, Duration: duration})
 	}
+	return false
 }
 
 // runOneStep runs a single update step, streaming its output through `send`.
@@ -256,11 +295,19 @@ func runUpdateStepsBatch(ctx context.Context, steps []updateStep) error {
 // runWithProgressBatch runs install/uninstall without a TUI (for CI/pipes).
 func runWithProgressBatch(ctx context.Context, op progressOperation) error {
 	var failed int
+	notInstalled := map[string]string{}
 
 	for _, name := range op.names {
 		c := comp.FindByName(name)
 		if c == nil {
 			continue
+		}
+		if op.mode == progress.ModeInstall {
+			if reason := unmetDependency(name, notInstalled); reason != "" {
+				fmt.Fprintf(os.Stdout, "  %s skipped: %s\n", name, reason)
+				notInstalled[name] = "skipped"
+				continue
+			}
 		}
 
 		fmt.Fprintf(os.Stdout, "Processing %s...\n", name)
@@ -287,6 +334,7 @@ func runWithProgressBatch(ctx context.Context, op progressOperation) error {
 		} else if result.Err != nil {
 			fmt.Fprintf(os.Stderr, "  %s failed (%s): %v\n", name, duration, result.Err)
 			failed++
+			notInstalled[name] = "failed"
 		} else {
 			fmt.Fprintf(os.Stdout, "  %s done (%s)\n", name, duration)
 		}
