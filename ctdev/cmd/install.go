@@ -90,11 +90,18 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("sudo required for install: %w", err)
 		}
 	}
-	if err := runWithProgress(cmd.Context(), progressOperation{
+	installErr := runWithProgress(cmd.Context(), progressOperation{
 		mode:  progress.ModeInstall,
 		names: resolved,
-	}); err != nil {
-		return err
+	})
+	// claude-code's drift review runs whenever it was part of this install, in
+	// every mode: it's how --dry-run shows the diff and --force says where the
+	// backup went, which the progress screen above can't.
+	if err := reviewClaudeCodeAfterInstall(cmd.Context(), resolved); err != nil {
+		return cancelToClean(err)
+	}
+	if installErr != nil {
+		return installErr
 	}
 
 	// install = install + configure: after installing, run each requested

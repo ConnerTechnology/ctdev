@@ -1,16 +1,26 @@
 {
-  "enabledPlugins": {
-    "frontend-design@claude-plugins-official": true,
-    "code-review@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
-    "feature-dev@claude-plugins-official": true,
-    "gopls-lsp@claude-plugins-official": true,
-    "superpowers@superpowers-marketplace": true,
-    "security-guidance@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
-    "stripe@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "sentry@claude-plugins-official": true
+  "model": "opus",
+  "effortLevel": "medium",
+  "statusLine": {
+    "type": "command",
+    "command": "ccstatusline",
+    "padding": 0,
+    "refreshInterval": 10
   },
-  "alwaysThinkingEnabled": true
+  "tui": "fullscreen",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "agentPushNotifEnabled": false,
+  "inputNeededNotifEnabled": false,
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(journalctl:*)"
+    ]
+  }
 }
