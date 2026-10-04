@@ -16,6 +16,6 @@ ctdev/                 Go module root
   setup/               System settings (Linux dconf/GRUB, macOS defaults)
     configs/           Setup config files (go:embed)
   state/               Install markers and XDG state
-  sysutil/             System utilities (packages, downloads, deploy, exec)
+  sysutil/             System utilities (packages, downloads, deploy, diff, exec)
   tui/                 Bubble Tea UI models
 ```

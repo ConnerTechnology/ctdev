@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -27,11 +28,7 @@ func init() {
 }
 
 func runConfigureClaudeCode(cmd *cobra.Command, args []string) error {
-	return cancelToClean(reviewClaudeCode(cmdContext(cmd), claudeCodeReview{
-		dryRun:      flagDryRun,
-		force:       flagForce,
-		interactive: canPromptClaudeCode(),
-	}))
+	return cancelToClean(reviewClaudeCode(cmdContext(cmd), claudeCodeReviewFromFlags()))
 }
 
 // canPromptClaudeCode reports whether someone is there to answer: a terminal on
@@ -45,26 +42,28 @@ func canPromptClaudeCode() bool {
 // install and is now there (or this is a dry run), even if something else in
 // the same run failed.
 func reviewClaudeCodeAfterInstall(ctx context.Context, resolved []string) error {
-	for _, name := range resolved {
-		if name != "claude-code" {
-			continue
-		}
-		if c := component.FindByName(name); !flagDryRun && (c == nil || !c.IsInstalled()) {
-			return nil
-		}
-		return reviewClaudeCode(ctx, claudeCodeReview{
-			dryRun:      flagDryRun,
-			force:       flagForce,
-			interactive: canPromptClaudeCode(),
-		})
+	if !slices.Contains(resolved, "claude-code") {
+		return nil
 	}
-	return nil
+	if c := component.FindByName("claude-code"); !flagDryRun && (c == nil || !c.IsInstalled()) {
+		return nil
+	}
+	return reviewClaudeCode(ctx, claudeCodeReviewFromFlags())
 }
 
 type claudeCodeReview struct {
 	dryRun      bool // show what would change, write nothing
 	force       bool // replace drifted files without asking
 	interactive bool // a terminal is there to show the diff and ask
+}
+
+// claudeCodeReviewFromFlags is the review the command-line flags ask for.
+func claudeCodeReviewFromFlags() claudeCodeReview {
+	return claudeCodeReview{
+		dryRun:      flagDryRun,
+		force:       flagForce,
+		interactive: canPromptClaudeCode(),
+	}
 }
 
 // reviewClaudeCode brings ~/.claude in line with ctdev's baseline. It runs
@@ -130,7 +129,7 @@ func reviewClaudeCode(ctx context.Context, r claudeCodeReview) error {
 		}
 	}
 
-	local, exists, err := component.ClaudeCodeSettingsLocalPath()
+	local, exists, err := component.StrayClaudeSettingsLocal()
 	if err != nil {
 		return err
 	}

@@ -140,10 +140,10 @@ func ReplaceClaudeCodeFile(d ClaudeCodeFileDrift) (backup string, err error) {
 	return backup, os.Chmod(d.Path, mode)
 }
 
-// ClaudeCodeSettingsLocalPath is ~/.claude/settings.local.json when it exists.
+// StrayClaudeSettingsLocal returns ~/.claude/settings.local.json and whether it exists.
 // Claude Code reads settings.local.json only inside a project, so one at the
 // user level looks real but does nothing; ctdev backs it up and removes it.
-func ClaudeCodeSettingsLocalPath() (string, bool, error) {
+func StrayClaudeSettingsLocal() (string, bool, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", false, err
