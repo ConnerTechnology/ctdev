@@ -1,6 +1,10 @@
 package component
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -25,6 +29,63 @@ func TestBetterbirdMajor(t *testing.T) {
 		if got != c.want {
 			t.Errorf("betterbirdMajor(%q) = %q, want %q", c.file, got, c.want)
 		}
+	}
+}
+
+func TestPgrepMatched(t *testing.T) {
+	// Real *exec.ExitErrors, since that is what sysutil.Run wraps.
+	exitWith := func(code string) error {
+		err := exec.Command("sh", "-c", "exit "+code).Run()
+		return fmt.Errorf("pgrep: %w", err)
+	}
+	cases := []struct {
+		name        string
+		err         error
+		wantRunning bool
+		wantErr     bool
+	}{
+		{name: "exit 0 is running", err: nil, wantRunning: true},
+		{name: "exit 1 is not running", err: exitWith("1")},
+		{name: "exit 2 is an error", err: exitWith("2"), wantErr: true},
+		{name: "exit 3 is an error", err: exitWith("3"), wantErr: true},
+		{name: "missing pgrep is an error", err: fmt.Errorf("pgrep: %w", exec.ErrNotFound), wantErr: true},
+	}
+	for _, c := range cases {
+		running, err := pgrepMatched(c.err)
+		if running != c.wantRunning || (err != nil) != c.wantErr {
+			t.Errorf("%s: got (%v, %v), want running=%v wantErr=%v", c.name, running, err, c.wantRunning, c.wantErr)
+		}
+	}
+}
+
+func TestBetterbirdCheckTree(t *testing.T) {
+	good := filepath.Join(t.TempDir(), "betterbird")
+	if err := os.MkdirAll(good, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(good, "betterbird"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := betterbirdCheckTree(good); err != nil {
+		t.Errorf("tree with binary: %v", err)
+	}
+
+	empty := filepath.Join(t.TempDir(), "betterbird")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := betterbirdCheckTree(empty)
+	if err == nil || !strings.Contains(err.Error(), filepath.Join(empty, "betterbird")) {
+		t.Errorf("tree without binary: got %v, want an error naming the expected path", err)
+	}
+
+	// A directory where the binary should be is not a binary.
+	dirBin := filepath.Join(t.TempDir(), "betterbird")
+	if err := os.MkdirAll(filepath.Join(dirBin, "betterbird"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := betterbirdCheckTree(dirBin); err == nil {
+		t.Error("tree with a directory in place of the binary: got nil error")
 	}
 }
 

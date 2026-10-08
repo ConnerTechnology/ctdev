@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -53,7 +54,11 @@ func betterbirdInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	// Replacing the tree under a running instance crashes it mid-session.
-	if exec.CommandContext(ctx, "pgrep", "-f", "betterbird-bin").Run() == nil {
+	running, err := betterbirdRunning(ctx)
+	if err != nil {
+		return err
+	}
+	if running {
 		return fmt.Errorf("betterbird is running; close it and re-run")
 	}
 
@@ -86,11 +91,11 @@ func betterbirdInstall(ctx context.Context, opts ExecOpts) error {
 		return fmt.Errorf("verify betterbird tarball: %w", err)
 	}
 
-	if err := sysutil.SudoRun(ctx, o, "rm", "-rf", betterbirdInstallDir); err != nil {
-		return fmt.Errorf("remove old betterbird: %w", err)
-	}
-	if err := sysutil.SudoRun(ctx, o, "tar", "-C", filepath.Dir(betterbirdInstallDir), "-xJf", tarPath); err != nil {
-		return fmt.Errorf("extract betterbird: %w", err)
+	// Staging sits next to the install dir so the swap is a rename on one
+	// filesystem; tmpDir's random suffix keeps the name unique.
+	staging := filepath.Join(filepath.Dir(betterbirdInstallDir), ".ctdev-"+filepath.Base(tmpDir))
+	if err := betterbirdReplace(ctx, o, tarPath, staging, betterbirdInstallDir); err != nil {
+		return err
 	}
 
 	desktop, err := Configs.ReadFile("configs/betterbird/eu.betterbird.Betterbird.desktop")
@@ -102,6 +107,83 @@ func betterbirdInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	fmt.Fprintf(opts.Stdout, "Betterbird installed to %s from %s\n", betterbirdInstallDir, file)
+	return nil
+}
+
+// betterbirdRunning asks pgrep whether a Betterbird process is alive.
+func betterbirdRunning(ctx context.Context) (bool, error) {
+	return pgrepMatched(sysutil.Run(ctx, sysutil.Opts{Stdout: io.Discard}, "pgrep", "-f", "betterbird-bin"))
+}
+
+// pgrepMatched maps pgrep's result: exit 0 (nil) is a match and exit 1 is no
+// match. Exit 2/3 or a missing pgrep says nothing about the process, so those
+// are errors rather than a green light.
+func pgrepMatched(err error) (bool, error) {
+	if err == nil {
+		return true, nil
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("check whether betterbird is running: %w", err)
+}
+
+// betterbirdReplace swaps a new release into installDir without ever leaving
+// the machine with no Betterbird: it extracts into staging, checks the result,
+// moves the old tree into staging, moves the new tree into place, and only
+// then removes staging (and the old tree with it). A failure before the swap
+// leaves installDir untouched; a failure during it puts the old tree back.
+func betterbirdReplace(ctx context.Context, o sysutil.Opts, tarPath, staging, installDir string) error {
+	if err := sysutil.SudoRun(ctx, o, "mkdir", staging); err != nil {
+		return fmt.Errorf("create betterbird staging dir: %w", err)
+	}
+	// WithoutCancel: after a Ctrl-C the staging dir still has to go.
+	keepStaging := false
+	defer func() {
+		if !keepStaging {
+			_ = sysutil.SudoRun(context.WithoutCancel(ctx), o, "rm", "-rf", staging)
+		}
+	}()
+
+	if err := sysutil.SudoRun(ctx, o, "tar", "-C", staging, "-xJf", tarPath); err != nil {
+		return fmt.Errorf("extract betterbird: %w", err)
+	}
+	newTree := filepath.Join(staging, "betterbird")
+	if err := betterbirdCheckTree(newTree); err != nil {
+		return err
+	}
+
+	oldTree := filepath.Join(staging, "old")
+	_, statErr := os.Lstat(installDir)
+	hadOld := statErr == nil
+	if hadOld {
+		if err := sysutil.SudoRun(ctx, o, "mv", "-T", installDir, oldTree); err != nil {
+			return fmt.Errorf("move old betterbird aside: %w", err)
+		}
+	}
+	if err := sysutil.SudoRun(ctx, o, "mv", "-T", newTree, installDir); err != nil {
+		if hadOld {
+			if rerr := sysutil.SudoRun(context.WithoutCancel(ctx), o, "mv", "-T", oldTree, installDir); rerr != nil {
+				// Staging now holds the only copy of the old install: keep it.
+				keepStaging = true
+				return fmt.Errorf("move new betterbird into place: %w (restoring the old one also failed: %v; it is in %s)", err, rerr, oldTree)
+			}
+		}
+		return fmt.Errorf("move new betterbird into place: %w", err)
+	}
+	return nil
+}
+
+// betterbirdCheckTree confirms an extracted tarball holds the binary the
+// desktop entry launches, so a truncated or reshaped tarball never replaces a
+// working install.
+func betterbirdCheckTree(tree string) error {
+	bin := filepath.Join(tree, "betterbird")
+	info, err := os.Stat(bin)
+	if err != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("extracted betterbird tarball has no %s; keeping the existing install", bin)
+	}
 	return nil
 }
 
