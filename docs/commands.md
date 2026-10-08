@@ -12,7 +12,8 @@ backup went.
 
 If a dependency fails, its dependents in the same run are skipped with the reason
 (`ccstatusline skipped: node failed`) rather than run against a missing dependency. They
-count as skipped, not failed, and the `Retry:` line lists them with the dependency.
+count as skipped, not failed, and on the progress screen the `Retry:` line lists them with
+the dependency (`--batch` prints no `Retry:` line).
 `uninstall` runs every selected component regardless.
 
 ```bash
