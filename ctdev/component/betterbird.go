@@ -172,7 +172,9 @@ func betterbirdReplace(ctx context.Context, o sysutil.Opts, tarPath, staging, in
 	_, statErr := os.Lstat(installDir)
 	hadOld := statErr == nil
 	if hadOld {
-		if err := sysutil.SudoRun(ctx, o, "mv", "-T", installDir, oldTree); err != nil {
+		// Not cancellable: a rename is instant, and killing sudo can orphan the
+		// mv so it lands after the disk check below has already looked.
+		if err := sysutil.SudoRun(context.WithoutCancel(ctx), o, "mv", "-T", installDir, oldTree); err != nil {
 			// The rename may have landed before the error (a Ctrl-C right
 			// after it), so look at the disk rather than trust the error.
 			switch betterbirdAfterFailedAside(pathMayExist(installDir), pathMayExist(oldTree)) {
