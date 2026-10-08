@@ -65,7 +65,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | --- | --- | --- |
 | `1password` | 1Password password manager | Linux, macOS |
 | `chrome` | Google Chrome browser | Linux, macOS |
-| `claude-desktop` | Claude desktop application | macOS |
+| `claude-desktop` | Claude desktop application | Linux, macOS |
 | `cleanmymac` | CleanMyMac system cleaner | macOS |
 | `dbeaver` | DBeaver database tool | Linux, macOS |
 | `linear` | Linear issue tracker | macOS |

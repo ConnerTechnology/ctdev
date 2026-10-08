@@ -97,3 +97,16 @@ func TestGoDetectionUsesPath(t *testing.T) {
 		t.Errorf("go must not set DetectPath (got %q) — detection falls through to a PATH lookup", c.DetectPath)
 	}
 }
+
+func TestClaudeDesktopInstallsOnLinuxAndMacOS(t *testing.T) {
+	c := FindByName("claude-desktop")
+	if c == nil {
+		t.Fatal("claude-desktop component missing from registry")
+	}
+	if len(c.SupportedOS) != 2 || c.SupportedOS[0] != OSMacOS || c.SupportedOS[1] != OSLinux {
+		t.Errorf("expected claude-desktop on macOS and Linux, got %v", c.SupportedOS)
+	}
+	if c.DetectCmd != "claude-desktop" {
+		t.Errorf("expected claude-desktop detected by its command on Linux, got %q", c.DetectCmd)
+	}
+}
