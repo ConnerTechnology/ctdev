@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -42,8 +43,8 @@ func betterbirdInstall(ctx context.Context, opts ExecOpts) error {
 	if p.OS != platform.Linux {
 		return unsupportedPMError("betterbird", p.PackageManager)
 	}
-	if p.Arch != "amd64" {
-		return fmt.Errorf("betterbird tarball only available on amd64 (got %s)", p.Arch)
+	if err := betterbirdCheckArch(p.Arch); err != nil {
+		return err
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing Betterbird...")
@@ -110,6 +111,16 @@ func betterbirdInstall(ctx context.Context, opts ExecOpts) error {
 	return nil
 }
 
+// betterbirdCheckArch rejects every arch but amd64, the only one upstream
+// ships a Linux tarball for. It wraps ErrUnsupportedOS so the executor reports
+// Skipped rather than Failed.
+func betterbirdCheckArch(arch string) error {
+	if arch != "amd64" {
+		return fmt.Errorf("betterbird tarball only available on amd64 (got %s): %w", arch, ErrUnsupportedOS)
+	}
+	return nil
+}
+
 // betterbirdRunning asks pgrep whether a Betterbird process is alive.
 func betterbirdRunning(ctx context.Context) (bool, error) {
 	return pgrepMatched(sysutil.Run(ctx, sysutil.Opts{Stdout: io.Discard}, "pgrep", "-f", "betterbird-bin"))
@@ -141,8 +152,11 @@ func betterbirdReplace(ctx context.Context, o sysutil.Opts, tarPath, staging, in
 	// WithoutCancel: after a Ctrl-C the staging dir still has to go.
 	keepStaging := false
 	defer func() {
-		if !keepStaging {
-			_ = sysutil.SudoRun(context.WithoutCancel(ctx), o, "rm", "-rf", staging)
+		if keepStaging {
+			return
+		}
+		if err := sysutil.SudoRun(context.WithoutCancel(ctx), o, "rm", "-rf", staging); err != nil {
+			fmt.Fprintf(o.Stdout, "warning: could not remove %s: %v; remove it by hand\n", staging, err)
 		}
 	}()
 
@@ -159,6 +173,18 @@ func betterbirdReplace(ctx context.Context, o sysutil.Opts, tarPath, staging, in
 	hadOld := statErr == nil
 	if hadOld {
 		if err := sysutil.SudoRun(ctx, o, "mv", "-T", installDir, oldTree); err != nil {
+			// The rename may have landed before the error (a Ctrl-C right
+			// after it), so look at the disk rather than trust the error.
+			switch betterbirdAfterFailedAside(pathMayExist(installDir), pathMayExist(oldTree)) {
+			case asideRestore:
+				if rerr := sysutil.SudoRun(context.WithoutCancel(ctx), o, "mv", "-T", oldTree, installDir); rerr != nil {
+					keepStaging = true
+					return fmt.Errorf("move old betterbird aside: %w (putting it back also failed: %v; it is in %s)", err, rerr, oldTree)
+				}
+			case asideKeep:
+				keepStaging = true
+				return fmt.Errorf("move old betterbird aside: %w (both %s and %s exist; left both in place)", err, installDir, oldTree)
+			}
 			return fmt.Errorf("move old betterbird aside: %w", err)
 		}
 	}
@@ -173,6 +199,37 @@ func betterbirdReplace(ctx context.Context, o sysutil.Opts, tarPath, staging, in
 		return fmt.Errorf("move new betterbird into place: %w", err)
 	}
 	return nil
+}
+
+// asideRecovery is what to do after moving the old install aside reported an
+// error.
+type asideRecovery int
+
+const (
+	asideClean   asideRecovery = iota // staging holds no old tree: removing it is safe
+	asideRestore                      // the old tree moved: put it back
+	asideKeep                         // unexpected state: remove nothing
+)
+
+// betterbirdAfterFailedAside decides, from what is on disk, whether a failed
+// move-aside actually moved the old install. Staging is only safe to remove
+// when it holds no old tree.
+func betterbirdAfterFailedAside(installExists, oldTreeExists bool) asideRecovery {
+	switch {
+	case !oldTreeExists:
+		return asideClean
+	case !installExists:
+		return asideRestore
+	default:
+		return asideKeep
+	}
+}
+
+// pathMayExist reports whether p exists, counting any Lstat error other than
+// "not exist" as present so a doubt never leads to deleting it.
+func pathMayExist(p string) bool {
+	_, err := os.Lstat(p)
+	return err == nil || !errors.Is(err, fs.ErrNotExist)
 }
 
 // betterbirdCheckTree confirms an extracted tarball holds the binary the

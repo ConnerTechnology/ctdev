@@ -1,6 +1,7 @@
 package component
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -103,5 +104,46 @@ func TestBetterbirdDesktopEntryPointsAtInstallDir(t *testing.T) {
 		if !strings.Contains(string(data), "\n"+want+"\n") {
 			t.Errorf("desktop entry missing line %q", want)
 		}
+	}
+}
+
+func TestBetterbirdCheckArch(t *testing.T) {
+	if err := betterbirdCheckArch("amd64"); err != nil {
+		t.Errorf("amd64: unexpected error %v", err)
+	}
+	err := betterbirdCheckArch("arm64")
+	if !errors.Is(err, ErrUnsupportedOS) {
+		t.Errorf("arm64: err = %v, want ErrUnsupportedOS so the executor reports Skipped", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "arm64") {
+		t.Errorf("arm64: err %q does not name the arch", err)
+	}
+}
+
+func TestBetterbirdAfterFailedAside(t *testing.T) {
+	cases := []struct {
+		name                     string
+		installExists, oldExists bool
+		want                     asideRecovery
+	}{
+		{name: "rename never happened", installExists: true, oldExists: false, want: asideClean},
+		{name: "rename landed before the error", installExists: false, oldExists: true, want: asideRestore},
+		{name: "both present", installExists: true, oldExists: true, want: asideKeep},
+		{name: "neither present", installExists: false, oldExists: false, want: asideClean},
+	}
+	for _, c := range cases {
+		if got := betterbirdAfterFailedAside(c.installExists, c.oldExists); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestPathMayExist(t *testing.T) {
+	dir := t.TempDir()
+	if !pathMayExist(dir) {
+		t.Errorf("pathMayExist(%q) = false for an existing dir", dir)
+	}
+	if pathMayExist(filepath.Join(dir, "missing")) {
+		t.Errorf("pathMayExist reported a missing path as present")
 	}
 }
