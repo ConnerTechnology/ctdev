@@ -21,7 +21,7 @@ func ccstatuslineInstall(ctx context.Context, opts ExecOpts) error {
 	// Phase 1: install the binary (skip if present unless --force)
 	if opts.Force || !alreadyInstalled("ccstatusline") {
 		fmt.Fprintln(opts.Stdout, "Installing ccstatusline...")
-		npm, err := npmPath()
+		npm, err := npmPath(o)
 		if err != nil {
 			return err
 		}
@@ -47,7 +47,7 @@ func ccstatuslineUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing ccstatusline...")
 
-	npm, err := npmPath()
+	npm, err := npmPath(o)
 	if err != nil {
 		return err
 	}

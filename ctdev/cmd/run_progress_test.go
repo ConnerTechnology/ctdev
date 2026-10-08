@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -162,5 +163,92 @@ func TestRunOneComponent_ScannerDrainsBeforeReturn(t *testing.T) {
 		if !seen[want] {
 			t.Errorf("expected to see %q streamed through scanner", want)
 		}
+	}
+}
+
+// registerDepChain registers dep-base (whose install and uninstall both fail),
+// dep-mid (depends on dep-base) and dep-top (depends on dep-mid), recording
+// which ones actually ran.
+func registerDepChain(t *testing.T) map[string]bool {
+	t.Helper()
+	ran := map[string]bool{}
+	step := func(name string, err error) func(context.Context, comp.ExecOpts) error {
+		return func(context.Context, comp.ExecOpts) error {
+			ran[name] = true
+			return err
+		}
+	}
+	boom := errors.New("boom")
+	comp.RegisterForTest(t, comp.Component{
+		Name: "dep-base", GoInstall: step("dep-base", boom), GoUninstall: step("dep-base", boom),
+	})
+	comp.RegisterForTest(t, comp.Component{
+		Name: "dep-mid", Dependencies: []string{"dep-base"},
+		GoInstall: step("dep-mid", nil), GoUninstall: step("dep-mid", nil),
+	})
+	comp.RegisterForTest(t, comp.Component{
+		Name: "dep-top", Dependencies: []string{"dep-mid"},
+		GoInstall: step("dep-top", nil), GoUninstall: step("dep-top", nil),
+	})
+	return ran
+}
+
+var depChain = []string{"dep-base", "dep-mid", "dep-top"}
+
+func TestRunComponents_SkipsDependentOfFailedDependency(t *testing.T) {
+	ran := registerDepChain(t)
+
+	sender := &captureSender{}
+	runComponents(context.Background(), sender, progressOperation{mode: progress.ModeInstall, names: depChain})
+
+	if ran["dep-mid"] || ran["dep-top"] {
+		t.Errorf("dependents of a failed dependency ran: %v", ran)
+	}
+	blocked := map[string]string{}
+	for _, m := range sender.Messages() {
+		if b, ok := m.(progress.InstallBlockedMsg); ok {
+			blocked[b.Name] = b.Reason
+		}
+	}
+	if blocked["dep-mid"] != "dep-base failed" {
+		t.Errorf("dep-mid reason = %q, want %q", blocked["dep-mid"], "dep-base failed")
+	}
+	if blocked["dep-top"] != "dep-mid skipped" {
+		t.Errorf("dep-top reason = %q, want %q", blocked["dep-top"], "dep-mid skipped")
+	}
+}
+
+// Uninstall runs every selected component: a dependency failing to uninstall
+// is no reason to keep its dependents.
+func TestRunComponents_UninstallIgnoresDependencies(t *testing.T) {
+	ran := registerDepChain(t)
+
+	sender := &captureSender{}
+	runComponents(context.Background(), sender, progressOperation{mode: progress.ModeUninstall, names: depChain})
+
+	if !ran["dep-mid"] || !ran["dep-top"] {
+		t.Errorf("uninstall should run every selected component; ran: %v", ran)
+	}
+}
+
+func TestRunWithProgressBatch_SkipsDependentOfFailedDependency(t *testing.T) {
+	ran := registerDepChain(t)
+
+	var err error
+	out := captureStdout(t, func() {
+		err = runWithProgressBatch(context.Background(), progressOperation{mode: progress.ModeInstall, names: depChain})
+	})
+
+	if ran["dep-mid"] || ran["dep-top"] {
+		t.Errorf("dependents of a failed dependency ran: %v", ran)
+	}
+	for _, want := range []string{"dep-mid skipped: dep-base failed", "dep-top skipped: dep-mid skipped"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in batch output, got:\n%s", want, out)
+		}
+	}
+	// One real failure; the skipped dependents are not counted as failures.
+	if err == nil || err.Error() != "1 component(s) failed" {
+		t.Errorf("err = %v, want \"1 component(s) failed\"", err)
 	}
 }

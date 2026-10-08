@@ -10,6 +10,12 @@ The exception is `claude-code`: its drift review of `~/.claude/` runs after ever
 that includes it, in every mode, so `--dry-run` shows the diff and `--force` says where the
 backup went.
 
+If a dependency fails, its dependents in the same run are skipped with the reason
+(`ccstatusline skipped: node failed`) rather than run against a missing dependency. They
+count as skipped, not failed, and on the progress screen the `Retry:` line lists them with
+the dependency (`--batch` prints no `Retry:` line).
+`uninstall` runs every selected component regardless.
+
 ```bash
 ctdev apply [profile]           # Apply a machine profile; no args lists profiles
 ctdev diff <profile>            # Show drift from a profile (non-zero exit on drift)

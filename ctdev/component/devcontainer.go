@@ -16,7 +16,7 @@ func devcontainerInstall(ctx context.Context, opts ExecOpts) error {
 	// Phase 1: install the CLI (skip if present unless --force).
 	if opts.Force || !sysutil.CommandExists("devcontainer") {
 		fmt.Fprintln(opts.Stdout, "Installing @devcontainers/cli...")
-		npm, err := npmPath()
+		npm, err := npmPath(o)
 		if err != nil {
 			return err
 		}
@@ -54,8 +54,10 @@ func deployDxWrapper(o sysutil.Opts) error {
 }
 
 // npmPath finds npm, falling back to the nodenv shim when nodenv isn't yet on
-// PATH (common right after `ctdev install node` in the same shell session).
-func npmPath() (string, error) {
+// PATH (common right after `ctdev install node` in the same shell session). In
+// a dry run with no npm yet it returns the bare "npm", so callers print what
+// they would run instead of failing.
+func npmPath(o sysutil.Opts) (string, error) {
 	if p, err := exec.LookPath("npm"); err == nil {
 		return p, nil
 	}
@@ -67,6 +69,11 @@ func npmPath() (string, error) {
 	if _, err := os.Stat(shim); err == nil {
 		return shim, nil
 	}
+	// A dry run installs nothing, so the node component earlier in the same run
+	// can't have put npm in place yet. Report the command a real run would use.
+	if o.DryRun {
+		return "npm", nil
+	}
 	return "", fmt.Errorf("npm not found — install the node component first")
 }
 
@@ -74,7 +81,7 @@ func devcontainerUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing @devcontainers/cli and dx wrapper...")
 
-	if npm, err := npmPath(); err == nil {
+	if npm, err := npmPath(o); err == nil {
 		_ = sysutil.Run(ctx, o, npm, "uninstall", "-g", "@devcontainers/cli")
 	}
 

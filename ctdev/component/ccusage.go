@@ -18,7 +18,7 @@ func ccusageInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing ccusage...")
-	npm, err := npmPath()
+	npm, err := npmPath(o)
 	if err != nil {
 		return err
 	}
@@ -32,7 +32,7 @@ func ccusageUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing ccusage...")
 
-	npm, err := npmPath()
+	npm, err := npmPath(o)
 	if err != nil {
 		return err
 	}
