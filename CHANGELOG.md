@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.31.0] - 2026-10-08
+
+### Added
+- **`claude-desktop` installs on Debian and Ubuntu.** On amd64 and arm64, `ctdev install
+  claude-desktop` adds Anthropic's apt repository (`downloads.claude.ai/claude-desktop`)
+  and its signing key, then installs the `claude-desktop` package, so updates arrive with
+  `apt upgrade` and `ctdev update`. It is detected by `claude-desktop` on PATH. Uninstall
+  removes the package, the source file and ctdev's keyring. Other Linux package managers
+  and architectures get an unsupported error. macOS is unchanged.
+- **`ctdev configure claude-code` reviews `~/.claude/` against one shared baseline.**
+  ctdev owns `~/.claude/settings.json` and `~/.claude/CLAUDE.md`, identical on every
+  computer (ADR 0009). A missing file is written; one that differs, or is a symlink, is
+  shown as a diff and replaced only when you answer yes, after a dated `.bak`. Without a
+  terminal it is left alone with a note; `--force` replaces without asking; `--dry-run`
+  shows the diff and writes nothing. The review also runs after any install that includes
+  `claude-code`.
+
+### Changed
+- **The Claude Code baseline sets Opus at medium effort, the ccstatusline status line,
+  fullscreen, hold-to-talk voice and a short allow list**, with no plugins. `claude-code`
+  now depends on `ccstatusline`. A stray `~/.claude/settings.local.json`, which Claude Code
+  never reads at user scope, is backed up and removed.
+
 ## [12.30.0] - 2026-10-03
 
 ### Added
