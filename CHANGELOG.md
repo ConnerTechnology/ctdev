@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.32.0] - 2026-10-09
+
+### Added
+- **`betterbird` installs on Linux.** On amd64, `ctdev install betterbird` asks upstream
+  for the current release, downloads the tarball and its `sha256` list, verifies it, and
+  installs to `/opt/betterbird` with a desktop entry in
+  `/usr/share/applications`. The new release is unpacked beside the old one and swapped in
+  only once it checks out, so a failed or interrupted install leaves the existing one in
+  place. It refuses while Betterbird is running. There is no updater: `--force` pulls the
+  latest release. Uninstall removes `/opt/betterbird` and the desktop entry and leaves the
+  mail profile in `~/.thunderbird`. Other architectures are skipped.
+
+### Fixed
+- **A component whose dependency failed is skipped, not installed anyway.** If `node`
+  fails, `ccstatusline` in the same run is reported as `ccstatusline skipped: node failed`
+  instead of failing with a misleading `npm not found`. The skip carries down a chain of
+  dependencies, counts as skipped rather than failed, and on the progress screen the
+  `Retry:` line lists it with the dependency. `uninstall` is unchanged.
+- **`--dry-run` no longer fails an npm component before Node is installed.**
+  `ccstatusline`, `ccusage` and `devcontainer` print the `npm install -g` they would run
+  instead of failing with `npm not found`.
+
 ## [12.31.0] - 2026-10-08
 
 ### Added
