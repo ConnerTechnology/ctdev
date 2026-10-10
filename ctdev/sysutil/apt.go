@@ -53,24 +53,11 @@ func AddAPTKeyring(ctx context.Context, o Opts, url, keyringPath string) error {
 	return SudoRun(ctx, o, "chmod", "0644", keyringPath)
 }
 
-// AddAPTSource writes an APT sources list entry.
+// AddAPTSource writes an APT sources list entry. World-readable: `ctdev
+// update` scans with `apt list --upgradable` as the user, which skips a
+// source it can't read, so the repo's upgrades never show.
 func AddAPTSource(ctx context.Context, o Opts, line, filename string) error {
-	path := "/etc/apt/sources.list.d/" + filename
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] write %s\n", path)
-		return nil
-	}
-	tmp, err := os.CreateTemp("", "apt-source-*")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(line + "\n"); err != nil {
-		tmp.Close()
-		return err
-	}
-	tmp.Close()
-	return SudoRun(ctx, o, "cp", tmp.Name(), path)
+	return SudoWriteFileMode(ctx, o, line+"\n", "/etc/apt/sources.list.d/"+filename, "0644")
 }
 
 // APTUpdate runs apt-get update.
