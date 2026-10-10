@@ -33,3 +33,11 @@ func TestAddAPTSourceDryRun(t *testing.T) {
 		t.Error("expected dry-run prefix")
 	}
 }
+
+func TestAPTSourceInstallArgsWorldReadable(t *testing.T) {
+	got := strings.Join(aptSourceInstallArgs("/tmp/apt-source-1", "/etc/apt/sources.list.d/example.list"), " ")
+	want := "-m 0644 /tmp/apt-source-1 /etc/apt/sources.list.d/example.list"
+	if got != want {
+		t.Errorf("install args = %q, want %q", got, want)
+	}
+}

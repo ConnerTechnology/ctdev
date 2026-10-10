@@ -70,7 +70,15 @@ func AddAPTSource(ctx context.Context, o Opts, line, filename string) error {
 		return err
 	}
 	tmp.Close()
-	return SudoRun(ctx, o, "cp", tmp.Name(), path)
+	return SudoRun(ctx, o, "install", aptSourceInstallArgs(tmp.Name(), path)...)
+}
+
+// aptSourceInstallArgs copies src to dst at 0644. Not cp: the temp source is
+// 0600 and cp preserves that, and `ctdev update` scans with `apt list
+// --upgradable` as the user, which skips a source it can't read, so the repo's
+// upgrades never show.
+func aptSourceInstallArgs(src, dst string) []string {
+	return []string{"-m", "0644", src, dst}
 }
 
 // APTUpdate runs apt-get update.
