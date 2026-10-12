@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.32.1] - 2026-10-12
+
+### Fixed
+- **Casks that need sudo no longer fail after you've entered your password.** Homebrew
+  cleared the sudo credential ctdev had cached the first time it needed root, so
+  `ctdev install logi-options` (and the 1Password, CleanMyMac, Docker and Tailscale casks)
+  failed with "a sudo password is required". ctdev now tells Homebrew the sudo check is
+  done, so the credential you typed is kept for the whole run.
+
 ## [12.32.0] - 2026-10-09
 
 ### Added
@@ -46,15 +55,6 @@ All notable changes to this project will be documented in this file.
   fullscreen, hold-to-talk voice and a short allow list**, with no plugins. `claude-code`
   now depends on `ccstatusline`. A stray `~/.claude/settings.local.json`, which Claude Code
   never reads at user scope, is backed up and removed.
-
-## [12.30.1] - 2026-10-12
-
-### Fixed
-- **Casks that need sudo no longer fail after you've entered your password.** Homebrew
-  cleared the sudo credential ctdev had cached the first time it needed root, so
-  `ctdev install logi-options` (and the 1Password, CleanMyMac, Docker and Tailscale casks)
-  failed with "a sudo password is required". ctdev now tells Homebrew the sudo check is
-  done, so the credential you typed is kept for the whole run.
 
 ## [12.30.0] - 2026-10-03
 
