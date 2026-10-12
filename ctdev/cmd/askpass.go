@@ -66,11 +66,18 @@ func setupAskpass() func() {
 // upgrade. Staleness is handled instead by refreshBrew, which runs an explicit
 // `brew update` before scanning, the same shape as refreshAptIndex.
 //
+// HOMEBREW_SUDO_CHECKED=1 is set for a different reason. The first time brew
+// needs sudo it runs `sudo --reset-timestamp` (utils/sudo.sh), which wipes the
+// credential ensureSudo cached; the cask's own `sudo -A` installer then finds
+// no ticket, calls the askpass helper, and fails. Marking the check done keeps
+// the credential the user typed at the start of the run. An explicit user
+// setting wins.
+//
 // Setting these on ctdev's own environment covers every child: sysutil.Run never
 // assigns cmd.Env, and the scanners shell out through raw exec.CommandContext
 // and never see sysutil.Opts at all.
 func setupHomebrewEnv() {
-	for _, key := range []string{"HOMEBREW_NO_AUTO_UPDATE", "HOMEBREW_NO_ENV_HINTS"} {
+	for _, key := range []string{"HOMEBREW_NO_AUTO_UPDATE", "HOMEBREW_NO_ENV_HINTS", "HOMEBREW_SUDO_CHECKED"} {
 		if _, ok := os.LookupEnv(key); !ok {
 			os.Setenv(key, "1")
 		}
