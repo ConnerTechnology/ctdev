@@ -48,6 +48,8 @@ func TestSetupHomebrewEnvDoesNotOverrideUser(t *testing.T) {
 	t.Setenv("HOMEBREW_NO_AUTO_UPDATE", "0")
 	t.Setenv("HOMEBREW_NO_ENV_HINTS", "")
 	os.Unsetenv("HOMEBREW_NO_ENV_HINTS")
+	t.Setenv("HOMEBREW_SUDO_CHECKED", "")
+	os.Unsetenv("HOMEBREW_SUDO_CHECKED")
 
 	setupHomebrewEnv()
 
@@ -56,5 +58,8 @@ func TestSetupHomebrewEnvDoesNotOverrideUser(t *testing.T) {
 	}
 	if got := os.Getenv("HOMEBREW_NO_ENV_HINTS"); got != "1" {
 		t.Errorf("HOMEBREW_NO_ENV_HINTS = %q, want 1 when unset", got)
+	}
+	if got := os.Getenv("HOMEBREW_SUDO_CHECKED"); got != "1" {
+		t.Errorf("HOMEBREW_SUDO_CHECKED = %q, want 1 so brew keeps the cached sudo credential", got)
 	}
 }
