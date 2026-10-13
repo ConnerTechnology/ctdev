@@ -38,6 +38,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"docker", scanDocker},
 		{"go", scanGo},
 		{"ruby", scanRuby},
+		{"pyenv", scanPyenv},
 		{"helm", scanHelm},
 		{"kubectl", scanKubectl},
 		{"terraform", scanTerraform},
@@ -403,6 +404,38 @@ func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	return []checklist.UpdateItem{{
 		Name:       "node (nodenv)",
+		Source:     "runtime",
+		CurrentVer: current,
+		NewVer:     latest,
+	}}, nil
+}
+
+func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if _, err := exec.LookPath("pyenv"); err != nil {
+		return nil, nil
+	}
+	// Compare against the global version, as scanNodeEnv does: `pyenv version`
+	// resolves the cwd's .python-version. `pyenv global` can list several
+	// versions, one per line; the first is the one `python` runs.
+	currentOut, err := exec.CommandContext(ctx, "pyenv", "global").Output()
+	if err != nil {
+		return nil, fmt.Errorf("pyenv global: %w", err)
+	}
+	current, _, _ := strings.Cut(strings.TrimSpace(string(currentOut)), "\n")
+	current = strings.TrimSpace(current)
+	if current == "" || current[0] < '0' || current[0] > '9' {
+		// "system" or unset — not pyenv-managed, nothing for us to update
+		return nil, nil
+	}
+
+	// fetchLatestPythonPatch returns "" when pyenv has no usable definition
+	// list, which is a "can't determine", not a failure — stay silent then.
+	latest := fetchLatestPythonPatch(ctx, current)
+	if latest == "" || !versionNewer(latest, current) {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{
+		Name:       "python (pyenv)",
 		Source:     "runtime",
 		CurrentVer: current,
 		NewVer:     latest,

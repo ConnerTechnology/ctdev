@@ -24,7 +24,12 @@ itself.
 
 Root is used only for the updates that need it: the system package manager, the
 Go toolchain (it lives in `/usr/local/go`), and rebuilding a Docker stack.
-Bun, nodenv and rbenv all stay inside `$HOME` and are updated as you.
+Bun, nodenv, rbenv and pyenv all stay inside `$HOME` and are updated as you.
+
+Python updates stay within the minor version you are on: 3.14.8 is offered
+3.14.9, never 3.15. A new minor breaks every installed package and virtualenv,
+so moving to one is `pyenv install 3.15.0 && pyenv global 3.15.0`, done when
+you choose.
 
 See [Commands](commands.md) for every flag, and `ctdev update --help` for the
 same list on the machine.

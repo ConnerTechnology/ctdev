@@ -1,4 +1,4 @@
-// Latest-version lookups (GitHub, go.dev, dl.k8s.io, nodenv/ruby-build) and
+// Latest-version lookups (GitHub, go.dev, dl.k8s.io, nodenv/ruby-build/pyenv) and
 // version-comparison helpers.
 package cmd
 
@@ -214,6 +214,38 @@ func fetchLatestRubyVersion(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+func fetchLatestPythonPatch(ctx context.Context, current string) string {
+	out, err := exec.CommandContext(ctx, "pyenv", "install", "--list").Output()
+	if err != nil {
+		return ""
+	}
+	return latestPythonPatch(string(out), current)
+}
+
+// latestPythonPatch picks the newest CPython release in the same major.minor
+// as current from `pyenv install --list` output. A new minor changes the C
+// ABI, which breaks every installed package and virtualenv, so moving to one
+// is left to the user. Pre-releases (3.15.0a1), free-threaded builds (3.14t)
+// and other interpreters (pypy3.10-7.3.17) are skipped.
+func latestPythonPatch(list, current string) string {
+	parts := strings.SplitN(current, ".", 3)
+	if len(parts) < 2 {
+		return ""
+	}
+	prefix := parts[0] + "." + parts[1] + "."
+	latest := ""
+	for _, line := range strings.Split(list, "\n") {
+		v := strings.TrimSpace(line)
+		if !strings.HasPrefix(v, prefix) || strings.Trim(v, "0123456789.") != "" {
+			continue
+		}
+		if latest == "" || versionNewer(v, latest) {
+			latest = v
+		}
+	}
+	return latest
 }
 
 func fetchLatestKubectlVersion(ctx context.Context) (string, error) {

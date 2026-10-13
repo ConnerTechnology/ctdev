@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-55 components, counted in `ctdev/component/registry.go` on 2026-10-04. A
+56 components, counted in `ctdev/component/registry.go` on 2026-10-13. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -84,6 +84,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `git` | Git configuration and aliases | Linux, macOS |
 | `go` | Go toolchain (official tarball) | Linux, macOS |
 | `node` | Node.js via nodenv | Linux, macOS |
+| `python` | Python via pyenv | Linux, macOS |
 | `ruby` | Ruby via rbenv | Linux, macOS |
 | `zsh` | Zsh, Oh My Zsh, Pure prompt, plugins | Linux, macOS |
 

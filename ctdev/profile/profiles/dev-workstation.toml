@@ -13,6 +13,7 @@ components = [
   "fonts",
   "vscode",
   "node",
+  "python",
   "go",
   "docker",
   "tailscale",
