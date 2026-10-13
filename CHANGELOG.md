@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [12.33.0] - 2026-10-13
+
+### Added
+- **`python` installs and manages Python with pyenv.** `ctdev install python` installs
+  pyenv (Homebrew on macOS, a clone of `~/.pyenv` on Linux) and CPython's build
+  dependencies, then installs Python 3.14.8 and makes it the global version. The zsh
+  configs run `pyenv init`, so `python`, `python3` and `pip` come from pyenv's shims;
+  run `ctdev install zsh` to pick that up on a machine that already has them. The
+  `dev-workstation` profile now includes `python`, and `ctdev verify` checks it.
+- **A Mac moves off Homebrew's Python on the first install.** Homebrew `python` and
+  `python@3.x` formulae that nothing else needs are uninstalled. One another formula
+  depends on is kept and named (`Keeping Homebrew python@3.14: needed by gcloud-cli`);
+  pyenv's Python still comes first on `PATH`. Packages installed with `pip` into the old
+  Python are not carried over. After removing the formula that needed it, run
+  `ctdev install python --force` to finish the cleanup.
+- **`ctdev update` offers Python patch releases.** It compares pyenv's global version with
+  the newest release in the same minor (3.14.8 → 3.14.9, never 3.15) and installs it
+  without asking for a password. A new minor breaks installed packages and virtualenvs,
+  so moving to one stays a `pyenv install` you run yourself.
+
 ## [12.32.1] - 2026-10-12
 
 ### Fixed
