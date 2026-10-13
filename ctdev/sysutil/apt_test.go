@@ -32,4 +32,7 @@ func TestAddAPTSourceDryRun(t *testing.T) {
 	if !strings.Contains(buf.String(), "[dry-run]") {
 		t.Error("expected dry-run prefix")
 	}
+	if !strings.Contains(buf.String(), "(mode 0644)") {
+		t.Errorf("source must be world-readable, got %q", buf.String())
+	}
 }
