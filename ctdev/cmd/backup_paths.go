@@ -664,3 +664,12 @@ func removeString(list []string, v string) []string {
 	}
 	return out
 }
+
+// commandOutput runs a command and returns its trimmed stdout ("" on error).
+func commandOutput(ctx context.Context, name string, args ...string) string {
+	out, err := exec.CommandContext(ctx, name, args...).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
