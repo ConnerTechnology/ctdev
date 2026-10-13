@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [13.0.0] - 2026-10-13
+
+### Removed
+- **`ctdev status` is gone.** Use `ctdev doctor` for problems and `ctdev info` for
+  inventory. Its health lines were doctor's own checks without the network ones, so
+  doctor still reports them. Two things it alone showed are not replaced: restic backup
+  freshness (last run, failed or overdue, integrity check), which is being rethought, and
+  up/down for the ctdev stacks (pihole, caddy, portainer, beszel, mcp-email-server).
+  Doctor still flags a crashed, restart-looping or unhealthy container, but not one that
+  stopped cleanly.
+
+### Fixed
+- **A Mac with Remote Login off no longer warns that SSH accepts passwords.** macOS ships
+  `/etc/ssh/sshd_config` on every Mac, so `ctdev doctor` reported password logins even
+  with no SSH server running. The check now asks launchd (macOS) or systemd (Linux)
+  whether sshd is running and is skipped as "SSH server not running" when it isn't. When
+  the service manager can't say, the check reads the config as before.
+- **`ctdev update` sees upgrades from the apt repos ctdev adds.** Their source files in
+  `/etc/apt/sources.list.d/` were written mode 0600, so the upgrade scan, which runs as
+  you, skipped them. This hid updates for claude-desktop, docker, dbeaver, terraform,
+  1password, gh, tailscale and vscode. New installs write them 0644. A file already
+  written stays 0600 until you run `sudo chmod 644` on it.
+
+### Changed
+- **Dependencies:** bubbletea 2.0.10 and `actions/checkout` v7.
+- **ADR 0008 records that Linear app credentials are per computer.** No change to the
+  binary's behavior.
+
 ## [12.33.0] - 2026-10-13
 
 ### Added
