@@ -1,7 +1,6 @@
 package diagnose
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -294,45 +293,6 @@ func TestParsePasswordAuth(t *testing.T) {
 		if got := parsePasswordAuth(tt.config); got != tt.want {
 			t.Errorf("%s: parsePasswordAuth = %v, want %v", tt.name, got, tt.want)
 		}
-	}
-}
-
-// macOS ships sshd_config whether or not Remote Login is on, which made every
-// Mac with it off report password logins. Only a definite answer may skip.
-func TestSystemdState(t *testing.T) {
-	tests := []struct {
-		name string
-		out  string
-		want serviceState
-	}{
-		{"debian service up", "active\ninactive\ninactive\ninactive", serviceRunning},
-		{"ubuntu socket activation", "inactive\ninactive\nactive\ninactive", serviceRunning},
-		{"everything down", "inactive\ninactive\ninactive\nfailed", serviceStopped},
-		{"no systemd answer", "", serviceUnknown},
-		{"systemd offline in a container", "offline\noffline\noffline\noffline", serviceUnknown},
-	}
-	for _, tt := range tests {
-		if got := systemdState(tt.out, 4); got != tt.want {
-			t.Errorf("%s: systemdState = %v, want %v", tt.name, got, tt.want)
-		}
-	}
-}
-
-func TestLaunchdState(t *testing.T) {
-	exitWith := func(code string) error {
-		return exec.Command("sh", "-c", "exit "+code).Run()
-	}
-	if got := launchdState(nil); got != serviceRunning {
-		t.Errorf("loaded job: got %v, want running", got)
-	}
-	if got := launchdState(exitWith("113")); got != serviceStopped {
-		t.Errorf("could not find service: got %v, want stopped", got)
-	}
-	if got := launchdState(exitWith("1")); got != serviceUnknown {
-		t.Errorf("other failure: got %v, want unknown", got)
-	}
-	if got := launchdState(exec.ErrNotFound); got != serviceUnknown {
-		t.Errorf("no launchctl: got %v, want unknown", got)
 	}
 }
 

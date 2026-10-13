@@ -171,12 +171,12 @@ var sshdUnits = []string{"ssh.service", "sshd.service", "ssh.socket", "sshd.sock
 
 // sshdServing asks the service manager whether sshd is up, without root. It
 // asks the service manager rather than dialing port 22 because sshd may listen
-// elsewhere, and status promises no network calls.
-func sshdServing(ctx context.Context, goos platform.OS) serviceState {
-	switch goos {
+// on another port or only on a non-loopback address, and this check is local.
+func sshdServing(ctx context.Context, osName platform.OS) serviceState {
+	switch osName {
 	case platform.MacOS:
 		_, err := captureErr(ctx, "launchctl", "print", "system/com.openssh.sshd")
-		return launchdState(err)
+		return launchdState(exitCode(err))
 	case platform.Linux:
 		if !commandExists("systemctl") {
 			return serviceUnknown
@@ -189,21 +189,34 @@ func sshdServing(ctx context.Context, goos platform.OS) serviceState {
 	return serviceUnknown
 }
 
-// launchdState maps the result of `launchctl print` to a service state.
-func launchdState(err error) serviceState {
+// exitCode is a command's exit status: 0 on success, -1 when it never ran.
+func exitCode(err error) int {
 	if err == nil {
-		return serviceRunning
+		return 0
 	}
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == launchdNoSuchService {
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return -1
+}
+
+// launchdState maps the exit status of `launchctl print` to a service state.
+func launchdState(code int) serviceState {
+	switch code {
+	case 0:
+		return serviceRunning
+	case launchdNoSuchService:
 		return serviceStopped
 	}
 	return serviceUnknown
 }
 
-// systemdState reads `systemctl is-active` output for want units. Any unit up
-// means serving; it is stopped only when every unit answered and none is.
-func systemdState(out string, want int) serviceState {
+// systemdState reads `systemctl is-active` output for the given number of
+// units. Any unit up means serving; it is stopped only when every unit
+// answered and none is. Old systemd prints "unknown" for a unit that isn't
+// installed, which lands on serviceUnknown and keeps the config check.
+func systemdState(out string, units int) serviceState {
 	lines := strings.Fields(out)
 	for _, state := range lines {
 		switch state {
@@ -211,7 +224,7 @@ func systemdState(out string, want int) serviceState {
 			return serviceRunning
 		}
 	}
-	if len(lines) != want {
+	if len(lines) != units {
 		return serviceUnknown
 	}
 	for _, state := range lines {
