@@ -103,8 +103,8 @@ type Check struct {
 	ID    string
 	Name  string
 	Group string
-	// Network marks a check that performs network I/O, so a run can leave
-	// those out.
+	// Network marks a check that performs network I/O. Nothing filters on it
+	// since `ctdev status` was removed; doctor always runs these.
 	Network bool
 	// Deep marks a check that is slow, uses the user's bandwidth, or touches
 	// third-party infrastructure. Only runs under --deep.

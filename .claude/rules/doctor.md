@@ -37,8 +37,9 @@ leaves the machine beyond the diagnostic probes themselves.
   (Unbound) and asks a root server non-recursively: only a real root sets AA; a
   transparent ISP proxy cannot, and that is the failure mode that broke DNSSEC in
   the Spencer's Desk Pi-hole write-up pi-01 was compared against on 2026-09-07.
-- **`Check.Network`** marks a check that does network I/O. **`Check.Deep`**
-  marks slow or third-party probes that only run under `--deep`.
+- **`Check.Network`** marks a check that does network I/O; nothing filters on
+  it since `status` was removed. **`Check.Deep`** marks slow or third-party
+  probes that only run under `--deep`.
 - **`Diagnose(results, facts) []Finding`** is the correlation engine: a pure
   function that turns combinations into verdicts. Network rules are layered and
   first-match-wins, because a network fault has one root cause and everything
