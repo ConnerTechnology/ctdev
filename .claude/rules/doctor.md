@@ -15,8 +15,8 @@ leaves the machine beyond the diagnostic probes themselves.
   status, container log sizes and the authoritative `sshd -T` read on machines
   where the operator would gladly have typed a password. `--root` calls
   `ensureSudo` in `runDoctor` **before** `GatherFacts`, which settles
-  `Facts.Root` once for the whole run — never inside `GatherFacts`, which must
-  never prompt on its own. Default off: doctor is pointed
+  `Facts.Root` once for the whole run — never inside `GatherFacts`, so callers
+  that only want facts never hit a password prompt. Default off: doctor is pointed
   at machines we do not manage, and demanding a stranger's password uninvited is
   the behavior the package doc promises it does not have.
 - **A skip never says "re-run with sudo".** ctdev installs to `~/.local/bin`,
