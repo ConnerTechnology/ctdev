@@ -40,6 +40,13 @@ if [[ -d "$HOME/.rbenv" ]]; then
   eval "$(rbenv init - zsh)"
 fi
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ pyenv ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+if [[ -d "$HOME/.pyenv" ]]; then
+  path=($HOME/.pyenv/bin $path)
+  eval "$(pyenv init - zsh)"
+fi
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ User Paths ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Prepend last so user binaries take precedence over everything (including shims)

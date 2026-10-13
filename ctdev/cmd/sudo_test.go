@@ -54,6 +54,7 @@ func TestUpdateNeedsRoot(t *testing.T) {
 		{"bun upgrades in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "bun"}}, false},
 		{"nodenv stays in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "node (nodenv)"}}, false},
 		{"rbenv stays in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "ruby"}}, false},
+		{"pyenv stays in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "python (pyenv)"}}, false},
 		{"flatpak uses polkit, not our sudo", []checklist.UpdateItem{{Source: "flatpak", Name: "org.x.Y"}}, false},
 		{"npm globals", []checklist.UpdateItem{{Source: "npm", Name: "typescript"}}, false},
 		{"oh-my-zsh git pull", []checklist.UpdateItem{{Source: "git", Name: "oh-my-zsh"}}, false},

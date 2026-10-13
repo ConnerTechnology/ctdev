@@ -69,6 +69,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		{"jq", []string{"--version"}, "jq"},
 		{"rg", []string{"--version"}, ""},
 		{"node", []string{"--version"}, "node"},
+		{"python", []string{"--version"}, "python"},
 		{"docker", []string{"--version"}, "docker"},
 		{"code", []string{"--version"}, "vscode"},
 		{"tailscale", []string{"version"}, "tailscale"},

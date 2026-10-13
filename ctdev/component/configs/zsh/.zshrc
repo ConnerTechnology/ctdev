@@ -141,7 +141,7 @@ fi
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ PATH ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# All PATH setup consolidated in path.zsh (system, homebrew, nodenv, rbenv, user paths)
+# All PATH setup consolidated in path.zsh (system, homebrew, nodenv, rbenv, pyenv, user paths)
 [[ -f ~/.zsh/path.zsh ]] && source ~/.zsh/path.zsh
 
 # bun

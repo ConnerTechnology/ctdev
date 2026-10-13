@@ -113,7 +113,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 //   - brew formulae don't, but casks do: Homebrew escalates internally for pkg
 //     payloads and system extensions.
 //   - among the runtimes only go is privileged (sudo rm/mv into /usr/local/go);
-//     bun, nodenv and rbenv all stay inside $HOME.
+//     bun, nodenv, rbenv and pyenv all stay inside $HOME.
 //   - the cli tools resolve their destination at run time via `which` and fall
 //     back to /usr/local/bin, so assume root.
 //   - docker stacks can rebuild through `sudo docker compose`.

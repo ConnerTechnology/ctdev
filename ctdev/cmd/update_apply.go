@@ -149,6 +149,13 @@ func runtimeUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 			}
 			return sysutil.Run(ctx, o, "nodenv", "global", item.NewVer)
 		}}, true
+	case "python (pyenv)":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			if err := sysutil.Run(ctx, o, "pyenv", "install", "--skip-existing", item.NewVer); err != nil {
+				return fmt.Errorf("pyenv install: %w", err)
+			}
+			return sysutil.Run(ctx, o, "pyenv", "global", item.NewVer)
+		}}, true
 	case "go":
 		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
 			if o.DryRun {
