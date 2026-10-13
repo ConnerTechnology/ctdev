@@ -42,9 +42,7 @@ func TestSelect(t *testing.T) {
 		deep, network bool
 		want          []string
 	}{
-		// `ctdev status` reuses the catalog with network off, which is what
-		// keeps its "no network calls" contract honest.
-		{"status", false, false, []string{"plain"}},
+		{"offline", false, false, []string{"plain"}},
 		{"default", false, true, []string{"plain", "net"}},
 		{"deep", true, true, []string{"plain", "net", "slow", "slow-net"}},
 		{"deep offline", true, false, []string{"plain", "slow"}},

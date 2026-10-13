@@ -68,7 +68,7 @@ func (s Severity) String() string {
 }
 
 // Glyph is the status marker, matching the vocabulary already used by
-// `ctdev verify` and `ctdev status`.
+// `ctdev verify`.
 func (s Severity) Glyph() string {
 	switch s {
 	case OK:
@@ -103,8 +103,8 @@ type Check struct {
 	ID    string
 	Name  string
 	Group string
-	// Network marks a check that performs network I/O. `ctdev status`
-	// excludes these to keep its "fast enough for every login" contract.
+	// Network marks a check that performs network I/O. Nothing filters on it
+	// since `ctdev status` was removed; doctor always runs these.
 	Network bool
 	// Deep marks a check that is slow, uses the user's bandwidth, or touches
 	// third-party infrastructure. Only runs under --deep.
@@ -328,24 +328,4 @@ func runOne(ctx context.Context, c Check, f Facts) Result {
 	case <-ctx.Done():
 		return skipf("timed out after %s", checkTimeout)
 	}
-}
-
-// LocalChecks runs the checks that touch nothing but this machine — no network
-// I/O, nothing slow. It exists so `ctdev status` can share this catalog while
-// keeping its own contract of being cheap enough to run on every login.
-func LocalChecks(ctx context.Context, info platform.Info, f Facts) (map[string]Result, []Check) {
-	checks := Select(Catalog(info, f), false, false)
-	return RunAll(ctx, checks, f), checks
-}
-
-// NeedsAttention filters results down to the ones worth interrupting someone
-// for. A clean pass and a check that couldn't run are both silence.
-func NeedsAttention(results map[string]Result) map[string]Result {
-	out := make(map[string]Result, len(results))
-	for id, res := range results {
-		if res.Severity == Warn || res.Severity == Fail {
-			out[id] = res
-		}
-	}
-	return out
 }

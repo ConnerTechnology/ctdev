@@ -15,8 +15,8 @@ leaves the machine beyond the diagnostic probes themselves.
   status, container log sizes and the authoritative `sshd -T` read on machines
   where the operator would gladly have typed a password. `--root` calls
   `ensureSudo` in `runDoctor` **before** `GatherFacts`, which settles
-  `Facts.Root` once for the whole run — never inside `GatherFacts`, because
-  `ctdev status` shares it and must stay silent. Default off: doctor is pointed
+  `Facts.Root` once for the whole run — never inside `GatherFacts`, so callers
+  that only want facts never hit a password prompt. Default off: doctor is pointed
   at machines we do not manage, and demanding a stranger's password uninvited is
   the behavior the package doc promises it does not have.
 - **A skip never says "re-run with sudo".** ctdev installs to `~/.local/bin`,
@@ -37,9 +37,8 @@ leaves the machine beyond the diagnostic probes themselves.
   (Unbound) and asks a root server non-recursively: only a real root sets AA; a
   transparent ISP proxy cannot, and that is the failure mode that broke DNSSEC in
   the Spencer's Desk Pi-hole write-up pi-01 was compared against on 2026-09-07.
-- **`Check.Network`** marks a check that does network I/O; `ctdev status` reuses
-  the same catalog filtered to `!Network && !Deep`, which is what keeps its
-  "no network calls" contract honest. **`Check.Deep`** marks slow or third-party
+- **`Check.Network`** marks a check that does network I/O; nothing filters on
+  it since `status` was removed. **`Check.Deep`** marks slow or third-party
   probes that only run under `--deep`.
 - **`Diagnose(results, facts) []Finding`** is the correlation engine: a pure
   function that turns combinations into verdicts. Network rules are layered and

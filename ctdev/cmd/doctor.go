@@ -163,8 +163,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Before GatherFacts, which settles Facts.Root once for the whole run — and
 	// before any check starts, so a password prompt never lands mid-report.
-	// Deliberately not inside GatherFacts: `ctdev status` shares it and must
-	// stay silent. ensureSudo no-ops when we already have root and warns rather
+	// Deliberately not inside GatherFacts, so callers that only want facts
+	// never hit a password prompt. ensureSudo no-ops when we already have root and warns rather
 	// than errors when nothing can type a password, so --root in cron degrades
 	// instead of failing.
 	if flagDoctorRoot {
