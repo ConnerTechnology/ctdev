@@ -2,7 +2,9 @@ package diagnose
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -115,6 +117,12 @@ func checkSSHExposure(ctx context.Context, f Facts) Result {
 	if !pathExists("/etc/ssh/sshd_config") {
 		return skipf("no SSH server installed")
 	}
+	// macOS ships sshd_config on every Mac whether or not Remote Login is on,
+	// so the file alone says nothing about exposure. Only a definite "not
+	// running" skips; an unanswerable probe falls through to the config.
+	if sshdServing(ctx, f.Platform.OS) == serviceStopped {
+		return skipf("SSH server not running")
+	}
 
 	// `sshd -T` prints the resolved configuration, which is the only
 	// authoritative answer once drop-ins, Match blocks, and compiled-in
@@ -143,6 +151,75 @@ func checkSSHExposure(ctx context.Context, f Facts) Result {
 			"the SSH server accepts password logins")
 	}
 	return okf("SSH accepts keys only")
+}
+
+type serviceState int
+
+const (
+	serviceUnknown serviceState = iota
+	serviceRunning
+	serviceStopped
+)
+
+// launchdNoSuchService is launchctl's exit status for "Could not find
+// service": the job isn't loaded, which for sshd means Remote Login is off.
+const launchdNoSuchService = 113
+
+// sshdUnits are every name sshd runs under on systemd hosts: Debian calls it
+// ssh, Fedora sshd, and newer Ubuntu starts it from a socket unit.
+var sshdUnits = []string{"ssh.service", "sshd.service", "ssh.socket", "sshd.socket"}
+
+// sshdServing asks the service manager whether sshd is up, without root. It
+// asks the service manager rather than dialing port 22 because sshd may listen
+// elsewhere, and status promises no network calls.
+func sshdServing(ctx context.Context, goos platform.OS) serviceState {
+	switch goos {
+	case platform.MacOS:
+		_, err := captureErr(ctx, "launchctl", "print", "system/com.openssh.sshd")
+		return launchdState(err)
+	case platform.Linux:
+		if !commandExists("systemctl") {
+			return serviceUnknown
+		}
+		// is-active exits non-zero whenever any unit is down, so the output,
+		// one state per unit, is the answer and the error is not.
+		out, _ := captureErr(ctx, "systemctl", append([]string{"is-active"}, sshdUnits...)...)
+		return systemdState(out, len(sshdUnits))
+	}
+	return serviceUnknown
+}
+
+// launchdState maps the result of `launchctl print` to a service state.
+func launchdState(err error) serviceState {
+	if err == nil {
+		return serviceRunning
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == launchdNoSuchService {
+		return serviceStopped
+	}
+	return serviceUnknown
+}
+
+// systemdState reads `systemctl is-active` output for want units. Any unit up
+// means serving; it is stopped only when every unit answered and none is.
+func systemdState(out string, want int) serviceState {
+	lines := strings.Fields(out)
+	for _, state := range lines {
+		switch state {
+		case "active", "activating", "reloading":
+			return serviceRunning
+		}
+	}
+	if len(lines) != want {
+		return serviceUnknown
+	}
+	for _, state := range lines {
+		if state != "inactive" && state != "failed" {
+			return serviceUnknown
+		}
+	}
+	return serviceStopped
 }
 
 // sshdReadableConfig concatenates the sshd configuration in the order sshd
