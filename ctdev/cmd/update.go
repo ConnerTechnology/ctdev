@@ -52,6 +52,12 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// One-time cleanup after machine profiles were removed. --check is
+	// read-only, so it only reports, the same as --dry-run. A failure here
+	// shouldn't block updates, so it warns and carries on.
+	if err := removeLeftoverProfiles(os.Stdout, leftoverProfilePaths(), flagDryRun || flagCheck); err != nil {
+		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("could not clean up old machine profiles: %v", err)))
+	}
 	if shouldRefreshKeys(flagRefreshKeys, flagCheck) {
 		fmt.Println(styles.Dimmed.Render("Refreshing APT GPG keys..."))
 		refreshAPTKeys(ctx, args)
