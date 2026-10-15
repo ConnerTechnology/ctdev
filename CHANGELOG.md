@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [14.0.0] - 2026-10-15
 
 ### Removed
 - **Machine profiles are gone, and with them `ctdev apply` and `ctdev diff`.** Choose
