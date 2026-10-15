@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-57 components, counted in `ctdev/component/registry.go` on 2026-10-15. A
+58 components, counted in `ctdev/component/registry.go` on 2026-10-15. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -94,6 +94,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | Component | What it is | Platforms |
 | --- | --- | --- |
 | `age` | age file encryption tool | Linux, macOS |
+| `endorctl` | Endor Labs CLI (dependency and secret scanning) | Linux, macOS |
 | `sops` | Mozilla SOPS secrets manager | Linux, macOS |
 | `tailscale` | Tailscale VPN | Linux, macOS |
 
