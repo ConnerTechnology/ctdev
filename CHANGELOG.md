@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [14.1.0] - 2026-10-15
 
 ### Added
 - **`ctdev install acli`** installs the Atlassian CLI: from Atlassian's Homebrew tap on
