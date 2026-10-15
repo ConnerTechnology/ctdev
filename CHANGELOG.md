@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`ctdev install acli`** installs the Atlassian CLI: from Atlassian's Homebrew tap on
+  macOS and from Atlassian's APT repository on Debian and Ubuntu. `ctdev update
+  --refresh-keys` refreshes its APT signing key.
+
 ## [14.0.0] - 2026-10-15
 
 ### Removed
