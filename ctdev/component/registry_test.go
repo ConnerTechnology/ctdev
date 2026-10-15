@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestRegistryHas56Components(t *testing.T) {
-	if len(Registry) != 56 {
-		t.Errorf("expected 56 components, got %d", len(Registry))
+func TestRegistryHas57Components(t *testing.T) {
+	if len(Registry) != 57 {
+		t.Errorf("expected 57 components, got %d", len(Registry))
 	}
 }
 

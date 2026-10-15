@@ -132,6 +132,7 @@ func TestAPTKeyRefreshers_RepoURLsMatchInstallers(t *testing.T) {
 		"1password": "https://downloads.1password.com/linux/debian",
 		"terraform": "https://apt.releases.hashicorp.com",
 		"tailscale": "https://pkgs.tailscale.com/stable",
+		"acli":      "https://acli.atlassian.com/linux/deb",
 	}
 	for name, expected := range want {
 		r, ok := aptKeyRefreshers[name]

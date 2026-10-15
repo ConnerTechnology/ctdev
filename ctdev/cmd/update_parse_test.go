@@ -374,6 +374,7 @@ func TestAPTKeyRefreshers_PathsMatchInstallers(t *testing.T) {
 		"1password": "/usr/share/keyrings/1password-archive-keyring.gpg",
 		"terraform": "/usr/share/keyrings/hashicorp-archive-keyring.gpg",
 		"tailscale": "/usr/share/keyrings/tailscale-archive-keyring.gpg",
+		"acli":      "/usr/share/keyrings/acli-archive-keyring.gpg",
 	}
 	for name, expected := range want {
 		r, ok := aptKeyRefreshers[name]

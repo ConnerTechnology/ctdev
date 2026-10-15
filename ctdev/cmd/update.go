@@ -262,6 +262,11 @@ var aptKeyRefreshers = map[string]aptKeyRefresher{
 		KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg",
 		RepoURL:     "https://pkgs.tailscale.com/stable",
 	},
+	"acli": {
+		KeyURL:      "https://acli.atlassian.com/gpg/public-key.asc",
+		KeyringPath: "/usr/share/keyrings/acli-archive-keyring.gpg",
+		RepoURL:     "https://acli.atlassian.com/linux/deb",
+	},
 }
 
 const aptSourcesDir = "/etc/apt/sources.list.d"
