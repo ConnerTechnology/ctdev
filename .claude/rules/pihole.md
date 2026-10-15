@@ -2,7 +2,6 @@
 paths:
   - "ctdev/component/pihole*.go"
   - "ctdev/component/configs/pihole/**"
-  - "ctdev/cmd/pihole*.go"
 ---
 # Pi-hole
 
@@ -26,16 +25,5 @@ paths:
   The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
   served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
   Pi-hole's lists, settings, and gravity.db persist in `~/pihole/etc-pihole`, which
-  restic backs up. A restic snapshot restores a Pi-hole but doesn't show what its
-  lists contain, so the allow/deny/regex lists and adlists are *also* version
-  controlled as `component/configs/pihole/lists.toml` (one entry per line, with
-  its comment and group): `ctdev pihole sync` diffs that file against gravity.db
-  and applies what you check, `ctdev pihole export` records the live state back
-  into it. Additions and updates are checked by default; **removals are not** —
-  an unchecked removal keeps the entry on the Pi-hole, which is what makes a
-  domain someone allowed in the web UI survive a sync. Writes are one SQL
-  transaction against gravity.db (the `pihole allow --delete` CLI is broken on
-  v6.4.3), then `pihole reloadlists`, or the much slower `pihole -g` only when an
-  adlist changed. Keep semicolons out of entry comments: the `pihole` CLI rejected
-  them (2026-09-08), and nobody has tried one through `sync`. Set the admin password with
+  restic backs up. Set the admin password with
   `docker exec -it pihole pihole setpassword`.

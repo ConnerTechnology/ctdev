@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- **`ctdev pihole sync` and `ctdev pihole export` are gone, and so is
+  `ctdev/component/configs/pihole/lists.toml`.** ctdev no longer keeps a Pi-hole's
+  allow/deny/regex lists and adlists in git. They still live in `~/pihole/etc-pihole`,
+  which restic backs up. `ctdev install pihole` and `ctdev configure pihole` are unchanged.
+
 ## [13.0.0] - 2026-10-13
 
 ### Removed
