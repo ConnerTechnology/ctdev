@@ -29,6 +29,14 @@ leaves the machine beyond the diagnostic probes themselves.
   closures, built as a function of `platform.Info` + `Facts` — the same shape as
   `cleanup.Task`. Gate at construction time so a wired machine has no Wi-Fi rows
   rather than a column of "n/a".
+- **Tool and service rows** (`managed.go`) are the one place doctor looks at what
+  ctdev installed. `Facts.Components` gates them, and only `runDoctor` fills it,
+  from `component.InstalledSet()`; `GatherFacts` leaves it empty, and `diagnose`
+  never imports `component`. Empty means no rows, so an unmanaged machine shows
+  none. Building the catalog runs no subprocess, because the sshd unit check is a
+  Fact. tailscaled and docker fail when stopped. sshd counts as running when its
+  service or socket is active, the same logic as `sec.ssh`, and when it's off the
+  row is informational, because turning ssh off is usually deliberate.
 - **`dns.dnssec` and `dns.roots`** (`dnssec.go`) speak DNS on the wire by hand
   because `net.Resolver` hides the response flags and both verdicts *are* flags.
   DNSSEC is judged by the bogus name (`dnssec-failed.org` must SERVFAIL), never
