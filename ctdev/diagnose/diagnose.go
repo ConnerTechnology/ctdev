@@ -67,8 +67,7 @@ func (s Severity) String() string {
 	}
 }
 
-// Glyph is the status marker, matching the vocabulary already used by
-// `ctdev verify`.
+// Glyph is the status marker for a result.
 func (s Severity) Glyph() string {
 	switch s {
 	case OK:
@@ -92,11 +91,14 @@ const (
 	GroupHardware = "Hardware"
 	GroupSystem   = "System"
 	GroupSecurity = "Security"
+	// GroupTools is the binaries ctdev installed, last because it is the part
+	// of the report about ctdev rather than about the machine.
+	GroupTools = "Tools"
 )
 
 // GroupOrder is the render order for check groups. Anything not listed sorts
 // after these, alphabetically.
-var GroupOrder = []string{GroupNetwork, GroupInternet, GroupHardware, GroupSystem, GroupSecurity}
+var GroupOrder = []string{GroupNetwork, GroupInternet, GroupHardware, GroupSystem, GroupSecurity, GroupTools}
 
 // Check is one diagnostic probe. It never mutates the system.
 type Check struct {
@@ -204,6 +206,17 @@ type Facts struct {
 	// that already exists. Deliberately a bool and not the credentials
 	// themselves: Facts travels into the report, and secrets must not.
 	IntegrationsConfigured bool
+
+	// Components names the ctdev components detected on this machine, which
+	// gates the tool and service rows. GatherFacts leaves it empty, so the
+	// package assumes nothing; `ctdev doctor` fills it from the component
+	// registry.
+	Components map[string]bool
+
+	// SSHUnitInstalled records that one of sshd's systemd units (ssh or sshd,
+	// service or socket) is installed. ssh isn't a ctdev component, so this
+	// is what gates its service row, and only alongside Components.
+	SSHUnitInstalled bool
 }
 
 // Finding is a verdict the correlation engine reached by combining several
@@ -245,6 +258,7 @@ func Catalog(info platform.Info, f Facts) []Check {
 	case platform.Windows:
 		checks = append(checks, windowsChecks(info, f)...)
 	}
+	checks = append(checks, managedChecks(info, f, systemProbe{})...)
 	return checks
 }
 

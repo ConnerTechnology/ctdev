@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/ConnerTechnology/ctdev/ctdev/diagnose"
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
@@ -174,7 +175,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	started := time.Now()
-	facts := diagnose.GatherFacts(ctx, info)
+	facts := gatherDoctorFacts(ctx, info, diagnose.GatherFacts, component.InstalledSet)
 
 	// Resolve credentials before the checks run, not after: any prompt belongs
 	// up front rather than interrupting a report mid-flow, and the gear check
@@ -242,6 +243,17 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+// gatherDoctorFacts is GatherFacts plus what only ctdev knows: the components
+// it installed, which gate the tool and service rows. They are filled here,
+// not in GatherFacts, so package diagnose never depends on the registry.
+func gatherDoctorFacts(ctx context.Context, info platform.Info,
+	gather func(context.Context, platform.Info) diagnose.Facts,
+	installed func() map[string]bool) diagnose.Facts {
+	f := gather(ctx, info)
+	f.Components = installed()
+	return f
 }
 
 // writeDoctorReport saves the Markdown report. It writes to the working

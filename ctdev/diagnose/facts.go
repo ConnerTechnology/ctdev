@@ -25,6 +25,7 @@ func GatherFacts(ctx context.Context, info platform.Info) Facts {
 	}
 	f.Gateway = defaultGateway(ctx, info)
 	f.DNS = resolvers(ctx, info, f.Iface)
+	f.SSHUnitInstalled = sshUnitInstalled(ctx, info)
 	return f
 }
 

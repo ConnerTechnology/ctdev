@@ -46,9 +46,6 @@ ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailsca
 ctdev configure linear          # this repo's Linear MCP server, as this computer's Linear app (--show)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
-ctdev pihole sync               # Apply the version-controlled lists.toml to this Pi-hole (interactive)
-ctdev pihole sync --dry-run     # Show what would change, apply nothing
-ctdev pihole export             # Write this Pi-hole's current lists back into lists.toml
 ctdev backup now                # Run a restic snapshot of this machine now
 ctdev backup test               # Check backups are set up correctly (config, connection, paths)
 ctdev backup disable            # Pause scheduled backups (config + snapshots kept)
@@ -58,7 +55,6 @@ ctdev backup paths              # Pick what to back up in a local web UI
 ctdev backup paths --listen tailnet  # serve the picker on this node's Tailscale address
 ctdev restore ls|files|in-place|check   # Inspect/restore from restic (see RECOVERY.md)
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
-ctdev verify                    # Verify the bootstrap installation
 ctdev doctor                    # Diagnose any machine: network, hardware, OS, security
 ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint
 ctdev doctor --network          # network and internet checks only
