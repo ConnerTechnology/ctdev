@@ -55,7 +55,7 @@ func resticDeploy(ctx context.Context, o sysutil.Opts, src, dest, mode string) e
 // ResticConfigured reports whether restic is usably configured — the env file
 // exists AND actually sets RESTIC_REPOSITORY. A bare file-exists check reported
 // success for configs written before v12.0.0 renamed RESTIC_REPO_B2 →
-// RESTIC_REPOSITORY, so status/verify/backup green-lit a config the backup
+// RESTIC_REPOSITORY, so ctdev's backup commands green-lit a config the backup
 // script then failed on. Checked via sudo since /etc/restic is root-only 0700.
 func ResticConfigured(ctx context.Context, o sysutil.Opts) bool {
 	// grep is quiet; a match (repo line present) exits 0.

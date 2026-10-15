@@ -241,3 +241,8 @@ func ensureResticReady(ctx context.Context, o sysutil.Opts, scriptPath string) e
 	}
 	return nil
 }
+
+func pathExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
