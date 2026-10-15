@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`ctdev install endorctl`** installs the Endor Labs CLI: from Endor Labs' Homebrew tap
+  on macOS, and on Linux as the latest binary from Endor Labs, checked against its
+  published SHA-256 and installed to `/usr/local/bin`. `ctdev update` doesn't update the
+  Linux binary; run `ctdev install endorctl --force` to get the latest.
+
 ## [14.1.0] - 2026-10-15
 
 ### Added
