@@ -60,7 +60,7 @@ itself in your password manager, since restic can't restore its own credentials.
 `ctdev configure caddy` writes `~/caddy/.env` (mode 600) and, when Pi-hole is
 present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
 set that Tailscale IP as a Global Nameserver (Override on) in the Tailscale admin
-console, and `sudo pihole setpassword` for the admin UI.
+console, and `docker exec -it pihole pihole setpassword` for the admin UI.
 
 **Say yes to "Pi-hole host resolver" in `ctdev configure pihole`.** A node that
 accepts Tailscale DNS resolves through MagicDNS, whose nameserver is its own

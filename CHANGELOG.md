@@ -11,7 +11,8 @@ All notable changes to this project will be documented in this file.
   replaces the drift check. `ctdev info` no longer shows a profile line. The node recipes
   keep their step-by-step `install` and `configure` commands.
 - **`ctdev update` deletes what profiles left behind:** `~/.config/ctdev/profiles/` and
-  the recorded applied profile (`~/.local/state/ctdev/applied-profile`), printing each
+  the recorded applied profile (`applied-profile` under `$XDG_STATE_HOME/ctdev`, by
+  default `~/.local/state/ctdev/applied-profile`), printing each
   path it deletes. `--dry-run` and `--check` only report what they would delete.
 
 ## [13.0.0] - 2026-10-13

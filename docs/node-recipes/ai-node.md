@@ -25,7 +25,7 @@ over SSH (upstream's `ui` subcommand needs a browser), writes them to
 claude mcp add --transport http email https://<node>.<tailnet>.ts.net/mcp
 ```
 
-On a node that already runs Caddy — like a `pihole-node` — `configure` publishes
+On a node that already runs Caddy — like a [Pi-hole node](pihole-node.md) — `configure` publishes
 on tailnet port **8443** instead of 443, and says so. 443 is not free there:
 `ctdev configure caddy` points `*.<domain>` at that node's *Tailscale* IP, and a
 serve rule on 443 would intercept it, so every `https://<svc>.<domain>` on the
