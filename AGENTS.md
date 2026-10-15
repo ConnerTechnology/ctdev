@@ -2,9 +2,9 @@
 
 `ctdev` is Conner Technology's internal tool for managing and maintaining devices and the networks
 they sit on: our own today, clients' later. It is a single Go CLI that installs components,
-configures system settings, runs backups, and diagnoses devices,
-including unmanaged devices it can see but not install on. The Go module is `ctdev/`; everything else at the root is the installer, the docs
-and CI.
+configures system settings, runs backups, and diagnoses devices, including unmanaged devices it can
+see but not install on. The Go module is `ctdev/`; everything else at the root is the installer,
+the docs and CI.
 
 ## Guardrails
 
