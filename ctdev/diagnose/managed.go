@@ -2,7 +2,6 @@ package diagnose
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -45,7 +44,7 @@ var managedTools = []managedTool{
 
 // managedService is a systemd unit that has to be running for something ctdev
 // installed to work. An empty component means the unit isn't a ctdev
-// component, so its own unit file is what says it's installed.
+// component, so a Fact about its own unit file says whether it's installed.
 type managedService struct {
 	unit      string
 	component string
@@ -57,20 +56,19 @@ var managedServices = []managedService{
 	{unit: "docker", component: "docker"},
 }
 
-// managedProbe is everything the managed checks ask the machine, so tests can
-// answer from a table instead of shelling out.
+// managedProbe is what the managed checks ask the machine while they run, so
+// tests can answer from a table instead of shelling out. Building the catalog
+// asks it nothing: everything the gates need is already in Facts.
 type managedProbe interface {
 	LookPath(name string) (string, error)
-	FileExists(path string) bool
 	// Version returns a tool's raw version output, stdout and stderr together.
 	Version(ctx context.Context, path string, args ...string) string
-	UnitInstalled(ctx context.Context, unit string) bool
 	UnitState(ctx context.Context, unit string) string
 }
 
 // managedChecks builds a row per installed tool and per installed service.
 // Nothing installed means no rows.
-func managedChecks(f Facts, p managedProbe) []Check {
+func managedChecks(info platform.Info, f Facts, p managedProbe) []Check {
 	if len(f.Components) == 0 {
 		return nil
 	}
@@ -80,13 +78,13 @@ func managedChecks(f Facts, p managedProbe) []Check {
 			checks = append(checks, toolCheck(t, p))
 		}
 	}
-	if f.Platform.OS != platform.Linux {
+	if info.OS != platform.Linux {
 		return checks
 	}
 	for _, s := range managedServices {
 		installed := f.Components[s.component]
 		if s.component == "" {
-			installed = p.UnitInstalled(context.Background(), s.unit)
+			installed = s.unit == "ssh" && f.SSHUnitInstalled
 		}
 		if installed {
 			checks = append(checks, serviceCheck(s, p))
@@ -102,7 +100,7 @@ func toolCheck(t managedTool, p managedProbe) Check {
 		Group: GroupTools,
 		Run: func(ctx context.Context, _ Facts) Result {
 			path, err := p.LookPath(t.binary)
-			if err != nil && t.fallback != "" && p.FileExists(t.fallback) {
+			if err != nil && t.fallback != "" && pathExists(t.fallback) {
 				path, err = t.fallback, nil
 			}
 			if err != nil {
@@ -111,7 +109,8 @@ func toolCheck(t managedTool, p managedProbe) Check {
 			}
 			version := firstLine(p.Version(ctx, path, t.args...))
 			if version == "" {
-				return okf("%s", path)
+				// Not the path: it can carry the username, and reports get shared.
+				return okf("installed")
 			}
 			return okf("%s", version)
 		},
@@ -143,27 +142,24 @@ type systemProbe struct{}
 
 func (systemProbe) LookPath(name string) (string, error) { return exec.LookPath(name) }
 
-func (systemProbe) FileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 // Version keeps stderr, unlike capture: some tools print their version there.
 func (systemProbe) Version(ctx context.Context, path string, args ...string) string {
-	out, _ := exec.CommandContext(ctx, path, args...).CombinedOutput()
-	return string(out)
-}
-
-func (systemProbe) UnitInstalled(ctx context.Context, unit string) bool {
-	if !commandExists("systemctl") {
-		return false
-	}
-	out := capture(ctx, "systemctl", "list-unit-files", unit+".service", "--no-legend")
-	return strings.Contains(out, unit+".service")
+	return captureCombined(ctx, path, args...)
 }
 
 func (systemProbe) UnitState(ctx context.Context, unit string) string {
 	// is-active exits non-zero for anything but active; the output is the answer.
 	out, _ := captureErr(ctx, "systemctl", "is-active", unit)
 	return out
+}
+
+// sshUnitInstalled reports whether the OpenSSH server's systemd unit is
+// installed. GatherFacts settles it, so building the catalog runs no
+// subprocess.
+func sshUnitInstalled(ctx context.Context, info platform.Info) bool {
+	if info.OS != platform.Linux || !commandExists("systemctl") {
+		return false
+	}
+	out := capture(ctx, "systemctl", "list-unit-files", "ssh.service", "--no-legend")
+	return strings.Contains(out, "ssh.service")
 }

@@ -212,6 +212,11 @@ type Facts struct {
 	// package assumes nothing; `ctdev doctor` fills it from the component
 	// registry.
 	Components map[string]bool
+
+	// SSHUnitInstalled records that the OpenSSH server's systemd unit is
+	// installed. ssh isn't a ctdev component, so this is what gates its
+	// service row, and only alongside Components.
+	SSHUnitInstalled bool
 }
 
 // Finding is a verdict the correlation engine reached by combining several
@@ -253,7 +258,7 @@ func Catalog(info platform.Info, f Facts) []Check {
 	case platform.Windows:
 		checks = append(checks, windowsChecks(info, f)...)
 	}
-	checks = append(checks, managedChecks(f, systemProbe{})...)
+	checks = append(checks, managedChecks(info, f, systemProbe{})...)
 	return checks
 }
 

@@ -3,6 +3,9 @@ package diagnose
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -14,9 +17,7 @@ import (
 // shells out to the machine running it.
 type fakeProbe struct {
 	paths    map[string]string // binary name -> path on PATH
-	files    map[string]bool   // absolute paths that exist
 	versions map[string]string // binary path -> raw version output
-	units    map[string]bool   // systemd units whose unit file is installed
 	states   map[string]string // systemd unit -> `systemctl is-active` output
 }
 
@@ -27,18 +28,16 @@ func (p fakeProbe) LookPath(name string) (string, error) {
 	return "", errors.New("not found")
 }
 
-func (p fakeProbe) FileExists(path string) bool { return p.files[path] }
-
 func (p fakeProbe) Version(_ context.Context, path string, _ ...string) string {
 	return p.versions[path]
 }
 
-func (p fakeProbe) UnitInstalled(_ context.Context, unit string) bool { return p.units[unit] }
-
 func (p fakeProbe) UnitState(_ context.Context, unit string) string { return p.states[unit] }
 
+var linuxInfo = platform.Info{OS: platform.Linux}
+
 func linuxFacts(components ...string) Facts {
-	f := Facts{Platform: platform.Info{OS: platform.Linux}, Components: map[string]bool{}}
+	f := Facts{Platform: linuxInfo, Components: map[string]bool{}}
 	for _, c := range components {
 		f.Components[c] = true
 	}
@@ -68,14 +67,16 @@ func findCheck(t *testing.T, checks []Check, id string) Check {
 // not a column of "n/a" — not even ssh, whose unit exists on plenty of
 // machines ctdev has never touched.
 func TestManagedChecksNothingInstalled(t *testing.T) {
-	got := managedChecks(linuxFacts(), fakeProbe{units: map[string]bool{"ssh": true}})
+	f := linuxFacts()
+	f.SSHUnitInstalled = true
+	got := managedChecks(linuxInfo, f, fakeProbe{})
 	if len(got) != 0 {
 		t.Errorf("managedChecks with no components = %v, want none", checkIDs(got))
 	}
 }
 
 func TestManagedChecksRowPerInstalledTool(t *testing.T) {
-	got := checkIDs(managedChecks(linuxFacts("git", "tmux", "vscode", "claude-code"), fakeProbe{}))
+	got := checkIDs(managedChecks(linuxInfo, linuxFacts("git", "tmux", "vscode", "claude-code"), fakeProbe{}))
 	want := []string{"tool.git", "tool.tmux", "tool.code", "tool.claude"}
 	for _, id := range want {
 		if !slices.Contains(got, id) {
@@ -92,7 +93,7 @@ func TestToolCheckShowsVersion(t *testing.T) {
 		paths:    map[string]string{"git": "/usr/bin/git"},
 		versions: map[string]string{"/usr/bin/git": "git version 2.43.0\nsecond line\n"},
 	}
-	res := findCheck(t, managedChecks(linuxFacts("git"), p), "tool.git").Run(context.Background(), Facts{})
+	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("git"), p), "tool.git").Run(context.Background(), Facts{})
 	if res.Severity != OK {
 		t.Fatalf("severity = %v, want OK (%q)", res.Severity, res.Detail)
 	}
@@ -101,8 +102,21 @@ func TestToolCheckShowsVersion(t *testing.T) {
 	}
 }
 
+// A binary path can carry the username (~/.local/bin, ~/.nodenv), and the
+// report is meant to be shared.
+func TestToolCheckWithoutVersionHidesPath(t *testing.T) {
+	p := fakeProbe{paths: map[string]string{"node": "/home/example/.nodenv/shims/node"}}
+	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("node"), p), "tool.node").Run(context.Background(), Facts{})
+	if res.Severity != OK {
+		t.Fatalf("severity = %v, want OK", res.Severity)
+	}
+	if strings.Contains(res.Detail, "/") || strings.Contains(res.Detail, "example") {
+		t.Errorf("detail = %q, must not show the binary's path", res.Detail)
+	}
+}
+
 func TestToolCheckMissingBinaryFails(t *testing.T) {
-	res := findCheck(t, managedChecks(linuxFacts("node"), fakeProbe{}), "tool.node").Run(context.Background(), Facts{})
+	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("node"), fakeProbe{}), "tool.node").Run(context.Background(), Facts{})
 	if res.Severity != Fail {
 		t.Fatalf("severity = %v, want Fail", res.Severity)
 	}
@@ -116,20 +130,30 @@ func TestToolCheckMissingBinaryFails(t *testing.T) {
 
 // The official Go tarball lands in /usr/local/go/bin, which a fresh shell may
 // not have on PATH yet.
-func TestGoFallsBackToUsrLocal(t *testing.T) {
-	p := fakeProbe{
-		files:    map[string]bool{"/usr/local/go/bin/go": true},
-		versions: map[string]string{"/usr/local/go/bin/go": "go version go1.26.0 linux/amd64"},
+func TestGoToolFallsBackToUsrLocal(t *testing.T) {
+	i := slices.IndexFunc(managedTools, func(m managedTool) bool { return m.component == "go" })
+	if i < 0 || managedTools[i].fallback != "/usr/local/go/bin/go" {
+		t.Fatalf("go tool entry should fall back to /usr/local/go/bin/go")
 	}
-	res := findCheck(t, managedChecks(linuxFacts("go"), p), "tool.go").Run(context.Background(), Facts{})
+}
+
+func TestToolCheckUsesFallbackOffPath(t *testing.T) {
+	fallback := filepath.Join(t.TempDir(), "go")
+	if err := os.WriteFile(fallback, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := fakeProbe{versions: map[string]string{fallback: "go version go1.26.0 linux/amd64"}}
+	tool := managedTool{component: "go", binary: "go", args: []string{"version"}, fallback: fallback}
+	res := toolCheck(tool, p).Run(context.Background(), Facts{})
 	if res.Severity != OK || res.Detail != "go version go1.26.0 linux/amd64" {
 		t.Errorf("result = %v %q, want OK with the version", res.Severity, res.Detail)
 	}
 }
 
 func TestManagedChecksServiceRows(t *testing.T) {
-	p := fakeProbe{units: map[string]bool{"ssh": true}}
-	got := checkIDs(managedChecks(linuxFacts("docker", "tailscale"), p))
+	f := linuxFacts("docker", "tailscale")
+	f.SSHUnitInstalled = true
+	got := checkIDs(managedChecks(linuxInfo, f, fakeProbe{}))
 	for _, id := range []string{"service.ssh", "service.tailscaled", "service.docker"} {
 		if !slices.Contains(got, id) {
 			t.Errorf("missing %s in %v", id, got)
@@ -139,7 +163,7 @@ func TestManagedChecksServiceRows(t *testing.T) {
 
 // ssh isn't a ctdev component; its row needs the OpenSSH server unit itself.
 func TestManagedChecksNoSSHRowWithoutUnit(t *testing.T) {
-	got := checkIDs(managedChecks(linuxFacts("docker"), fakeProbe{}))
+	got := checkIDs(managedChecks(linuxInfo, linuxFacts("docker"), fakeProbe{}))
 	if slices.Contains(got, "service.ssh") {
 		t.Errorf("no ssh unit installed but got a row: %v", got)
 	}
@@ -148,12 +172,12 @@ func TestManagedChecksNoSSHRowWithoutUnit(t *testing.T) {
 	}
 }
 
-// Services are systemd units, so other platforms get none.
+// Services are systemd units, so other platforms get none. The gate is the
+// platform Catalog was asked for.
 func TestManagedChecksNoServicesOffLinux(t *testing.T) {
 	f := linuxFacts("docker", "tailscale")
-	f.Platform.OS = platform.MacOS
-	p := fakeProbe{units: map[string]bool{"ssh": true}}
-	for _, id := range checkIDs(managedChecks(f, p)) {
+	f.SSHUnitInstalled = true
+	for _, id := range checkIDs(managedChecks(platform.Info{OS: platform.MacOS}, f, fakeProbe{})) {
 		if strings.HasPrefix(id, "service.") {
 			t.Errorf("service row %s on macOS", id)
 		}
@@ -173,7 +197,7 @@ func TestServiceCheckSeverity(t *testing.T) {
 	}
 	for _, tc := range cases {
 		p := fakeProbe{states: map[string]string{"docker": tc.state}}
-		res := findCheck(t, managedChecks(linuxFacts("docker"), p), "service.docker").Run(context.Background(), Facts{})
+		res := findCheck(t, managedChecks(linuxInfo, linuxFacts("docker"), p), "service.docker").Run(context.Background(), Facts{})
 		if res.Severity != tc.want {
 			t.Errorf("state %q: severity = %v, want %v", tc.state, res.Severity, tc.want)
 		}
@@ -186,9 +210,21 @@ func TestServiceCheckSeverity(t *testing.T) {
 // Catalog only adds these rows when the caller filled Facts.Components; the
 // package itself assumes nothing.
 func TestCatalogHasNoToolRowsWithoutComponents(t *testing.T) {
-	for _, c := range Catalog(platform.Info{OS: platform.Linux}, Facts{Platform: platform.Info{OS: platform.Linux}}) {
+	f := Facts{Platform: linuxInfo, SSHUnitInstalled: true}
+	for _, c := range Catalog(linuxInfo, f) {
 		if strings.HasPrefix(c.ID, "tool.") || strings.HasPrefix(c.ID, "service.") {
 			t.Errorf("Catalog without components has %s", c.ID)
 		}
+	}
+}
+
+func TestCaptureCombinedKeepsStderr(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh")
+	}
+	got := captureCombined(context.Background(), sh, "-c", "echo out; echo err 1>&2")
+	if !strings.Contains(got, "out") || !strings.Contains(got, "err") {
+		t.Errorf("captureCombined = %q, want stdout and stderr", got)
 	}
 }
