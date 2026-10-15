@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/ConnerTechnology/ctdev/ctdev/diagnose"
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
@@ -175,6 +176,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	started := time.Now()
 	facts := diagnose.GatherFacts(ctx, info)
+	// What ctdev installed gates the tool and service rows. It is filled here,
+	// not in GatherFacts, so package diagnose never depends on the registry.
+	facts.Components = component.InstalledSet()
 
 	// Resolve credentials before the checks run, not after: any prompt belongs
 	// up front rather than interrupting a report mid-flow, and the gear check
