@@ -6,7 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 - **`ctdev verify` is gone.** Use `ctdev doctor` for health and `ctdev info` for
-  inventory.
+  inventory. Its tool and service checks moved to doctor (see Added). Three things it
+  alone checked are not replaced: that the homelab containers (pihole, caddy, portainer,
+  beszel) are running, that suspend is masked, and the zsh setup (login shell, Oh My Zsh,
+  the pure prompt, `~/.zshrc`, and the devcontainer `dx` wrapper). The restic binary and
+  backup timer are still checked by `ctdev backup test`.
+
+### Added
+- **`ctdev doctor` checks what ctdev installed.** A Tools group has a row for each
+  installed component that ships a binary (git, zsh, tmux, jq, node, python, docker,
+  code, tailscale, claude, gh, devcontainer, go) with its version, and fails when the
+  binary is not on PATH. Go is also found in `/usr/local/go/bin`. On Linux, ssh,
+  tailscaled and docker, when installed, fail unless they are running, so a stopped
+  service shows up and not only a failed one.
 
 ## [13.0.0] - 2026-10-13
 
