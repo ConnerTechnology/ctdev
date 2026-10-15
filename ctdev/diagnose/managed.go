@@ -3,6 +3,7 @@ package diagnose
 import (
 	"context"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
@@ -42,16 +43,15 @@ var managedTools = []managedTool{
 	{component: "go", binary: "go", args: []string{"version"}, fallback: "/usr/local/go/bin/go"},
 }
 
-// managedService is a systemd unit that has to be running for something ctdev
-// installed to work. An empty component means the unit isn't a ctdev
-// component, so a Fact about its own unit file says whether it's installed.
+// managedService is a systemd unit that has to be running for a ctdev
+// component to work, so a stopped one is a failure. sshd isn't a component and
+// has its own row; see sshServiceCheck.
 type managedService struct {
 	unit      string
 	component string
 }
 
 var managedServices = []managedService{
-	{unit: "ssh"}, // the remote-access lifeline; enabled by `ctdev configure ssh`
 	{unit: "tailscaled", component: "tailscale"},
 	{unit: "docker", component: "docker"},
 }
@@ -63,7 +63,8 @@ type managedProbe interface {
 	LookPath(name string) (string, error)
 	// Version returns a tool's raw version output, stdout and stderr together.
 	Version(ctx context.Context, path string, args ...string) string
-	UnitState(ctx context.Context, unit string) string
+	// UnitState returns `systemctl is-active` output: one state per unit.
+	UnitState(ctx context.Context, units ...string) string
 }
 
 // managedChecks builds a row per installed tool and per installed service.
@@ -81,16 +82,35 @@ func managedChecks(info platform.Info, f Facts, p managedProbe) []Check {
 	if info.OS != platform.Linux {
 		return checks
 	}
+	if f.SSHUnitInstalled {
+		checks = append(checks, sshServiceCheck(p))
+	}
 	for _, s := range managedServices {
-		installed := f.Components[s.component]
-		if s.component == "" {
-			installed = s.unit == "ssh" && f.SSHUnitInstalled
-		}
-		if installed {
+		if f.Components[s.component] {
 			checks = append(checks, serviceCheck(s, p))
 		}
 	}
 	return checks
+}
+
+// sshServiceCheck reports whether sshd is up under any of its unit names. Off
+// is information, not a failure: plenty of desktops have the server installed
+// and switched off on purpose, so there's no advice to turn it on.
+func sshServiceCheck(p managedProbe) Check {
+	return Check{
+		ID:    "service.ssh",
+		Name:  "ssh",
+		Group: GroupSystem,
+		Run: func(ctx context.Context, _ Facts) Result {
+			switch systemdState(p.UnitState(ctx, sshdUnits...), len(sshdUnits)) {
+			case serviceRunning:
+				return okf("running")
+			case serviceStopped:
+				return infof("off")
+			}
+			return skipf("could not tell whether sshd is running")
+		},
+	}
 }
 
 func toolCheck(t managedTool, p managedProbe) Check {
@@ -147,19 +167,29 @@ func (systemProbe) Version(ctx context.Context, path string, args ...string) str
 	return captureCombined(ctx, path, args...)
 }
 
-func (systemProbe) UnitState(ctx context.Context, unit string) string {
+func (systemProbe) UnitState(ctx context.Context, units ...string) string {
 	// is-active exits non-zero for anything but active; the output is the answer.
-	out, _ := captureErr(ctx, "systemctl", "is-active", unit)
+	out, _ := captureErr(ctx, "systemctl", append([]string{"is-active"}, units...)...)
 	return out
 }
 
-// sshUnitInstalled reports whether the OpenSSH server's systemd unit is
-// installed. GatherFacts settles it, so building the catalog runs no
-// subprocess.
+// sshUnitInstalled reports whether any of sshd's systemd units is installed.
+// GatherFacts settles it, so building the catalog runs no subprocess.
 func sshUnitInstalled(ctx context.Context, info platform.Info) bool {
 	if info.OS != platform.Linux || !commandExists("systemctl") {
 		return false
 	}
-	out := capture(ctx, "systemctl", "list-unit-files", "ssh.service", "--no-legend")
-	return strings.Contains(out, "ssh.service")
+	args := append([]string{"list-unit-files", "--no-legend"}, sshdUnits...)
+	return sshdUnitListed(capture(ctx, "systemctl", args...))
+}
+
+// sshdUnitListed reads `systemctl list-unit-files` output for any of sshd's
+// unit names, matched on the whole first field so sshd-keygen doesn't count.
+func sshdUnitListed(out string) bool {
+	for _, line := range lines(out) {
+		if fields := strings.Fields(line); len(fields) > 0 && slices.Contains(sshdUnits, fields[0]) {
+			return true
+		}
+	}
+	return false
 }

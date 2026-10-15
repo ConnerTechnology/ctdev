@@ -9,6 +9,22 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
+// --strict fails the run on failures only; an sshd that is off is reported as
+// information and must not trip it.
+func TestStrictIgnoresInfoRows(t *testing.T) {
+	results := map[string]diagnose.Result{
+		"service.ssh":    {Severity: diagnose.Info, Detail: "off"},
+		"service.docker": {Severity: diagnose.OK, Detail: "running"},
+	}
+	if n := countFailures(results); n != 0 {
+		t.Errorf("countFailures = %d, want 0", n)
+	}
+	results["service.tailscaled"] = diagnose.Result{Severity: diagnose.Fail, Detail: "tailscaled is inactive"}
+	if n := countFailures(results); n != 1 {
+		t.Errorf("countFailures = %d, want 1 for a stopped tailscaled", n)
+	}
+}
+
 // doctor is the one caller that knows what ctdev installed; the facts it hands
 // the catalog have to carry that, on top of what GatherFacts found.
 func TestDoctorFactsCarryInstalledComponents(t *testing.T) {

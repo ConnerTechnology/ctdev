@@ -17,9 +17,11 @@ All notable changes to this project will be documented in this file.
 - **`ctdev doctor` checks what ctdev installed.** A Tools group has a row for each
   installed component that ships a binary (git, zsh, tmux, jq, node, python, docker,
   code, tailscale, claude, gh, devcontainer, go) with its version, and fails when the
-  binary is not on PATH. Go is also found in `/usr/local/go/bin`. On Linux, ssh,
-  tailscaled and docker, when installed, fail unless they are running, so a stopped
-  service shows up and not only a failed one.
+  binary is not on PATH. Go is also found in `/usr/local/go/bin`. On Linux, tailscaled
+  and docker, when installed, fail unless they are running, so a stopped service shows
+  up and not only a failed one. An installed sshd shows as running when its service or
+  its socket is active (`ssh` or `sshd`), and as "off" otherwise. Off is information,
+  not a failure, so `--strict` doesn't count it.
 
 ## [13.0.0] - 2026-10-13
 

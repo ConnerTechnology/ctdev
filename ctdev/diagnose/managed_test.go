@@ -32,7 +32,83 @@ func (p fakeProbe) Version(_ context.Context, path string, _ ...string) string {
 	return p.versions[path]
 }
 
-func (p fakeProbe) UnitState(_ context.Context, unit string) string { return p.states[unit] }
+// UnitState answers like `systemctl is-active`: one line per unit asked.
+func (p fakeProbe) UnitState(_ context.Context, units ...string) string {
+	out := make([]string, len(units))
+	for i, u := range units {
+		out[i] = p.states[u]
+	}
+	return strings.Join(out, "\n")
+}
+
+func sshdStates(service, sshdService, socket, sshdSocket string) map[string]string {
+	return map[string]string{
+		"ssh.service": service, "sshd.service": sshdService,
+		"ssh.socket": socket, "sshd.socket": sshdSocket,
+	}
+}
+
+func runSSHRow(t *testing.T, states map[string]string) Result {
+	t.Helper()
+	f := linuxFacts("git")
+	f.SSHUnitInstalled = true
+	return findCheck(t, managedChecks(linuxInfo, f, fakeProbe{states: states}), "service.ssh").Run(context.Background(), Facts{})
+}
+
+func TestSSHRowServiceActiveIsRunning(t *testing.T) {
+	res := runSSHRow(t, sshdStates("active", "inactive", "inactive", "inactive"))
+	if res.Severity != OK || res.Detail != "running" {
+		t.Errorf("result = %v %q, want OK running", res.Severity, res.Detail)
+	}
+}
+
+// Newer Ubuntu starts sshd from ssh.socket, so the service is inactive until
+// someone connects.
+func TestSSHRowSocketActiveIsRunning(t *testing.T) {
+	res := runSSHRow(t, sshdStates("inactive", "inactive", "active", "inactive"))
+	if res.Severity != OK {
+		t.Errorf("severity = %v (%q), want OK", res.Severity, res.Detail)
+	}
+}
+
+// An installed sshd that's switched off is often deliberate on a desktop, so
+// it's information, not a failure, and doctor doesn't push to enable it.
+func TestSSHRowOffIsInfoNotFailure(t *testing.T) {
+	res := runSSHRow(t, sshdStates("inactive", "inactive", "inactive", "inactive"))
+	if res.Severity != Info {
+		t.Fatalf("severity = %v, want Info", res.Severity)
+	}
+	if res.Detail != "off" {
+		t.Errorf("detail = %q, want off", res.Detail)
+	}
+	if res.Advice != "" {
+		t.Errorf("advice = %q, want none", res.Advice)
+	}
+}
+
+func TestSSHRowUnreadableIsSkipped(t *testing.T) {
+	res := runSSHRow(t, map[string]string{})
+	if res.Severity != Skipped {
+		t.Errorf("severity = %v, want Skipped when systemd gives no answer", res.Severity)
+	}
+}
+
+func TestSSHDUnitListed(t *testing.T) {
+	cases := []struct {
+		name, out string
+		want      bool
+	}{
+		{"debian", "ssh.service enabled enabled\nssh.socket disabled enabled", true},
+		{"fedora", "sshd.service enabled disabled\nsshd.socket disabled disabled", true},
+		{"none", "", false},
+		{"unrelated", "sshd-keygen.service static -", false},
+	}
+	for _, tc := range cases {
+		if got := sshdUnitListed(tc.out); got != tc.want {
+			t.Errorf("%s: sshdUnitListed = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
 
 var linuxInfo = platform.Info{OS: platform.Linux}
 

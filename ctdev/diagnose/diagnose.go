@@ -213,9 +213,9 @@ type Facts struct {
 	// registry.
 	Components map[string]bool
 
-	// SSHUnitInstalled records that the OpenSSH server's systemd unit is
-	// installed. ssh isn't a ctdev component, so this is what gates its
-	// service row, and only alongside Components.
+	// SSHUnitInstalled records that one of sshd's systemd units (ssh or sshd,
+	// service or socket) is installed. ssh isn't a ctdev component, so this
+	// is what gates its service row, and only alongside Components.
 	SSHUnitInstalled bool
 }
 
