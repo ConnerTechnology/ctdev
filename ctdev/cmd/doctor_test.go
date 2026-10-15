@@ -6,7 +6,26 @@ import (
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/diagnose"
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
+
+// doctor is the one caller that knows what ctdev installed; the facts it hands
+// the catalog have to carry that, on top of what GatherFacts found.
+func TestDoctorFactsCarryInstalledComponents(t *testing.T) {
+	gather := func(context.Context, platform.Info) diagnose.Facts {
+		return diagnose.Facts{Hostname: "test-host", SSHUnitInstalled: true}
+	}
+	installed := func() map[string]bool { return map[string]bool{"git": true, "docker": true} }
+
+	f := gatherDoctorFacts(context.Background(), platform.Info{OS: platform.Linux}, gather, installed)
+
+	if !f.Components["git"] || !f.Components["docker"] || len(f.Components) != 2 {
+		t.Errorf("Components = %v, want git and docker", f.Components)
+	}
+	if f.Hostname != "test-host" || !f.SSHUnitInstalled {
+		t.Errorf("gathered facts were lost: %+v", f)
+	}
+}
 
 // The set-up instructions promise that setting CTDEV_UNIFI_API_KEY is enough.
 // Requiring the endpoint separately made that promise false, and left the tool
