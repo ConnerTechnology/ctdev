@@ -5,21 +5,16 @@ work on. Both are below; neither needs a clone of this repo.
 
 ## Fresh machine setup
 
-Install the `ctdev` binary, then either apply a **machine profile** (the fast
-path) or compose the machine by hand from components and `configure` categories.
+Install the `ctdev` binary, then choose the components and `configure`
+categories this machine should have.
 
 ```bash
 # 1. install ctdev
 curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash
 
-# 2a. the fast path: apply a profile (built in — no repo clone needed)
-ctdev apply                      # list profiles: dev-workstation, pihole-node, ai-node, family-desktop
-ctdev apply dev-workstation      # plan → confirm → install + batch-configure → next steps
-ctdev diff dev-workstation       # later: check the machine hasn't drifted (cron-able)
-# add your own: ~/.config/ctdev/profiles/<name>.toml
-
-# 2b. or by hand: install the components you want (each runs its configure step afterward)
-ctdev install zsh git gh node go docker tailscale vscode claude-code tmux
+# 2. install the components you want (each runs its configure step afterward)
+ctdev install                    # pick them from a list
+ctdev install zsh git gh node go docker tailscale vscode claude-code tmux   # or name them
 
 # 3. apply the system settings you want
 ctdev configure ssh --batch      # SSH server + key-based auth hardening
@@ -53,7 +48,6 @@ Use `--dry-run` on any command to preview changes before applying.
 
 ## Where to go next
 
-- [Profiles](profiles.md) — the declarative form of the block above
 - [Components](components/README.md) — what `ctdev install` can put on a machine
 - [Configure](configure.md) — the system settings categories
 - [Commands](commands.md) — every command and flag

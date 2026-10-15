@@ -2,7 +2,7 @@
 
 ## What it is
 
-ctdev sets up a UniFi network to a standard, the way it sets up a machine from a profile.
+ctdev sets up a UniFi network to a standard, the way it sets up a machine.
 
 It covers UniFi only. A network built on any other vendor's devices gets diagnosis only.
 

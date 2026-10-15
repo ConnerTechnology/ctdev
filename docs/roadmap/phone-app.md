@@ -5,8 +5,8 @@
 A ctdev app for phones, so that a phone can be a managed device: one that reports its health and
 takes commands.
 
-A phone running the app is a managed device but not a machine. Profiles, components, configure,
-backup and update apply to machines only.
+A phone running the app is a managed device but not a machine. Components, configure, backup
+and update apply to machines only.
 
 This is an intention. Nothing about the app is designed.
 

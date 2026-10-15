@@ -5,8 +5,6 @@ server runs as a container reachable **only over Tailscale** — nothing is
 published to the LAN or the internet.
 
 ```bash
-ctdev apply ai-node                      # ← the whole block below in one command
-# — or step by step: —
 ctdev install zsh git tailscale docker
 sudo tailscale up                        # join the tailnet
 ctdev install mcp-email-server           # MCP server that reads your mailboxes over IMAP

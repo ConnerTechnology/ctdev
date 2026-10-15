@@ -8,9 +8,6 @@ DNS-01, nothing exposed to the internet):
 
 ```bash
 # after SSHing in and installing ctdev — see ../install.md:
-ctdev apply pihole-node                  # ← the whole block below in one command,
-                                         #    then follow its printed next steps
-# — or step by step: —
 ctdev install zsh git tailscale          # whatever base tools you want
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker

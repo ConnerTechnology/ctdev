@@ -13,7 +13,7 @@ import (
 // leftoverProfilePaths names what machine profiles left on a machine before
 // they were removed: the local profiles directory (always under ~/.config,
 // whatever XDG_CONFIG_HOME says, because that is where profiles read it from)
-// and the profile `ctdev apply` recorded.
+// and the profile the old apply command recorded.
 func leftoverProfilePaths() []string {
 	var paths []string
 	if home, err := os.UserHomeDir(); err == nil {

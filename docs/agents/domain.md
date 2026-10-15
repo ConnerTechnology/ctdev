@@ -15,7 +15,7 @@ codebase. Single-context: one glossary, one ADR directory.
 
 When your output names a domain concept — an issue title, a refactor proposal, a test name — use
 the term as `CONTEXT.md` defines it. Until it exists, the live vocabulary is the code's: component,
-profile, configure category, check, finding.
+configure category, check, finding.
 
 If the concept you need is not in the glossary, that is a signal: either you are inventing language
 the project does not use, or there is a real gap to note for `/domain-modeling`.

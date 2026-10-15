@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- **Machine profiles are gone, and with them `ctdev apply` and `ctdev diff`.** Choose
+  what a machine runs with `ctdev install`, which opens a picker when given no names, and
+  `ctdev configure`. Installing a component already runs its configure step. Nothing
+  replaces the drift check. `ctdev info` no longer shows a profile line. The node recipes
+  keep their step-by-step `install` and `configure` commands.
+- **`ctdev update` deletes what profiles left behind:** `~/.config/ctdev/profiles/` and
+  the recorded applied profile (`~/.local/state/ctdev/applied-profile`), printing each
+  path it deletes. `--dry-run` and `--check` only report what they would delete.
+
 ## [13.0.0] - 2026-10-13
 
 ### Removed

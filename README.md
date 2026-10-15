@@ -16,21 +16,14 @@ Technology.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash
-ctdev apply dev-workstation      # plan → confirm → install + batch-configure → next steps
-ctdev diff dev-workstation       # later: check the machine hasn't drifted (cron-able)
+ctdev install                    # pick the components this machine should have
+ctdev configure                  # walk through the system settings
 ```
 
-Both paths — a profile, or components and settings picked by hand — are in
-[Getting started](docs/getting-started.md). Installing the binary on its own,
+The whole first run is in [Getting started](docs/getting-started.md). Installing the binary on its own,
 verifying it, and removing it are in [Install](docs/install.md).
 
 ## What ctdev does
-
-**[Profiles](docs/profiles.md).** A machine profile is a TOML file saying which
-components a machine should have and which settings should be applied. `ctdev
-apply` makes the machine match it; `ctdev diff` says where it has drifted. Four
-profiles are built into the binary, so a machine with nothing else on it can
-apply one.
 
 **[Components](docs/components/README.md).** A component is one installable
 thing — a CLI tool, a desktop app, a runtime, a container stack. `ctdev install`

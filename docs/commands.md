@@ -17,14 +17,13 @@ the dependency (`--batch` prints no `Retry:` line).
 `uninstall` runs every selected component regardless.
 
 ```bash
-ctdev apply [profile]           # Apply a machine profile; no args lists profiles
-ctdev diff <profile>            # Show drift from a profile (non-zero exit on drift)
+ctdev install                   # Pick components to install from the registry
 ctdev install <component...>    # Install components (then configure them)
 ctdev uninstall <component...>  # Remove specific components
 ctdev update [-y]               # Update system packages, components, and Docker stacks
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
-ctdev info                      # Inventory: specs, kernel, uptime, profile, drives, usage, installed components
+ctdev info                      # Inventory: specs, kernel, uptime, drives, usage, installed components
 ctdev configure                 # Full-screen settings browser (all categories)
 ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration

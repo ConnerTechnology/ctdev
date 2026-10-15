@@ -12,7 +12,6 @@ ctdev/                 Go module root
   gpu/                 GPU/NVIDIA signing management
   linear/              Linear app credentials per workspace, app tokens, a repo's .mcp.json wiring
   platform/            OS/arch detection
-  profile/             Machine profiles (embedded TOML + ~/.config/ctdev/profiles)
   setup/               System settings (Linux dconf/GRUB, macOS defaults)
     configs/           Setup config files (go:embed)
   state/               Install markers and XDG state
