@@ -27,17 +27,7 @@ type ComponentInfo struct {
 	Installed bool
 }
 
-// ProfileInfo names the machine profile this host was built from, and how much
-// of it is actually present. Inferred is set when no `ctdev apply` recorded a
-// profile and the name is a best guess from what's installed.
-type ProfileInfo struct {
-	Name      string
-	Inferred  bool
-	Installed int
-	Total     int
-}
-
-func Render(sysInfo platform.SystemInfo, version string, components []ComponentInfo, prof *ProfileInfo, termWidth int) string {
+func Render(sysInfo platform.SystemInfo, version string, components []ComponentInfo, termWidth int) string {
 	var b strings.Builder
 
 	b.WriteString(styles.Title.Render("System Information"))
@@ -72,9 +62,6 @@ func Render(sysInfo platform.SystemInfo, version string, components []ComponentI
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("ctdev"), valueStyle.Render(version)))
 	if sysInfo.Uptime > 0 {
 		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Uptime"), valueStyle.Render(humanUptime(sysInfo.Uptime))))
-	}
-	if prof != nil {
-		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Profile"), renderProfile(prof)))
 	}
 
 	// Hardware section
@@ -289,21 +276,6 @@ func diskLabelText(mount string) string {
 		return "/ (system)"
 	}
 	return mount
-}
-
-// renderProfile shows the profile and how complete it is, pointing at
-// `ctdev diff` only when something is actually missing.
-func renderProfile(p *ProfileInfo) string {
-	out := styles.Value.Render(p.Name)
-	if p.Inferred {
-		out += styles.Dimmed.Render(" (closest match)")
-	}
-	missing := p.Total - p.Installed
-	if missing <= 0 {
-		return out + styles.Dimmed.Render(fmt.Sprintf(" · %d/%d components", p.Installed, p.Total))
-	}
-	return out + styles.Warning.Render(fmt.Sprintf(" · %d/%d components", p.Installed, p.Total)) +
-		styles.Dimmed.Render(fmt.Sprintf(" — ctdev diff %s", p.Name))
 }
 
 // humanUptime renders uptime at the coarsest useful precision: minutes for a

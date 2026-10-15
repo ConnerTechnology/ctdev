@@ -33,7 +33,7 @@ needed it fails with its own error.
 | Path | What |
 | --- | --- |
 | `~/.local/bin/ctdev` | The binary, as the install script places it |
-| `~/.config/ctdev/` | Configuration, including your own machine profiles |
+| `~/.config/ctdev/` | Configuration |
 | `~/.local/state/ctdev/` | State ctdev keeps between runs |
 
 `uninstall.sh` removes those three, and `~/.cache/ctdev` if anything has left

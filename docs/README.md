@@ -10,7 +10,6 @@ them is plain Markdown with relative links, readable on GitHub as it stands.
 
 ## What ctdev does
 
-- [Profiles](profiles.md) — declarative machine profiles: `apply` and `diff`
 - [Components](components/README.md) — everything `ctdev install` can put on a machine
 - [Configure](configure.md) — system settings, by category
 - [Update](update.md) — packages, components and stacks

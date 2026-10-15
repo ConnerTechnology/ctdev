@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Removed
+- **Machine profiles are gone, and with them `ctdev apply` and `ctdev diff`.** Choose
+  what a machine runs with `ctdev install`, which opens a picker when given no names, and
+  `ctdev configure`. Installing a component already runs its configure step. Nothing
+  replaces the drift check. `ctdev info` no longer shows a profile line. The node recipes
+  now carry the base tools and `configure` steps their profiles applied.
+- **`ctdev update` deletes what profiles left behind:** `~/.config/ctdev/profiles/` and
+  the recorded applied profile (`applied-profile` under `$XDG_STATE_HOME/ctdev`, by
+  default `~/.local/state/ctdev/applied-profile`), printing each path it
+  deletes. `--dry-run` and `--check` only report what they would delete.
 - **`ctdev verify` is gone.** Use `ctdev doctor` for health and `ctdev info` for
   inventory. Its tool and service checks moved to doctor (see Added). Four things it
   alone checked are not replaced: that the homelab containers (pihole, caddy, portainer,

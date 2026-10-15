@@ -5,12 +5,18 @@ server runs as a container reachable **only over Tailscale** — nothing is
 published to the LAN or the internet.
 
 ```bash
-ctdev apply ai-node                      # ← the whole block below in one command
-# — or step by step: —
-ctdev install zsh git tailscale docker
+ctdev install zsh git mosh tailscale docker btop
+ctdev configure ssh --batch              # SSH server + key-based auth hardening
+ctdev configure locale --batch           # UTF-8 locale, for Mosh
+ctdev configure linger --batch           # user services keep running after logout
+ctdev configure sleep --batch            # never suspend
+ctdev configure autoupdate --batch       # automatic security updates
+# skip `ctdev configure ufw`: Docker's iptables rules sit ahead of UFW (see below)
 sudo tailscale up                        # join the tailnet
 ctdev install mcp-email-server           # MCP server that reads your mailboxes over IMAP
 ctdev configure mcp-email-server         # add mailboxes, publish it to the tailnet
+ctdev install portainer                  # optional: Docker management web UI
+ctdev install beszel                     # optional: server/container monitoring
 ctdev install restic && ctdev configure restic   # back the mailbox config up
 ```
 
@@ -27,7 +33,7 @@ over SSH (upstream's `ui` subcommand needs a browser), writes them to
 claude mcp add --transport http email https://<node>.<tailnet>.ts.net/mcp
 ```
 
-On a node that already runs Caddy — like a `pihole-node` — `configure` publishes
+On a node that already runs Caddy — like a [Pi-hole node](pihole-node.md) — `configure` publishes
 on tailnet port **8443** instead of 443, and says so. 443 is not free there:
 `ctdev configure caddy` points `*.<domain>` at that node's *Tailscale* IP, and a
 serve rule on 443 would intercept it, so every `https://<svc>.<domain>` on the

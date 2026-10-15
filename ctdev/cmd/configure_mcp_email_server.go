@@ -59,7 +59,7 @@ func configureMCPEmailServer(ctx context.Context) error {
 		return fmt.Errorf("stack not deployed — run 'ctdev install mcp-email-server' first")
 	}
 
-	// Checked before anything reads the account list, so a profile apply fails
+	// Checked before anything reads the account list, so a batch run fails
 	// fast instead of starting a container to tell the user it can't continue.
 	if isBatchMode() && !flagConfigShow {
 		// Every field here is a mailbox credential; there is nothing sensible

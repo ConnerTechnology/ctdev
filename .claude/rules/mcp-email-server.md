@@ -7,8 +7,7 @@ paths:
 # AI / MCP nodes
 
 An always-on node that holds credentials so laptops don't have to. Same shape as
-the homelab node — compose it from components; `ctdev apply ai-node` is the
-built-in profile.
+the homelab node — compose it from components (`docs/node-recipes/ai-node.md`).
 
 - `ctdev install mcp-email-server` — [mcp-email-server](https://github.com/ai-zerolab/mcp-email-server)
   as a Docker compose stack in `~/mcp-email-server/`, exposing IMAP mailboxes to

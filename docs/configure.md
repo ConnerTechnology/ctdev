@@ -14,8 +14,7 @@ ctdev configure --show          # what is currently configured
 
 Each setting is a **category**. Run with no arguments and you get a browser over
 all of them; name one and you get just that one. `--batch` applies the
-recommended defaults without asking, which is what [profiles](profiles.md) use,
-and what you want in a script.
+recommended defaults without asking, which is what you want in a script.
 
 ## The categories
 
@@ -33,9 +32,12 @@ sliders on both Cinnamon and macOS.
 
 **Component wizards** — `pihole`, `caddy`, `restic`,
 `mcp-email-server`. These belong to a component and mostly run for you when you install
-it; running `configure` directly reconfigures without reinstalling. They are
-the ones that ask for secrets, which is why they are never run non-interactively
-by `apply`.
+it; running `configure` directly reconfigures without reinstalling. `restic` and
+`mcp-email-server` ask for secrets and refuse `--batch`. `caddy --batch` skips its
+prompts and takes the domain, email and token from `--domain`, `--acme-email`,
+`CF_API_TOKEN` or the existing `~/caddy/.env`. `pihole --batch` applies the
+category's defaults, which also set the upstream to Cloudflare, so run it
+interactively.
 
 **Claude Code** — `claude-code` isn't a wizard: `ctdev configure claude-code` diffs
 `~/.claude/settings.json` and `CLAUDE.md` against ctdev's baseline and asks before replacing

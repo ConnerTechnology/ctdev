@@ -22,8 +22,8 @@ paths:
   cannot resolve them (NXDOMAIN, verified); it also gives every LAN client tailnet
   names. tailscaled keeps answering on 100.100.100.100 with `--accept-dns=false`;
   that flag only governs who writes resolv.conf. Gated to NetworkManager hosts
-  without systemd-resolved; never batch-applied by a profile (`pihole` defaults
-  would also flip the upstream to Cloudflare).
+  without systemd-resolved. Don't batch-apply `pihole`: its defaults would also
+  flip the upstream to Cloudflare.
   The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
   served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
   Pi-hole's lists, settings, and gravity.db persist in `~/pihole/etc-pihole`, which
