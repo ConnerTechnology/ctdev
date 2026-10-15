@@ -32,16 +32,10 @@ func TestCommandTreeShape(t *testing.T) {
 	if !hasSubcommand(rootCmd, "backup") || !hasSubcommand(rootCmd, "restore") {
 		t.Error("expected top-level backup and restore commands")
 	}
-	// pihole is back, but only for the lists that gravity.db holds and restic
-	// can't meaningfully version — never for the old backup/import verbs.
-	pihole := childCommand(t, rootCmd, "pihole")
-	for _, sub := range []string{"sync", "export"} {
-		if !hasSubcommand(pihole, sub) {
-			t.Errorf("pihole should have a %q subcommand", sub)
-		}
-	}
-	if hasSubcommand(pihole, "import") || hasSubcommand(pihole, "backup") {
-		t.Error("the old pihole import/backup verbs are gone")
+	// There is no top-level pihole command; the Pi-hole component is reached
+	// through install/configure, and its state through restic.
+	if hasSubcommand(rootCmd, "pihole") {
+		t.Error("ctdev pihole should be removed")
 	}
 	// gpu moved under configure.
 	if hasSubcommand(rootCmd, "gpu") {

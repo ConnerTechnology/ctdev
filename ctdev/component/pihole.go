@@ -10,7 +10,8 @@ import (
 // Pi-hole runs as a container (official pihole/pihole image) with host
 // networking so it owns the host's :53 (DNS) and :80 (web, behind Caddy). The
 // stack lives in ~/pihole/; gravity.db and config persist in ./etc-pihole,
-// which restic backs up (see `ctdev configure restic`). Tune settings with
+// which restic backs up when ~/pihole is in `ctdev backup paths` (see
+// `ctdev configure restic`). Tune settings with
 // `ctdev configure pihole`.
 
 // The tuning drop-ins are read by FTL / Unbound on container (re)start (the
