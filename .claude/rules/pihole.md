@@ -25,5 +25,5 @@ paths:
   The upstream choices include "Local recursive (Unbound)" → `127.0.0.1#5335`,
   served by the `unbound` sidecar in the Pi-hole stack (recursive + DNSSEC).
   Pi-hole's lists, settings, and gravity.db persist in `~/pihole/etc-pihole`, which
-  restic backs up. Set the admin password with
+  restic backs up when `~/pihole` is in `ctdev backup paths`. Set the admin password with
   `docker exec -it pihole pihole setpassword`.
