@@ -5,10 +5,18 @@ server runs as a container reachable **only over Tailscale** — nothing is
 published to the LAN or the internet.
 
 ```bash
-ctdev install zsh git tailscale docker
+ctdev install zsh git mosh tailscale docker btop
+ctdev configure ssh --batch              # SSH server + key-based auth hardening
+ctdev configure locale --batch           # UTF-8 locale, for Mosh
+ctdev configure linger --batch           # user services keep running after logout
+ctdev configure sleep --batch            # never suspend
+ctdev configure autoupdate --batch       # automatic security updates
+# skip `ctdev configure ufw`: Docker's iptables rules sit ahead of UFW (see below)
 sudo tailscale up                        # join the tailnet
 ctdev install mcp-email-server           # MCP server that reads your mailboxes over IMAP
 ctdev configure mcp-email-server         # add mailboxes, publish it to the tailnet
+ctdev install portainer                  # optional: Docker management web UI
+ctdev install beszel                     # optional: server/container monitoring
 ctdev install restic && ctdev configure restic   # back the mailbox config up
 ```
 

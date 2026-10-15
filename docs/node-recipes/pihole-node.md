@@ -8,7 +8,12 @@ DNS-01, nothing exposed to the internet):
 
 ```bash
 # after SSHing in and installing ctdev — see ../install.md:
-ctdev install zsh git tailscale          # whatever base tools you want
+ctdev install zsh git mosh tailscale smartmontools btop   # base tools, disk health, monitoring
+ctdev configure ssh --batch              # SSH server + key-based auth hardening
+ctdev configure locale --batch           # UTF-8 locale, for Mosh
+ctdev configure linger --batch           # user services keep running after logout
+ctdev configure sleep --batch            # never suspend
+ctdev configure autoupdate --batch       # automatic security updates
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker
 ctdev configure pihole                   # upstreams, listening mode, blocking, host resolver
