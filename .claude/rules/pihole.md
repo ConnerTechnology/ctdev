@@ -2,6 +2,8 @@
 paths:
   - "ctdev/component/pihole*.go"
   - "ctdev/component/configs/pihole/**"
+  - "ctdev/setup/pihole*.go"
+  - "ctdev/sysutil/pihole*.go"
 ---
 # Pi-hole
 
