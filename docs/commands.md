@@ -56,7 +56,6 @@ ctdev backup paths              # Pick what to back up in a local web UI
 ctdev backup paths --listen tailnet  # serve the picker on this node's Tailscale address
 ctdev restore ls|files|in-place|check   # Inspect/restore from restic (see RECOVERY.md)
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
-ctdev verify                    # Verify the bootstrap installation
 ctdev doctor                    # Diagnose any machine: network, hardware, OS, security
 ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint
 ctdev doctor --network          # network and internet checks only

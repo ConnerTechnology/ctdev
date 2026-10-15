@@ -5,11 +5,28 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Removed
+- **`ctdev verify` is gone.** Use `ctdev doctor` for health and `ctdev info` for
+  inventory. Its tool and service checks moved to doctor (see Added). Four things it
+  alone checked are not replaced: that the homelab containers (pihole, caddy, portainer,
+  beszel) are running, that suspend is masked, the zsh setup (login shell, Oh My Zsh,
+  the pure prompt, `~/.zshrc`, and the devcontainer `dx` wrapper), and the informational
+  version rows for curl, mosh, rg and fd, which ctdev doesn't install. The restic binary
+  and backup timer are still checked by `ctdev backup test`.
 - **`ctdev pihole sync` and `ctdev pihole export` are gone, and so is
   `ctdev/component/configs/pihole/lists.toml`.** ctdev no longer keeps a Pi-hole's
   allow/deny/regex lists and adlists in git. They still live in `~/pihole/etc-pihole`,
   which restic backs up when `~/pihole` is in `ctdev backup paths`. `ctdev install pihole`
   and `ctdev configure pihole` are unchanged.
+
+### Added
+- **`ctdev doctor` checks what ctdev installed.** A Tools group has a row for each
+  installed component that ships a binary (git, zsh, tmux, jq, node, python, docker,
+  code, tailscale, claude, gh, devcontainer, go) with its version, and fails when the
+  binary is not on PATH. Go is also found in `/usr/local/go/bin`. On Linux, tailscaled
+  and docker, when installed, fail unless they are running, so a stopped service shows
+  up and not only a failed one. An installed sshd shows as running when its service or
+  its socket is active (`ssh` or `sshd`), and as "off" otherwise. Off is information,
+  not a failure, so `--strict` doesn't count it.
 
 ## [13.0.0] - 2026-10-13
 

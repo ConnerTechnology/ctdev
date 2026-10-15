@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -31,6 +32,24 @@ func captureErr(ctx context.Context, name string, args ...string) (string, error
 	}
 	return strings.TrimSpace(stdout.String()), nil
 }
+
+// captureCombined runs a read-only command and returns its trimmed stdout and
+// stderr together, for tools that print their version to stderr or exit
+// non-zero. WaitDelay bounds the wait for the pipes once the command exits or
+// ctx ends, so a grandchild that inherited them can't hold the check open.
+func captureCombined(ctx context.Context, name string, args ...string) string {
+	cmd := exec.CommandContext(ctx, name, args...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	cmd.WaitDelay = captureWaitDelay
+	_ = cmd.Run()
+	return strings.TrimSpace(out.String())
+}
+
+// captureWaitDelay is how long captureCombined waits on a pipe still held
+// open after the command itself is gone.
+const captureWaitDelay = 2 * time.Second
 
 // sudoCapture runs a read-only command as root without ever prompting. A
 // missing password is a failed probe, not a stall — see sysutil.SudoNoPrompt.

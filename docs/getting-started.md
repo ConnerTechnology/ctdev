@@ -39,7 +39,6 @@ Everything is idempotent and safe to re-run.
 - Add your client's SSH public key: `echo 'ssh-ed25519 ...' >> ~/.ssh/authorized_keys`, then re-run `ctdev configure ssh --batch` (password auth is disabled only once a key is present)
 - Authenticate the VS Code tunnel once: `code tunnel user login`
 - `gh auth login` · `ctdev configure git` · (optional) `sudo tailscale up`
-- Verify everything: `ctdev verify`
 
 ## Day one on an existing machine
 

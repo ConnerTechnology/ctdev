@@ -53,7 +53,7 @@ func runBackupTest(cmd *cobra.Command, args []string) error {
 	}
 
 	// 1. restic installed.
-	if !report("restic installed", sysutil.CommandExists("restic"), firstLine(runForOutput("restic", "version"))) {
+	if !report("restic installed", sysutil.CommandExists("restic"), firstLine(commandOutput(ctx, "restic", "version"))) {
 		return stop("restic is not installed — run: ctdev install restic")
 	}
 	// 2. backup script deployed.
@@ -134,4 +134,21 @@ func resticRepoReachable(ctx context.Context) string {
 		return err.Error()
 	}
 	return ""
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return strings.TrimSpace(s[:i])
+	}
+	return s
+}
+
+func unitEnabled(name string) bool {
+	return unitEnabledState(name) == "enabled"
+}
+
+func unitEnabledState(name string) string {
+	out, _ := exec.Command("systemctl", "is-enabled", name).Output()
+	return strings.TrimSpace(string(out))
 }
