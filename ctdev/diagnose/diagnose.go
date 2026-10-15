@@ -67,8 +67,7 @@ func (s Severity) String() string {
 	}
 }
 
-// Glyph is the status marker, matching the vocabulary already used by
-// `ctdev verify`.
+// Glyph is the status marker for a result.
 func (s Severity) Glyph() string {
 	switch s {
 	case OK:

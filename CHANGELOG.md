@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- **`ctdev verify` is gone.** Use `ctdev doctor` for health and `ctdev info` for
+  inventory.
+
 ## [13.0.0] - 2026-10-13
 
 ### Removed

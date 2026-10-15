@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -134,4 +135,33 @@ func resticRepoReachable(ctx context.Context) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// runForOutput runs a command and returns combined output, tolerating tools
+// that print their version to stderr or exit non-zero.
+func runForOutput(path string, args ...string) string {
+	out, _ := exec.Command(path, args...).CombinedOutput()
+	return string(out)
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return strings.TrimSpace(s[:i])
+	}
+	return s
+}
+
+func unitEnabled(name string) bool {
+	return unitEnabledState(name) == "enabled"
+}
+
+func unitEnabledState(name string) string {
+	out, _ := exec.Command("systemctl", "is-enabled", name).Output()
+	return strings.TrimSpace(string(out))
+}
+
+func pathExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
