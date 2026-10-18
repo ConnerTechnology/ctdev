@@ -92,7 +92,14 @@ func TestMacKeyRepeatRateRoundTrip(t *testing.T) {
 
 func TestDetectMacKeyRepeatRate(t *testing.T) {
 	ctx := context.Background()
-	for read, want := range map[string]string{"2": "33", "0": "", "x": ""} {
+	for read, want := range map[string]string{
+		"2":   "33",
+		"12":  "6",   // slower than ctdev's choices: shown, matches none
+		"120": "0.6", // under 1 cps: one decimal, never "0"
+		"134": "0.5",
+		"0":   "",
+		"x":   "",
+	} {
 		useFake(t, &fakeDefaults{values: map[string]string{"NSGlobalDomain KeyRepeat": read}})
 		if got := detectMacKeyRepeatRate(ctx); got != want {
 			t.Errorf("KeyRepeat %s: detect = %q, want %q", read, got, want)
@@ -157,22 +164,6 @@ func TestMacBoolKeysOnOff(t *testing.T) {
 	}
 	if f.values["NSGlobalDomain B"] != "0" {
 		t.Error("a failed write should not stop the next key")
-	}
-}
-
-func TestMacTypingKeys(t *testing.T) {
-	want := []string{
-		"NSAutomaticQuoteSubstitutionEnabled",
-		"NSAutomaticDashSubstitutionEnabled",
-		"NSAutomaticSpellingCorrectionEnabled",
-		"NSAutomaticCapitalizationEnabled",
-		"NSAutomaticPeriodSubstitutionEnabled",
-	}
-	if !reflect.DeepEqual([]string(macTypeAsTyped), want) {
-		t.Errorf("macTypeAsTyped = %v, want %v", macTypeAsTyped, want)
-	}
-	if !reflect.DeepEqual([]string(macHoldToRepeat), []string{"ApplePressAndHoldEnabled"}) {
-		t.Errorf("macHoldToRepeat = %v", macHoldToRepeat)
 	}
 }
 

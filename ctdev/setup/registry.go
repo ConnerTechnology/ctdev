@@ -257,7 +257,8 @@ var Registry = []Setting{
 		Slug:     "keyboard",
 		Category: "Keyboard",
 		Description: "How many characters per second a held key types, so moving the cursor or deleting with a held key is quick. " +
-			"macOS offers only these speeds; takes effect after logging out and back in.",
+			"ctdev offers the eight fastest 15 ms steps (15–120 ms); 67 cps is faster than System Settings allows. " +
+			"Takes effect after logging out and back in.",
 		Control:    ControlPicker,
 		Default:    macKeyRepeatRateDefaultCps,
 		Choices:    macKeyRepeatRateChoices(),

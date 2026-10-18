@@ -19,9 +19,12 @@ import (
 const macKeyRepeatDelayDefaultMs = "195"
 
 // keyRepeatUnitMs is the unit of NSGlobalDomain KeyRepeat and InitialKeyRepeat.
+// Apple doesn't document it: 15 ms per unit is the community's long-standing
+// measurement of these keys, not an Apple spec. Both keys take any positive
+// integer.
 const keyRepeatUnitMs = 15
 
-// macKeyRepeatGroup is the ApplyGroup shared by the macOS key repeat sliders,
+// macKeyRepeatGroup is the ApplyGroup shared by the macOS key repeat settings,
 // so the log-out note prints once however many of them apply.
 const macKeyRepeatGroup = "macos-keyrepeat"
 
@@ -242,15 +245,34 @@ func keyRepeatMsToUnits(ms string) (int, error) {
 	return units, nil
 }
 
-// detectMacKeyRepeat reads NSGlobalDomain <key> (KeyRepeat or
-// InitialKeyRepeat) and returns it in ms, or "" when the key is unset.
-func detectMacKeyRepeat(ctx context.Context, key string) string {
+// readMacKeyRepeatUnits reads NSGlobalDomain <key> (KeyRepeat or
+// InitialKeyRepeat) in its raw 15 ms units. ok is false when the key is unset
+// or not an integer.
+func readMacKeyRepeatUnits(ctx context.Context, key string) (int, bool) {
 	out, ok := defaultsRead(ctx, "NSGlobalDomain", key)
 	if !ok {
-		return ""
+		return 0, false
 	}
 	units, err := strconv.Atoi(out)
 	if err != nil {
+		return 0, false
+	}
+	return units, true
+}
+
+// writeMacKeyRepeatUnits writes NSGlobalDomain <key> in its raw 15 ms units.
+func writeMacKeyRepeatUnits(ctx context.Context, o sysutil.Opts, key string, units int) error {
+	if err := macExec(ctx, o, "defaults", "write", "NSGlobalDomain", key, "-int", strconv.Itoa(units)); err != nil {
+		return fmt.Errorf("defaults write NSGlobalDomain %s: %w", key, err)
+	}
+	return nil
+}
+
+// detectMacKeyRepeat reads NSGlobalDomain <key> (KeyRepeat or
+// InitialKeyRepeat) and returns it in ms, or "" when the key is unset.
+func detectMacKeyRepeat(ctx context.Context, key string) string {
+	units, ok := readMacKeyRepeatUnits(ctx, key)
+	if !ok {
 		return ""
 	}
 	return strconv.Itoa(units * keyRepeatUnitMs)
@@ -262,10 +284,7 @@ func applyMacKeyRepeat(ctx context.Context, o sysutil.Opts, key, ms string) erro
 	if err != nil {
 		return err
 	}
-	if err := macExec(ctx, o, "defaults", "write", "NSGlobalDomain", key, "-int", strconv.Itoa(units)); err != nil {
-		return fmt.Errorf("defaults write NSGlobalDomain %s: %w", key, err)
-	}
-	return nil
+	return writeMacKeyRepeatUnits(ctx, o, key, units)
 }
 
 // macKeyRepeatNote is the post-apply hook for macKeyRepeatGroup.

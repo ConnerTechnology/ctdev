@@ -12,25 +12,31 @@ import (
 )
 
 // macOS key repeat rate, shown in characters per second like Cinnamon's.
-// NSGlobalDomain KeyRepeat stores the time between repeats in units of
-// keyRepeatUnitMs, so only the speeds in macKeyRepeatRateChoices exist.
+// NSGlobalDomain KeyRepeat stores the time between repeats as a positive
+// integer in units of keyRepeatUnitMs. ctdev offers the eight fastest steps
+// (15–120 ms) in macKeyRepeatRateChoices; macOS itself takes slower values.
 
 // macKeyRepeatMaxUnits is the slowest KeyRepeat ctdev offers (120 ms, 8 cps),
-// the bottom of the old ms slider.
+// the bottom of the old ms slider. It is ctdev's choice, not a macOS limit.
 const macKeyRepeatMaxUnits = 8
 
 // macKeyRepeatRateDefaultCps is the recommended rate: the speed nearest the
 // Linux default of 50 cps. 50 cps is a 20 ms interval; the nearest 15 ms step
 // is 15 ms (KeyRepeat 1), which is 67 cps. (In cps, 67 and 33 are equally far.)
+// 67 cps is faster than System Settings' keyboard slider goes.
 const macKeyRepeatRateDefaultCps = "67"
 
 // keyRepeatUnitsToCps converts a KeyRepeat value to characters per second,
-// rounded to a whole number. ok is false for a value below 1.
+// rounded to a whole number, or to one decimal below 1 cps so a very slow
+// rate never reads as 0. ok is false for a value below 1.
 func keyRepeatUnitsToCps(units int) (string, bool) {
 	if units < 1 {
 		return "", false
 	}
 	cps := 1000 / float64(units*keyRepeatUnitMs)
+	if cps < 1 {
+		return strconv.FormatFloat(math.Round(cps*10)/10, 'f', 1, 64), true
+	}
 	return strconv.Itoa(int(math.Round(cps))), true
 }
 
@@ -48,7 +54,7 @@ func keyRepeatCpsToUnits(cps string) (int, error) {
 	return units, nil
 }
 
-// macKeyRepeatRateChoices lists every rate KeyRepeat 1..macKeyRepeatMaxUnits
+// macKeyRepeatRateChoices lists the rate each KeyRepeat 1..macKeyRepeatMaxUnits
 // gives, fastest first.
 func macKeyRepeatRateChoices() []PickerChoice {
 	var choices []PickerChoice
@@ -56,7 +62,7 @@ func macKeyRepeatRateChoices() []PickerChoice {
 		cps, _ := keyRepeatUnitsToCps(u)
 		desc := fmt.Sprintf("%s characters per second (a repeat every %d ms)", cps, u*keyRepeatUnitMs)
 		if u == 1 {
-			desc += ", the fastest"
+			desc += ", faster than System Settings allows"
 		}
 		choices = append(choices, PickerChoice{Value: cps, Description: desc})
 	}
@@ -64,14 +70,12 @@ func macKeyRepeatRateChoices() []PickerChoice {
 }
 
 // detectMacKeyRepeatRate reads NSGlobalDomain KeyRepeat and returns it in
-// characters per second, or "" when the key is unset or unreadable.
+// characters per second, or "" when the key is unset or unreadable. A value
+// slower than ctdev's choices is still returned, so it shows as the current
+// value without matching any choice.
 func detectMacKeyRepeatRate(ctx context.Context) string {
-	out, ok := defaultsRead(ctx, "NSGlobalDomain", "KeyRepeat")
+	units, ok := readMacKeyRepeatUnits(ctx, "KeyRepeat")
 	if !ok {
-		return ""
-	}
-	units, err := strconv.Atoi(out)
-	if err != nil {
 		return ""
 	}
 	cps, _ := keyRepeatUnitsToCps(units)
@@ -84,10 +88,7 @@ func applyMacKeyRepeatRate(ctx context.Context, o sysutil.Opts, cps string) erro
 	if err != nil {
 		return err
 	}
-	if err := macExec(ctx, o, "defaults", "write", "NSGlobalDomain", "KeyRepeat", "-int", strconv.Itoa(units)); err != nil {
-		return fmt.Errorf("defaults write NSGlobalDomain KeyRepeat: %w", err)
-	}
-	return nil
+	return writeMacKeyRepeatUnits(ctx, o, "KeyRepeat", units)
 }
 
 // macBoolKeys is an on/off setting made of NSGlobalDomain bool keys that ctdev
