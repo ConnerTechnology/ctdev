@@ -51,6 +51,13 @@ type Setting struct {
 	// path (it ignores the value). The wizard offers these as a single
 	// "apply?" question instead of a fake enable/disable choice.
 	OneWay bool
+	// NoOffSwitch, on a OneWay setting, says why it has no off switch. The
+	// wizard prints it.
+	NoOffSwitch string
+	// NotNeededFn reports why this machine doesn't need the setting, or ""
+	// when it does. A setting that isn't needed is shown as such and is left
+	// out of what --batch applies.
+	NotNeededFn func(ctx context.Context) string
 }
 
 // SettingState holds runtime state for a setting during TUI interaction.
@@ -59,6 +66,7 @@ type SettingState struct {
 	CurrentValue string // detected system value
 	DesiredValue string // what will be applied (initialized to Default)
 	Enabled      bool   // whether included in apply set
+	NotNeeded    string // why this machine doesn't need the setting; "" when it does
 }
 
 // NeedsApply returns true if this setting should be applied.
@@ -94,11 +102,17 @@ func InitStates(ctx context.Context, settings []Setting) []SettingState {
 		if settings[i].DetectFunc != nil {
 			current = settings[i].DetectFunc(ctx)
 		}
+		notNeeded := ""
+		if settings[i].NotNeededFn != nil {
+			notNeeded = settings[i].NotNeededFn(ctx)
+		}
 		states[i] = SettingState{
 			Setting:      &settings[i],
 			CurrentValue: current,
 			DesiredValue: settings[i].Default,
-			Enabled:      true,
+			// A setting this machine doesn't need isn't applied by default.
+			Enabled:   notNeeded == "",
+			NotNeeded: notNeeded,
 		}
 	}
 	return states

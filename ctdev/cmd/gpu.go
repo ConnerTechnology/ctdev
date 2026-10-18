@@ -7,6 +7,7 @@ import (
 
 	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/setup"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
@@ -70,6 +71,12 @@ func runGPUSigning(ctx context.Context, recover bool) error {
 	}
 	if recover {
 		return gpu.RunRecover(ctx, opts)
+	}
+	// The wizard already offered signing anyway; --batch never applies a
+	// setting this machine doesn't need.
+	if reason := setup.NvidiaSigningNotNeeded(ctx); reason != "" {
+		fmt.Printf("  %s\n", styles.Dimmed.Render("Driver signing not needed: "+reason+"."))
+		return nil
 	}
 	return gpu.RunSetup(ctx, opts)
 }

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -110,5 +111,20 @@ func TestApplyAndQuitFlags(t *testing.T) {
 	press(m2, "q")
 	if m2.Applied() {
 		t.Error("q should not mark applied")
+	}
+}
+
+func TestNotNeededShownInsteadOfRecommended(t *testing.T) {
+	states := testStates()
+	states[3].NotNeeded = "no reason here"
+	m := New(states)
+	m.cursor = m.lastSetting() // OneWay D ("not installed")
+	row := m.renderRow(m.cursor)
+	if !strings.Contains(row, "not needed") || strings.Contains(row, "≠ REC") {
+		t.Errorf("row should say not needed, not ≠ REC; got %q", row)
+	}
+	footer := m.footerView()
+	if !strings.Contains(footer, "Not needed: no reason here") || strings.Contains(footer, "Recommended") {
+		t.Errorf("footer should give the reason instead of a recommendation; got %q", footer)
 	}
 }

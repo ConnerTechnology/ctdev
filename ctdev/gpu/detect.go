@@ -1,6 +1,7 @@
 package gpu
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,6 +26,15 @@ func IsSecureBootEnabled() bool {
 		return false
 	}
 	return parseSecureBootState(string(out))
+}
+
+// IsSecureBootDisabled reports whether mokutil says Secure Boot is off. It is
+// false when mokutil is missing or can't tell, so a caller that skips signing
+// on "off" never skips it on a guess. mokutil can exit non-zero while still
+// printing the state, so stdout is checked rather than the error.
+func IsSecureBootDisabled(ctx context.Context) bool {
+	out, _ := exec.CommandContext(ctx, "mokutil", "--sb-state").Output()
+	return strings.Contains(string(out), "SecureBoot disabled")
 }
 
 func parseSecureBootState(output string) bool {

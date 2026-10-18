@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
+  "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
+  suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
+  in the wizard, the settings browser and `--show`. Driver signing shows as not needed
+  when `mokutil --sb-state` says Secure Boot is off, and the suspend services when
+  suspend is masked. A setting that isn't needed isn't applied by `--batch` (even with
+  `--force`), the wizard asks "Apply anyway?" defaulting to no, and `configure gpu`
+  skips the signing flow and says why. Both stay on-only, and the wizard says why
+  there's no off switch.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added
