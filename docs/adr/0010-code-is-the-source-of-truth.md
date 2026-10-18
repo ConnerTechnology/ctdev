@@ -7,7 +7,7 @@ date: 2026-10-18
 
 What ctdev does is what its code says. The reason for a line lives in a comment next to it when
 the code acts on that reason, and otherwise in the trail git keeps: the commit body names the
-Linear ticket and says why, the pull request collects the commits, and the ticket holds the ask
+Linear issue and says why, the pull request collects the commits, and the issue holds the ask
 and the discussion. Docs and rules don't restate how the code works. A rule holds only what no
 single file can say: a convention across files, a trap, an outside fact. ADRs record product
 decisions as well as agent setup, each with a status and a date. `AGENTS.md` stays orientation.

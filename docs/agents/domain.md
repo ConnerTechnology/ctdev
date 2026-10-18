@@ -8,7 +8,7 @@ codebase. Single-context: one glossary, one ADR directory.
 - **`CONTEXT.md`** at the repo root — the glossary. `/domain-modeling` adds a term when one is
   resolved.
 - **`docs/adr/`** — the decisions, one per file. A new ADR follows `docs/adr/template.md`, which
-  requires the status and date that the skill's format leaves optional. A superseded ADR is
+  adds a date to the skill's format and makes the status required. A superseded ADR is
   history: the one that replaced it is what holds.
 
 ## Use the glossary's vocabulary

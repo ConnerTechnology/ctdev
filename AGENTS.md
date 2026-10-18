@@ -24,6 +24,7 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | Home | What is in it |
 | --- | --- |
 | This file | Orientation, and the conventions that bind everywhere |
+| `docs/agents/where-things-go.md` | Where each kind of fact goes, and how to trace a line back to its Linear issue |
 | `.claude/rules/` | What no single file can say about one component or directory: conventions across files, traps, outside facts. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, doctor, the install scripts, the Go conventions inside the module |
 | `docs/README.md` | The human-facing docs: one page per capability, in README order |
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
@@ -33,9 +34,9 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | `TROUBLESHOOTING.md` | Symptoms and fixes on a live machine |
 | `CHANGELOG.md` | What shipped in each version |
 
-The code is the source of truth: the why goes in a comment where the code acts on it.
-`docs/agents/where-things-go.md` says where every other fact goes, and how to trace a line back to
-its ticket. A paragraph you want to add here almost certainly belongs somewhere on that page.
+What ctdev does is what its code says: the why goes in a comment where the code acts on it. A
+paragraph you want to add here almost certainly belongs in a home that
+`docs/agents/where-things-go.md` lists.
 
 ## Where things get recorded
 
@@ -75,17 +76,15 @@ file the next session reads:
 
 - Changes reach `main` through a GitHub pull request. The release commit in "Releases" is the one
   exception.
-- Commit messages are one line in conventional-commit form, `type: description`, then a body of a
-  line or two that cites the Linear ID and says why. Attribution is off, set in
-  `.claude/settings.json`.
-- To learn why a line is the way it is: `git blame` → the commit body → its PR
-  (`gh pr list --search <sha> --state merged`) → the Linear ticket.
+- A commit's subject is one line in conventional-commit form, `type: description`. Its body, a
+  line or two, cites the Linear issue and says why; the release commit has no issue and no body.
+  Attribution is off, set in `.claude/settings.json`.
 
 ## Releases
 
 1. Commit changes
-2. Run `/doctor prompt-audit <repo path>` in a terminal `claude` started outside the repo (this
-   repo's `disableBundledSkills` turns off the skill it runs on); fix or ticket each finding
+2. In a terminal, run `claude --settings '{"disableBundledSkills":false}'` in the repo, then
+   `/doctor prompt-audit`; fix each finding or file an issue for it
 3. Update CHANGELOG.md
 4. Bump VERSION
 5. Commit: `docs: update for vX.Y.Z`
