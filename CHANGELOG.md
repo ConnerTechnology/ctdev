@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file.
   idle"**, with a one-line reason in the wizard. It shows only on machines with a WiFi
   adapter, not on every NetworkManager machine, and it can now be turned off: choosing
   "not installed" removes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`.
+- **`ctdev configure boot` names its settings by what you get, each with a one-line
+  "why":** "Boot menu at startup" (was "GRUB menu style"), "Boot menu wait time" (was
+  "GRUB timeout") and "Other operating systems in the boot menu" (was "OS prober"). The
+  recommended defaults stay menu, 10 s and on.
 
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
