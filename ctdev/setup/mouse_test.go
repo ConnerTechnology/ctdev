@@ -349,3 +349,18 @@ func TestMouseOffDryRunTouchesNothing(t *testing.T) {
 		t.Errorf("dry-run off didn't say what it would remove:\n%s", out)
 	}
 }
+
+func TestRoundMouseSpeed(t *testing.T) {
+	for raw, want := range map[string]string{
+		"0.46218487394957974": "0.46",
+		"0.65":                "0.65",
+		"0":                   "0",
+		"-0.25":               "-0.25",
+		"":                    "",
+		"unset":               "unset",
+	} {
+		if got := roundMouseSpeed(raw); got != want {
+			t.Errorf("roundMouseSpeed(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}

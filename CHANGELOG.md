@@ -13,7 +13,8 @@ All notable changes to this project will be documented in this file.
   and xdotool packages stay), or the Logitech udev rule and Solaar user service. The
   Logitech setting also shows while it's installed, so it can be turned off after the
   receiver is unplugged. The recommended mouse speed is now 0.46, and the slider moves
-  in steps of 0.01. "Mouse accel profile" is now "Mouse acceleration".
+  in steps of 0.01. The current speed shows rounded to that step, so a desktop-set
+  0.46218… reads as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
 
 ## [14.2.0] - 2026-10-15
 

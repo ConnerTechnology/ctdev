@@ -299,7 +299,7 @@ func detectCodeTunnelService(_ context.Context) string {
 }
 
 func detectMouseSpeed(ctx context.Context) string {
-	return detectDconfString(ctx, "/org/gnome/desktop/peripherals/mouse/speed")
+	return roundMouseSpeed(detectDconfString(ctx, "/org/gnome/desktop/peripherals/mouse/speed"))
 }
 
 func detectNaturalScroll(ctx context.Context) string {

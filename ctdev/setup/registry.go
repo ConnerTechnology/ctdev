@@ -313,7 +313,7 @@ var Registry = []Setting{
 		Description: "How far the pointer moves for a given hand movement.",
 		Control:     ControlSlider,
 		Default:     "0.46",
-		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: 0.01, Unit: ""},
+		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: mouseSpeedStep, Unit: ""},
 		DetectFunc:  detectMouseSpeed,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/gnome/desktop/peripherals/mouse/speed", v)

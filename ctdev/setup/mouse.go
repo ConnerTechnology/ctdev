@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -77,6 +79,20 @@ func removeUserFile(o sysutil.Opts, path string) error {
 		return fmt.Errorf("remove %s: %w", path, err)
 	}
 	return nil
+}
+
+// mouseSpeedStep is the mouse speed slider's step.
+const mouseSpeedStep = 0.01
+
+// roundMouseSpeed rounds a stored speed to the slider's step. The desktop's
+// own speed slider stores values like 0.46218487394957974, which would never
+// match a recommended 0.46. Values that aren't numbers pass through.
+func roundMouseSpeed(raw string) string {
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return raw
+	}
+	return FormatSliderVal(math.Round(v/mouseSpeedStep)*mouseSpeedStep, mouseSpeedStep)
 }
 
 // ── Middle-click opens the window overview ──────────────────────────────
