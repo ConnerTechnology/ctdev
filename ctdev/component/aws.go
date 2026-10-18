@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -47,7 +48,11 @@ func awsV2Installed() bool {
 	if !sysutil.CommandExists("aws") {
 		return false
 	}
-	out, err := awsVersion(context.Background())
+	// `ctdev info` and `update` run this on every call; don't let a wedged
+	// `aws` hang them.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := awsVersion(ctx)
 	return err == nil && awsIsV2(out)
 }
 
