@@ -65,15 +65,37 @@ func dirHasEntry(dir, prefix string) bool {
 	return false
 }
 
-// packageInstalled and systemctlQuery are the probes the apply paths use;
-// tests swap in fakes.
+// The probes the apply paths use; tests swap in fakes.
 var (
 	packageInstalled = detectPackageInstalled
 	systemctlQuery   = func(ctx context.Context, verb, unit string) string {
 		out, _ := runOutput(ctx, "systemctl", verb, unit)
 		return out
 	}
+	// unitExists reports whether systemd knows the unit at all.
+	unitExists = func(ctx context.Context, unit string) bool {
+		_, err := runOutput(ctx, "systemctl", "cat", unit)
+		return err == nil
+	}
+	// simulateRemove returns apt's plan for removing pkgs, without changing
+	// anything. Simulation needs no root.
+	simulateRemove = func(ctx context.Context, pkgs []string) (string, error) {
+		return runOutput(ctx, "apt-get", append([]string{"-s", "remove"}, pkgs...)...)
+	}
 )
+
+// removedBy returns the packages an apt simulation's "Remv <pkg> [...]" lines
+// name.
+func removedBy(plan string) []string {
+	var pkgs []string
+	for _, line := range strings.Split(plan, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && f[0] == "Remv" {
+			pkgs = append(pkgs, f[1])
+		}
+	}
+	return pkgs
+}
 
 // addedDir holds one file per setting listing what ctdev added for it, so
 // turning the setting off removes exactly that and nothing the machine
@@ -121,13 +143,33 @@ func detectPackages(ctx context.Context, pkgs []string) string {
 
 // applyOwnedPackages installs the missing packages in pkgs and records them
 // under key. "not installed" removes the packages recorded under key and
-// leaves alone any the machine had before ctdev.
+// leaves alone any the machine had before ctdev. apt removes whatever depends
+// on a removed package too, so the removal is simulated first and refused when
+// it would take anything ctdev didn't install.
 func applyOwnedPackages(ctx context.Context, o sysutil.Opts, key string, pkgs []string, v string) error {
 	if v == "not installed" {
 		added := readAdded(key)
 		if len(added) == 0 {
 			fmt.Fprintf(o.Stdout, "  ctdev didn't install %s; leaving them in place.\n", strings.Join(pkgs, ", "))
 			return nil
+		}
+		plan, err := simulateRemove(ctx, added)
+		if err != nil {
+			return fmt.Errorf("simulate removing %s: %w", strings.Join(added, ", "), err)
+		}
+		owned := map[string]bool{}
+		for _, p := range added {
+			owned[p] = true
+		}
+		var blockers []string
+		for _, p := range removedBy(plan) {
+			if !owned[p] {
+				blockers = append(blockers, p)
+			}
+		}
+		if len(blockers) > 0 {
+			return fmt.Errorf("removing %s would also remove %s, which ctdev didn't install; leaving them in place",
+				strings.Join(added, ", "), strings.Join(blockers, ", "))
 		}
 		args := append([]string{"apt-get", "remove", "-y", "-qq"}, added...)
 		if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
@@ -152,16 +194,23 @@ func applyOwnedPackages(ctx context.Context, o sysutil.Opts, key string, pkgs []
 	return recordAdded(o, key, missing...)
 }
 
-// detectBluetoothService reports "active" or "inactive".
+// detectBluetoothService reports "active" when the service is both enabled
+// and running, and "inactive" otherwise.
 func detectBluetoothService(ctx context.Context) string {
-	if systemctlQuery(ctx, "is-active", bluetoothService) == "active" {
+	if systemctlQuery(ctx, "is-enabled", bluetoothService) == "enabled" &&
+		systemctlQuery(ctx, "is-active", bluetoothService) == "active" {
 		return "active"
 	}
 	return "inactive"
 }
 
+// serviceUndo maps what ctdev did to bluetooth.service to its reverse.
+var serviceUndo = map[string]string{"enable": "disable", "start": "stop"}
+
 // applyBluetoothService enables and starts bluetooth.service, recording which
-// of the two ctdev did. "inactive" undoes exactly those.
+// of the two ctdev did. "inactive" undoes exactly those. The unit comes with
+// bluez, so turning it on needs Bluetooth support first, and turning it off
+// after bluez is gone only clears the record.
 func applyBluetoothService(ctx context.Context, o sysutil.Opts, v string) error {
 	const key = "bluetooth-service"
 	if v == "inactive" {
@@ -170,8 +219,11 @@ func applyBluetoothService(ctx context.Context, o sysutil.Opts, v string) error 
 			fmt.Fprintf(o.Stdout, "  ctdev didn't turn on %s; leaving it as it is.\n", bluetoothService)
 			return nil
 		}
+		if !unitExists(ctx, bluetoothService) {
+			return clearAdded(o, key)
+		}
 		for _, verb := range added {
-			undo := map[string]string{"enable": "disable", "start": "stop"}[verb]
+			undo := serviceUndo[verb]
 			if undo == "" {
 				continue
 			}
@@ -182,6 +234,9 @@ func applyBluetoothService(ctx context.Context, o sysutil.Opts, v string) error 
 		return clearAdded(o, key)
 	}
 
+	if !unitExists(ctx, bluetoothService) {
+		return fmt.Errorf("%s isn't installed; turn on Bluetooth support first", bluetoothService)
+	}
 	var did []string
 	if systemctlQuery(ctx, "is-enabled", bluetoothService) != "enabled" {
 		if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", bluetoothService); err != nil {

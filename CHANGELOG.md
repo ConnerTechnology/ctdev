@@ -15,7 +15,9 @@ All notable changes to this project will be documented in this file.
   `pulseaudio-module-bluetooth`. Each setting has a one-line reason, shows only on a
   machine with the hardware it needs (a Bluetooth adapter, a sound card), and can be
   turned off: off removes only the packages and service changes ctdev recorded adding,
-  under `~/.local/state/ctdev/configure-added/`, or the LDAC config file.
+  under `~/.local/state/ctdev/configure-added/`, or the LDAC config file. A removal that
+  would also take a package ctdev didn't install is refused, and the dependencies an
+  install pulled in stay until `sudo apt autoremove`.
 
 ## [14.2.0] - 2026-10-15
 

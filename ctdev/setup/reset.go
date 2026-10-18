@@ -102,9 +102,8 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 
 	// WirePlumber LDAC config
 	fmt.Fprintf(w, "Removing WirePlumber LDAC config...\n")
-	ldacConf := ldacConfPath
-	if _, err := os.Stat(ldacConf); err == nil {
-		if err := sysutil.SudoRun(ctx, o, "rm", ldacConf); err != nil {
+	if _, err := os.Stat(ldacConfPath); err == nil {
+		if err := sysutil.SudoRun(ctx, o, "rm", ldacConfPath); err != nil {
 			return fmt.Errorf("remove wireplumber ldac config: %w", err)
 		}
 		// Best-effort restart of PipeWire stack.

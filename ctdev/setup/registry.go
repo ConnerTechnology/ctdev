@@ -432,7 +432,7 @@ var Registry = []Setting{
 		Default:     "active",
 		DetectFunc:  detectBluetoothService,
 		ApplyFunc:   applyBluetoothService,
-		HardwareFn:  gateBluetoothAdapter,
+		HardwareFn:  allOf(gateDesktop, gateBluetoothAdapter),
 	},
 
 	// ── Desktop ────────────────────────────────────────────────────────

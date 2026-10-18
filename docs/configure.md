@@ -35,6 +35,9 @@ config), and switches alert sounds. Neither installs the other's packages.
 Turning a setting off removes only what ctdev added: ctdev records the packages it
 installed and the service changes it made under
 `~/.local/state/ctdev/configure-added/`, and leaves anything the machine already had.
+If removing those packages would also remove one ctdev didn't install (something
+that depends on them), it refuses and names it. Off leaves the dependencies those
+packages pulled in; `sudo apt autoremove` cleans them up.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 

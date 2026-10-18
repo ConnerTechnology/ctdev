@@ -36,9 +36,13 @@ func fakeAudioHost(t *testing.T, bluetooth bool) string {
 	added := t.TempDir()
 
 	origSound, origBT, origPkg, origCtl, origAdded := sysClassSound, sysClassBluetooth, packageInstalled, systemctlQuery, addedDir
+	origUnit, origSim := unitExists, simulateRemove
 	t.Cleanup(func() {
 		sysClassSound, sysClassBluetooth, packageInstalled, systemctlQuery, addedDir = origSound, origBT, origPkg, origCtl, origAdded
+		unitExists, simulateRemove = origUnit, origSim
 	})
+	unitExists = func(context.Context, string) bool { return true }
+	simulateRemove = func(_ context.Context, pkgs []string) (string, error) { return removalPlan(pkgs...), nil }
 	sysClassSound, sysClassBluetooth = sound, bt
 	packageInstalled = func(context.Context, string) bool { return false }
 	systemctlQuery = func(_ context.Context, verb, _ string) string {
@@ -49,6 +53,16 @@ func fakeAudioHost(t *testing.T, bluetooth bool) string {
 	}
 	addedDir = func() string { return added }
 	return added
+}
+
+// removalPlan is apt-get -s remove output that removes exactly pkgs.
+func removalPlan(pkgs ...string) string {
+	var b strings.Builder
+	b.WriteString("Reading package lists...\n")
+	for _, p := range pkgs {
+		b.WriteString("Remv " + p + " [1.0-1]\n")
+	}
+	return b.String()
 }
 
 // fakeRoot puts logging stand-ins for sudo and the commands ctdev runs as root
@@ -365,6 +379,128 @@ func TestAudioAndBluetoothDefaultsMatchThisComputer(t *testing.T) {
 	for name, def := range want {
 		if got := settingByName(t, name).Default; got != def {
 			t.Errorf("%q default = %q, want %q", name, got, def)
+		}
+	}
+}
+
+func TestRemovedByReadsRemvLines(t *testing.T) {
+	plan := "NOTE: This is only a simulation!\nRemv blueman [2.4.4]\nRemv bluez [5.72-0ubuntu5.8]\nInst foo\n"
+	if got := strings.Join(removedBy(plan), " "); got != "blueman bluez" {
+		t.Errorf("removedBy = %q, want %q", got, "blueman bluez")
+	}
+}
+
+func TestPackageSettingOffRefusesWhenRemovalTakesMore(t *testing.T) {
+	fakeAudioHost(t, true)
+	logged := fakeRoot(t)
+	if err := recordAdded(sysutil.Opts{}, "bluetooth-audio", "libspa-0.2-bluetooth"); err != nil {
+		t.Fatal(err)
+	}
+	// The user installed pipewire-audio later; it hard-depends on the codecs.
+	simulateRemove = func(context.Context, []string) (string, error) {
+		return removalPlan("pipewire-audio", "libspa-0.2-bluetooth"), nil
+	}
+
+	s := settingByName(t, "Bluetooth headphones")
+	err := s.ApplyFunc(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}, "not installed")
+	if err == nil || !strings.Contains(err.Error(), "pipewire-audio") {
+		t.Fatalf("want a refusal naming pipewire-audio, got %v", err)
+	}
+	if out := logged(); strings.Contains(out, "apt-get remove") {
+		t.Errorf("nothing should be removed, ran:\n%s", out)
+	}
+	if got := readAdded("bluetooth-audio"); strings.Join(got, " ") != "libspa-0.2-bluetooth" {
+		t.Errorf("record should be kept, got %v", got)
+	}
+}
+
+func TestTurningOffBothBluetoothSettingsInOneRun(t *testing.T) {
+	fakeAudioHost(t, true)
+	logged := fakeRoot(t)
+	packageInstalled = func(context.Context, string) bool { return true }
+	systemctlQuery = func(_ context.Context, verb, _ string) string {
+		if verb == "is-enabled" {
+			return "enabled"
+		}
+		return "active"
+	}
+	// Removing bluez deletes bluetooth.service.
+	unitExists = func(context.Context, string) bool { return !strings.Contains(logged(), "apt-get remove") }
+	if err := recordAdded(sysutil.Opts{}, "bluetooth", "bluez", "blueman"); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordAdded(sysutil.Opts{}, "bluetooth-service", "enable", "start"); err != nil {
+		t.Fatal(err)
+	}
+
+	states := InitStates(context.Background(), FilterByHardware(FilterBySlug(Registry, "bluetooth")))
+	if len(states) != 2 {
+		t.Fatalf("want both bluetooth settings shown, got %d", len(states))
+	}
+	for i := range states {
+		off := map[string]string{"installed": "not installed", "active": "inactive"}[states[i].CurrentValue]
+		if err := states[i].Setting.ApplyFunc(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}, off); err != nil {
+			t.Fatalf("%s off: %v", states[i].Setting.Name, err)
+		}
+	}
+
+	out := logged()
+	if !strings.Contains(out, "apt-get remove -y -qq bluez blueman") {
+		t.Errorf("want bluez and blueman removed, ran:\n%s", out)
+	}
+	if strings.Contains(out, "systemctl") {
+		t.Errorf("the unit is gone with bluez, so systemctl shouldn't run; ran:\n%s", out)
+	}
+	for _, key := range []string{"bluetooth", "bluetooth-service"} {
+		if got := readAdded(key); len(got) != 0 {
+			t.Errorf("record %s not cleared: %v", key, got)
+		}
+	}
+}
+
+func TestBluetoothServiceOnWithoutBluezFails(t *testing.T) {
+	fakeAudioHost(t, true)
+	logged := fakeRoot(t)
+	unitExists = func(context.Context, string) bool { return false }
+
+	err := applyBluetoothService(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}, "active")
+	if err == nil || !strings.Contains(err.Error(), "Bluetooth support") {
+		t.Fatalf("want an error pointing at Bluetooth support, got %v", err)
+	}
+	if out := logged(); out != "" {
+		t.Errorf("nothing should run without the unit; ran:\n%s", out)
+	}
+}
+
+func TestBluetoothServiceHiddenWithoutDesktop(t *testing.T) {
+	fakeAudioHost(t, true)
+	t.Setenv("XDG_CURRENT_DESKTOP", "")
+	t.Setenv("DISPLAY", "")
+	t.Setenv("WAYLAND_DISPLAY", "")
+
+	if got := FilterByHardware(FilterBySlug(Registry, "bluetooth")); len(got) != 0 {
+		t.Errorf("bluetooth settings shown without a desktop session: %d", len(got))
+	}
+}
+
+func TestDetectBluetoothServiceNeedsEnabledAndRunning(t *testing.T) {
+	fakeAudioHost(t, true)
+	tests := []struct {
+		enabled, active, want string
+	}{
+		{"enabled", "active", "active"},
+		{"disabled", "active", "inactive"},
+		{"enabled", "inactive", "inactive"},
+	}
+	for _, tt := range tests {
+		systemctlQuery = func(_ context.Context, verb, _ string) string {
+			if verb == "is-enabled" {
+				return tt.enabled
+			}
+			return tt.active
+		}
+		if got := detectBluetoothService(context.Background()); got != tt.want {
+			t.Errorf("%s + %s: got %q, want %q", tt.enabled, tt.active, got, tt.want)
 		}
 	}
 }
