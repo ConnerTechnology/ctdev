@@ -13,7 +13,6 @@ ctdev configure ssh --batch              # SSH server + key-based auth hardening
 ctdev configure locale --batch           # UTF-8 locale, for Mosh
 ctdev configure linger --batch           # user services keep running after logout
 ctdev configure sleep --batch            # never suspend
-ctdev configure autoupdate --batch       # automatic security updates
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker
 ctdev configure pihole                   # upstreams, listening mode, blocking, host resolver
