@@ -106,6 +106,8 @@ func TestAWSInstallReplacesV1(t *testing.T) {
 	}
 }
 
+// The embedded key expires 2027-07-01; when AWS renews it, this test is what
+// confirms the replacement .asc is still the AWS CLI Team key.
 func TestAWSEmbeddedKeyIsAWSCLITeam(t *testing.T) {
 	key, err := Configs.ReadFile(awsPublicKey)
 	if err != nil {

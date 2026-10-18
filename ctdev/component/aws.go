@@ -18,7 +18,13 @@ const (
 	awsFormula    = "awscli"
 	awsInstallDir = "/usr/local/aws-cli"
 	awsBinDir     = "/usr/local/bin"
-	awsPublicKey  = "configs/aws/aws-cli-public-key.asc"
+
+	// awsPublicKey is the AWS CLI Team key <aws-cli@amazon.com> that signs the
+	// Linux zip, fingerprint FB5D B77F D5C1 18B8 0511 ADA8 A631 0ACC 4672 475C.
+	// It expires 2027-07-01. To renew, replace the .asc with the key block from
+	// AWS's install page, verbatim; TestAWSEmbeddedKeyIsAWSCLITeam checks the
+	// fingerprint.
+	awsPublicKey = "configs/aws/aws-cli-public-key.asc"
 )
 
 // awsVersion runs `aws --version`; a var so tests can fake the installed CLI.
@@ -32,9 +38,11 @@ func awsIsV2(versionOutput string) bool {
 	return strings.HasPrefix(strings.TrimSpace(versionOutput), "aws-cli/2.")
 }
 
-// awsV2Installed is the aws component's install check: an `aws` on PATH that
-// reports v2. apt's v1 doesn't count, so installing over it asks for sudo up
-// front and `configure aws` offers v2 instead of running on v1.
+// awsV2Installed is the aws component's Detect hook, so IsInstalled,
+// InstallNeedsRoot, the installer's skip and `configure aws` all agree: an
+// `aws` on PATH that reports v2. apt's v1 (Ubuntu's awscli package on several
+// releases) doesn't count, so installing over it asks for sudo up front and
+// `configure aws` offers v2 instead of running on v1.
 func awsV2Installed() bool {
 	if !sysutil.CommandExists("aws") {
 		return false
@@ -66,6 +74,8 @@ func awsInstallArgs(update bool) []string {
 	return args
 }
 
+// awsInstall installs AWS CLI v2. `ctdev update` doesn't update the Linux
+// install; `ctdev install aws --force` does, through aws/install --update.
 func awsInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
@@ -78,6 +88,8 @@ func awsInstall(ctx context.Context, opts ExecOpts) error {
 
 	fmt.Fprintln(opts.Stdout, "Installing AWS CLI v2...")
 
+	// macOS uses the awscli Homebrew formula. AWS's docs don't cover Homebrew;
+	// Thomas chose it in CTD-90 decision 3 ("the pkg or Homebrew").
 	if p.OS == platform.MacOS {
 		return sysutil.InstallPackage(ctx, o, awsFormula)
 	}
@@ -85,6 +97,11 @@ func awsInstall(ctx context.Context, opts ExecOpts) error {
 		return unsupportedPMError("aws", p.PackageManager)
 	}
 
+	// Linux follows AWS's command line installer: the zip, its .sig checked
+	// with gpg, then aws/install. Sources, checked 2026-10-18:
+	// https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+	// https://docs.aws.amazon.com/cli/latest/userguide/getting-started-version.html (--update)
+	// https://docs.aws.amazon.com/cli/latest/userguide/uninstall.html
 	zipURL, err := awsZipURL(p.Arch)
 	if err != nil {
 		return err
@@ -169,7 +186,8 @@ func awsUninstall(ctx context.Context, opts ExecOpts) error {
 	if p.OS != platform.Linux {
 		return unsupportedPMError("aws", p.PackageManager)
 	}
-	// AWS's documented uninstall: the two symlinks, then the install dir.
+	// AWS's documented uninstall (uninstall.html): the two symlinks, then the
+	// install dir.
 	// ~/.aws (profiles, SSO cache) stays: it's shared with every AWS SDK.
 	return sysutil.SudoRun(ctx, o, "rm", "-rf",
 		filepath.Join(awsBinDir, "aws"), filepath.Join(awsBinDir, "aws_completer"), awsInstallDir)
