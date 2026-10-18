@@ -348,7 +348,7 @@ var Registry = []Setting{
 		Name:        "Keep the Logitech mouse working after a KVM switch",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Restarts Solaar when the Logi Bolt receiver reconnects, so middle-click still works after switching.",
+		Description: "Middle-click and Solaar settings keep working after the KVM switches back.",
 		Control:     ControlToggle,
 		Default:     "installed",
 		DetectFunc:  detectLogitechKVMFix,
