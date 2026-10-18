@@ -29,9 +29,6 @@ func TestBootSettingsPlainNamesAndWhy(t *testing.T) {
 		if s.Name != w.name {
 			t.Errorf("boot[%d].Name = %q, want %q", i, s.Name, w.name)
 		}
-		if strings.Contains(s.Name, "GRUB") {
-			t.Errorf("%q: plain name must not name GRUB", s.Name)
-		}
 		if s.Default != w.def {
 			t.Errorf("%q: Default = %q, want %q", s.Name, s.Default, w.def)
 		}

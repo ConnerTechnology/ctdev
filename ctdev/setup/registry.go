@@ -82,7 +82,7 @@ var Registry = []Setting{
 		Name:        "Other operating systems in the boot menu",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "Lets you start Windows or another installed system from the boot menu; turn it off on a VM host, where scanning disks can damage guest systems.",
+		Description: "Lets you start Windows or another installed system from the boot menu; turn it off on a host whose VMs use LVM volumes or raw disks, where scanning them can damage those systems.",
 		Control:     ControlToggle,
 		Default:     "enabled",
 		DetectFunc:  detectGrubOSProber,

@@ -24,7 +24,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 
 	if o.DryRun {
 		fmt.Fprintln(w, "[DRY-RUN] Would reset Power, Screensaver, Keyboard, Mouse, Sound, Nemo settings")
-		fmt.Fprintln(w, "[DRY-RUN] Would reset GRUB settings (timeout=10, menu, os-prober enabled)")
+		fmt.Fprintln(w, "[DRY-RUN] Would reset boot settings (menu shown, 10 s wait, other operating systems listed)")
 		if hasNvidia {
 			fmt.Fprintln(w, "[DRY-RUN] Would reset NVIDIA suspend settings (GRUB parameters, systemd services)")
 		}
