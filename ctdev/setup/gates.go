@@ -28,17 +28,6 @@ func gateGrub() bool {
 	return err == nil
 }
 
-// gateAptDaily reports whether this host ships apt's daily download/upgrade
-// units. They come from the apt package itself, so they exist on Debian-family
-// machines and nowhere else.
-func gateAptDaily() bool {
-	if !gateLinux() {
-		return false
-	}
-	_, err := os.Stat("/usr/lib/systemd/system/apt-daily.service")
-	return err == nil
-}
-
 // gateDesktop reports whether a graphical session is plausible on this Linux
 // host (a headless node exports none of these).
 func gateDesktop() bool {
@@ -128,4 +117,44 @@ func allOf(fns ...func() bool) func() bool {
 		}
 		return true
 	}
+}
+
+// sysBlockDir is where the kernel lists block devices; tests point it at a
+// fake tree.
+var sysBlockDir = "/sys/block"
+
+// gateSSD reports whether this Linux host has an SSD that TRIM can help.
+func gateSSD() bool { return gateLinux() && hasSSD() }
+
+// hasSSD reports whether any block device under sysBlockDir is a fixed,
+// non-rotational disk that accepts discards. Loop, zram and device-mapper
+// devices have no device link and are skipped; removable flash is skipped
+// because fstrim.timer is about the machine's own disks. Reads sysfs files
+// only, so it stays cheap enough for a gate.
+func hasSSD() bool {
+	entries, err := os.ReadDir(sysBlockDir)
+	if err != nil {
+		return false
+	}
+	read := func(dev, rel string) string {
+		b, err := os.ReadFile(filepath.Join(sysBlockDir, dev, rel))
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(b))
+	}
+	for _, e := range entries {
+		dev := e.Name()
+		if _, err := os.Stat(filepath.Join(sysBlockDir, dev, "device")); err != nil {
+			continue
+		}
+		if read(dev, "queue/rotational") != "0" || read(dev, "removable") == "1" {
+			continue
+		}
+		if d := read(dev, "queue/discard_max_bytes"); d == "" || d == "0" {
+			continue
+		}
+		return true
+	}
+	return false
 }
