@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- **ctdev no longer installs the mcp-email-server.** The `mcp-email-server` component,
+  its `ctdev configure mcp-email-server` wizard, its rules and the AI / MCP node recipe
+  (`docs/node-recipes/ai-node.md`) are gone. There is no uninstall path:
+  `ctdev uninstall mcp-email-server` now reports an unknown component. A node that had
+  it keeps, until you remove each by hand:
+  - the `mcp-email-server` container, still running and restarting with the node:
+    `docker compose -f ~/mcp-email-server/docker-compose.yml down`
+  - the `mcp-email-server:local` image: `docker image rm mcp-email-server:local`
+  - the `tailscale serve` rule that published it to the tailnet, on port 443, or 8443 on
+    a node that also ran caddy (`MCP_SERVE_PORT` in `~/mcp-email-server/.env`):
+    `sudo tailscale serve --https=<port> off`
+  - `~/mcp-email-server/`, whose `config/managed.sqlite3` holds every mailbox password
+    unencrypted: `rm -rf ~/mcp-email-server`. If `ctdev backup paths` includes it, the
+    restic snapshots hold those passwords too.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added
