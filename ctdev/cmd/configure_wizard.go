@@ -25,6 +25,7 @@ var slugDescriptions = map[string]string{
 	"desktop":    "Desktop",
 	"network":    "Network & WiFi",
 	"system":     "System",
+	"storage":    "Storage",
 	"ssh":        "SSH",
 	"ufw":        "Firewall (UFW)",
 	"locale":     "Locale",

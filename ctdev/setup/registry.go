@@ -501,19 +501,19 @@ var Registry = []Setting{
 		},
 		HardwareFn: gateNetworkManager,
 	},
+
+	// ── Storage ────────────────────────────────────────────────────────
+
 	{
-		Name:        "SSD TRIM timer",
-		Slug:        "system",
-		Category:    "System",
-		Description: "Enables periodic TRIM for SSDs, which helps maintain write performance and longevity.",
+		Name:        "Keep SSDs fast (weekly TRIM)",
+		Slug:        "storage",
+		Category:    "Storage",
+		Description: "Tells your SSDs once a week which blocks are free, so writes stay fast as the disk fills up.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "active",
 		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "fstrim.timer") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySSDTrim(ctx, o)
-		},
-		HardwareFn: gateLinux,
+		ApplyFunc:   applySSDTrim,
+		HardwareFn:  gateSSD,
 	},
 
 	// ── SSH ──────────────────────────────────────────────────────────────
