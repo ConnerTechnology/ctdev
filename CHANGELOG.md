@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure boot` names its settings by what you get, each with a one-line
+  "why":** "Boot menu at startup" (was "GRUB menu style"), "Boot menu wait time" (was
+  "GRUB timeout") and "Other operating systems in the boot menu" (was "OS prober"). The
+  recommended defaults stay menu, 10 s and on.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added

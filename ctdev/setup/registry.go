@@ -45,10 +45,10 @@ var Registry = []Setting{
 		HardwareFn: detectNvidiaLoaded,
 	},
 	{
-		Name:        "GRUB menu style",
+		Name:        "Boot menu at startup",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "Controls how the GRUB boot menu appears. 'menu' always shows it, 'hidden' skips it unless Shift is held, 'countdown' shows a timer.",
+		Description: "Seeing the menu at startup lets you pick another system or a recovery entry when this one won't boot.",
 		Control:     ControlPicker,
 		Default:     "menu",
 		Choices: []PickerChoice{
@@ -64,10 +64,10 @@ var Registry = []Setting{
 		HardwareFn: gateGrub,
 	},
 	{
-		Name:        "GRUB timeout",
+		Name:        "Boot menu wait time",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "How many seconds the GRUB menu waits before booting the default entry.",
+		Description: "Gives you time to pick an entry before the default one starts on its own; 0 starts it right away.",
 		Control:     ControlSlider,
 		Default:     "10",
 		Slider:      &SliderRange{Min: 0, Max: 30, Step: 1, Unit: "s"},
@@ -79,10 +79,10 @@ var Registry = []Setting{
 		HardwareFn: gateGrub,
 	},
 	{
-		Name:        "OS prober",
+		Name:        "Other operating systems in the boot menu",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "Lets GRUB detect other operating systems (e.g. Windows) and add them to the boot menu. Useful for dual-boot setups.",
+		Description: "Lets you start Windows or another installed system from the boot menu; turn it off on a VM host, where scanning disks can damage guest systems.",
 		Control:     ControlToggle,
 		Default:     "enabled",
 		DetectFunc:  detectGrubOSProber,
