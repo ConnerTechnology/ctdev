@@ -174,7 +174,7 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 	fmt.Printf("  %s\n", wizardValueStyle.Render(s.Name))
 	fmt.Printf("  %s\n", styles.Dimmed.Render(s.Description))
 	current := state.CurrentValue
-	if s.Default != "" && s.Default != current {
+	if state.NotNeeded == "" && s.Default != "" && s.Default != current {
 		// Default is documented as "our recommended value" — say so; --batch
 		// applies exactly these.
 		fmt.Printf("  %s %s %s\n", styles.Dimmed.Render("Current:"), setup.DisplayValue(s, current),

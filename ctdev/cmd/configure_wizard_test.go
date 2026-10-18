@@ -324,6 +324,9 @@ func TestPromptSetting_NotNeededDefaultsToSkip(t *testing.T) {
 	if !strings.Contains(out, "Not needed on this machine: "+reason) {
 		t.Errorf("wizard should give the reason; got %q", out)
 	}
+	if strings.Contains(out, "recommended") {
+		t.Errorf("wizard shouldn't recommend a setting this machine doesn't need; got %q", out)
+	}
 
 	// Yes, then a value, changes it anyway.
 	stdinScanner = bufio.NewScanner(strings.NewReader("y\nnever\n"))
