@@ -179,24 +179,6 @@ func TestRegistrySlugCounts(t *testing.T) {
 	}
 }
 
-func TestLogitechKVMFixHasHardwareFn(t *testing.T) {
-	for _, s := range Registry {
-		if s.Name == "Logitech KVM mouse fix" {
-			if s.HardwareFn == nil {
-				t.Error("Logitech KVM mouse fix should have HardwareFn set")
-			}
-			if s.DetectFunc == nil {
-				t.Error("Logitech KVM mouse fix should have DetectFunc set")
-			}
-			if s.ApplyFunc == nil {
-				t.Error("Logitech KVM mouse fix should have ApplyFunc set")
-			}
-			return
-		}
-	}
-	t.Fatal("Logitech KVM mouse fix not found in Registry")
-}
-
 func TestHideDrivesHasHardwareFn(t *testing.T) {
 	for _, s := range Registry {
 		if s.Name == "Hide drives" {

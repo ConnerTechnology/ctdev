@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure mouse` names its settings by what they do, and each says why.**
+  "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
+  only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
+  Logitech mouse working after a KVM switch". Both can now be turned off: off removes the
+  xbindkeys config and autostart entry (an edited config is left alone, and the xbindkeys
+  and xdotool packages stay), or the Logitech udev rule and Solaar user service. The
+  Logitech setting also shows while it's installed, so it can be turned off after the
+  receiver is unplugged. The recommended mouse speed is now 0.46, and the slider moves
+  in steps of 0.01. "Mouse accel profile" is now "Mouse acceleration".
+
 ## [14.2.0] - 2026-10-15
 
 ### Added
