@@ -103,8 +103,7 @@ func gateMosh() bool {
 	if !gateLinux() {
 		return false
 	}
-	_, err := exec.LookPath("mosh-server")
-	return err == nil
+	return remoteCommandExists("mosh-server")
 }
 
 // gateVSCode reports whether VS Code's `code` CLI is on PATH on this Linux
@@ -168,16 +167,24 @@ func applySSHServer(ctx context.Context, o sysutil.Opts, mode string) error {
 
 // ── Key-only login ──────────────────────────────────────────────────────
 
-// detectSSHKeyOnly reports "enabled" only when sshd's effective config has
-// password login off, read from `sshd -T` (the drop-in is root-only). With no
-// authorized key ctdev leaves passwords on, so that reads "disabled" and a
-// re-run after adding a key finishes the job.
+// detectSSHKeyOnly reports "enabled" only when ctdev's drop-in exists and
+// sshd's effective config has password login off, both read through the
+// sudo probe (the drop-in is root-only). With no authorized key ctdev leaves
+// passwords on, so that reads "disabled" and a re-run after adding a key
+// finishes the job. When the probe can't run (--show and --dry-run skip
+// sudo) it reads "unknown".
 func detectSSHKeyOnly(ctx context.Context) string {
 	if !hasAuthorizedKey() {
 		return "disabled"
 	}
 	out, err := remoteSudoProbe(ctx, "sshd", "-T")
-	if err != nil || !sshdPasswordAuthOff(out) {
+	if err != nil {
+		return ValueUnknown
+	}
+	if _, err := remoteSudoProbe(ctx, "test", "-e", sshdDropIn); err != nil {
+		return "disabled"
+	}
+	if !sshdPasswordAuthOff(out) {
 		return "disabled"
 	}
 	return "enabled"
@@ -381,13 +388,17 @@ func applyCodeTunnel(ctx context.Context, o sysutil.Opts, value string) error {
 // ── Local-network-only firewall (UFW) ───────────────────────────────────
 
 // detectUFW reports "enabled" when UFW is on (ufw.conf's ENABLED=yes) and
-// every allow rule ctdev adds is present (`ufw status`, root-only).
+// every allow rule ctdev adds is present (`ufw status`, root-only). When the
+// probe can't run (--show and --dry-run skip sudo) it reads "unknown".
 func detectUFW(ctx context.Context) string {
 	if !ufwEnabled() {
 		return "disabled"
 	}
 	status, err := remoteSudoProbe(ctx, "ufw", "status")
-	if err != nil || !ufwHasCtdevRules(status) {
+	if err != nil {
+		return ValueUnknown
+	}
+	if !ufwHasCtdevRules(status) {
 		return "disabled"
 	}
 	return "enabled"

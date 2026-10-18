@@ -61,9 +61,14 @@ type SettingState struct {
 	Enabled      bool   // whether included in apply set
 }
 
+// ValueUnknown is what a DetectFunc returns when it can't read the current
+// value, e.g. a root-only probe under --show or --dry-run, which skip sudo.
+// It is shown as is and never applied.
+const ValueUnknown = "unknown"
+
 // NeedsApply returns true if this setting should be applied.
 func (inst *SettingState) NeedsApply(force bool) bool {
-	if !inst.Enabled {
+	if !inst.Enabled || inst.CurrentValue == ValueUnknown {
 		return false
 	}
 	if force {

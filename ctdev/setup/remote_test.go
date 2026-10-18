@@ -420,8 +420,8 @@ func TestDetectUFW(t *testing.T) {
 	t.Run("status unreadable", func(t *testing.T) {
 		useFakeRemote(t)
 		enable(t)
-		if got := detectUFW(context.Background()); got != "disabled" {
-			t.Errorf("got %q, want disabled", got)
+		if got := detectUFW(context.Background()); got != ValueUnknown {
+			t.Errorf("got %q, want %q", got, ValueUnknown)
 		}
 	})
 }
@@ -448,6 +448,7 @@ func TestDetectSSHKeyOnly(t *testing.T) {
 	t.Run("key, passwords still on", func(t *testing.T) {
 		f := useFakeRemote(t)
 		writeAuthorizedKey(t, f)
+		f.sudoOut["test -e "+sshdDropIn] = ""
 		f.sudoOut["sshd -T"] = "pubkeyauthentication yes\npasswordauthentication yes"
 		if got := detectSSHKeyOnly(context.Background()); got != "disabled" {
 			t.Errorf("got %q, want disabled", got)
@@ -456,16 +457,25 @@ func TestDetectSSHKeyOnly(t *testing.T) {
 	t.Run("key, passwords off", func(t *testing.T) {
 		f := useFakeRemote(t)
 		writeAuthorizedKey(t, f)
+		f.sudoOut["test -e "+sshdDropIn] = ""
 		f.sudoOut["sshd -T"] = "pubkeyauthentication yes\npasswordauthentication no"
 		if got := detectSSHKeyOnly(context.Background()); got != "enabled" {
 			t.Errorf("got %q, want enabled", got)
 		}
 	})
+	t.Run("passwords off by another file, no ctdev drop-in", func(t *testing.T) {
+		f := useFakeRemote(t)
+		writeAuthorizedKey(t, f)
+		f.sudoOut["sshd -T"] = "pubkeyauthentication yes\npasswordauthentication no"
+		if got := detectSSHKeyOnly(context.Background()); got != "disabled" {
+			t.Errorf("got %q, want disabled", got)
+		}
+	})
 	t.Run("sshd -T unreadable", func(t *testing.T) {
 		f := useFakeRemote(t)
 		writeAuthorizedKey(t, f)
-		if got := detectSSHKeyOnly(context.Background()); got != "disabled" {
-			t.Errorf("got %q, want disabled", got)
+		if got := detectSSHKeyOnly(context.Background()); got != ValueUnknown {
+			t.Errorf("got %q, want %q", got, ValueUnknown)
 		}
 	})
 }
@@ -600,16 +610,19 @@ func TestApplyCodeTunnelOnSaysItTurnedLingerBackOn(t *testing.T) {
 	}
 }
 
-func TestMoshSupportIsGatedOnMoshServer(t *testing.T) {
-	for _, s := range Registry {
-		if s.Name == "Mosh support" {
-			if reflect.ValueOf(s.HardwareFn).Pointer() != reflect.ValueOf(gateMosh).Pointer() {
-				t.Error("Mosh support should be gated on mosh-server (gateMosh)")
-			}
-			return
-		}
+func TestGateMosh(t *testing.T) {
+	if !gateLinux() {
+		t.Skip("gateMosh is Linux-only")
 	}
-	t.Fatal("Mosh support not in Registry")
+	f := useFakeRemote(t)
+	f.commands["mosh-server"] = true
+	if !gateMosh() {
+		t.Error("mosh-server on PATH: want shown")
+	}
+	delete(f.commands, "mosh-server")
+	if gateMosh() {
+		t.Error("no mosh-server: want hidden")
+	}
 }
 
 func TestUFWHasCtdevRules(t *testing.T) {
