@@ -31,7 +31,9 @@ sliders on both Cinnamon and macOS.
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 Each needs its tool: on a machine without git or the AWS CLI, it asks "Git isn't
 installed. Install it now? [Y/n]" (or "AWS CLI isn't…") and installs the `git` or
-`aws` component before going on, and `--batch` installs without asking. When
+`aws` component before going on. `--batch` installs without asking, a no stops the
+wizard and says how to install later, and `--show` never installs. The check is the
+component's own install check, so an AWS CLI v1 counts as missing. When
 `~/.aws/config` has no profiles yet, `configure aws` offers to run
 `aws configure sso` to create one. `ctdev install git` and `ctdev install aws` run
 these wizards afterward.

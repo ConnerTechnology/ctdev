@@ -5,11 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **`ctdev install aws`** installs AWS CLI v2 from AWS's official installer, never apt
-  (whose `awscli` is v1 on several Ubuntu releases): on Linux the zip, checked against
-  its PGP signature with the AWS CLI Team key and installed to `/usr/local/aws-cli`; on
-  macOS the `awscli` Homebrew formula. A v1 `aws` already on the machine gets v2
-  installed over it. Run `ctdev install aws --force` to update the Linux install. It
+- **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
+  several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
+  against its PGP signature with the AWS CLI Team key and installed to
+  `/usr/local/aws-cli`. On macOS it uses the `awscli` Homebrew formula, which is
+  Homebrew's package rather than AWS's installer (chosen in CTD-90). A v1 `aws` already
+  on the machine doesn't count as installed: v2 goes in over it. Run `ctdev install aws --force` to update the Linux install. It
   then runs `ctdev configure aws`.
 
 ### Changed
