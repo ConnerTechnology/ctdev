@@ -12,8 +12,8 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-// AWS CLI v2 comes from AWS's own installer, never apt: Ubuntu's `awscli`
-// package is v1 on several releases, and `aws configure sso` needs v2.
+// AWS CLI v2 (CTD-90 decision 3) comes from AWS's own installer on Linux,
+// never apt, whose `awscli` package is v1 on several Ubuntu releases.
 const (
 	awsFormula    = "awscli"
 	awsInstallDir = "/usr/local/aws-cli"
@@ -30,6 +30,17 @@ var awsVersion = func(ctx context.Context) (string, error) {
 // awsIsV2 reports whether `aws --version` output is from AWS CLI v2.
 func awsIsV2(versionOutput string) bool {
 	return strings.HasPrefix(strings.TrimSpace(versionOutput), "aws-cli/2.")
+}
+
+// awsV2Installed is the aws component's install check: an `aws` on PATH that
+// reports v2. apt's v1 doesn't count, so installing over it asks for sudo up
+// front and `configure aws` offers v2 instead of running on v1.
+func awsV2Installed() bool {
+	if !sysutil.CommandExists("aws") {
+		return false
+	}
+	out, err := awsVersion(context.Background())
+	return err == nil && awsIsV2(out)
 }
 
 // awsZipURL is the latest Linux installer for a Go arch, as published at
@@ -59,12 +70,10 @@ func awsInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	// A v1 `aws` (apt's awscli) on PATH doesn't count: install v2 over it.
+	// A v1 `aws` (apt's awscli) doesn't count as installed: v2 goes in over it.
 	if !opts.Force && alreadyInstalled("aws") {
-		if out, err := awsVersion(ctx); err == nil && awsIsV2(out) {
-			fmt.Fprintln(opts.Stdout, "aws already installed")
-			return nil
-		}
+		fmt.Fprintln(opts.Stdout, "aws already installed")
+		return nil
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing AWS CLI v2...")
@@ -89,11 +98,14 @@ func awsInstall(ctx context.Context, opts ExecOpts) error {
 		return nil
 	}
 
-	for _, dep := range [][2]string{{"gpg", "gnupg"}, {"unzip", "unzip"}} {
-		if !sysutil.CommandExists(dep[0]) {
-			if err := sysutil.InstallPackage(ctx, o, dep[1]); err != nil {
-				return err
-			}
+	if !sysutil.CommandExists("gpg") {
+		if err := sysutil.InstallPackage(ctx, o, "gnupg"); err != nil {
+			return err
+		}
+	}
+	if !sysutil.CommandExists("unzip") {
+		if err := sysutil.InstallPackage(ctx, o, "unzip"); err != nil {
+			return err
 		}
 	}
 
@@ -153,6 +165,9 @@ func awsUninstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.OS == platform.MacOS {
 		return sysutil.RemovePackage(ctx, o, awsFormula)
+	}
+	if p.OS != platform.Linux {
+		return unsupportedPMError("aws", p.PackageManager)
 	}
 	// AWS's documented uninstall: the two symlinks, then the install dir.
 	// ~/.aws (profiles, SSO cache) stays: it's shared with every AWS SDK.

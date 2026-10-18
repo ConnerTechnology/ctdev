@@ -117,7 +117,7 @@ func TestAWSEmbeddedKeyIsAWSCLITeam(t *testing.T) {
 	if _, err := exec.LookPath("gpg"); err != nil {
 		t.Skip("gpg not installed")
 	}
-	out, err := exec.Command("gpg", "--homedir", t.TempDir(), "--show-keys", "--with-colons", "--fingerprint", filepath.Join("configs", "aws", "aws-cli-public-key.asc")).Output()
+	out, err := exec.Command("gpg", "--homedir", t.TempDir(), "--show-keys", "--with-colons", "--fingerprint", awsPublicKey).Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,5 +145,30 @@ func TestAWSVerifySignatureRejectsBadSignature(t *testing.T) {
 	err := awsVerifySignature(context.Background(), sysutil.Opts{Stdout: &out}, dir, zipPath, sigPath)
 	if err == nil || !strings.Contains(err.Error(), "signature check failed") {
 		t.Errorf("expected a signature failure, got %v", err)
+	}
+}
+
+// Detection is v2-aware in one place, so the sudo pre-check agrees with the
+// installer: installing over apt's v1 needs root, and the TUI must not be the
+// first to ask for it.
+func TestAWSDetectionIgnoresV1(t *testing.T) {
+	c := FindByName("aws")
+	fakeAWSOnPath(t, "aws-cli/1.22.34 Python/3.10.12 Linux/6.8.0 botocore/1.23.34\n")
+	if c.IsInstalled() {
+		t.Error("a v1 aws should not count as installed")
+	}
+	if !InstallNeedsRoot("apt", []string{"aws"}, false) {
+		t.Error("installing v2 over v1 should need root")
+	}
+}
+
+func TestAWSDetectionAcceptsV2(t *testing.T) {
+	c := FindByName("aws")
+	fakeAWSOnPath(t, "aws-cli/2.27.41 Python/3.11.6 Linux/6.8.0\n")
+	if !c.IsInstalled() {
+		t.Error("a v2 aws should count as installed")
+	}
+	if InstallNeedsRoot("apt", []string{"aws"}, false) {
+		t.Error("re-running over v2 shouldn't need root")
 	}
 }

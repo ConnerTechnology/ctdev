@@ -82,13 +82,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			len(requested), len(deps), strings.Join(deps, ", "))
 	}
 
-	// Only ask for a password when something in this run will use it — a
-	// dotfiles-only install (zsh configs, claude-code, fonts) works fine in a
-	// container that has no sudo at all.
-	if !flagDryRun && comp.InstallNeedsRoot(platform.Detect().PackageManager, resolved, flagForce) {
-		if err := ensureSudo(cmdContext(cmd)); err != nil {
-			return fmt.Errorf("sudo required for install: %w", err)
-		}
+	if err := ensureSudoForInstall(cmdContext(cmd), resolved, flagForce); err != nil {
+		return err
 	}
 	installErr := runWithProgress(cmd.Context(), progressOperation{
 		mode:  progress.ModeInstall,
@@ -125,6 +120,20 @@ func runInstall(cmd *cobra.Command, args []string) error {
 				fmt.Printf("  configure %s: %v\n", name, err)
 			}
 		}
+	}
+	return nil
+}
+
+// ensureSudoForInstall caches a sudo password before the progress TUI takes
+// the terminal, but only when something in this install will use it — a
+// dotfiles-only install (zsh configs, claude-code, fonts) works fine in a
+// container that has no sudo at all.
+func ensureSudoForInstall(ctx context.Context, names []string, force bool) error {
+	if flagDryRun || !comp.InstallNeedsRoot(platform.Detect().PackageManager, names, force) {
+		return nil
+	}
+	if err := ensureSudo(ctx); err != nil {
+		return fmt.Errorf("sudo required for install: %w", err)
 	}
 	return nil
 }
