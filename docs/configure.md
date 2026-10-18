@@ -28,6 +28,14 @@ macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
 and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
 sliders on both Cinnamon and macOS.
 
+**Desktop** — `audio`, `bluetooth`. `bluetooth` installs bluez and Blueman and
+turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
+PulseAudio tools, plus Bluetooth audio (PipeWire's Bluetooth codecs and an LDAC
+config), and switches alert sounds. Neither installs the other's packages.
+Turning a setting off removes only what ctdev added: ctdev records the packages it
+installed and the service changes it made under
+`~/.local/state/ctdev/configure-added/`, and leaves anything the machine already had.
+
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 
 **Component wizards** — `pihole`, `caddy`, `restic`,

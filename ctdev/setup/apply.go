@@ -321,30 +321,6 @@ func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
 	return nil
 }
 
-// applyWireplumberLDAC copies the WirePlumber LDAC config from the ctdev repo.
-func applyWireplumberLDAC(ctx context.Context, o sysutil.Opts) error {
-	confDir := "/etc/wireplumber/wireplumber.conf.d"
-	confDst := filepath.Join(confDir, "51-ldac-hq.conf")
-
-	if err := sysutil.SudoRun(ctx, o, "mkdir", "-p", confDir); err != nil {
-		return fmt.Errorf("mkdir wireplumber conf dir: %w", err)
-	}
-
-	content, err := Configs.ReadFile("configs/wireplumber/51-ldac-hq.conf")
-	if err != nil {
-		return fmt.Errorf("read embedded wireplumber config: %w", err)
-	}
-	if err := sysutil.SudoWriteFile(ctx, o, string(content), confDst); err != nil {
-		return fmt.Errorf("copy wireplumber config: %w", err)
-	}
-
-	// Restart PipeWire stack to pick up new config; best-effort.
-	_ = sysutil.Run(ctx, o, "systemctl", "--user", "restart",
-		"pipewire", "pipewire-pulse", "wireplumber")
-
-	return nil
-}
-
 // applyLogitechKVMFix installs a udev rule and systemd user service to restart Solaar
 // when the Logi Bolt receiver reconnects after a KVM switch.
 func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {

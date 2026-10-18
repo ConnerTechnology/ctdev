@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure bluetooth` sets up only Bluetooth, and `configure audio` only audio.**
+  `bluetooth` installs bluez and Blueman ("Bluetooth support") and turns on
+  `bluetooth.service` ("Bluetooth on at startup"), so on a machine without bluez it now
+  installs it before enabling the service. `audio` installs PipeWire, WirePlumber and the
+  PulseAudio tools ("Sound system (PipeWire)"), PipeWire's Bluetooth codecs ("Bluetooth
+  headphones"), the LDAC config ("Hi-fi Bluetooth audio") and switches "Alert sounds".
+  Installs skip apt's recommends, so Blueman no longer pulls in
+  `pulseaudio-module-bluetooth`. Each setting has a one-line reason, shows only on a
+  machine with the hardware it needs (a Bluetooth adapter, a sound card), and can be
+  turned off: off removes only the packages and service changes ctdev recorded adding,
+  under `~/.local/state/ctdev/configure-added/`, or the LDAC config file.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added
