@@ -14,11 +14,15 @@ All notable changes to this project will be documented in this file.
     `docker compose -f ~/mcp-email-server/docker-compose.yml down`
   - the `mcp-email-server:local` image: `docker image rm mcp-email-server:local`
   - the `tailscale serve` rule that published it to the tailnet, on port 443, or 8443 on
-    a node that also ran caddy (`MCP_SERVE_PORT` in `~/mcp-email-server/.env`):
-    `sudo tailscale serve --https=<port> off`
+    a node that also ran caddy (`MCP_SERVE_PORT` in `~/mcp-email-server/.env`).
+    `sudo tailscale serve --https=<port> off` clears everything served on that port, not
+    just this proxy, so first check with `tailscale serve status` that nothing else
+    uses it.
   - `~/mcp-email-server/`, whose `config/managed.sqlite3` holds every mailbox password
-    unencrypted: `rm -rf ~/mcp-email-server`. If `ctdev backup paths` includes it, the
-    restic snapshots hold those passwords too.
+    unencrypted: `rm -rf ~/mcp-email-server`. If it is backed up, remove it from the
+    includes in `ctdev backup paths` (the ✕ on its chip, then Save & Close). Older
+    restic snapshots keep the passwords until each backup run's `forget --prune` drops
+    them, by default once they fall outside 7 daily, 4 weekly and 6 monthly snapshots.
 
 ## [14.2.0] - 2026-10-15
 
