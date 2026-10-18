@@ -93,7 +93,6 @@ func TestEmbeddedUdevConfigs(t *testing.T) {
 		contains string
 	}{
 		{"configs/udev/99-logitech-kvm-fix.rules", "046d"},
-		{"configs/udev/99-hide-drives.rules", "UDISKS_IGNORE"},
 		{"configs/udev/solaar-restart.service", "solaar"},
 	}
 	for _, f := range files {

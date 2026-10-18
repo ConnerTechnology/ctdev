@@ -24,9 +24,18 @@ They fall into three groups.
 `autoupdate`, `macos`, `gpu`. These change the machine itself: the SSH daemon
 and key-based auth hardening, the firewall, suspend, the UTF-8 locale Mosh
 needs, user-service lingering, the VS Code tunnel, automatic security updates,
-macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
+macOS defaults (typing, dialogs, screensaver password), and the NVIDIA driver
 and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
 sliders on both Cinnamon and macOS.
+
+**The desktop** — `desktop` holds how the desktop looks and behaves, on whichever
+platform you run it. On macOS: an auto-hiding Dock, faster animations, Finder's
+list view with path and status bars, and no `.DS_Store` files on network and USB
+drives, each one on or off. On Cinnamon: Nemo's default view, and Hide drives,
+which lists this machine's partitions and hides the ones you check from the file
+manager. It writes `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem
+UUID; checking nothing removes it. `--batch` leaves Hide drives alone, since
+which partitions to hide is this machine's choice.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 

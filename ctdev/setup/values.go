@@ -2,6 +2,7 @@ package setup
 
 import (
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -101,4 +102,31 @@ func FormatSliderVal(val, step float64) string {
 		return "0"
 	}
 	return out
+}
+
+// PicksNone is a ControlMultiPick value with nothing checked.
+const PicksNone = "none"
+
+// JoinPicks returns the ControlMultiPick value for picks: sorted, deduplicated
+// and comma-joined, or PicksNone when empty.
+func JoinPicks(picks []string) string {
+	var out []string
+	for _, p := range picks {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return PicksNone
+	}
+	slices.Sort(out)
+	return strings.Join(slices.Compact(out), ",")
+}
+
+// SplitPicks returns the checked values in a ControlMultiPick value.
+func SplitPicks(value string) []string {
+	if value == "" || value == PicksNone {
+		return nil
+	}
+	return strings.Split(value, ",")
 }
