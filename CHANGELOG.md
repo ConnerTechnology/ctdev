@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`ctdev install aws`** installs AWS CLI v2 from AWS's official installer, never apt
+  (whose `awscli` is v1 on several Ubuntu releases): on Linux the zip, checked against
+  its PGP signature with the AWS CLI Team key and installed to `/usr/local/aws-cli`; on
+  macOS the `awscli` Homebrew formula. A v1 `aws` already on the machine gets v2
+  installed over it. Run `ctdev install aws --force` to update the Linux install. It
+  then runs `ctdev configure aws`.
+
+### Changed
+- **`ctdev install git`** now runs `ctdev configure git` afterward.
+- **`ctdev configure aws` and `ctdev configure git` install their tool first** when it's
+  missing, after asking "AWS CLI isn't installed. Install it now? [Y/n]" (or "Git
+  isn't…"). With `--batch` they install without asking.
+- **`ctdev configure aws` with no profiles** in `~/.aws/config` offers to run
+  `aws configure sso` instead of exiting.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added

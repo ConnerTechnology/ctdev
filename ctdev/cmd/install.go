@@ -132,7 +132,9 @@ func runInstall(cmd *cobra.Command, args []string) error {
 // componentWizards are the components whose configuration step is a dedicated
 // wizard rather than a `configure <name>` category from setup.Registry.
 var componentWizards = map[string]func(context.Context) error{
+	"aws":              configureAWS,
 	"caddy":            configureCaddy,
+	"git":              configureGit,
 	"mcp-email-server": configureMCPEmailServer,
 }
 

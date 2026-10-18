@@ -27,8 +27,8 @@ ctdev info                      # Inventory: specs, kernel, uptime, drives, usag
 ctdev configure                 # Full-screen settings browser (all categories)
 ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
-ctdev configure git             # Configure git user and SSH signing key
-ctdev configure aws             # Configure AWS profile
+ctdev configure git             # Configure git user and SSH signing key (installs git first if missing)
+ctdev configure aws             # Pick the AWS profile; offers `aws configure sso` when there is none (installs the AWS CLI first if missing)
 ctdev configure ssh             # SSH server + key-based auth hardening
 ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
 ctdev configure sleep           # Never-suspend (mask sleep targets)
