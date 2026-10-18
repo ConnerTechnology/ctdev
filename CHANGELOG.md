@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
+  several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
+  against its PGP signature with the AWS CLI Team key and installed to
+  `/usr/local/aws-cli`. On macOS it uses the `awscli` Homebrew formula, which is
+  Homebrew's package rather than AWS's installer (chosen in CTD-90). A v1 `aws` already
+  on the machine doesn't count as installed: v2 goes in over it. Run `ctdev install aws --force` to update the Linux install. It
+  then runs `ctdev configure aws`.
+
 ### Changed
 - **`ctdev configure storage`** is a new category holding SSD TRIM, renamed "Keep SSDs
   fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
@@ -17,6 +26,12 @@ All notable changes to this project will be documented in this file.
   "why":** "Boot menu at startup" (was "GRUB menu style"), "Boot menu wait time" (was
   "GRUB timeout") and "Other operating systems in the boot menu" (was "OS prober"). The
   recommended defaults stay menu, 10 s and on.
+- **`ctdev install git`** now runs `ctdev configure git` afterward.
+- **`ctdev configure aws` and `ctdev configure git` install their tool first** when it's
+  missing, after asking "AWS CLI isn't installed. Install it now? [Y/n]" (or "Git
+  isn't…"). With `--batch` they install without asking.
+- **`ctdev configure aws` with no profiles** in `~/.aws/config` offers to run
+  `aws configure sso` instead of exiting.
 
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
