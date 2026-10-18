@@ -38,6 +38,7 @@ ctdev configure tunnel          # VS Code tunnel service
 ctdev configure autoupdate      # Automatic security updates + apt-daily job timeout
 ctdev configure macos           # macOS defaults (Dock/Finder/typing/animations) — macOS only
 ctdev configure keyboard        # Key repeat delay/speed (Cinnamon, macOS) + NumLock on boot
+ctdev configure storage         # Weekly SSD TRIM (fstrim.timer) — only on machines with an SSD
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)
