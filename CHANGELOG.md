@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
   fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
   discards, and it now has an off switch: turning it off stops and disables
   `fstrim.timer`. It is no longer under `configure system`.
+- **`ctdev configure network`: "WiFi power save off" is now "Keep WiFi connected when
+  idle"**, with a one-line reason in the wizard. It shows only on machines with a WiFi
+  adapter, not on every NetworkManager machine, and it can now be turned off: choosing
+  "not installed" removes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`.
 
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:

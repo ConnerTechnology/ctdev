@@ -59,13 +59,42 @@ func gateDconfDesktop() bool {
 	return err == nil
 }
 
+// etcNetworkManager is NetworkManager's config directory; tests point it at a
+// fake tree.
+var etcNetworkManager = "/etc/NetworkManager"
+
 // gateNetworkManager reports whether NetworkManager manages this Linux host.
 func gateNetworkManager() bool {
 	if !gateLinux() {
 		return false
 	}
-	_, err := os.Stat("/etc/NetworkManager")
+	_, err := os.Stat(etcNetworkManager)
 	return err == nil
+}
+
+// sysClassNet is where the kernel lists network interfaces; tests point it at
+// a fake tree.
+var sysClassNet = "/sys/class/net"
+
+// gateWiFi reports whether NetworkManager manages this Linux host and it has
+// a WiFi adapter.
+func gateWiFi() bool {
+	return gateNetworkManager() && hasWiFiAdapter(sysClassNet)
+}
+
+// hasWiFiAdapter reports whether any interface under root is wireless. The
+// kernel gives every WiFi interface a "wireless" directory in sysfs.
+func hasWiFiAdapter(root string) bool {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if _, err := os.Stat(filepath.Join(root, e.Name(), "wireless")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // gatePowerProfiles reports whether power-profiles-daemon's CLI is available
