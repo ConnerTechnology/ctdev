@@ -373,7 +373,9 @@ func (m *Model) renderRow(i int) string {
 	} else {
 		parts = append(parts, styles.Value.Render(setup.DisplayValue(s, val)))
 	}
-	if s.Default != "" && val != s.Default {
+	if st.NotNeeded != "" && !st.Enabled && st.CurrentValue != s.Default {
+		parts = append(parts, styles.Dimmed.Render("not needed"))
+	} else if s.Default != "" && val != s.Default {
 		parts = append(parts, styles.BadgeWarn.Render("≠ REC"))
 	} else if s.OneWay && st.CurrentValue == s.Default {
 		parts = append(parts, styles.Success.Render("✓"))
@@ -393,7 +395,9 @@ func (m *Model) footerView() string {
 		}
 		b.WriteString("  " + styles.Dimmed.Render(desc) + "\n")
 		detail := fmt.Sprintf("Current: %s", setup.DisplayValue(s, st.CurrentValue))
-		if s.Default != "" {
+		if st.NotNeeded != "" {
+			detail += fmt.Sprintf(" · Not needed: %s", st.NotNeeded)
+		} else if s.Default != "" {
 			detail += fmt.Sprintf(" · Recommended: %s", setup.DisplayValue(s, s.Default))
 		}
 		if r := s.Slider; r != nil {

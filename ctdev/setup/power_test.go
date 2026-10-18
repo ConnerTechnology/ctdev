@@ -31,7 +31,9 @@ func TestDconfSecondsToMinutes(t *testing.T) {
 		{"0", "never"},
 		{"3600", "60"},
 		{"uint32 1800", "30"},
-		{"90", "1.5"},
+		{"90", "90 s"}, // hand-set, not whole minutes: exact seconds
+		{"7", "7 s"},
+		{"int32 45", "45 s"},
 		{"", ""}, // unset key: nothing to report
 		{"garbage", "garbage"},
 	}
@@ -210,6 +212,31 @@ func TestEveryPowerSettingHasOneLineWhy(t *testing.T) {
 		}
 		if s.OneWay {
 			t.Errorf("%s: every power setting needs an off switch", s.Name)
+		}
+	}
+}
+
+func TestSuspendOnlySettingsNotNeededWhenMasked(t *testing.T) {
+	allMasked := map[string]string{}
+	for _, u := range sleepTargets {
+		allMasked[u] = "masked"
+	}
+	for _, name := range []string{"Suspend when idle after", "Lock the screen on suspend"} {
+		s := powerSetting(t, name)
+		if s.NotNeededFn == nil {
+			t.Fatalf("%s: must check whether suspend can happen", name)
+		}
+		fakeSystemctlIsEnabled(t, allMasked)
+		if got := s.NotNeededFn(context.Background()); !strings.Contains(got, "suspend is turned off") {
+			t.Errorf("%s with suspend masked: NotNeeded = %q, want a 'suspend is turned off' reason", name, got)
+		}
+		states := InitStates(context.Background(), []Setting{{Name: s.Name, Default: s.Default, NotNeededFn: s.NotNeededFn}})
+		if states[0].NeedsApply(true) {
+			t.Errorf("%s with suspend masked: applied by default", name)
+		}
+		fakeSystemctlIsEnabled(t, map[string]string{})
+		if got := s.NotNeededFn(context.Background()); got != "" {
+			t.Errorf("%s with suspend allowed: NotNeeded = %q, want needed", name, got)
 		}
 	}
 }

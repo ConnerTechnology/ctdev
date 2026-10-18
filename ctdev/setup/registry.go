@@ -145,7 +145,8 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconfMinutes(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v, "")
 		},
-		HardwareFn: gateCinnamon,
+		HardwareFn:  gateCinnamon,
+		NotNeededFn: suspendNotNeeded,
 	},
 	{
 		Name:        neverSuspendName,
@@ -171,7 +172,8 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v)
 		},
-		HardwareFn: gateCinnamon,
+		HardwareFn:  gateCinnamon,
+		NotNeededFn: suspendNotNeeded,
 	},
 	{
 		Name:        "Lock the screen with the screensaver",

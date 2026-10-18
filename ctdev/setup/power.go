@@ -51,6 +51,15 @@ func detectSuspendMasked(ctx context.Context) string {
 	return "disabled"
 }
 
+// suspendNotNeeded is the NotNeededFn of settings that only act when the
+// machine suspends: with "Never suspend, even when asked" on, they can't.
+func suspendNotNeeded(ctx context.Context) string {
+	if SuspendMasked(ctx) {
+		return "suspend is turned off, so this has no effect"
+	}
+	return ""
+}
+
 // applyNeverSuspend masks the sleep targets for "enabled" and unmasks them
 // for "disabled", which removes exactly what enabling added.
 func applyNeverSuspend(ctx context.Context, o sysutil.Opts, value string) error {
@@ -83,8 +92,9 @@ func stripGVariantType(v string) string {
 }
 
 // dconfSecondsToMinutes renders a dconf timer in seconds as minutes for a
-// SliderRange with Never: 0 is SliderNever. Unset keys stay empty and values
-// that aren't numbers are shown as read.
+// SliderRange with Never: 0 is SliderNever. A hand-set value that isn't whole
+// minutes is shown exactly, in seconds ("90 s"). Unset keys stay empty and
+// values that aren't numbers are shown as read.
 func dconfSecondsToMinutes(raw string) string {
 	v := stripGVariantType(raw)
 	if v == "" {
@@ -96,6 +106,9 @@ func dconfSecondsToMinutes(raw string) string {
 	}
 	if sec == 0 {
 		return SliderNever
+	}
+	if math.Mod(sec, 60) != 0 {
+		return strconv.FormatFloat(sec, 'f', -1, 64) + " s"
 	}
 	return strconv.FormatFloat(sec/60, 'f', -1, 64)
 }

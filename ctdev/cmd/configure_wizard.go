@@ -158,7 +158,9 @@ func showSetting(state *setup.SettingState, width int) {
 	value := wizardValueStyle.Render(setup.DisplayValue(s, state.CurrentValue))
 
 	marker := ""
-	if state.CurrentValue != s.Default {
+	if state.NotNeeded != "" {
+		marker = styles.Dimmed.Render(fmt.Sprintf(" (not needed: %s)", state.NotNeeded))
+	} else if state.CurrentValue != s.Default {
 		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", setup.DisplayValue(s, s.Default)))
 	}
 	fmt.Printf("  %s %s%s\n", label, value, marker)
@@ -202,6 +204,21 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 		state.DesiredValue = s.Default
 		state.Enabled = true
 		return true, nil
+	}
+
+	// A setting this machine doesn't need stays out of the apply set unless
+	// asked for.
+	if state.NotNeeded != "" {
+		fmt.Printf("  %s\n", styles.Dimmed.Render("Not needed on this machine: "+state.NotNeeded+"."))
+		yes, err := promptYesNoCtx(ctx, "Change it anyway?", false)
+		if err != nil {
+			return false, err
+		}
+		if !yes {
+			fmt.Println()
+			state.Enabled = false
+			return false, nil
+		}
 	}
 
 	var newValue string
