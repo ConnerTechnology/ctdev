@@ -431,9 +431,6 @@ ClientAliveInterval 60
 ClientAliveCountMax 3
 `
 
-// keepWiFiConnectedName is the wizard name of the WiFi power save setting.
-const keepWiFiConnectedName = "Keep WiFi connected when idle"
-
 // wifiPowersaveConfPath is the NetworkManager drop-in ctdev owns for it.
 const wifiPowersaveConfPath = "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
 

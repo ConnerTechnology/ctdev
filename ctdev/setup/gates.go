@@ -70,12 +70,16 @@ func gateDconfDesktop() bool {
 	return err == nil
 }
 
+// etcNetworkManager is NetworkManager's config directory; tests point it at a
+// fake tree.
+var etcNetworkManager = "/etc/NetworkManager"
+
 // gateNetworkManager reports whether NetworkManager manages this Linux host.
 func gateNetworkManager() bool {
 	if !gateLinux() {
 		return false
 	}
-	_, err := os.Stat("/etc/NetworkManager")
+	_, err := os.Stat(etcNetworkManager)
 	return err == nil
 }
 

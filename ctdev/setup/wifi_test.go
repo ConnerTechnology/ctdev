@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -67,14 +68,26 @@ func findSetting(t *testing.T, settings []Setting, name string) *Setting {
 	return nil
 }
 
+// fakeNetworkManagerHost points the NetworkManager and network interface
+// gates at fake trees: NetworkManager present, with the given interfaces.
+// The gates are Linux-only, so the test is skipped elsewhere.
+func fakeNetworkManagerHost(t *testing.T, ifaces []string, wireless ...string) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("the NetworkManager gate is Linux-only")
+	}
+	origNM, origNet := etcNetworkManager, sysClassNet
+	t.Cleanup(func() { etcNetworkManager, sysClassNet = origNM, origNet })
+	etcNetworkManager = t.TempDir()
+	sysClassNet = fakeSysClassNet(t, ifaces, wireless...)
+}
+
 func TestKeepWiFiConnectedHiddenOnWiredOnlyMachine(t *testing.T) {
-	orig := sysClassNet
-	t.Cleanup(func() { sysClassNet = orig })
-	sysClassNet = fakeSysClassNet(t, []string{"lo", "enp5s0"})
+	fakeNetworkManagerHost(t, []string{"lo", "enp5s0"})
 
 	visible := FilterByHardware(FilterBySlug(Registry, "network"))
-	if s := findSetting(t, visible, keepWiFiConnectedName); s != nil {
-		t.Errorf("%q shown on a wired-only machine", keepWiFiConnectedName)
+	if s := findSetting(t, visible, "Keep WiFi connected when idle"); s != nil {
+		t.Error(`"Keep WiFi connected when idle" shown on a wired-only machine`)
 	}
 	if findSetting(t, Registry, "WiFi power save off") != nil {
 		t.Error(`old name "WiFi power save off" still in the registry`)
@@ -82,9 +95,9 @@ func TestKeepWiFiConnectedHiddenOnWiredOnlyMachine(t *testing.T) {
 }
 
 func TestKeepWiFiConnectedHasOffSwitch(t *testing.T) {
-	s := findSetting(t, Registry, keepWiFiConnectedName)
+	s := findSetting(t, Registry, "Keep WiFi connected when idle")
 	if s == nil {
-		t.Fatalf("%q not in the registry", keepWiFiConnectedName)
+		t.Fatal(`"Keep WiFi connected when idle" not in the registry`)
 	}
 	if s.OneWay {
 		t.Error("expected an off switch, but the setting is marked OneWay")
@@ -112,14 +125,10 @@ func TestKeepWiFiConnectedHasOffSwitch(t *testing.T) {
 }
 
 func TestKeepWiFiConnectedShownWithWiFiAdapter(t *testing.T) {
-	orig := sysClassNet
-	t.Cleanup(func() { sysClassNet = orig })
-	sysClassNet = fakeSysClassNet(t, []string{"lo", "enp5s0"}, "wlp4s0")
+	fakeNetworkManagerHost(t, []string{"lo", "enp5s0"}, "wlp4s0")
 
 	visible := FilterByHardware(FilterBySlug(Registry, "network"))
-	shown := findSetting(t, visible, keepWiFiConnectedName) != nil
-	// NetworkManager is still required; only assert where the host has it.
-	if shown != gateNetworkManager() {
-		t.Errorf("shown = %v with a WiFi adapter, want %v (NetworkManager present)", shown, gateNetworkManager())
+	if findSetting(t, visible, "Keep WiFi connected when idle") == nil {
+		t.Error(`"Keep WiFi connected when idle" hidden on a machine with a WiFi adapter`)
 	}
 }

@@ -486,7 +486,7 @@ var Registry = []Setting{
 	// ── Network ────────────────────────────────────────────────────────
 
 	{
-		Name:        keepWiFiConnectedName,
+		Name:        "Keep WiFi connected when idle",
 		Slug:        "network",
 		Category:    "Network",
 		Description: "Stops WiFi power saving, so the machine stays reachable over WiFi while idle instead of dropping off the network. Takes effect after the next reboot or NetworkManager restart.",
