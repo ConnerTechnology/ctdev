@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`ctdev configure storage`** is a new category holding SSD TRIM, renamed "Keep SSDs
+  fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
+  discards, and it now has an off switch: turning it off stops and disables
+  `fstrim.timer`. It is no longer under `configure system`.
+
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
   automatic security updates (unattended-upgrades) and the apt daily job timeout. The

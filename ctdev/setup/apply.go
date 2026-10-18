@@ -324,8 +324,18 @@ func applyHideDrives(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 }
 
-// applySSDTrim enables the fstrim.timer systemd unit for periodic SSD TRIM.
-func applySSDTrim(ctx context.Context, o sysutil.Opts) error {
+// applySSDTrim turns the fstrim.timer systemd unit (weekly SSD TRIM) on for
+// "active" and off for anything else.
+func applySSDTrim(ctx context.Context, o sysutil.Opts, value string) error {
+	if value != "active" {
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "stop", "fstrim.timer"); err != nil {
+			return fmt.Errorf("stop fstrim.timer: %w", err)
+		}
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "disable", "fstrim.timer"); err != nil {
+			return fmt.Errorf("disable fstrim.timer: %w", err)
+		}
+		return nil
+	}
 	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "fstrim.timer"); err != nil {
 		return fmt.Errorf("enable fstrim.timer: %w", err)
 	}
