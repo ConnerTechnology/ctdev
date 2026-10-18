@@ -24,7 +24,7 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | Home | What is in it |
 | --- | --- |
 | This file | Orientation, and the conventions that bind everywhere |
-| `.claude/rules/` | The facts about one component or one directory. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, doctor, the install scripts, the Go conventions inside the module |
+| `.claude/rules/` | What no single file can say about one component or directory: conventions across files, traps, outside facts. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, doctor, the install scripts, the Go conventions inside the module |
 | `docs/README.md` | The human-facing docs: one page per capability, in README order |
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
 | `docs/architecture.md` | The directory map of the Go module |
@@ -33,8 +33,9 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | `TROUBLESHOOTING.md` | Symptoms and fixes on a live machine |
 | `CHANGELOG.md` | What shipped in each version |
 
-A fact that is true of one component goes in that component's rule, not here. If you find yourself
-wanting to add a paragraph to this file, it almost certainly belongs in a rule or in `docs/`.
+The code is the source of truth: the why goes in a comment where the code acts on it.
+`docs/agents/where-things-go.md` says where every other fact goes, and how to trace a line back to
+its ticket. A paragraph you want to add here almost certainly belongs somewhere on that page.
 
 ## Where things get recorded
 
@@ -74,18 +75,23 @@ file the next session reads:
 
 - Changes reach `main` through a GitHub pull request. The release commit in "Releases" is the one
   exception.
-- Commit messages are one line in conventional-commit form, `type: description`. Attribution is
-  off, set in `.claude/settings.json`.
+- Commit messages are one line in conventional-commit form, `type: description`, then a body of a
+  line or two that cites the Linear ID and says why. Attribution is off, set in
+  `.claude/settings.json`.
+- To learn why a line is the way it is: `git blame` → the commit body → its PR
+  (`gh pr list --search <sha> --state merged`) → the Linear ticket.
 
 ## Releases
 
 1. Commit changes
-2. Update CHANGELOG.md
-3. Bump VERSION
-4. Commit: `docs: update for vX.Y.Z`
-5. Tag: `git tag vX.Y.Z`
-6. Push: `git push && git push --tags`
-7. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
+2. Run `/doctor prompt-audit <repo path>` in a terminal `claude` started outside the repo (this
+   repo's `disableBundledSkills` turns off the skill it runs on); fix or ticket each finding
+3. Update CHANGELOG.md
+4. Bump VERSION
+5. Commit: `docs: update for vX.Y.Z`
+6. Tag: `git tag vX.Y.Z`
+7. Push: `git push && git push --tags`
+8. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
 
 ## Guidance is checked
 
