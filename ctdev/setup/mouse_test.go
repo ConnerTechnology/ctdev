@@ -16,8 +16,19 @@ import (
 // Root writes and `rm -f` land on the real (temp) filesystem so tests can
 // check exactly what is left behind; everything else is only recorded.
 type fakeMouseSystem struct {
-	calls [][]string
-	pkgs  map[string]bool
+	calls  [][]string
+	pkgs   map[string]bool
+	starts int // times xbindkeys was started
+}
+
+func (f *fakeMouseSystem) packages(_ context.Context, o sysutil.Opts, pkgs []string) error {
+	f.calls = append(f.calls, append([]string{"apt-get-install"}, pkgs...))
+	if !o.DryRun {
+		for _, p := range pkgs {
+			f.pkgs[p] = true
+		}
+	}
+	return nil
 }
 
 func (f *fakeMouseSystem) run(_ context.Context, o sysutil.Opts, name string, args ...string) error {
@@ -34,10 +45,6 @@ func (f *fakeMouseSystem) sudoRun(_ context.Context, o sysutil.Opts, name string
 	case name == "rm" && len(args) == 2 && args[0] == "-f":
 		if err := os.Remove(args[1]); err != nil && !os.IsNotExist(err) {
 			return err
-		}
-	case name == "apt-get":
-		for _, p := range args[3:] {
-			f.pkgs[p] = true
 		}
 	}
 	return nil
@@ -72,20 +79,18 @@ func useFakeMouseSystem(t *testing.T) (*fakeMouseSystem, string) {
 	}
 
 	f := &fakeMouseSystem{pkgs: map[string]bool{}}
-	saved := []any{mouseRun, mouseSudoRun, mouseSudoWrite, mousePkgInstalled, mouseStartXbind, logitechUdevRule}
+	run, sudoRun, sudoWrite, pkgs, installed, start, rule :=
+		mouseRun, mouseSudoRun, mouseSudoWrite, mousePackages, mousePkgInstalled, mouseStartXbind, logitechUdevRule
 	t.Cleanup(func() {
-		mouseRun = saved[0].(func(context.Context, sysutil.Opts, string, ...string) error)
-		mouseSudoRun = saved[1].(func(context.Context, sysutil.Opts, string, ...string) error)
-		mouseSudoWrite = saved[2].(func(context.Context, sysutil.Opts, string, string) error)
-		mousePkgInstalled = saved[3].(func(context.Context, string) bool)
-		mouseStartXbind = saved[4].(func() error)
-		logitechUdevRule = saved[5].(string)
+		mouseRun, mouseSudoRun, mouseSudoWrite, mousePackages, mousePkgInstalled, mouseStartXbind, logitechUdevRule =
+			run, sudoRun, sudoWrite, pkgs, installed, start, rule
 	})
 	mouseRun = f.run
 	mouseSudoRun = f.sudoRun
 	mouseSudoWrite = f.sudoWrite
+	mousePackages = f.packages
 	mousePkgInstalled = func(_ context.Context, p string) bool { return f.pkgs[p] }
-	mouseStartXbind = func() error { return nil }
+	mouseStartXbind = func() error { f.starts++; return nil }
 	logitechUdevRule = filepath.Join(udevDir, "99-logitech-kvm-fix.rules")
 	return f, home
 }
@@ -249,6 +254,9 @@ func TestMiddleClickOffKeepsAnEditedConfig(t *testing.T) {
 	if !strings.Contains(out.String(), "Leaving "+rc) {
 		t.Errorf("off didn't say it left %s; output:\n%s", rc, out)
 	}
+	if got := s.DetectFunc(ctx); got != "not installed" {
+		t.Errorf("after off: detect = %q", got)
+	}
 }
 
 func TestLogitechKVMFixOffRemovesWhatOnInstalled(t *testing.T) {
@@ -362,5 +370,152 @@ func TestRoundMouseSpeed(t *testing.T) {
 		if got := roundMouseSpeed(raw); got != want {
 			t.Errorf("roundMouseSpeed(%q) = %q, want %q", raw, got, want)
 		}
+	}
+}
+
+// applyThroughStates drives one setting the way the wizard and settings
+// browser do: detect, queue desired, and apply only if NeedsApply says so.
+func applyThroughStates(t *testing.T, name, desired string) {
+	t.Helper()
+	ctx := context.Background()
+	states := InitStates(ctx, []Setting{*mouseSetting(t, name)})
+	st := &states[0]
+	st.DesiredValue = desired
+	if !st.NeedsApply(false) {
+		t.Fatalf("%q: current %q, desired %q: wizard wouldn't apply", name, st.CurrentValue, desired)
+	}
+	if err := st.Setting.ApplyFunc(ctx, sysutil.Opts{Stdout: &bytes.Buffer{}}, st.DesiredValue); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMouseOffReachableFromPartialInstall(t *testing.T) {
+	cases := []struct {
+		name    string
+		setting string
+		partial func(t *testing.T, home string) // starts from a full install
+	}{
+		{"edited xbindkeysrc", middleClickName, func(t *testing.T, home string) {
+			if err := os.WriteFile(filepath.Join(home, ".xbindkeysrc"), []byte("# mine\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"only the udev rule", logitechName, func(t *testing.T, home string) {
+			if err := os.Remove(filepath.Join(home, ".config", "systemd", "user", solaarService)); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"only the user service", logitechName, func(t *testing.T, _ string) {
+			if err := os.Remove(logitechUdevRule); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, home := useFakeMouseSystem(t)
+			s := mouseSetting(t, c.setting)
+			ctx := context.Background()
+			if err := s.ApplyFunc(ctx, sysutil.Opts{Stdout: &bytes.Buffer{}}, "installed"); err != nil {
+				t.Fatal(err)
+			}
+			c.partial(t, home)
+			if got := s.DetectFunc(ctx); got != "partly installed" {
+				t.Fatalf("detect = %q, want partly installed", got)
+			}
+
+			applyThroughStates(t, c.setting, "not installed")
+			if got := s.DetectFunc(ctx); got != "not installed" {
+				t.Errorf("after off: detect = %q", got)
+			}
+			if c.setting == logitechName && logitechFixPresent() {
+				t.Error("off left a piece of the Logitech fix")
+			}
+			autostart := filepath.Join(home, ".config", "autostart", "xbindkeys.desktop")
+			if _, err := os.Stat(autostart); c.setting == middleClickName && !os.IsNotExist(err) {
+				t.Errorf("off left ctdev's autostart entry: %v", err)
+			}
+		})
+	}
+}
+
+func TestMouseOnRepairsPartialInstall(t *testing.T) {
+	_, _ = useFakeMouseSystem(t)
+	ctx := context.Background()
+	if err := applyLogitechKVMFix(ctx, sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(logitechUdevRule); err != nil {
+		t.Fatal(err)
+	}
+	applyThroughStates(t, logitechName, "installed")
+	if got := detectLogitechKVMFix(ctx); got != "installed" {
+		t.Errorf("after on: detect = %q", got)
+	}
+}
+
+func TestMiddleClickOffGivesBackTheUsersOwnConfig(t *testing.T) {
+	f, home := useFakeMouseSystem(t)
+	s := mouseSetting(t, middleClickName)
+	ctx := context.Background()
+	o := sysutil.Opts{Stdout: &bytes.Buffer{}}
+
+	rc := filepath.Join(home, ".xbindkeysrc")
+	mine := "# my own bindings\n"
+	if err := os.WriteFile(rc, []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := listFiles(t, home)
+
+	if err := s.ApplyFunc(ctx, o, "installed"); err != nil {
+		t.Fatal(err)
+	}
+	if !isCtdevFile(rc, xbindkeysrcSrc) {
+		t.Fatal("on didn't deploy ctdev's .xbindkeysrc")
+	}
+	f.calls, f.starts = nil, 0
+
+	if err := s.ApplyFunc(ctx, o, "not installed"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(rc)
+	if err != nil || string(got) != mine {
+		t.Errorf(".xbindkeysrc after off = %q, %v; want the user's %q", got, err, mine)
+	}
+	if after := listFiles(t, home); !reflect.DeepEqual(after, before) {
+		t.Errorf("off left %v, want %v", after, before)
+	}
+	if !f.called("killall", "xbindkeys") || f.starts != 1 {
+		t.Errorf("off should restart xbindkeys on the user's config: calls %v, starts %d", f.calls, f.starts)
+	}
+}
+
+func TestMiddleClickOffLeavesXbindkeysRunningWhenConfigIsTheUsers(t *testing.T) {
+	f, home := useFakeMouseSystem(t)
+	s := mouseSetting(t, middleClickName)
+	ctx := context.Background()
+	o := sysutil.Opts{Stdout: &bytes.Buffer{}}
+	if err := s.ApplyFunc(ctx, o, "installed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".xbindkeysrc"), []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.calls, f.starts = nil, 0
+	if err := s.ApplyFunc(ctx, o, "not installed"); err != nil {
+		t.Fatal(err)
+	}
+	if f.called("killall", "xbindkeys") || f.starts != 0 {
+		t.Errorf("off touched xbindkeys running on the user's config: calls %v, starts %d", f.calls, f.starts)
+	}
+}
+
+func TestMiddleClickInstallsPackagesThroughApplyPackages(t *testing.T) {
+	f, _ := useFakeMouseSystem(t)
+	if err := applyXbindkeys(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
+		t.Fatal(err)
+	}
+	if !f.called("apt-get-install", "xbindkeys", "xdotool") {
+		t.Errorf("on didn't install the packages; ran %v", f.calls)
 	}
 }

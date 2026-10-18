@@ -9,8 +9,11 @@ All notable changes to this project will be documented in this file.
   "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
   only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
   Logitech mouse working after a KVM switch". Both can now be turned off: off removes the
-  xbindkeys config and autostart entry (an edited config is left alone, and the xbindkeys
-  and xdotool packages stay), or the Logitech udev rule and Solaar user service. The
+  xbindkeys config and autostart entry and puts back any file of yours they replaced (an
+  edited config is left alone, and the xbindkeys and xdotool packages stay), or the
+  Logitech udev rule and Solaar user service. A half-installed setting shows as "partly
+  installed", so either choice repairs or removes it. `ctdev reset` removes both the same
+  way. The
   Logitech setting also shows while it's installed, so it can be turned off after the
   receiver is unplugged. The recommended mouse speed is now 0.46, and the slider moves
   in steps of 0.01. The current speed shows rounded to that step, so a desktop-set

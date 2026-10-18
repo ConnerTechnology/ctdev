@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -21,6 +22,7 @@ var (
 	mouseRun          = sysutil.Run
 	mouseSudoRun      = sysutil.SudoRun
 	mouseSudoWrite    = sysutil.SudoWriteFile
+	mousePackages     = applyPackages
 	mousePkgInstalled = detectPackageInstalled
 	mouseStartXbind   = func() error { return startDetached("xbindkeys") }
 
@@ -95,20 +97,63 @@ func roundMouseSpeed(raw string) string {
 	return FormatSliderVal(math.Round(v/mouseSpeedStep)*mouseSpeedStep, mouseSpeedStep)
 }
 
+// installState names a setting's state from whether all, some or none of
+// what ctdev installs is in place. "partly installed" matches neither toggle
+// value, so the wizard applies whichever one the user picks.
+func installState(all, any bool) string {
+	switch {
+	case all:
+		return "installed"
+	case any:
+		return "partly installed"
+	}
+	return "not installed"
+}
+
+// newestBackup returns the most recent backup DeployFile made of path, or "".
+// Backup names end in a sortable timestamp (sysutil.BackupPath).
+func newestBackup(path string) string {
+	matches, err := filepath.Glob(path + ".*.bak")
+	if err != nil || len(matches) == 0 {
+		return ""
+	}
+	sort.Strings(matches)
+	return matches[len(matches)-1]
+}
+
+// restoreBackup puts back the newest backup of path, honoring dry-run.
+// Reports whether one was restored.
+func restoreBackup(o sysutil.Opts, path string) (bool, error) {
+	backup := newestBackup(path)
+	if backup == "" {
+		return false, nil
+	}
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "[dry-run] restore %s from %s\n", path, backup)
+		return true, nil
+	}
+	if err := os.Rename(backup, path); err != nil {
+		return false, fmt.Errorf("restore %s: %w", path, err)
+	}
+	fmt.Fprintf(o.Stdout, "Restored %s from %s\n", path, backup)
+	return true, nil
+}
+
 // ── Middle-click opens the window overview ──────────────────────────────
 
 // detectXbindkeys reports "installed" when xbindkeys and xdotool are present
-// and ctdev's binding config and autostart entry are both in place.
+// and ctdev's binding config and autostart entry are both in place, and
+// "partly installed" when only one of ctdev's files is.
 func detectXbindkeys(ctx context.Context) string {
 	rc, autostart, err := xbindkeysPaths()
 	if err != nil {
 		return "not installed"
 	}
-	if mousePkgInstalled(ctx, "xbindkeys") && mousePkgInstalled(ctx, "xdotool") &&
-		isCtdevFile(rc, xbindkeysrcSrc) && isCtdevFile(autostart, xbindkeysAutoSrc) {
-		return "installed"
-	}
-	return "not installed"
+	ours := isCtdevFile(rc, xbindkeysrcSrc)
+	ourAutostart := isCtdevFile(autostart, xbindkeysAutoSrc)
+	all := ours && ourAutostart &&
+		mousePkgInstalled(ctx, "xbindkeys") && mousePkgInstalled(ctx, "xdotool")
+	return installState(all, ours || ourAutostart)
 }
 
 // setXbindkeys turns the middle-click binding on ("installed") or off.
@@ -121,7 +166,7 @@ func setXbindkeys(ctx context.Context, o sysutil.Opts, v string) error {
 
 // applyXbindkeys installs xbindkeys and xdotool, deploys the config, and sets up autostart.
 func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
-	if err := mouseSudoRun(ctx, o, "apt-get", "install", "-y", "-qq", "xbindkeys", "xdotool"); err != nil {
+	if err := mousePackages(ctx, o, []string{"xbindkeys", "xdotool"}); err != nil {
 		return fmt.Errorf("install xbindkeys/xdotool: %w", err)
 	}
 
@@ -147,16 +192,19 @@ func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
 	return nil
 }
 
-// removeXbindkeys stops xbindkeys and removes ctdev's binding config and
-// autostart entry. A file that no longer matches ctdev's copy was edited by
-// the user, so it stays. The xbindkeys and xdotool packages stay too: other
-// bindings may use them, and ctdev can't tell whether it installed them.
+// removeXbindkeys removes ctdev's binding config and autostart entry and
+// puts back whatever ctdev backed up when it installed them. A file that no
+// longer matches ctdev's copy was edited by the user, so it stays. xbindkeys
+// is restarted only when its config changed: stopped if ctdev's was removed,
+// started again if the user's own config is back. The xbindkeys and xdotool
+// packages stay: other bindings may use them, and ctdev can't tell whether it
+// installed them.
 func removeXbindkeys(ctx context.Context, o sysutil.Opts) error {
 	rc, autostart, err := xbindkeysPaths()
 	if err != nil {
 		return err
 	}
-	_ = mouseRun(ctx, o, "killall", "xbindkeys")
+	removedRC, restoredRC := false, false
 	for _, f := range []struct{ path, src string }{
 		{autostart, xbindkeysAutoSrc},
 		{rc, xbindkeysrcSrc},
@@ -170,6 +218,19 @@ func removeXbindkeys(ctx context.Context, o sysutil.Opts) error {
 		}
 		if err := removeUserFile(o, f.path); err != nil {
 			return err
+		}
+		restored, err := restoreBackup(o, f.path)
+		if err != nil {
+			return err
+		}
+		if f.path == rc {
+			removedRC, restoredRC = true, restored
+		}
+	}
+	if removedRC {
+		_ = mouseRun(ctx, o, "killall", "xbindkeys")
+		if restoredRC && !o.DryRun {
+			_ = mouseStartXbind()
 		}
 	}
 	return nil
@@ -193,13 +254,12 @@ func gateLogitechKVMFix() bool {
 }
 
 // detectLogitechKVMFix reports "installed" when both the udev rule and the
-// Solaar restart user service are in place.
+// Solaar restart user service are in place, and "partly installed" when
+// only one is.
 func detectLogitechKVMFix(_ context.Context) string {
 	svc, err := solaarServicePath()
-	if err == nil && fileExists(logitechUdevRule) && fileExists(svc) {
-		return "installed"
-	}
-	return "not installed"
+	all := err == nil && fileExists(logitechUdevRule) && fileExists(svc)
+	return installState(all, logitechFixPresent())
 }
 
 // setLogitechKVMFix turns the KVM fix on ("installed") or off.
