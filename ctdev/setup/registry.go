@@ -564,47 +564,6 @@ var Registry = []Setting{
 		HardwareFn: gateLinux,
 	},
 
-	// ── Automatic updates ────────────────────────────────────────────────
-
-	{
-		Name:     "Automatic security updates",
-		Slug:     "autoupdate",
-		Category: "Automatic Updates",
-		Description: "Installs unattended-upgrades and enables a daily job that applies security " +
-			"updates automatically (security pocket only — normal updates stay manual via " +
-			"'ctdev update'). Recommended for always-on nodes and family machines that don't " +
-			"get regular hands-on attention.",
-		Control:    ControlToggle,
-		Default:    "enabled",
-		OneWay:     true,
-		DetectFunc: detectUnattendedUpgrades,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyUnattendedUpgrades(ctx, o)
-		},
-		HardwareFn: gateLinux,
-	},
-	{
-		Name:     "apt daily job timeout",
-		Slug:     "autoupdate",
-		Category: "Automatic Updates",
-		Description: "Caps how long apt's daily download and upgrade jobs may run before systemd " +
-			"kills them. Both units ship with apt as Type=oneshot, which systemd gives no start " +
-			"timeout at all — so a mirror fetch that stalls instead of failing holds " +
-			"/var/lib/apt/lists/lock indefinitely, and every later apt run (including 'ctdev " +
-			"update') can't lock the index. 'No timeout' removes the cap and restores stock apt.",
-		Control: ControlPicker,
-		Default: "30min",
-		Choices: []PickerChoice{
-			{Value: "15min", Description: "Kill after 15 minutes"},
-			{Value: "30min", Description: "Kill after 30 minutes (recommended)"},
-			{Value: "1h", Description: "Kill after 1 hour — slow links, large upgrades"},
-			{Value: "infinity", Description: "No timeout (systemd default; can wedge apt)"},
-		},
-		DetectFunc: detectAptDailyTimeout,
-		ApplyFunc:  applyAptDailyTimeout,
-		HardwareFn: gateAptDaily,
-	},
-
 	// ── Locale ───────────────────────────────────────────────────────────
 
 	{

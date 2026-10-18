@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
+  automatic security updates (unattended-upgrades) and the apt daily job timeout. The
+  node recipes no longer run it. Nothing is uninstalled: a machine already set up keeps
+  the `unattended-upgrades` package, `/etc/apt/apt.conf.d/20auto-upgrades` and the
+  `ctdev-timeout.conf` drop-ins for `apt-daily.service` and `apt-daily-upgrade.service`,
+  and they keep working. Remove them by hand if you no longer want them.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added
