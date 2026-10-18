@@ -18,9 +18,11 @@ ctdev stacks. CTD-88 calls removing `verify` part of narrowing ctdev's command s
 
 ## Consequences
 
-Doctor took two of `verify`'s checks, and both appear only for what ctdev installed: each installed
-tool is on PATH, with its version, and the services ctdev depends on (ssh, tailscaled, docker) are
-running. A machine ctdev does not manage shows none of these rows (ADR-0011).
+Doctor took two of `verify`'s checks, and both appear only for what ctdev installed. Each installed
+tool must be on PATH, and its version is shown; a missing one fails. On Linux, an installed
+tailscaled or docker fails when stopped. An installed sshd counts as running when its service or
+its socket is active, and when it is off the row is informational, which `--strict` ignores. A
+machine ctdev does not manage shows none of these rows (ADR-0011).
 
 Some checks are no longer anywhere, by decision:
 

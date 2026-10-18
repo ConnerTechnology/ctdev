@@ -14,4 +14,4 @@ check already hides what doesn't apply, which is the reason the record gives. De
 
 The `macos` category is broken up by topic: Dock, Finder and animations move into `desktop`, and
 typing into `keyboard`. That work is CTD-94 and CTD-95. Until both land, the code still has a
-`macos` category (`ctdev/cmd/configure_wizard.go`), so the code and this decision disagree.
+`macos` category (`ctdev/setup/registry.go`), so the code and this decision disagree.
