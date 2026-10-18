@@ -25,7 +25,7 @@ var slugDescriptions = map[string]string{
 	"desktop":    "Desktop",
 	"network":    "Network & WiFi",
 	"system":     "System",
-	"ssh":        "SSH & remote access",
+	"ssh":        "SSH & Remote Access",
 	"sleep":      "Sleep & Suspend",
 	"autoupdate": "Automatic Updates",
 	"pihole":     "Pi-hole DNS",

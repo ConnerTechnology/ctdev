@@ -46,9 +46,14 @@ var (
 	remoteStateDir = state.StateDir
 	// remoteCommandExists reports whether a binary is on PATH.
 	remoteCommandExists = sysutil.CommandExists
+	// remoteInstall installs apt packages (openssh-server, ufw).
+	remoteInstall = applyPackages
 	// sshdPath is the OpenSSH server binary; its absence means
 	// openssh-server isn't installed.
 	sshdPath = "/usr/sbin/sshd"
+	// sshSocketMigrationDropIn is left by Ubuntu's 22.10/23.04 upgrade to
+	// socket activation; while it exists, ssh.service pulls ssh.socket back in.
+	sshSocketMigrationDropIn = "/etc/systemd/system/ssh.service.d/00-socket.conf"
 	// ufwConfPath holds UFW's ENABLED= switch, readable without root.
 	ufwConfPath = "/etc/ufw/ufw.conf"
 )
@@ -64,7 +69,15 @@ const (
 // enforcement is delegated to the gateway firewall (see remote-access design).
 var lanCIDRs = []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"}
 
-const sshdDropIn = "/etc/ssh/sshd_config.d/99-ctdev.conf"
+// sshdDropIn is ctdev's sshd drop-in. sshd keeps the first value it reads
+// and includes sshd_config.d/*.conf in name order, so the 00- prefix puts it
+// ahead of drop-ins like 50-cloud-init.conf. sshdLegacyDropIn is the name
+// older ctdev versions used; it is removed whenever the drop-in is written
+// or turned off.
+const (
+	sshdDropIn       = "/etc/ssh/sshd_config.d/00-ctdev.conf"
+	sshdLegacyDropIn = "/etc/ssh/sshd_config.d/99-ctdev.conf"
+)
 
 const sshHardeningConf = `# Managed by ctdev — remote access (key-based SSH)
 PubkeyAuthentication yes
@@ -84,12 +97,13 @@ const (
 // remoteOn reports whether a toggle value asks for the setting to be on.
 func remoteOn(value string) bool { return value == "enabled" }
 
-// gateSSHD reports whether the OpenSSH server is installed on this Linux host.
-func gateSSHD() bool {
+// gateMosh reports whether mosh-server is on PATH on this Linux host; the
+// UTF-8 locale only matters to Mosh.
+func gateMosh() bool {
 	if !gateLinux() {
 		return false
 	}
-	_, err := os.Stat(sshdPath)
+	_, err := exec.LookPath("mosh-server")
 	return err == nil
 }
 
@@ -122,7 +136,7 @@ func detectSSHServer(ctx context.Context) string {
 func applySSHServer(ctx context.Context, o sysutil.Opts, mode string) error {
 	if mode != sshOff {
 		if _, err := os.Stat(sshdPath); err != nil {
-			if err := remoteSudo(ctx, o, "apt-get", "install", "-y", "-qq", "openssh-server"); err != nil {
+			if err := remoteInstall(ctx, o, []string{"openssh-server"}); err != nil {
 				return fmt.Errorf("install openssh-server: %w", err)
 			}
 		}
@@ -139,7 +153,13 @@ func applySSHServer(ctx context.Context, o sysutil.Opts, mode string) error {
 		if err := remoteSudo(ctx, o, "systemctl", "disable", "--now", "ssh.socket"); err != nil {
 			return err
 		}
-		return remoteSudo(ctx, o, "systemctl", "enable", "--now", "ssh.service")
+		if err := remoteSudo(ctx, o, "systemctl", "enable", "--now", "ssh.service"); err != nil {
+			return err
+		}
+		if _, err := os.Stat(sshSocketMigrationDropIn); err == nil {
+			fmt.Fprintf(o.Stdout, "  note: %s pulls ssh.socket back in, so SSH may still start on demand; to remove it, follow Ubuntu's revert steps at https://discourse.ubuntu.com/t/sshd-now-uses-socket-based-activation-ubuntu-22-10-and-later/30189\n", sshSocketMigrationDropIn)
+		}
+		return nil
 	case sshOff:
 		return remoteSudo(ctx, o, "systemctl", "disable", "--now", "ssh.socket", "ssh.service")
 	}
@@ -148,11 +168,29 @@ func applySSHServer(ctx context.Context, o sysutil.Opts, mode string) error {
 
 // ── Key-only login ──────────────────────────────────────────────────────
 
-func detectSSHKeyOnly(_ context.Context) string {
-	if _, err := os.Stat(sshdDropIn); err == nil {
-		return "enabled"
+// detectSSHKeyOnly reports "enabled" only when sshd's effective config has
+// password login off, read from `sshd -T` (the drop-in is root-only). With no
+// authorized key ctdev leaves passwords on, so that reads "disabled" and a
+// re-run after adding a key finishes the job.
+func detectSSHKeyOnly(ctx context.Context) string {
+	if !hasAuthorizedKey() {
+		return "disabled"
 	}
-	return "disabled"
+	out, err := remoteSudoProbe(ctx, "sshd", "-T")
+	if err != nil || !sshdPasswordAuthOff(out) {
+		return "disabled"
+	}
+	return "enabled"
+}
+
+// sshdPasswordAuthOff reports whether `sshd -T` output has password login off.
+func sshdPasswordAuthOff(effective string) bool {
+	for _, line := range strings.Split(effective, "\n") {
+		if strings.EqualFold(strings.TrimSpace(line), "passwordauthentication no") {
+			return true
+		}
+	}
+	return false
 }
 
 // applySSHKeyOnly writes or removes ctdev's sshd drop-in. Password auth is
@@ -162,16 +200,26 @@ func detectSSHKeyOnly(_ context.Context) string {
 // starts it with the new config).
 func applySSHKeyOnly(ctx context.Context, o sysutil.Opts, value string) error {
 	if !remoteOn(value) {
-		if err := remoteSudo(ctx, o, "rm", "-f", sshdDropIn); err != nil {
+		if err := remoteSudo(ctx, o, "rm", "-f", sshdDropIn, sshdLegacyDropIn); err != nil {
 			return err
 		}
 		return remoteSudo(ctx, o, "systemctl", "try-reload-or-restart", "ssh.service")
 	}
+	// The SSH server setting runs first and installs openssh-server, so this
+	// only trips when that setting was skipped or failed.
+	if _, err := os.Stat(sshdPath); err != nil {
+		fmt.Fprintln(o.Stdout, "  skipped: no sshd — turn on the SSH server first")
+		return nil
+	}
+	hasKey := hasAuthorizedKey()
 	content := sshHardeningConf
-	if hasAuthorizedKey() {
+	if hasKey {
 		content += "PasswordAuthentication no\n"
 	} else {
 		fmt.Fprintln(o.Stdout, "  note: no ~/.ssh/authorized_keys yet — leaving password auth enabled until a key is added; re-run after adding your key")
+	}
+	if err := remoteSudo(ctx, o, "rm", "-f", sshdLegacyDropIn); err != nil {
+		return err
 	}
 	if err := remoteWriteFile(ctx, o, content, sshdDropIn); err != nil {
 		return err
@@ -179,7 +227,15 @@ func applySSHKeyOnly(ctx context.Context, o sysutil.Opts, value string) error {
 	if err := remoteSudo(ctx, o, "sshd", "-t"); err != nil {
 		return fmt.Errorf("sshd config validation failed: %w", err)
 	}
-	return remoteSudo(ctx, o, "systemctl", "try-reload-or-restart", "ssh.service")
+	if err := remoteSudo(ctx, o, "systemctl", "try-reload-or-restart", "ssh.service"); err != nil {
+		return err
+	}
+	if hasKey && !o.DryRun {
+		if out, err := remoteSudoProbe(ctx, "sshd", "-T"); err == nil && !sshdPasswordAuthOff(out) {
+			fmt.Fprintln(o.Stdout, "  warning: another sshd setting turns password login back on; check /etc/ssh/sshd_config and /etc/ssh/sshd_config.d/ (sudo sshd -T | grep -i passwordauthentication)")
+		}
+	}
+	return nil
 }
 
 // hasAuthorizedKey reports whether ~/.ssh/authorized_keys has at least one key.
@@ -223,11 +279,13 @@ func applyLinger(ctx context.Context, o sysutil.Opts, value string) error {
 	if err != nil {
 		return err
 	}
-	verb := "disable-linger"
 	if remoteOn(value) {
-		verb = "enable-linger"
+		return remoteSudo(ctx, o, "loginctl", "enable-linger", name)
 	}
-	return remoteSudo(ctx, o, "loginctl", verb, name)
+	if detectCodeTunnel(ctx) == "enabled" {
+		fmt.Fprintln(o.Stdout, "  warning: the vscode.dev tunnel is on and stops when you log out without this; turn \"Open this machine from vscode.dev\" off too, or keep this on")
+	}
+	return remoteSudo(ctx, o, "loginctl", "disable-linger", name)
 }
 
 // ── Mosh support (UTF-8 locale) ─────────────────────────────────────────
@@ -306,8 +364,12 @@ func applyCodeTunnel(ctx context.Context, o sysutil.Opts, value string) error {
 		}
 		return nil
 	}
+	lingerWasOff := detectLinger(ctx) != "enabled"
 	if err := applyLinger(ctx, o, "enabled"); err != nil {
 		return fmt.Errorf("keep programs running (lingering): %w", err)
+	}
+	if lingerWasOff {
+		fmt.Fprintln(o.Stdout, "  note: also turned on \"Keep my programs running after I disconnect\", which the tunnel needs (if you turned it off in this run, the tunnel turned it back on)")
 	}
 	if err := remoteRun(ctx, o, "code", "tunnel", "service", "install", "--accept-server-license-terms"); err != nil {
 		return fmt.Errorf("code tunnel service install: %w", err)
@@ -318,33 +380,76 @@ func applyCodeTunnel(ctx context.Context, o sysutil.Opts, value string) error {
 
 // ── Local-network-only firewall (UFW) ───────────────────────────────────
 
-// detectUFW reports whether UFW is turned on, from ufw.conf's ENABLED=yes
-// (readable without root, unlike `ufw status`).
-func detectUFW(_ context.Context) string {
+// detectUFW reports "enabled" when UFW is on (ufw.conf's ENABLED=yes) and
+// every allow rule ctdev adds is present (`ufw status`, root-only).
+func detectUFW(ctx context.Context) string {
+	if !ufwEnabled() {
+		return "disabled"
+	}
+	status, err := remoteSudoProbe(ctx, "ufw", "status")
+	if err != nil || !ufwHasCtdevRules(status) {
+		return "disabled"
+	}
+	return "enabled"
+}
+
+// ufwEnabled reports whether ufw.conf, readable without root, has ENABLED=yes.
+func ufwEnabled() bool {
 	f, err := os.Open(ufwConfPath)
 	if err != nil {
-		return "disabled"
+		return false
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		if strings.TrimSpace(sc.Text()) == "ENABLED=yes" {
-			return "enabled"
+			return true
 		}
 	}
-	return "disabled"
+	return false
+}
+
+// ufwRule is one allow rule ctdev adds: a port and protocol from a range.
+type ufwRule struct{ port, proto, cidr string }
+
+// args returns the rule as `ufw allow` / `ufw delete allow` arguments.
+func (r ufwRule) args() []string {
+	return []string{"from", r.cidr, "to", "any", "port", r.port, "proto", r.proto}
 }
 
 // ufwRules are the allow rules ctdev adds, one SSH and one Mosh rule per
-// private range, as `ufw allow` arguments.
-func ufwRules() [][]string {
-	var rules [][]string
+// private range.
+func ufwRules() []ufwRule {
+	var rules []ufwRule
 	for _, cidr := range lanCIDRs {
 		rules = append(rules,
-			[]string{"from", cidr, "to", "any", "port", "22", "proto", "tcp"},
-			[]string{"from", cidr, "to", "any", "port", "60000:61000", "proto", "udp"})
+			ufwRule{port: "22", proto: "tcp", cidr: cidr},
+			ufwRule{port: "60000:61000", proto: "udp", cidr: cidr})
 	}
 	return rules
+}
+
+// ufwHasCtdevRules reports whether `ufw status` lists every rule ctdev adds.
+// UFW prints each as "22/tcp  ALLOW  192.168.0.0/16".
+func ufwHasCtdevRules(status string) bool {
+	listed := map[ufwRule]bool{}
+	for _, line := range strings.Split(status, "\n") {
+		f := strings.Fields(line)
+		if len(f) != 3 || f[1] != "ALLOW" {
+			continue
+		}
+		port, proto, ok := strings.Cut(f[0], "/")
+		if !ok {
+			continue
+		}
+		listed[ufwRule{port: port, proto: proto, cidr: f[2]}] = true
+	}
+	for _, r := range ufwRules() {
+		if !listed[r] {
+			return false
+		}
+	}
+	return true
 }
 
 // applyUFW turns the local-network-only firewall on or off. On opens SSH and
@@ -354,13 +459,13 @@ func ufwRules() [][]string {
 func applyUFW(ctx context.Context, o sysutil.Opts, value string) error {
 	if remoteOn(value) {
 		if !remoteCommandExists("ufw") {
-			if err := remoteSudo(ctx, o, "apt-get", "install", "-y", "-qq", "ufw"); err != nil {
+			if err := remoteInstall(ctx, o, []string{"ufw"}); err != nil {
 				return fmt.Errorf("install ufw: %w", err)
 			}
 		}
 		for _, r := range ufwRules() {
-			if err := remoteSudo(ctx, o, "ufw", append([]string{"allow"}, r...)...); err != nil {
-				return fmt.Errorf("ufw allow %s: %w", strings.Join(r, " "), err)
+			if err := remoteSudo(ctx, o, "ufw", append([]string{"allow"}, r.args()...)...); err != nil {
+				return fmt.Errorf("ufw allow %s: %w", strings.Join(r.args(), " "), err)
 			}
 		}
 		return remoteSudo(ctx, o, "ufw", "--force", "enable")
@@ -370,7 +475,7 @@ func applyUFW(ctx context.Context, o sysutil.Opts, value string) error {
 	}
 	// Best-effort: a rule someone already deleted by hand isn't an error.
 	for _, r := range ufwRules() {
-		_ = remoteSudo(ctx, o, "ufw", append([]string{"delete", "allow"}, r...)...)
+		_ = remoteSudo(ctx, o, "ufw", append([]string{"delete", "allow"}, r.args()...)...)
 	}
 	if !o.DryRun {
 		status, err := remoteSudoProbe(ctx, "ufw", "status")

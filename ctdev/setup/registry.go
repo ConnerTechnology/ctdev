@@ -545,7 +545,9 @@ var Registry = []Setting{
 		Default:     "enabled",
 		DetectFunc:  detectSSHKeyOnly,
 		ApplyFunc:   applySSHKeyOnly,
-		HardwareFn:  gateSSHD,
+		// Gated on Linux, not on sshd: the SSH server setting before it
+		// installs openssh-server in the same run.
+		HardwareFn: gateLinux,
 	},
 	{
 		Name:        "Keep my programs running after I disconnect",
@@ -567,7 +569,7 @@ var Registry = []Setting{
 		Default:     "enabled",
 		DetectFunc:  detectMoshLocale,
 		ApplyFunc:   applyMoshLocale,
-		HardwareFn:  gateLinux,
+		HardwareFn:  gateMosh,
 	},
 	{
 		Name:        "Open this machine from vscode.dev",

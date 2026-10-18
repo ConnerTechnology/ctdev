@@ -18,8 +18,10 @@ type fakeRemote struct {
 	calls    [][]string
 	probes   map[string]string // "name args..." → stdout
 	commands map[string]bool   // binaries on PATH
-	status   string            // `ufw status` output
+	sudoOut  map[string]string // root-only probes: "name args..." → stdout
 	stateDir string
+	home     string
+	onSudo   func(cmd []string) // optional side effect of a root command
 }
 
 func useFakeRemote(t *testing.T) *fakeRemote {
@@ -27,14 +29,25 @@ func useFakeRemote(t *testing.T) *fakeRemote {
 	f := &fakeRemote{
 		probes:   map[string]string{},
 		commands: map[string]bool{"code": true, "ufw": true},
+		sudoOut:  map[string]string{},
 		stateDir: t.TempDir(),
+		home:     t.TempDir(),
 	}
+	t.Setenv("HOME", f.home)
 	origSudo, origRun, origWrite := remoteSudo, remoteRun, remoteWriteFile
 	origProbe, origSudoProbe, origUser := remoteProbe, remoteSudoProbe, remoteUsername
 	origState, origExists, origSSHD, origUFWConf := remoteStateDir, remoteCommandExists, sshdPath, ufwConfPath
+	origInstall, origMigration := remoteInstall, sshSocketMigrationDropIn
 	remoteSudo = func(_ context.Context, _ sysutil.Opts, name string, args ...string) error {
-		f.calls = append(f.calls, append([]string{"sudo", name}, args...))
+		cmd := append([]string{"sudo", name}, args...)
+		f.calls = append(f.calls, cmd)
+		if f.onSudo != nil {
+			f.onSudo(cmd)
+		}
 		return nil
+	}
+	remoteInstall = func(ctx context.Context, o sysutil.Opts, pkgs []string) error {
+		return remoteSudo(ctx, o, "apt-get", append([]string{"install", "-y", "-qq"}, pkgs...)...)
 	}
 	remoteRun = func(_ context.Context, _ sysutil.Opts, name string, args ...string) error {
 		f.calls = append(f.calls, append([]string{name}, args...))
@@ -51,7 +64,13 @@ func useFakeRemote(t *testing.T) *fakeRemote {
 		}
 		return out, nil
 	}
-	remoteSudoProbe = func(_ context.Context, _ string, _ ...string) (string, error) { return f.status, nil }
+	remoteSudoProbe = func(_ context.Context, name string, args ...string) (string, error) {
+		out, ok := f.sudoOut[strings.Join(append([]string{name}, args...), " ")]
+		if !ok {
+			return "", errors.New("exit status 1")
+		}
+		return out, nil
+	}
 	remoteUsername = func() (string, error) { return "tester", nil }
 	remoteStateDir = func() string { return f.stateDir }
 	remoteCommandExists = func(name string) bool { return f.commands[name] }
@@ -60,7 +79,9 @@ func useFakeRemote(t *testing.T) *fakeRemote {
 		t.Fatal(err)
 	}
 	ufwConfPath = filepath.Join(t.TempDir(), "ufw.conf")
+	sshSocketMigrationDropIn = filepath.Join(t.TempDir(), "00-socket.conf")
 	t.Cleanup(func() {
+		remoteInstall, sshSocketMigrationDropIn = origInstall, origMigration
 		remoteSudo, remoteRun, remoteWriteFile = origSudo, origRun, origWrite
 		remoteProbe, remoteSudoProbe, remoteUsername = origProbe, origSudoProbe, origUser
 		remoteStateDir, remoteCommandExists, sshdPath, ufwConfPath = origState, origExists, origSSHD, origUFWConf
@@ -196,7 +217,7 @@ func TestApplySSHKeyOnlyOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := [][]string{
-		{"sudo", "rm", "-f", sshdDropIn},
+		{"sudo", "rm", "-f", sshdDropIn, sshdLegacyDropIn},
 		{"sudo", "systemctl", "try-reload-or-restart", "ssh.service"},
 	}
 	if !reflect.DeepEqual(f.calls, want) {
@@ -206,7 +227,6 @@ func TestApplySSHKeyOnlyOff(t *testing.T) {
 
 func TestApplySSHKeyOnlyOn(t *testing.T) {
 	f := useFakeRemote(t)
-	t.Setenv("HOME", t.TempDir())
 	if err := applySSHKeyOnly(context.Background(), quietOpts, "enabled"); err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +354,7 @@ func TestApplyUFWOn(t *testing.T) {
 func TestApplyUFWOff(t *testing.T) {
 	t.Run("only ctdev's rules", func(t *testing.T) {
 		f := useFakeRemote(t)
-		f.status = "Status: active"
+		f.sudoOut["ufw status"] = "Status: active"
 		if err := applyUFW(context.Background(), quietOpts, "disabled"); err != nil {
 			t.Fatal(err)
 		}
@@ -347,7 +367,7 @@ func TestApplyUFWOff(t *testing.T) {
 	})
 	t.Run("other rules stay up", func(t *testing.T) {
 		f := useFakeRemote(t)
-		f.status = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n53                         ALLOW       Anywhere"
+		f.sudoOut["ufw status"] = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n53                         ALLOW       Anywhere"
 		if err := applyUFW(context.Background(), quietOpts, "disabled"); err != nil {
 			t.Fatal(err)
 		}
@@ -357,15 +377,247 @@ func TestApplyUFWOff(t *testing.T) {
 	})
 }
 
-func TestDetectUFW(t *testing.T) {
-	useFakeRemote(t)
-	if got := detectUFW(context.Background()); got != "disabled" {
-		t.Errorf("no ufw.conf: got %q, want disabled", got)
+// ctdevUFWStatus is `ufw status` with every rule ctdev adds.
+func ctdevUFWStatus() string {
+	var b strings.Builder
+	b.WriteString("Status: active\n\nTo                         Action      From\n--                         ------      ----\n")
+	for _, r := range ufwRules() {
+		b.WriteString(r.port + "/" + r.proto + "                     ALLOW       " + r.cidr + "\n")
 	}
-	if err := os.WriteFile(ufwConfPath, []byte("# comment\nENABLED=yes\nLOGLEVEL=low\n"), 0o644); err != nil {
+	return b.String()
+}
+
+func TestDetectUFW(t *testing.T) {
+	enable := func(t *testing.T) {
+		t.Helper()
+		if err := os.WriteFile(ufwConfPath, []byte("# comment\nENABLED=yes\nLOGLEVEL=low\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("no ufw.conf", func(t *testing.T) {
+		f := useFakeRemote(t)
+		f.sudoOut["ufw status"] = ctdevUFWStatus()
+		if got := detectUFW(context.Background()); got != "disabled" {
+			t.Errorf("got %q, want disabled", got)
+		}
+	})
+	t.Run("on with ctdev's rules", func(t *testing.T) {
+		f := useFakeRemote(t)
+		enable(t)
+		f.sudoOut["ufw status"] = ctdevUFWStatus()
+		if got := detectUFW(context.Background()); got != "enabled" {
+			t.Errorf("got %q, want enabled", got)
+		}
+	})
+	t.Run("on some other way, without ctdev's rules", func(t *testing.T) {
+		f := useFakeRemote(t)
+		enable(t)
+		f.sudoOut["ufw status"] = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW       Anywhere"
+		if got := detectUFW(context.Background()); got != "disabled" {
+			t.Errorf("got %q, want disabled", got)
+		}
+	})
+	t.Run("status unreadable", func(t *testing.T) {
+		useFakeRemote(t)
+		enable(t)
+		if got := detectUFW(context.Background()); got != "disabled" {
+			t.Errorf("got %q, want disabled", got)
+		}
+	})
+}
+
+func writeAuthorizedKey(t *testing.T, f *fakeRemote) {
+	t.Helper()
+	dir := filepath.Join(f.home, ".ssh")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if got := detectUFW(context.Background()); got != "enabled" {
-		t.Errorf("ENABLED=yes: got %q, want enabled", got)
+	if err := os.WriteFile(filepath.Join(dir, "authorized_keys"), []byte("ssh-ed25519 AAAAexample test@example.invalid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDetectSSHKeyOnly(t *testing.T) {
+	t.Run("drop-in present, no key", func(t *testing.T) {
+		f := useFakeRemote(t)
+		f.sudoOut["sshd -T"] = "pubkeyauthentication yes\npasswordauthentication yes"
+		if got := detectSSHKeyOnly(context.Background()); got != "disabled" {
+			t.Errorf("got %q, want disabled", got)
+		}
+	})
+	t.Run("key, passwords still on", func(t *testing.T) {
+		f := useFakeRemote(t)
+		writeAuthorizedKey(t, f)
+		f.sudoOut["sshd -T"] = "pubkeyauthentication yes\npasswordauthentication yes"
+		if got := detectSSHKeyOnly(context.Background()); got != "disabled" {
+			t.Errorf("got %q, want disabled", got)
+		}
+	})
+	t.Run("key, passwords off", func(t *testing.T) {
+		f := useFakeRemote(t)
+		writeAuthorizedKey(t, f)
+		f.sudoOut["sshd -T"] = "pubkeyauthentication yes\npasswordauthentication no"
+		if got := detectSSHKeyOnly(context.Background()); got != "enabled" {
+			t.Errorf("got %q, want enabled", got)
+		}
+	})
+	t.Run("sshd -T unreadable", func(t *testing.T) {
+		f := useFakeRemote(t)
+		writeAuthorizedKey(t, f)
+		if got := detectSSHKeyOnly(context.Background()); got != "disabled" {
+			t.Errorf("got %q, want disabled", got)
+		}
+	})
+}
+
+// ctdev's drop-in must sort ahead of drop-ins like 50-cloud-init.conf,
+// because sshd keeps the first value it reads.
+func TestSSHDDropInSortsFirst(t *testing.T) {
+	if name := filepath.Base(sshdDropIn); name >= "50-cloud-init.conf" {
+		t.Errorf("drop-in %q sorts after 50-cloud-init.conf", name)
+	}
+}
+
+func TestApplySSHKeyOnlyRemovesLegacyDropIn(t *testing.T) {
+	f := useFakeRemote(t)
+	if err := applySSHKeyOnly(context.Background(), quietOpts, "enabled"); err != nil {
+		t.Fatal(err)
+	}
+	if !f.ran("sudo", "rm", "-f", sshdLegacyDropIn) {
+		t.Errorf("legacy 99-ctdev.conf not removed: %q", f.calls)
+	}
+}
+
+func TestApplySSHKeyOnlyWarnsWhenOverridden(t *testing.T) {
+	f := useFakeRemote(t)
+	writeAuthorizedKey(t, f)
+	f.sudoOut["sshd -T"] = "passwordauthentication yes"
+	var out strings.Builder
+	if err := applySSHKeyOnly(context.Background(), sysutil.Opts{Stdout: &out}, "enabled"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "another sshd setting") {
+		t.Errorf("want an override warning, got %q", out.String())
+	}
+}
+
+func TestApplySSHKeyOnlySkipsWithoutSSHD(t *testing.T) {
+	f := useFakeRemote(t)
+	sshdPath = filepath.Join(t.TempDir(), "missing")
+	var out strings.Builder
+	if err := applySSHKeyOnly(context.Background(), sysutil.Opts{Stdout: &out}, "enabled"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 0 || !strings.Contains(out.String(), "skipped: no sshd") {
+		t.Errorf("want skipped with no calls, got %q / %q", out.String(), f.calls)
+	}
+}
+
+// One `configure ssh --batch` run on a machine without openssh-server: the
+// SSH server setting installs it, and key-only login, applied after it in
+// the same run, still writes its drop-in.
+func TestBatchDeliversKeyOnlyOnAFreshMachine(t *testing.T) {
+	f := useFakeRemote(t)
+	sshdPath = filepath.Join(t.TempDir(), "sshd")
+	f.onSudo = func(cmd []string) {
+		if len(cmd) > 2 && cmd[1] == "apt-get" && cmd[len(cmd)-1] == "openssh-server" {
+			_ = os.WriteFile(sshdPath, nil, 0o755)
+		}
+	}
+	var keyOnly *Setting
+	for i := range Registry {
+		if Registry[i].Name == "Key-only login" {
+			keyOnly = &Registry[i]
+		}
+	}
+	if keyOnly == nil {
+		t.Fatal("Key-only login not in Registry")
+	}
+	if gateLinux() && !keyOnly.HardwareFn() {
+		t.Fatal("Key-only login is hidden before sshd is installed")
+	}
+	if err := applySSHServer(context.Background(), quietOpts, sshOnDemand); err != nil {
+		t.Fatal(err)
+	}
+	if err := applySSHKeyOnly(context.Background(), quietOpts, "enabled"); err != nil {
+		t.Fatal(err)
+	}
+	if !f.ran("write", sshdDropIn) {
+		t.Errorf("drop-in not written in the same run: %q", f.calls)
+	}
+}
+
+func TestApplySSHServerAlwaysOnNotesSocketMigrationDropIn(t *testing.T) {
+	f := useFakeRemote(t)
+	if err := os.WriteFile(sshSocketMigrationDropIn, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := applySSHServer(context.Background(), sysutil.Opts{Stdout: &out}, sshAlwaysOn); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "discourse.ubuntu.com") {
+		t.Errorf("want a note pointing at Ubuntu's revert steps, got %q", out.String())
+	}
+	for _, c := range f.calls {
+		if c[1] == "rm" {
+			t.Errorf("the migration drop-in must not be deleted: %q", c)
+		}
+	}
+}
+
+func writeTunnelService(t *testing.T, f *fakeRemote) {
+	t.Helper()
+	dir := filepath.Join(f.home, ".config", "systemd", "user")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "code-tunnel.service"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestApplyLingerOffWarnsWhenTunnelIsOn(t *testing.T) {
+	f := useFakeRemote(t)
+	writeTunnelService(t, f)
+	var out strings.Builder
+	if err := applyLinger(context.Background(), sysutil.Opts{Stdout: &out}, "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "vscode.dev tunnel is on") {
+		t.Errorf("want a tunnel warning, got %q", out.String())
+	}
+}
+
+func TestApplyCodeTunnelOnSaysItTurnedLingerBackOn(t *testing.T) {
+	useFakeRemote(t)
+	var out strings.Builder
+	if err := applyCodeTunnel(context.Background(), sysutil.Opts{Stdout: &out}, "enabled"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "turned it back on") {
+		t.Errorf("want a note that lingering was turned on, got %q", out.String())
+	}
+}
+
+func TestMoshSupportIsGatedOnMoshServer(t *testing.T) {
+	for _, s := range Registry {
+		if s.Name == "Mosh support" {
+			if reflect.ValueOf(s.HardwareFn).Pointer() != reflect.ValueOf(gateMosh).Pointer() {
+				t.Error("Mosh support should be gated on mosh-server (gateMosh)")
+			}
+			return
+		}
+	}
+	t.Fatal("Mosh support not in Registry")
+}
+
+func TestUFWHasCtdevRules(t *testing.T) {
+	if !ufwHasCtdevRules(ctdevUFWStatus()) {
+		t.Error("full ctdev status should match")
+	}
+	partial := strings.Replace(ctdevUFWStatus(), "60000:61000/udp                     ALLOW       10.0.0.0/8\n", "", 1)
+	if ufwHasCtdevRules(partial) {
+		t.Error("a missing Mosh rule should not match")
 	}
 }

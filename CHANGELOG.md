@@ -15,6 +15,13 @@ All notable changes to this project will be documented in this file.
   the tunnel service, and ctdev's UFW rules (UFW itself turns off only when no other
   rules are left). Turning on vscode.dev also turns on lingering, which the tunnel
   needs.
+- **Key-only login reads sshd's effective config** (`sshd -T`), so it shows "enabled"
+  only when password login is really off, and a re-run after adding your key finishes
+  the job. ctdev's drop-in is now `/etc/ssh/sshd_config.d/00-ctdev.conf`, which sorts
+  ahead of drop-ins like `50-cloud-init.conf` (sshd keeps the first value it reads);
+  the old `99-ctdev.conf` is removed. The firewall shows "enabled" only when UFW is on
+  and ctdev's SSH and Mosh rules are present. Mosh support shows only when
+  `mosh-server` is installed.
 - **The SSH server defaults to starting on demand** through `ssh.socket` instead of
   `ssh.service` always running. The setting is a choice of on demand, always on, or
   off, and installs `openssh-server` when it is missing.
