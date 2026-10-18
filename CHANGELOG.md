@@ -5,10 +5,26 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **`ctdev configure storage`** is a new category holding SSD TRIM, renamed "Keep SSDs
+  fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
+  discards, and it now has an off switch: turning it off stops and disables
+  `fstrim.timer`. It is no longer under `configure system`.
+- **`ctdev configure network`: "WiFi power save off" is now "Keep WiFi connected when
+  idle"**, with a one-line reason in the wizard. It shows only on machines with a WiFi
+  adapter, not on every NetworkManager machine, and it can now be turned off: choosing
+  "not installed" removes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`.
 - **`ctdev configure boot` names its settings by what you get, each with a one-line
   "why":** "Boot menu at startup" (was "GRUB menu style"), "Boot menu wait time" (was
   "GRUB timeout") and "Other operating systems in the boot menu" (was "OS prober"). The
   recommended defaults stay menu, 10 s and on.
+
+### Removed
+- **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
+  automatic security updates (unattended-upgrades) and the apt daily job timeout. The
+  node recipes no longer run it. Nothing is uninstalled: a machine already set up keeps
+  the `unattended-upgrades` package, `/etc/apt/apt.conf.d/20auto-upgrades` and the
+  `ctdev-timeout.conf` drop-ins for `apt-daily.service` and `apt-daily-upgrade.service`,
+  and they keep working. Remove them by hand if you no longer want them.
 
 ## [14.2.0] - 2026-10-15
 

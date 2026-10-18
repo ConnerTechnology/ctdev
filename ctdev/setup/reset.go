@@ -208,9 +208,8 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 		_ = sysutil.SudoRun(ctx, o, "rm", "-f", sshdDropIn)
 		_ = sysutil.SudoRun(ctx, o, "systemctl", "reload", "ssh")
 	}
-	nmConf := "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
-	if _, err := os.Stat(nmConf); err == nil {
-		_ = sysutil.SudoRun(ctx, o, "rm", "-f", nmConf)
+	if _, err := os.Stat(wifiPowersaveConfPath); err == nil {
+		_ = sysutil.SudoRun(ctx, o, "rm", "-f", wifiPowersaveConfPath)
 	}
 	resetPiholeHostResolver(ctx, o)
 	if sysutil.CommandExists("ufw") {

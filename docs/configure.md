@@ -21,12 +21,12 @@ recommended defaults without asking, which is what you want in a script.
 They fall into three groups.
 
 **Machine behavior** — `ssh`, `ufw`, `sleep`, `locale`, `linger`, `tunnel`,
-`autoupdate`, `macos`, `gpu`. These change the machine itself: the SSH daemon
-and key-based auth hardening, the firewall, suspend, the UTF-8 locale Mosh
-needs, user-service lingering, the VS Code tunnel, automatic security updates,
-macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
-and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
-sliders on both Cinnamon and macOS.
+`macos`, `gpu`. These change the machine itself: the SSH daemon and key-based
+auth hardening, the firewall, suspend, the UTF-8 locale Mosh needs,
+user-service lingering, the VS Code tunnel, macOS defaults (Dock, Finder,
+typing, faster animations), and the NVIDIA driver and MOK signing. Key repeat
+speed is not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and
+macOS.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 
