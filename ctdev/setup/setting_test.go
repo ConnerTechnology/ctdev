@@ -113,7 +113,7 @@ func TestInitStates(t *testing.T) {
 
 func TestRegistryHasAllSlugs(t *testing.T) {
 	slugs := Slugs(Registry)
-	expected := []string{"gpu", "boot", "power", "keyboard", "mouse", "audio", "bluetooth", "desktop", "network", "system"}
+	expected := []string{"gpu", "boot", "power", "keyboard", "mouse", "audio", "bluetooth", "desktop", "network", "system", "storage"}
 	for _, slug := range expected {
 		found := false
 		for _, s := range slugs {

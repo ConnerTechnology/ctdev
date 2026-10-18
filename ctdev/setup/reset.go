@@ -24,7 +24,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 
 	if o.DryRun {
 		fmt.Fprintln(w, "[DRY-RUN] Would reset Power, Screensaver, Keyboard, Mouse, Sound, Nemo settings")
-		fmt.Fprintln(w, "[DRY-RUN] Would reset GRUB settings (timeout=10, menu, os-prober enabled)")
+		fmt.Fprintln(w, "[DRY-RUN] Would reset boot settings (menu shown, 10 s wait, other operating systems listed)")
 		if hasNvidia {
 			fmt.Fprintln(w, "[DRY-RUN] Would reset NVIDIA suspend settings (GRUB parameters, systemd services)")
 		}
@@ -102,9 +102,8 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 
 	// WirePlumber LDAC config
 	fmt.Fprintf(w, "Removing WirePlumber LDAC config...\n")
-	ldacConf := "/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf"
-	if _, err := os.Stat(ldacConf); err == nil {
-		if err := sysutil.SudoRun(ctx, o, "rm", ldacConf); err != nil {
+	if _, err := os.Stat(ldacConfPath); err == nil {
+		if err := sysutil.SudoRun(ctx, o, "rm", ldacConfPath); err != nil {
 			return fmt.Errorf("remove wireplumber ldac config: %w", err)
 		}
 		// Best-effort restart of PipeWire stack.
@@ -210,9 +209,8 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 			_ = sysutil.SudoRun(ctx, o, "systemctl", "reload", "ssh")
 		}
 	}
-	nmConf := "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
-	if _, err := os.Stat(nmConf); err == nil {
-		_ = sysutil.SudoRun(ctx, o, "rm", "-f", nmConf)
+	if _, err := os.Stat(wifiPowersaveConfPath); err == nil {
+		_ = sysutil.SudoRun(ctx, o, "rm", "-f", wifiPowersaveConfPath)
 	}
 	resetPiholeHostResolver(ctx, o)
 	if sysutil.CommandExists("ufw") {

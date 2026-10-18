@@ -12,7 +12,6 @@ ctdev install zsh git mosh tailscale smartmontools btop   # base tools, disk hea
 ctdev configure ssh                      # SSH server, key-only login, Mosh, keep programs
                                          # running; leave the firewall off (see below)
 ctdev configure sleep --batch            # never suspend
-ctdev configure autoupdate --batch       # automatic security updates
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker
 ctdev configure pihole                   # upstreams, listening mode, blocking, host resolver

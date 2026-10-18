@@ -20,11 +20,21 @@ recommended defaults without asking, which is what you want in a script.
 
 They fall into three groups.
 
-**Machine behavior** — `ssh`, `sleep`, `autoupdate`, `macos`, `gpu`. These
-change the machine itself: remote access, suspend, automatic security updates,
-macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
-and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
-sliders on both Cinnamon and macOS.
+**Machine behavior** — `ssh`, `sleep`, `macos`, `gpu`. These change the
+machine itself: remote access, suspend, macOS defaults (Dock, Finder, typing,
+faster animations), and the NVIDIA driver and MOK signing. Key repeat speed is
+not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and macOS.
+
+**Desktop** — `audio`, `bluetooth`. `bluetooth` installs bluez and Blueman and
+turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
+PulseAudio tools, plus Bluetooth audio (PipeWire's Bluetooth codecs and an LDAC
+config), and switches alert sounds. Neither installs the other's packages.
+Turning a setting off removes only what ctdev added: ctdev records the packages it
+installed and the service changes it made under
+`~/.local/state/ctdev/configure-added/`, and leaves anything the machine already had.
+If removing those packages would also remove one ctdev didn't install (something
+that depends on them), it refuses and names it. Off leaves the dependencies those
+packages pulled in; `sudo apt autoremove` cleans them up.
 
 `ssh` is the one place for remote access. Its settings are the SSH server
 (started on demand by `ssh.socket`, always running, or off), key-only login,
@@ -37,15 +47,22 @@ ports first, so on a DNS or proxy host run `ctdev configure ssh` without
 `--batch` and leave it off.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
+Each needs its tool: on a machine without git or the AWS CLI, it asks "Git isn't
+installed. Install it now? [Y/n]" (or "AWS CLI isn't…") and installs the `git` or
+`aws` component before going on. `--batch` installs without asking, a no stops the
+wizard and says how to install later, and `--show` never installs. The check is the
+component's own install check, so an AWS CLI v1 counts as missing. When
+`~/.aws/config` has no profiles yet, `configure aws` offers to run
+`aws configure sso` to create one. `ctdev install git` and `ctdev install aws` run
+these wizards afterward.
 
-**Component wizards** — `pihole`, `caddy`, `restic`,
-`mcp-email-server`. These belong to a component and mostly run for you when you install
-it; running `configure` directly reconfigures without reinstalling. `restic` and
-`mcp-email-server` ask for secrets and refuse `--batch`. `caddy --batch` skips its
-prompts and takes the domain, email and token from `--domain`, `--acme-email`,
-`CF_API_TOKEN` or the existing `~/caddy/.env`. `pihole --batch` applies the
-category's defaults, which also set the upstream to Cloudflare, so run it
-interactively.
+**Component wizards** — `pihole`, `caddy`, `restic`. These belong to a component
+and mostly run for you when you install it; running `configure` directly
+reconfigures without reinstalling. `restic` asks for secrets and refuses
+`--batch`. `caddy --batch` skips its prompts and takes the domain, email and
+token from `--domain`, `--acme-email`, `CF_API_TOKEN` or the existing
+`~/caddy/.env`. `pihole --batch` applies the category's defaults, which also set
+the upstream to Cloudflare, so run it interactively.
 
 **Claude Code** — `claude-code` isn't a wizard: `ctdev configure claude-code` diffs
 `~/.claude/settings.json` and `CLAUDE.md` against ctdev's baseline and asks before replacing

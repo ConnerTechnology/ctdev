@@ -36,14 +36,15 @@ var configureCmd = &cobra.Command{
 var configureAWSCmd = &cobra.Command{
 	Use:   "aws",
 	Short: "Configure AWS profile",
-	Long:  "Set the default AWS_PROFILE in your shell environment.",
-	RunE:  runConfigureAWS,
+	Long: "Set the default AWS_PROFILE in your shell environment. Installs the AWS CLI first " +
+		"when it's missing, and offers 'aws configure sso' when ~/.aws/config has no profiles.",
+	RunE: runConfigureAWS,
 }
 
 var configureGitCmd = &cobra.Command{
 	Use:   "git",
 	Short: "Configure git user settings",
-	Long:  "Set git user name and email globally or locally.",
+	Long:  "Set git user name and email globally or locally. Installs git first when it's missing.",
 	RunE:  runConfigureGit,
 }
 
@@ -168,6 +169,10 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 func configureGit(ctx context.Context) error {
 	if flagConfigShow {
 		return showGitConfig()
+	}
+
+	if ok, err := ensureTool(ctx, "git", "Git", isBatchMode()); !ok || err != nil {
+		return err
 	}
 
 	// If flags provided, set directly (non-interactive). --signing-key counts
@@ -555,13 +560,19 @@ func configureAWS(ctx context.Context) error {
 		return showAWSConfig()
 	}
 
+	if ok, err := ensureTool(ctx, "aws", "AWS CLI", isBatchMode()); !ok || err != nil {
+		return err
+	}
+
 	selected := flagAWSProfile
 
 	if selected == "" {
-		profiles, err := sysutil.ReadAWSProfiles()
-		if err != nil || len(profiles) == 0 {
-			fmt.Println("No AWS profiles found in ~/.aws/config. Set up AWS CLI first: aws configure sso")
-			return nil
+		profiles, _ := sysutil.ReadAWSProfiles()
+		if len(profiles) == 0 {
+			var err error
+			if profiles, err = offerAWSConfigureSSO(ctx, isBatchMode()); err != nil || len(profiles) == 0 {
+				return err
+			}
 		}
 
 		fmt.Println("AWS Profiles:")

@@ -179,79 +179,6 @@ func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error
 	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
-// autoUpgradesConf enables the apt periodic jobs that unattended-upgrades
-// hooks into. The package's stock 50unattended-upgrades already restricts
-// upgrades to the security pocket, so this stays security-only by default.
-const autoUpgradesConf = `// Written by ctdev (configure autoupdate).
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Unattended-Upgrade "1";
-`
-
-const autoUpgradesConfPath = "/etc/apt/apt.conf.d/20auto-upgrades"
-
-// applyUnattendedUpgrades installs unattended-upgrades and turns on the
-// daily security-update run.
-func applyUnattendedUpgrades(ctx context.Context, o sysutil.Opts) error {
-	if err := applyPackages(ctx, o, []string{"unattended-upgrades"}); err != nil {
-		return err
-	}
-	return sysutil.SudoWriteFile(ctx, o, autoUpgradesConf, autoUpgradesConfPath)
-}
-
-// detectUnattendedUpgrades reports "enabled" only when both the package and
-// the periodic config that actually triggers it are present.
-func detectUnattendedUpgrades(ctx context.Context) string {
-	if !detectPackageInstalled(ctx, "unattended-upgrades") {
-		return "disabled"
-	}
-	b, err := os.ReadFile(autoUpgradesConfPath)
-	if err != nil || !strings.Contains(string(b), `Unattended-Upgrade "1"`) {
-		return "disabled"
-	}
-	return "enabled"
-}
-
-// aptDailyUnits are the two stock apt jobs that take /var/lib/apt/lists/lock.
-// Both ship with the apt package and are driven by their own timers.
-var aptDailyUnits = []string{"apt-daily.service", "apt-daily-upgrade.service"}
-
-// aptDailyTimeoutConf caps a single unit's start timeout. %s is the timespan.
-const aptDailyTimeoutConf = `# Written by ctdev (configure autoupdate).
-# Both apt-daily units are Type=oneshot, which systemd gives an infinite start
-# timeout. A fetch that stalls rather than fails then holds the apt lock for as
-# long as the machine is up, and every later apt run — including ctdev update —
-# can't lock. This cap lets systemd kill the run instead.
-[Service]
-TimeoutStartSec=%s
-`
-
-func aptDailyDropInPath(unit string) string {
-	return filepath.Join("/etc/systemd/system", unit+".d", "ctdev-timeout.conf")
-}
-
-// applyAptDailyTimeout writes (or removes) the start-timeout drop-in for both
-// apt-daily units. "infinity" removes the drop-in rather than writing it out,
-// so turning the cap off restores stock apt behavior instead of leaving a
-// ctdev file behind that merely restates the default.
-func applyAptDailyTimeout(ctx context.Context, o sysutil.Opts, value string) error {
-	for _, unit := range aptDailyUnits {
-		path := aptDailyDropInPath(unit)
-		if value == "infinity" {
-			if err := sysutil.SudoRun(ctx, o, "rm", "-f", path); err != nil {
-				return fmt.Errorf("remove %s: %w", path, err)
-			}
-			continue
-		}
-		if err := sysutil.SudoRun(ctx, o, "mkdir", "-p", filepath.Dir(path)); err != nil {
-			return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-		}
-		if err := sysutil.SudoWriteFile(ctx, o, fmt.Sprintf(aptDailyTimeoutConf, value), path); err != nil {
-			return fmt.Errorf("write %s: %w", path, err)
-		}
-	}
-	return sysutil.SudoRun(ctx, o, "systemctl", "daemon-reload")
-}
-
 // applyNvidiaSigning runs the GPU signing setup via the gpu package.
 func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{
@@ -320,30 +247,6 @@ func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
 	return nil
 }
 
-// applyWireplumberLDAC copies the WirePlumber LDAC config from the ctdev repo.
-func applyWireplumberLDAC(ctx context.Context, o sysutil.Opts) error {
-	confDir := "/etc/wireplumber/wireplumber.conf.d"
-	confDst := filepath.Join(confDir, "51-ldac-hq.conf")
-
-	if err := sysutil.SudoRun(ctx, o, "mkdir", "-p", confDir); err != nil {
-		return fmt.Errorf("mkdir wireplumber conf dir: %w", err)
-	}
-
-	content, err := Configs.ReadFile("configs/wireplumber/51-ldac-hq.conf")
-	if err != nil {
-		return fmt.Errorf("read embedded wireplumber config: %w", err)
-	}
-	if err := sysutil.SudoWriteFile(ctx, o, string(content), confDst); err != nil {
-		return fmt.Errorf("copy wireplumber config: %w", err)
-	}
-
-	// Restart PipeWire stack to pick up new config; best-effort.
-	_ = sysutil.Run(ctx, o, "systemctl", "--user", "restart",
-		"pipewire", "pipewire-pulse", "wireplumber")
-
-	return nil
-}
-
 // applyLogitechKVMFix installs a udev rule and systemd user service to restart Solaar
 // when the Logi Bolt receiver reconnects after a KVM switch.
 func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {
@@ -396,8 +299,18 @@ func applyHideDrives(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 }
 
-// applySSDTrim enables the fstrim.timer systemd unit for periodic SSD TRIM.
-func applySSDTrim(ctx context.Context, o sysutil.Opts) error {
+// applySSDTrim turns the fstrim.timer systemd unit (weekly SSD TRIM) on for
+// "active" and off for anything else.
+func applySSDTrim(ctx context.Context, o sysutil.Opts, value string) error {
+	if value != "active" {
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "stop", "fstrim.timer"); err != nil {
+			return fmt.Errorf("stop fstrim.timer: %w", err)
+		}
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "disable", "fstrim.timer"); err != nil {
+			return fmt.Errorf("disable fstrim.timer: %w", err)
+		}
+		return nil
+	}
 	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "fstrim.timer"); err != nil {
 		return fmt.Errorf("enable fstrim.timer: %w", err)
 	}
@@ -417,6 +330,9 @@ func applyUpdateGrub(ctx context.Context, o sysutil.Opts) error {
 // sleepTargets are the systemd targets masked to keep an always-on box awake.
 var sleepTargets = []string{"sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"}
 
+// wifiPowersaveConfPath is the NetworkManager drop-in ctdev owns for it.
+const wifiPowersaveConfPath = "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
+
 const wifiPowersaveConf = `[connection]
 # Managed by ctdev — keep the WiFi adapter from dropping off the network while idle.
 wifi.powersave = 2
@@ -427,9 +343,13 @@ func applySuspendMask(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.SudoRun(ctx, o, "systemctl", append([]string{"mask"}, sleepTargets...)...)
 }
 
-// applyWifiPowersaveOff writes a NetworkManager drop-in disabling WiFi power
-// save. It intentionally does NOT restart NetworkManager — doing so over a
-// remote session could drop the connection; it takes effect on next restart.
-func applyWifiPowersaveOff(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoWriteFile(ctx, o, wifiPowersaveConf, "/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
+// applyKeepWiFiConnected writes, or for "not installed" removes, the
+// NetworkManager drop-in disabling WiFi power save. It intentionally does NOT
+// restart NetworkManager — doing so over a remote session could drop the
+// connection; the change takes effect on the next restart.
+func applyKeepWiFiConnected(ctx context.Context, o sysutil.Opts, v string) error {
+	if v == "not installed" {
+		return sysutil.SudoRun(ctx, o, "rm", "-f", wifiPowersaveConfPath)
+	}
+	return sysutil.SudoWriteFile(ctx, o, wifiPowersaveConf, wifiPowersaveConfPath)
 }
