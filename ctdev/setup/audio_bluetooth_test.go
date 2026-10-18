@@ -74,7 +74,7 @@ func fakeRoot(t *testing.T) func() string {
 	bin := t.TempDir()
 	log := filepath.Join(bin, "log")
 	script := "#!/bin/sh\necho \"$(basename \"$0\") $*\" >> '" + log + "'\n"
-	for _, name := range []string{"sudo", "apt-get", "systemctl", "rm", "mkdir", "cp"} {
+	for _, name := range []string{"sudo", "apt-get", "systemctl", "rm", "mkdir", "cp", "dconf"} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
 		}
