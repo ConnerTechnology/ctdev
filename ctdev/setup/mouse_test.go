@@ -152,10 +152,8 @@ func TestMouseCategoryHoldsBothInstallSettings(t *testing.T) {
 			t.Errorf("%q: needs DetectFunc, ApplyFunc and HardwareFn", name)
 		}
 	}
-	for _, s := range FilterBySlug(Registry, "system") {
-		if strings.Contains(strings.ToLower(s.Name), "logitech") {
-			t.Errorf("configure system still has %q", s.Name)
-		}
+	if len(FilterBySlug(Registry, "system")) != 0 {
+		t.Error("the system category still has settings")
 	}
 	for _, s := range Registry {
 		if s.Name == "Mouse bindings (xbindkeys)" || s.Name == "Logitech KVM mouse fix" {
