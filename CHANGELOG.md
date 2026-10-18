@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
+  several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
+  against its PGP signature with the AWS CLI Team key and installed to
+  `/usr/local/aws-cli`. On macOS it uses the `awscli` Homebrew formula, which is
+  Homebrew's package rather than AWS's installer (chosen in CTD-90). A v1 `aws` already
+  on the machine doesn't count as installed: v2 goes in over it. Run `ctdev install aws --force` to update the Linux install. It
+  then runs `ctdev configure aws`.
+
 ### Changed
 - **`ctdev configure storage`** is a new category holding SSD TRIM, renamed "Keep SSDs
   fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
@@ -49,15 +58,6 @@ All notable changes to this project will be documented in this file.
     includes in `ctdev backup paths` (the ✕ on its chip, then Save & Close). Older
     restic snapshots keep the passwords until each backup run's `forget --prune` drops
     them, by default once they fall outside 7 daily, 4 weekly and 6 monthly snapshots.
-
-### Added
-- **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
-  several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
-  against its PGP signature with the AWS CLI Team key and installed to
-  `/usr/local/aws-cli`. On macOS it uses the `awscli` Homebrew formula, which is
-  Homebrew's package rather than AWS's installer (chosen in CTD-90). A v1 `aws` already
-  on the machine doesn't count as installed: v2 goes in over it. Run `ctdev install aws --force` to update the Linux install. It
-  then runs `ctdev configure aws`.
 
 ## [14.2.0] - 2026-10-15
 
