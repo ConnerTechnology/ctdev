@@ -22,11 +22,12 @@ They fall into three groups.
 
 **Machine behavior** — `ssh`, `ufw`, `power`, `locale`, `linger`, `tunnel`,
 `autoupdate`, `macos`, `gpu`. These change the machine itself: the SSH daemon
-and key-based auth hardening, the firewall, the power profile, display, suspend
-and screensaver timers (in minutes, or never) and never suspending, the UTF-8 locale Mosh
-needs, user-service lingering, the VS Code tunnel, automatic security updates,
-macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
-and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
+and key-based auth hardening, the firewall, power (the power profile, the
+display, idle-suspend and screensaver timers in minutes or never, and "Never
+suspend, even when asked"), the UTF-8 locale Mosh needs, user-service
+lingering, the VS Code tunnel, automatic security updates, macOS defaults
+(Dock, Finder, typing, faster animations), and the NVIDIA driver and MOK
+signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
 sliders on both Cinnamon and macOS.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.

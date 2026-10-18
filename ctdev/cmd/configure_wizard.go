@@ -330,7 +330,7 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 
 	fmt.Printf("  %s range: %s (step %s)\n",
 		styles.Dimmed.Render("Valid"), setup.SliderRangeLabel(r),
-		formatSliderVal(r.Step, r.Step))
+		setup.FormatSliderVal(r.Step, r.Step))
 	// Enter keeps the current value; when nothing is set yet there is nothing
 	// to keep, so Enter takes the recommended value instead.
 	enterValue := state.CurrentValue
@@ -372,15 +372,7 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 	// Snap to nearest step
 	val = math.Round(val/r.Step) * r.Step
 
-	return formatSliderVal(val, r.Step), nil
-}
-
-// formatSliderVal formats a float value, using integer format when the step is >= 1.
-func formatSliderVal(val, step float64) string {
-	if step >= 1 {
-		return strconv.Itoa(int(val))
-	}
-	return strconv.FormatFloat(val, 'f', -1, 64)
+	return setup.FormatSliderVal(val, r.Step), nil
 }
 
 // applySettings applies changed settings, running post-apply hooks for groups.

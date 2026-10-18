@@ -17,6 +17,12 @@ const neverSuspendName = "Never suspend, even when asked"
 // sleepTargets are the systemd targets masked to keep an always-on box awake.
 var sleepTargets = []string{"sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"}
 
+// minutesTimer is the range of power's timers: 5 to 120 minutes, or never.
+// A function so each setting gets its own copy.
+func minutesTimer() *SliderRange {
+	return &SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true}
+}
+
 // systemctlIsEnabled returns `systemctl is-enabled <unit>`'s stdout. It prints
 // "masked" with a non-zero exit, so stdout is read rather than the error.
 // A var so tests can fake it.
@@ -99,11 +105,11 @@ func dconfSecondsToMinutes(raw string) string {
 func minutesToDconf(value, gvType string) (string, error) {
 	sec := 0
 	if value != SliderNever {
-		min, err := strconv.ParseFloat(value, 64)
-		if err != nil || min < 0 {
+		mins, err := strconv.ParseFloat(value, 64)
+		if err != nil || mins < 0 {
 			return "", fmt.Errorf("invalid minutes %q", value)
 		}
-		sec = int(math.Round(min * 60))
+		sec = int(math.Round(mins * 60))
 	}
 	if gvType != "" {
 		return gvType + " " + strconv.Itoa(sec), nil

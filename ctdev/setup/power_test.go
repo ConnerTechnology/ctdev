@@ -157,7 +157,7 @@ func TestPowerCategoryAbsorbsSleep(t *testing.T) {
 	if s.Default != "enabled" {
 		t.Errorf("never suspend default = %q, want enabled", s.Default)
 	}
-	// It sits right after the inactive-sleep timer.
+	// It sits right after "Suspend when idle after".
 	var power []string
 	for _, r := range Registry {
 		if r.Slug == "power" {
@@ -167,7 +167,7 @@ func TestPowerCategoryAbsorbsSleep(t *testing.T) {
 	for i, n := range power {
 		if n == neverSuspendName {
 			if i == 0 || power[i-1] != "Suspend when idle after" {
-				t.Errorf("never suspend should follow the inactive-sleep timer; power order = %v", power)
+				t.Errorf("never suspend should follow \"Suspend when idle after\"; power order = %v", power)
 			}
 		}
 	}

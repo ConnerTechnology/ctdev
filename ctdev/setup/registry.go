@@ -122,7 +122,7 @@ var Registry = []Setting{
 		Description: "Saves power and the panel when nobody is looking, on AC power.",
 		Control:     ControlSlider,
 		Default:     "60",
-		Slider:      &SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true},
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
 			return detectDconfMinutes(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac")
 		},
@@ -138,7 +138,7 @@ var Registry = []Setting{
 		Description: "Saves power on AC when nobody uses the machine; never keeps it awake for remote use.",
 		Control:     ControlSlider,
 		Default:     SliderNever,
-		Slider:      &SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true},
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
 			return detectDconfMinutes(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
 		},
@@ -195,7 +195,7 @@ var Registry = []Setting{
 		Description: "Blanks the screen when nobody uses it; never leaves it on.",
 		Control:     ControlSlider,
 		Default:     SliderNever,
-		Slider:      &SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true},
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
 			return detectDconfMinutes(ctx, "/org/cinnamon/desktop/session/idle-delay")
 		},
