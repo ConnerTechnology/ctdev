@@ -10,6 +10,9 @@ func init() {
 	PostApplyHooks["grub"] = applyUpdateGrub
 	PostApplyHooks["pihole-ftl"] = applyPiholeRestart
 	PostApplyHooks[macKeyRepeatGroup] = macKeyRepeatNote
+	for group, app := range macRestartGroups {
+		PostApplyHooks[group] = macRestartHook(app)
+	}
 }
 
 // Registry is the single source of truth for all setup settings.
@@ -471,8 +474,9 @@ var Registry = []Setting{
 		Default:     "enabled",
 		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDock) },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyMacDefaults(ctx, o, macDesktopDock, v, "Dock")
+			return applyMacDefaults(ctx, o, macDesktopDock, v)
 		},
+		ApplyGroup: macDockGroup,
 		HardwareFn: gateMacOS,
 	},
 
@@ -485,8 +489,9 @@ var Registry = []Setting{
 		Default:     "enabled",
 		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopAnimations) },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyMacDefaults(ctx, o, macDesktopAnimations, v, "Dock")
+			return applyMacDefaults(ctx, o, macDesktopAnimations, v)
 		},
+		ApplyGroup: macDockGroup,
 		HardwareFn: gateMacOS,
 	},
 
@@ -499,8 +504,9 @@ var Registry = []Setting{
 		Default:     "enabled",
 		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopFinder) },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyMacDefaults(ctx, o, macDesktopFinder, v, "Finder")
+			return applyMacDefaults(ctx, o, macDesktopFinder, v)
 		},
+		ApplyGroup: macFinderGroup,
 		HardwareFn: gateMacOS,
 	},
 
@@ -513,8 +519,9 @@ var Registry = []Setting{
 		Default:     "enabled",
 		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDSStore) },
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyMacDefaults(ctx, o, macDesktopDSStore, v, "Finder")
+			return applyMacDefaults(ctx, o, macDesktopDSStore, v)
 		},
+		ApplyGroup: macFinderGroup,
 		HardwareFn: gateMacOS,
 	},
 
@@ -804,7 +811,7 @@ var Registry = []Setting{
 		Category: "macOS",
 		Description: "Applies opinionated macOS defaults: volume-change feedback sound, " +
 			"smart quotes/dashes/autocorrect/auto-capitalize off, key repeat instead of the press-and-hold accent popup, " +
-			"expanded save/print dialogs, and password required immediately after screensaver. Restarts Dock and Finder. " +
+			"expanded save/print dialogs, and password required immediately after screensaver. " +
 			"Key repeat speed is in the keyboard category; Dock, Finder and animations are in desktop.",
 		Control:    ControlToggle,
 		OneWay:     true,

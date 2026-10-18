@@ -113,7 +113,8 @@ func TestApplyMacOSDefaultsDryRun(t *testing.T) {
 		t.Errorf("dry-run ran commands: %v", f.calls)
 	}
 
-	// One line per section, in table order, then the restart line.
+	// One line per section, in table order, and no restart: none of these
+	// keys needs Dock or Finder restarted.
 	var sections []string
 	for _, d := range macOSDefaults {
 		if len(sections) == 0 || sections[len(sections)-1] != d.Section {
@@ -121,16 +122,16 @@ func TestApplyMacOSDefaultsDryRun(t *testing.T) {
 		}
 	}
 	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != len(sections)+1 {
-		t.Fatalf("expected %d dry-run lines, got %d:\n%s", len(sections)+1, len(lines), output)
+	if len(lines) != len(sections) {
+		t.Fatalf("expected %d dry-run lines, got %d:\n%s", len(sections), len(lines), output)
 	}
 	for i, sec := range sections {
 		if want := "[dry-run] Would configure " + sec + ":"; !strings.HasPrefix(lines[i], want) {
 			t.Errorf("line %d = %q, want prefix %q", i, lines[i], want)
 		}
 	}
-	if lines[len(lines)-1] != "[dry-run] Would restart Dock and Finder" {
-		t.Errorf("last line = %q", lines[len(lines)-1])
+	if strings.Contains(output, "restart") {
+		t.Errorf("macos dry-run restarts something: %q", output)
 	}
 	// Every entry is named with its value.
 	for _, d := range macOSDefaults {
@@ -206,9 +207,10 @@ func TestApplyMacOSDefaults_WritesEveryEntryWithTypedArgs(t *testing.T) {
 			t.Errorf("no write used %s", fl)
 		}
 	}
-	last := f.calls[len(f.calls)-2:]
-	if !reflect.DeepEqual(last, [][]string{{"killall", "Dock"}, {"killall", "Finder"}}) {
-		t.Errorf("expected Dock and Finder restart last; got %v", last)
+	for _, c := range f.calls {
+		if c[0] == "killall" {
+			t.Errorf("macos restarted an app: %v", c)
+		}
 	}
 	// After a successful apply, detect agrees.
 	if got := detectMacOSDefaults(context.Background()); got != "applied" {
@@ -558,16 +560,17 @@ func keys(m map[string]macDefault) []string {
 
 // TestRegistryMacDesktopSettings checks each macOS desktop setting: gated to
 // macOS, on writes its keys and detects "enabled", off deletes exactly those
-// keys and detects "disabled", and the right app restarts.
+// keys and detects "disabled", and the setting is in the group whose hook
+// restarts the right app.
 func TestRegistryMacDesktopSettings(t *testing.T) {
 	cases := map[string]struct {
-		table   []macDefault
-		restart string
+		table []macDefault
+		group string
 	}{
-		"Auto-hiding Dock":                             {macDesktopDock, "Dock"},
-		"Faster animations":                            {macDesktopAnimations, "Dock"},
-		"Finder list view with path and status bars":   {macDesktopFinder, "Finder"},
-		"No .DS_Store files on network and USB drives": {macDesktopDSStore, "Finder"},
+		"Auto-hiding Dock":                             {macDesktopDock, macDockGroup},
+		"Faster animations":                            {macDesktopAnimations, macDockGroup},
+		"Finder list view with path and status bars":   {macDesktopFinder, macFinderGroup},
+		"No .DS_Store files on network and USB drives": {macDesktopDSStore, macFinderGroup},
 	}
 	seen := map[string]bool{}
 	for _, s := range FilterBySlug(Registry, "desktop") {
@@ -599,8 +602,13 @@ func TestRegistryMacDesktopSettings(t *testing.T) {
 			if got := s.DetectFunc(ctx); got != "enabled" {
 				t.Errorf("detect after on = %q", got)
 			}
-			if !hasRun(f.calls, "killall", c.restart) {
-				t.Errorf("on did not restart %s; calls %v", c.restart, f.calls)
+			if s.ApplyGroup != c.group {
+				t.Errorf("ApplyGroup = %q, want %q", s.ApplyGroup, c.group)
+			}
+			for _, call := range f.calls {
+				if call[0] == "killall" {
+					t.Errorf("apply restarted an app itself: %v", call)
+				}
 			}
 
 			f.calls = nil
@@ -628,6 +636,23 @@ func TestRegistryMacDesktopSettings(t *testing.T) {
 	for name := range cases {
 		if !seen[name] {
 			t.Errorf("%q not in the desktop category", name)
+		}
+	}
+}
+
+func TestMacRestartHooks(t *testing.T) {
+	for group, app := range map[string]string{macDockGroup: "Dock", macFinderGroup: "Finder"} {
+		hook, ok := PostApplyHooks[group]
+		if !ok {
+			t.Fatalf("no post-apply hook for %q", group)
+		}
+		f := &fakeDefaults{}
+		useFake(t, f)
+		if err := hook(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
+			t.Fatalf("%s hook: %v", group, err)
+		}
+		if !reflect.DeepEqual(f.calls, [][]string{{"killall", app}}) {
+			t.Errorf("%s hook ran %v, want one killall %s", group, f.calls, app)
 		}
 	}
 }

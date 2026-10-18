@@ -257,3 +257,51 @@ func hasRun(runs [][]string, want ...string) bool {
 	}
 	return false
 }
+
+func TestApplyHideDrivesDetectReportsAreNoOps(t *testing.T) {
+	f := useFakeHideDrives(t, fakeLsblk)
+	for _, v := range []string{hideDrivesLegacy, hideDrivesUnknown} {
+		if err := applyHideDrives(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}, v); err != nil {
+			t.Errorf("apply(%q) = %v, want a no-op", v, err)
+		}
+	}
+	if len(f.runs) != 0 || len(f.writes) != 0 {
+		t.Errorf("no-op ran %v and wrote %v", f.runs, f.writes)
+	}
+}
+
+func TestNeedsApplyForceSkipsNoDefault(t *testing.T) {
+	s := &Setting{Name: "Pick", Control: ControlMultiPick}
+	st := SettingState{Setting: s, CurrentValue: hideDrivesLegacy, DesiredValue: hideDrivesLegacy, Enabled: true}
+	if st.NeedsApply(true) {
+		t.Error("--force applies a setting with no recommendation and no change")
+	}
+	st.DesiredValue = "AAAA-1111"
+	if !st.NeedsApply(true) {
+		t.Error("--force skips a real change")
+	}
+	withDefault := SettingState{Setting: &Setting{Default: "on"}, CurrentValue: "on", DesiredValue: "on", Enabled: true}
+	if !withDefault.NeedsApply(true) {
+		t.Error("--force no longer re-applies a setting that has a default")
+	}
+}
+
+func TestHideDrivesChoicesKeepsDisconnectedHidden(t *testing.T) {
+	f := useFakeHideDrives(t, fakeLsblk)
+	ctx := context.Background()
+	if err := applyHideDrives(ctx, sysutil.Opts{Stdout: &bytes.Buffer{}}, "AAAA-1111,FFFF-9999"); err != nil {
+		t.Fatal(err)
+	}
+	got := hideDrivesChoices(ctx)
+	last := got[len(got)-1]
+	if len(got) != 4 || last.Value != "FFFF-9999" || !strings.Contains(last.Description, "not connected") {
+		t.Fatalf("choices = %v, want the 3 attached plus FFFF-9999 (not connected)", got)
+	}
+	// A legacy rule's report is not a partition.
+	if err := os.WriteFile(f.path, []byte(`ENV{DEVNAME}=="/dev/sdz1", ENV{UDISKS_IGNORE}="1"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := hideDrivesChoices(ctx); len(got) != 3 {
+		t.Errorf("legacy rule added choices: %v", got)
+	}
+}

@@ -71,6 +71,11 @@ func (inst *SettingState) NeedsApply(force bool) bool {
 	if !inst.Enabled {
 		return false
 	}
+	if force && inst.Setting != nil && inst.Setting.Default == "" {
+		// No recommendation to force: --force re-applies defaults, and a
+		// per-machine choice has none, so only an actual change applies.
+		return inst.CurrentValue != inst.DesiredValue
+	}
 	if force {
 		return true
 	}

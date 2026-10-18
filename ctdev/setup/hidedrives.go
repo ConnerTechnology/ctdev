@@ -28,6 +28,9 @@ const hideDrivesNone = PicksNone
 // choice rewrites it.
 const hideDrivesLegacy = "legacy rule"
 
+// hideDrivesUnknown is the value detect reports when the rule can't be read.
+const hideDrivesUnknown = "unknown"
+
 // lsblkRead lists block devices as JSON. Read-only; tests substitute a fake.
 var lsblkRead = func(ctx context.Context) ([]byte, error) {
 	return exec.CommandContext(ctx, "lsblk", "-J", "-l", "-o", "NAME,UUID,FSTYPE,LABEL,SIZE,MOUNTPOINT,TYPE").Output()
@@ -68,7 +71,25 @@ func deref(s *string) string {
 // hideDrivesChoices lists this machine's partitions that have a filesystem
 // UUID, in lsblk order. A partition without one can't be keyed, so it isn't
 // offered.
+//
+// Partitions the rule hides now that aren't attached are added at the end as
+// "(not connected)", so re-picking keeps them hidden unless unchecked.
 func hideDrivesChoices(ctx context.Context) []PickerChoice {
+	choices := attachedPartitions(ctx)
+	listed := make(map[string]bool)
+	for _, c := range choices {
+		listed[c.Value] = true
+	}
+	for _, u := range SplitPicks(detectHideDrives(ctx)) {
+		if !listed[u] && fsUUID.MatchString(u) {
+			choices = append(choices, PickerChoice{Value: u, Description: "hidden now (not connected)"})
+		}
+	}
+	return choices
+}
+
+// attachedPartitions lists the partitions lsblk sees that have a UUID.
+func attachedPartitions(ctx context.Context) []PickerChoice {
 	out, err := lsblkRead(ctx)
 	if err != nil {
 		return nil
@@ -122,7 +143,7 @@ func detectHideDrives(_ context.Context) string {
 		return hideDrivesNone
 	}
 	if err != nil {
-		return "unknown"
+		return hideDrivesUnknown
 	}
 	var uuids []string
 	for _, line := range strings.Split(string(content), "\n") {
@@ -143,6 +164,10 @@ func detectHideDrives(_ context.Context) string {
 // value checks nothing, then reloads udev and re-triggers block devices so
 // the file manager sees the change without a reboot.
 func applyHideDrives(ctx context.Context, o sysutil.Opts, value string) error {
+	if value == hideDrivesLegacy || value == hideDrivesUnknown {
+		// Detect's reports, not a choice: leave the rule as it is.
+		return nil
+	}
 	uuids := SplitPicks(value)
 	for _, u := range uuids {
 		if !fsUUID.MatchString(u) {

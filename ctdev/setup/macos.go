@@ -186,14 +186,13 @@ func detectMacOSDefaults(ctx context.Context) string {
 }
 
 // ApplyMacOSDefaults writes every entry in macOSDefaults (sound, typing,
-// dialogs, screensaver security), then restarts Dock and Finder. Exposed as the `macos` configure category.
+// dialogs, screensaver security). Exposed as the `macos` configure category.
 func ApplyMacOSDefaults(ctx context.Context, o sysutil.Opts) error {
 	w := o.Stdout
 	if o.DryRun {
 		for _, line := range macOSDefaultsPlan() {
 			fmt.Fprintln(w, line)
 		}
-		fmt.Fprintln(w, "[dry-run] Would restart Dock and Finder")
 		return nil
 	}
 
@@ -206,12 +205,6 @@ func ApplyMacOSDefaults(ctx context.Context, o sysutil.Opts) error {
 		}
 		defaultsWrite(ctx, o, &errs, d.Domain, d.Key, d.Type.flag(), d.Value)
 	}
-
-	fmt.Fprintln(w, "Applying changes...")
-	// Best-effort restarts; killall's "No matching processes" is noise.
-	quiet := sysutil.Opts{Stdout: io.Discard}
-	_ = macExec(ctx, quiet, "killall", "Dock")
-	_ = macExec(ctx, quiet, "killall", "Finder")
 
 	if len(errs) > 0 {
 		fmt.Fprintf(w, "macOS defaults applied with %d warning(s)\n", len(errs))
@@ -262,9 +255,10 @@ func detectMacDefaults(ctx context.Context, table []macDefault) string {
 }
 
 // applyMacDefaults writes table for "enabled" or deletes its keys for
-// anything else, then restarts the apps that read them (best effort). A
-// delete of a key that isn't set fails harmlessly, so its error is ignored.
-func applyMacDefaults(ctx context.Context, o sysutil.Opts, table []macDefault, value string, restart ...string) error {
+// anything else. A delete of a key that isn't set fails harmlessly, so its
+// error is ignored. The app that reads the keys restarts once per apply, in
+// its ApplyGroup's post-apply hook (macRestartGroups).
+func applyMacDefaults(ctx context.Context, o sysutil.Opts, table []macDefault, value string) error {
 	var errs []error
 	for _, d := range table {
 		if value == "enabled" {
@@ -273,14 +267,26 @@ func applyMacDefaults(ctx context.Context, o sysutil.Opts, table []macDefault, v
 			_ = macExec(ctx, o, "defaults", "delete", d.Domain, d.Key)
 		}
 	}
-	quiet := sysutil.Opts{Stdout: io.Discard, DryRun: o.DryRun}
-	if o.DryRun {
-		quiet.Stdout = o.Stdout
-	}
-	for _, app := range restart {
-		_ = macExec(ctx, quiet, "killall", app)
-	}
 	return errors.Join(errs...)
+}
+
+// ApplyGroups of the macOS desktop settings, keyed by the app each restarts.
+const (
+	macDockGroup   = "macos-dock"
+	macFinderGroup = "macos-finder"
+)
+
+// macRestartGroups maps each group to the app its post-apply hook restarts.
+var macRestartGroups = map[string]string{macDockGroup: "Dock", macFinderGroup: "Finder"}
+
+// macRestartHook returns a post-apply hook that restarts app (best effort;
+// killall's "No matching processes" is noise).
+func macRestartHook(app string) PostApplyHook {
+	return func(ctx context.Context, o sysutil.Opts) error {
+		fmt.Fprintf(o.Stdout, "  Restarting %s...\n", app)
+		_ = macExec(ctx, sysutil.Opts{Stdout: io.Discard, DryRun: o.DryRun}, "killall", app)
+		return nil
+	}
 }
 
 // keyRepeatMsToUnits converts a slider value in ms to macOS's 15 ms units,
