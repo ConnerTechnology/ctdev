@@ -431,6 +431,12 @@ ClientAliveInterval 60
 ClientAliveCountMax 3
 `
 
+// keepWiFiConnectedName is the wizard name of the WiFi power save setting.
+const keepWiFiConnectedName = "Keep WiFi connected when idle"
+
+// wifiPowersaveConfPath is the NetworkManager drop-in ctdev owns for it.
+const wifiPowersaveConfPath = "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
+
 const wifiPowersaveConf = `[connection]
 # Managed by ctdev — keep the WiFi adapter from dropping off the network while idle.
 wifi.powersave = 2
@@ -510,11 +516,15 @@ func applySuspendMask(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.SudoRun(ctx, o, "systemctl", append([]string{"mask"}, sleepTargets...)...)
 }
 
-// applyWifiPowersaveOff writes a NetworkManager drop-in disabling WiFi power
-// save. It intentionally does NOT restart NetworkManager — doing so over a
-// remote session could drop the connection; it takes effect on next restart.
-func applyWifiPowersaveOff(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoWriteFile(ctx, o, wifiPowersaveConf, "/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
+// applyKeepWiFiConnected writes, or for "not installed" removes, the
+// NetworkManager drop-in disabling WiFi power save. It intentionally does NOT
+// restart NetworkManager — doing so over a remote session could drop the
+// connection; the change takes effect on the next restart.
+func applyKeepWiFiConnected(ctx context.Context, o sysutil.Opts, v string) error {
+	if v == "not installed" {
+		return sysutil.SudoRun(ctx, o, "rm", "-f", wifiPowersaveConfPath)
+	}
+	return sysutil.SudoWriteFile(ctx, o, wifiPowersaveConf, wifiPowersaveConfPath)
 }
 
 // applyLinger enables systemd lingering for the current user so user services

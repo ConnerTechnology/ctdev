@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure network`: "WiFi power save off" is now "Keep WiFi connected when
+  idle"**, with a one-line reason in the wizard. It shows only on machines with a WiFi
+  adapter, not on every NetworkManager machine, and it can now be turned off: choosing
+  "not installed" removes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added

@@ -208,7 +208,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 		_ = sysutil.SudoRun(ctx, o, "rm", "-f", sshdDropIn)
 		_ = sysutil.SudoRun(ctx, o, "systemctl", "reload", "ssh")
 	}
-	nmConf := "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
+	nmConf := wifiPowersaveConfPath
 	if _, err := os.Stat(nmConf); err == nil {
 		_ = sysutil.SudoRun(ctx, o, "rm", "-f", nmConf)
 	}

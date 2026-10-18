@@ -486,20 +486,17 @@ var Registry = []Setting{
 	// ── Network ────────────────────────────────────────────────────────
 
 	{
-		Name:        "WiFi power save off",
+		Name:        keepWiFiConnectedName,
 		Slug:        "network",
 		Category:    "Network",
-		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
+		Description: "Stops WiFi power saving, so the machine stays reachable over WiFi while idle instead of dropping off the network. Takes effect after the next reboot or NetworkManager restart.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(_ context.Context) string {
-			return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
+			return detectFileExists(wifiPowersaveConfPath)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyWifiPowersaveOff(ctx, o)
-		},
-		HardwareFn: gateNetworkManager,
+		ApplyFunc:  applyKeepWiFiConnected,
+		HardwareFn: gateWiFi,
 	},
 	{
 		Name:        "SSD TRIM timer",
