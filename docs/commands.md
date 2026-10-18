@@ -36,8 +36,8 @@ ctdev configure locale          # UTF-8 locale (for Mosh)
 ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
 ctdev configure autoupdate      # Automatic security updates + apt-daily job timeout
-ctdev configure macos           # macOS defaults (Dock/Finder/typing/animations) — macOS only
-ctdev configure keyboard        # Key repeat delay/speed (Cinnamon, macOS) + NumLock on boot
+ctdev configure macos           # macOS defaults (Dock/Finder/animations) — macOS only
+ctdev configure keyboard        # Key repeat delay (ms) and rate (cps) on Cinnamon and macOS, macOS typing, NumLock on boot
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)

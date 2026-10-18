@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure keyboard` holds the macOS typing settings, and shows the repeat rate
+  in characters per second on every machine.** On macOS the rate is a choice of the eight
+  speeds macOS stores (67 cps down to 8 cps, in 15 ms steps), converted to and from
+  `KeyRepeat` behind the scenes. The recommended rate is 67 cps, the step nearest the
+  Linux default of 50 cps; the delay stays 195 ms. "Type exactly what I type" (no smart
+  quotes, dashes, autocorrect, auto-capitalize or double-space period) and "Holding a key
+  repeats it" (no accent popup) move here from `configure macos`, and each has an off
+  switch that deletes the keys ctdev wrote. "NumLock on boot" can be turned off, which
+  removes numlockx.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added

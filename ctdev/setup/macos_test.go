@@ -54,6 +54,12 @@ func (f *fakeDefaults) run(_ context.Context, name string, args ...string) ([]by
 			f.values[id] = readBack(args[3], args[4])
 		}
 		return nil, nil
+	case "delete":
+		if _, ok := f.values[id]; !ok {
+			return nil, errors.New("exit status 1")
+		}
+		delete(f.values, id)
+		return nil, nil
 	}
 	return nil, nil
 }
@@ -141,7 +147,6 @@ func TestApplyMacOSDefaultsDryRun(t *testing.T) {
 
 func TestMacOSDefaultsTable_RequiredEntries(t *testing.T) {
 	want := map[string]macDefault{
-		"NSGlobalDomain ApplePressAndHoldEnabled":           {Type: defBool, Value: "false"},
 		"NSGlobalDomain NSAutomaticWindowAnimationsEnabled": {Type: defBool, Value: "false"},
 		"com.apple.dock autohide-delay":                     {Type: defFloat, Value: "0"},
 		"com.apple.dock autohide-time-modifier":             {Type: defFloat, Value: "0.15"},
@@ -168,8 +173,12 @@ func TestMacOSDefaultsTable_RequiredEntries(t *testing.T) {
 			t.Errorf("%s = (%v, %q), want (%v, %q)", id, g.Type, g.Value, w.Type, w.Value)
 		}
 	}
-	// Key repeat moved to the keyboard category; reduceMotion is left alone.
-	for _, id := range []string{"NSGlobalDomain KeyRepeat", "NSGlobalDomain InitialKeyRepeat", "com.apple.universalaccess reduceMotion"} {
+	// Typing moved to the keyboard category; reduceMotion is left alone.
+	typing := []string{"NSGlobalDomain KeyRepeat", "NSGlobalDomain InitialKeyRepeat", "com.apple.universalaccess reduceMotion"}
+	for _, k := range append(append(macBoolKeys{}, macTypeAsTyped...), macHoldToRepeat...) {
+		typing = append(typing, "NSGlobalDomain "+k)
+	}
+	for _, id := range typing {
 		if _, ok := got[id]; ok {
 			t.Errorf("%s should not be in the macOS defaults table", id)
 		}
@@ -278,7 +287,7 @@ func TestDetectMacOSDefaults(t *testing.T) {
 
 	t.Run("bool reads back wrong", func(t *testing.T) {
 		f := allApplied()
-		f.values["NSGlobalDomain ApplePressAndHoldEnabled"] = "1"
+		f.values["NSGlobalDomain NSNavPanelExpandedStateForSaveMode"] = "0"
 		useFake(t, f)
 		if got := detectMacOSDefaults(ctx); got != "not applied" {
 			t.Errorf("got %q, want not applied", got)
@@ -444,36 +453,43 @@ func TestRegistryKeyRepeatSettings(t *testing.T) {
 		}
 	}
 
-	delay, ok := found[key{"Key repeat delay", "macos"}]
+	s, ok := found[key{"Key repeat delay", "macos"}]
 	if !ok {
 		t.Fatal("no macOS-gated Key repeat delay")
 	}
-	interval, ok := found[key{"Key repeat interval", "macos"}]
-	if !ok {
-		t.Fatal("no macOS-gated Key repeat interval")
+	if s.Category != "Keyboard" || s.Control != ControlSlider {
+		t.Errorf("%s: category %q control %v", s.Name, s.Category, s.Control)
+	}
+	if s.Default != macKeyRepeatDelayDefaultMs {
+		t.Errorf("%s: default %q, want %q", s.Name, s.Default, macKeyRepeatDelayDefaultMs)
+	}
+	if s.Slider == nil || s.Slider.Min != 120 || s.Slider.Max != 1800 || s.Slider.Step != 15 || s.Slider.Unit != "ms" {
+		t.Errorf("%s: slider %+v", s.Name, s.Slider)
 	}
 
-	checks := []struct {
-		s       Setting
-		def     string
-		min     float64
-		max     float64
-		storage string
-	}{
-		{delay, macKeyRepeatDelayDefaultMs, 120, 1800, "InitialKeyRepeat"},
-		{interval, macKeyRepeatIntervalDefaultMs, 15, 120, "KeyRepeat"},
+	rate, ok := found[key{"Key repeat rate", "macos"}]
+	if !ok {
+		t.Fatal("no macOS-gated Key repeat rate")
 	}
-	for _, c := range checks {
+	if rate.Category != "Keyboard" || rate.Control != ControlPicker {
+		t.Errorf("%s: category %q control %v", rate.Name, rate.Category, rate.Control)
+	}
+	if rate.Default != macKeyRepeatRateDefaultCps {
+		t.Errorf("%s: default %q, want %q", rate.Name, rate.Default, macKeyRepeatRateDefaultCps)
+	}
+	inChoices := false
+	for _, c := range rate.Choices {
+		inChoices = inChoices || c.Value == rate.Default
+	}
+	if !inChoices {
+		t.Errorf("%s: default %q is not one of its choices %v", rate.Name, rate.Default, rate.Choices)
+	}
+
+	for _, c := range []struct {
+		s       Setting
+		storage string
+	}{{s, "InitialKeyRepeat"}, {rate, "KeyRepeat"}} {
 		s := c.s
-		if s.Category != "Keyboard" || s.Control != ControlSlider {
-			t.Errorf("%s: category %q control %v", s.Name, s.Category, s.Control)
-		}
-		if s.Default != c.def {
-			t.Errorf("%s: default %q, want %q", s.Name, s.Default, c.def)
-		}
-		if s.Slider == nil || s.Slider.Min != c.min || s.Slider.Max != c.max || s.Slider.Step != 15 || s.Slider.Unit != "ms" {
-			t.Errorf("%s: slider %+v", s.Name, s.Slider)
-		}
 		if s.ApplyGroup != macKeyRepeatGroup {
 			t.Errorf("%s: ApplyGroup %q, want %q", s.Name, s.ApplyGroup, macKeyRepeatGroup)
 		}

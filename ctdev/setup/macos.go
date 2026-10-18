@@ -13,16 +13,10 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-// Key repeat defaults for the macOS `keyboard` sliders, in milliseconds.
-// macOS stores both in units of 15 ms (see keyRepeatUnitMs).
-const (
-	// macKeyRepeatIntervalDefaultMs is the recommended time between repeated
-	// characters: 30 ms is KeyRepeat 2. Set "15" for KeyRepeat 1, the fastest.
-	macKeyRepeatIntervalDefaultMs = "30"
-	// macKeyRepeatDelayDefaultMs is the recommended hold before repeating
-	// starts: the 15 ms step nearest the Linux default of 200 ms.
-	macKeyRepeatDelayDefaultMs = "195"
-)
+// macKeyRepeatDelayDefaultMs is the recommended hold before repeating starts,
+// for the macOS `keyboard` slider: the 15 ms step nearest the Linux default of
+// 200 ms. The rate is in keyboard.go, in characters per second.
+const macKeyRepeatDelayDefaultMs = "195"
 
 // keyRepeatUnitMs is the unit of NSGlobalDomain KeyRepeat and InitialKeyRepeat.
 const keyRepeatUnitMs = 15
@@ -120,13 +114,8 @@ var macOSDefaults = []macDefault{
 	{"Finder", "com.apple.finder", "FXPreferredViewStyle", defString, "Nlsv"},
 	{"Finder", "com.apple.finder", "QuitMenuItem", defBool, "true"},
 
-	// Key repeat speed lives in the `keyboard` category (macKeyRepeat*).
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticQuoteSubstitutionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticDashSubstitutionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticSpellingCorrectionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticCapitalizationEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticPeriodSubstitutionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "ApplePressAndHoldEnabled", defBool, "false"},
+	// Typing (key repeat, text substitutions, press-and-hold) lives in the
+	// `keyboard` category (keyboard.go).
 
 	{"Dialogs", "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode", defBool, "true"},
 	{"Dialogs", "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode2", defBool, "true"},
@@ -203,7 +192,7 @@ func detectMacOSDefaults(ctx context.Context) string {
 }
 
 // ApplyMacOSDefaults writes every entry in macOSDefaults (Dock, animations,
-// Finder, typing, dialogs, screensaver security), then restarts Dock and
+// Finder, dialogs, screensaver security), then restarts Dock and
 // Finder. Exposed as the `macos` configure category.
 func ApplyMacOSDefaults(ctx context.Context, o sysutil.Opts) error {
 	w := o.Stdout

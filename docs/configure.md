@@ -24,9 +24,10 @@ They fall into three groups.
 `autoupdate`, `macos`, `gpu`. These change the machine itself: the SSH daemon
 and key-based auth hardening, the firewall, suspend, the UTF-8 locale Mosh
 needs, user-service lingering, the VS Code tunnel, automatic security updates,
-macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
-and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
-sliders on both Cinnamon and macOS.
+macOS defaults (Dock, Finder, faster animations), and the NVIDIA driver
+and MOK signing. Typing is not in `macos`: it is in `keyboard`, which shows the
+repeat rate in characters per second on both Cinnamon and macOS and holds the
+macOS text-substitution and press-and-hold settings.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 
