@@ -45,6 +45,31 @@ All notable changes to this project will be documented in this file.
   under `~/.local/state/ctdev/configure-added/`, or the LDAC config file. A removal that
   would also take a package ctdev didn't install is refused, and the dependencies an
   install pulled in stay until `sudo apt autoremove`.
+- **`ctdev configure ssh` is the one place for remote access.** `configure linger`,
+  `locale`, `tunnel` and `ufw` are gone, and their settings joined `ssh` under plain
+  names: SSH server, key-only login, keep my programs running after I disconnect
+  (lingering), Mosh support (the `en_US.UTF-8` locale), open this machine from
+  vscode.dev (the VS Code tunnel), and only allow SSH and Mosh from my local network
+  (UFW). Each one can now be turned off, removing what ctdev added: the SSH server
+  units, the sshd drop-in, lingering, the `en_US.UTF-8` locale if ctdev generated it,
+  the tunnel service, and ctdev's UFW rules (UFW itself turns off only when no other
+  rules are left). Turning on vscode.dev also turns on lingering, which the tunnel
+  needs.
+- **Key-only login reads sshd's effective config** (`sshd -T`), so it shows "enabled"
+  only when password login is really off, and a re-run after adding your key finishes
+  the job. ctdev's drop-in is now `/etc/ssh/sshd_config.d/00-ctdev.conf`, which sorts
+  ahead of drop-ins like `50-cloud-init.conf` (sshd keeps the first value it reads);
+  the old `99-ctdev.conf` is removed. The firewall shows "enabled" only when UFW is on
+  and ctdev's SSH and Mosh rules are present. Mosh support shows only when
+  `mosh-server` is installed.
+- **The SSH server defaults to starting on demand** through `ssh.socket` instead of
+  `ssh.service` always running. The setting is a choice of on demand, always on, or
+  off, and installs `openssh-server` when it is missing.
+- **Mosh support no longer changes the system's default language.** It generates
+  `en_US.UTF-8` without running `update-locale`.
+- **`configure ssh --batch` now also applies the firewall**, so on a DNS or proxy
+  host run `ctdev configure ssh` interactively and leave the firewall off. The Pi-hole
+  recipe says so.
 
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:

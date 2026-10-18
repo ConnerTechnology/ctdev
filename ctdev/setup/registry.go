@@ -522,69 +522,83 @@ var Registry = []Setting{
 		HardwareFn:  gateSSD,
 	},
 
-	// ── SSH ──────────────────────────────────────────────────────────────
+	// ── SSH & remote access ──────────────────────────────────────────────
+	// Everything that lets you reach this machine from somewhere else. Each
+	// setting has an off path that removes what ctdev added (setup/remote.go).
 
 	{
 		Name:        "SSH server",
 		Slug:        "ssh",
-		Category:    "SSH",
-		Description: "Enables and starts the OpenSSH server so you can connect to this machine over SSH.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "active",
-		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ssh.service") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySSHServer(ctx, o)
+		Category:    "SSH & Remote Access",
+		Description: "Lets you connect to this machine over SSH. \"On demand\" starts the server only when a connection arrives (ssh.socket), so it costs nothing while idle.",
+		Control:     ControlPicker,
+		Default:     sshOnDemand,
+		Choices: []PickerChoice{
+			{Value: sshOnDemand, Description: "Started when someone connects, via ssh.socket (recommended)"},
+			{Value: sshAlwaysOn, Description: "Always running, via ssh.service"},
+			{Value: sshOff, Description: "No SSH server; new connections are refused"},
 		},
+		DetectFunc: detectSSHServer,
+		ApplyFunc:  applySSHServer,
 		HardwareFn: gateLinux,
 	},
 	{
-		Name:        "SSH key-based auth",
+		Name:        "Key-only login",
 		Slug:        "ssh",
-		Category:    "SSH",
-		Description: "Hardens sshd for key-based login (pubkey on, keyboard-interactive off, keepalives). Password auth is disabled only once an authorized key exists, so you can't lock yourself out.",
+		Category:    "SSH & Remote Access",
+		Description: "Turns password login off once ~/.ssh/authorized_keys has your key, so a guessed password can't get in. Until a key is there, passwords keep working so you can't lock yourself out.",
 		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/ssh/sshd_config.d/99-ctdev.conf") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySSHKeyAuth(ctx, o)
-		},
+		Default:     "enabled",
+		DetectFunc:  detectSSHKeyOnly,
+		ApplyFunc:   applySSHKeyOnly,
+		// Gated on Linux, not on sshd: the SSH server setting before it
+		// installs openssh-server in the same run.
 		HardwareFn: gateLinux,
 	},
-
-	// ── Firewall ─────────────────────────────────────────────────────────
-
 	{
-		Name:        "Firewall (UFW)",
-		Slug:        "ufw",
-		Category:    "Firewall",
-		Description: "Allows SSH (22/tcp) and Mosh (60000:61000/udp) from private LAN ranges and enables UFW. VLAN/subnet enforcement is left to your gateway firewall. Heads up: on a DNS or web host (Pi-hole, reverse proxy) UFW's default-deny will block those services unless you open their ports first.",
+		Name:        "Keep my programs running after I disconnect",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Lets tmux sessions and background services (like the VS Code tunnel) keep running after you log out or your connection drops.",
 		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "active",
-		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ufw.service") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyUFWRemote(ctx, o)
-		},
-		HardwareFn: gateLinux,
+		Default:     "enabled",
+		DetectFunc:  detectLinger,
+		ApplyFunc:   applyLinger,
+		HardwareFn:  gateLinux,
 	},
-
-	// ── Locale ───────────────────────────────────────────────────────────
-
 	{
-		Name:        "UTF-8 locale (Mosh)",
-		Slug:        "locale",
-		Category:    "Locale",
-		Description: "Generates the en_US.UTF-8 locale. Mosh refuses to start without a UTF-8 locale.",
+		Name:        "Mosh support",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Generates the en_US.UTF-8 locale. Mosh, the SSH that survives sleep and roaming, refuses to start without it.",
 		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  detectUTF8Locale,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyUTF8Locale(ctx, o)
-		},
-		HardwareFn: gateLinux,
+		Default:     "enabled",
+		DetectFunc:  detectMoshLocale,
+		ApplyFunc:   applyMoshLocale,
+		HardwareFn:  gateMosh,
+	},
+	{
+		Name:        "Open this machine from vscode.dev",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Runs the VS Code tunnel in the background so you can open this machine from vscode.dev in any browser (an iPad, say). Also turns on \"Keep my programs running\", which it needs. Run 'code tunnel user login' once to sign in.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectCodeTunnel,
+		ApplyFunc:   applyCodeTunnel,
+		// The tunnel is a systemd user service installed by VS Code's CLI.
+		HardwareFn: gateVSCode,
+	},
+	{
+		Name:        "Only allow SSH and Mosh from my local network (firewall)",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Turns on the UFW firewall and allows SSH and Mosh only from private LAN ranges. Heads up: it blocks every other incoming service (Pi-hole, a web server) unless you open that service's ports first.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectUFW,
+		ApplyFunc:   applyUFW,
+		HardwareFn:  gateLinux,
 	},
 
 	// ── Sleep ────────────────────────────────────────────────────────────
@@ -601,41 +615,6 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applySuspendMask(ctx, o)
 		},
-		HardwareFn: gateLinux,
-	},
-
-	// ── Service lingering ────────────────────────────────────────────────
-
-	{
-		Name:        "User service lingering",
-		Slug:        "linger",
-		Category:    "Service Lingering",
-		Description: "Enables systemd lingering for your user so user services (VS Code tunnel, tmux) keep running without an active login session.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "enabled",
-		DetectFunc:  detectLinger,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyLinger(ctx, o)
-		},
-		HardwareFn: gateLinux,
-	},
-
-	// ── VS Code tunnel ───────────────────────────────────────────────────
-
-	{
-		Name:        "VS Code tunnel service",
-		Slug:        "tunnel",
-		Category:    "VS Code Tunnel",
-		Description: "Installs the VS Code tunnel as a background service so you can open this machine from vscode.dev in a browser (e.g. iPad Safari). Requires VS Code; run 'code tunnel user login' once to authenticate.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  detectCodeTunnelService,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyCodeTunnelService(ctx, o)
-		},
-		// The tunnel is installed as a systemd user service, so Linux only.
 		HardwareFn: gateLinux,
 	},
 

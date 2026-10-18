@@ -4,8 +4,6 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"os/user"
-	"path/filepath"
 	"strings"
 )
 
@@ -239,16 +237,6 @@ func detectLogitechBolt() bool {
 	return strings.Contains(string(out), "046d:c548")
 }
 
-// detectUTF8Locale reports "installed" if an en_US UTF-8 locale is generated.
-func detectUTF8Locale(ctx context.Context) string {
-	out, _ := exec.CommandContext(ctx, "locale", "-a").Output()
-	low := strings.ToLower(string(out))
-	if strings.Contains(low, "en_us.utf-8") || strings.Contains(low, "en_us.utf8") {
-		return "installed"
-	}
-	return "not installed"
-}
-
 // detectSuspendMasked reports "enabled" when all sleep targets are masked.
 // `systemctl is-enabled` prints "masked" with a non-zero exit, so the captured
 // stdout is checked rather than the error.
@@ -260,31 +248,6 @@ func detectSuspendMasked(ctx context.Context) string {
 		}
 	}
 	return "enabled"
-}
-
-// detectLinger reports whether systemd lingering is enabled for the current user.
-func detectLinger(ctx context.Context) string {
-	u, err := user.Current()
-	if err != nil {
-		return "disabled"
-	}
-	out, err := exec.CommandContext(ctx, "loginctl", "show-user", u.Username, "--property=Linger").Output()
-	if err != nil {
-		return "disabled"
-	}
-	if strings.TrimSpace(string(out)) == "Linger=yes" {
-		return "enabled"
-	}
-	return "disabled"
-}
-
-// detectCodeTunnelService reports whether the VS Code tunnel user service exists.
-func detectCodeTunnelService(_ context.Context) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "not installed"
-	}
-	return detectFileExists(filepath.Join(home, ".config", "systemd", "user", "code-tunnel.service"))
 }
 
 func detectMouseSpeed(ctx context.Context) string {
