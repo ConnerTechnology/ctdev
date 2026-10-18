@@ -368,9 +368,10 @@ func (m *Model) renderRow(i int) string {
 
 	parts := []string{"  " + name}
 	if st.Enabled {
-		parts = append(parts, styles.Dimmed.Render(st.CurrentValue+" →"), styles.Warning.Render(val))
+		parts = append(parts, styles.Dimmed.Render(setup.DisplayValue(s, st.CurrentValue)+" →"),
+			styles.Warning.Render(setup.DisplayValue(s, val)))
 	} else {
-		parts = append(parts, styles.Value.Render(val))
+		parts = append(parts, styles.Value.Render(setup.DisplayValue(s, val)))
 	}
 	if s.Default != "" && val != s.Default {
 		parts = append(parts, styles.BadgeWarn.Render("≠ REC"))
@@ -391,9 +392,9 @@ func (m *Model) footerView() string {
 			desc = ansi.Truncate(desc, m.width-4, "…")
 		}
 		b.WriteString("  " + styles.Dimmed.Render(desc) + "\n")
-		detail := fmt.Sprintf("Current: %s", st.CurrentValue)
+		detail := fmt.Sprintf("Current: %s", setup.DisplayValue(s, st.CurrentValue))
 		if s.Default != "" {
-			detail += fmt.Sprintf(" · Recommended: %s", s.Default)
+			detail += fmt.Sprintf(" · Recommended: %s", setup.DisplayValue(s, s.Default))
 		}
 		if r := s.Slider; r != nil {
 			detail += fmt.Sprintf(" · Range: %s (←/→ step %s)",
