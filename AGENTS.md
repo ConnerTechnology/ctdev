@@ -24,7 +24,7 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | Home | What is in it |
 | --- | --- |
 | This file | Orientation, and the conventions that bind everywhere |
-| `.claude/rules/` | The facts about one component or one directory. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, mcp-email-server, doctor, the install scripts, the Go conventions inside the module |
+| `.claude/rules/` | The facts about one component or one directory. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, doctor, the install scripts, the Go conventions inside the module |
 | `docs/README.md` | The human-facing docs: one page per capability, in README order |
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
 | `docs/architecture.md` | The directory map of the Go module |

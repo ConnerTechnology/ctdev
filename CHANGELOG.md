@@ -5,19 +5,59 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **`ctdev configure storage`** is a new category holding SSD TRIM, renamed "Keep SSDs
+  fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
+  discards, and it now has an off switch: turning it off stops and disables
+  `fstrim.timer`. It is no longer under `configure system`.
+- **`ctdev configure network`: "WiFi power save off" is now "Keep WiFi connected when
+  idle"**, with a one-line reason in the wizard. It shows only on machines with a WiFi
+  adapter, not on every NetworkManager machine, and it can now be turned off: choosing
+  "not installed" removes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`.
+- **`ctdev configure boot` names its settings by what you get, each with a one-line
+  "why":** "Boot menu at startup" (was "GRUB menu style"), "Boot menu wait time" (was
+  "GRUB timeout") and "Other operating systems in the boot menu" (was "OS prober"). The
+  recommended defaults stay menu, 10 s and on.
+
 - **`ctdev configure mouse` names its settings by what they do, and each says why.**
   "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
   only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
-  Logitech mouse working after a KVM switch". Both can now be turned off: off removes the
-  xbindkeys config and autostart entry and puts back any file of yours they replaced (an
-  edited config is left alone, and the xbindkeys and xdotool packages stay), or the
-  Logitech udev rule and Solaar user service. A half-installed setting shows as "partly
-  installed", so either choice repairs or removes it. `ctdev reset` removes both the same
-  way. The
-  Logitech setting also shows while it's installed, so it can be turned off after the
-  receiver is unplugged. The recommended mouse speed is now 0.46, and the slider moves
-  in steps of 0.01. The current speed shows rounded to that step, so a desktop-set
-  0.46218… reads as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
+  Logitech mouse working after a KVM switch"; it also shows while it's installed, so it
+  can be turned off after the receiver is unplugged. Both can now be turned off: off
+  removes the xbindkeys config and autostart entry and puts back any file of yours they
+  replaced (an edited config is left alone, and the xbindkeys and xdotool packages stay),
+  or the Logitech udev rule and Solaar user service. A half-installed setting shows as
+  "partly installed", so either choice repairs or removes it. `ctdev reset` removes both
+  the same way. The recommended mouse speed is now 0.46, and the slider moves in steps
+  of 0.01. The current speed shows rounded to that step, so a desktop-set 0.46218… reads
+  as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
+### Removed
+- **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
+  `configure storage` and the Logitech KVM fix to `configure mouse`.
+  `ctdev configure system` now reports an unknown category.
+- **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
+  automatic security updates (unattended-upgrades) and the apt daily job timeout. The
+  node recipes no longer run it. Nothing is uninstalled: a machine already set up keeps
+  the `unattended-upgrades` package, `/etc/apt/apt.conf.d/20auto-upgrades` and the
+  `ctdev-timeout.conf` drop-ins for `apt-daily.service` and `apt-daily-upgrade.service`,
+  and they keep working. Remove them by hand if you no longer want them.
+- **ctdev no longer installs the mcp-email-server.** The `mcp-email-server` component,
+  its `ctdev configure mcp-email-server` wizard, its rules and the AI / MCP node recipe
+  (`docs/node-recipes/ai-node.md`) are gone. There is no uninstall path:
+  `ctdev uninstall mcp-email-server` now reports an unknown component. A node that had
+  it keeps, until you remove each by hand:
+  - the `mcp-email-server` container, still running and restarting with the node:
+    `docker compose -f ~/mcp-email-server/docker-compose.yml down`
+  - the `mcp-email-server:local` image: `docker image rm mcp-email-server:local`
+  - the `tailscale serve` rule that published it to the tailnet, on port 443, or 8443 on
+    a node that also ran caddy (`MCP_SERVE_PORT` in `~/mcp-email-server/.env`).
+    `sudo tailscale serve --https=<port> off` clears everything served on that port, not
+    just this proxy, so first check with `tailscale serve status` that nothing else
+    uses it.
+  - `~/mcp-email-server/`, whose `config/managed.sqlite3` holds every mailbox password
+    unencrypted: `rm -rf ~/mcp-email-server`. If it is backed up, remove it from the
+    includes in `ctdev backup paths` (the ✕ on its chip, then Save & Close). Older
+    restic snapshots keep the passwords until each backup run's `forget --prune` drops
+    them, by default once they fall outside 7 daily, 4 weekly and 6 monthly snapshots.
 
 ## [14.2.0] - 2026-10-15
 

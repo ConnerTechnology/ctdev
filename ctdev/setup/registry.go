@@ -45,10 +45,10 @@ var Registry = []Setting{
 		HardwareFn: detectNvidiaLoaded,
 	},
 	{
-		Name:        "GRUB menu style",
+		Name:        "Boot menu at startup",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "Controls how the GRUB boot menu appears. 'menu' always shows it, 'hidden' skips it unless Shift is held, 'countdown' shows a timer.",
+		Description: "Seeing the menu at startup lets you pick another system or a recovery entry when this one won't boot.",
 		Control:     ControlPicker,
 		Default:     "menu",
 		Choices: []PickerChoice{
@@ -64,10 +64,10 @@ var Registry = []Setting{
 		HardwareFn: gateGrub,
 	},
 	{
-		Name:        "GRUB timeout",
+		Name:        "Boot menu wait time",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "How many seconds the GRUB menu waits before booting the default entry.",
+		Description: "Gives you time to pick an entry before the default one starts on its own; 0 starts it right away.",
 		Control:     ControlSlider,
 		Default:     "10",
 		Slider:      &SliderRange{Min: 0, Max: 30, Step: 1, Unit: "s"},
@@ -79,10 +79,10 @@ var Registry = []Setting{
 		HardwareFn: gateGrub,
 	},
 	{
-		Name:        "OS prober",
+		Name:        "Other operating systems in the boot menu",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "Lets GRUB detect other operating systems (e.g. Windows) and add them to the boot menu. Useful for dual-boot setups.",
+		Description: "Lets you start Windows or another installed system from the boot menu; turn it off on a host whose VMs use LVM volumes or raw disks, where scanning them can damage those systems.",
 		Control:     ControlToggle,
 		Default:     "enabled",
 		DetectFunc:  detectGrubOSProber,
@@ -470,34 +470,31 @@ var Registry = []Setting{
 	// ── Network ────────────────────────────────────────────────────────
 
 	{
-		Name:        "WiFi power save off",
+		Name:        "Keep WiFi connected when idle",
 		Slug:        "network",
 		Category:    "Network",
-		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
+		Description: "Stops WiFi power saving, so the machine stays reachable over WiFi while idle instead of dropping off the network. Takes effect after the next reboot or NetworkManager restart.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(_ context.Context) string {
-			return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
+			return detectFileExists(wifiPowersaveConfPath)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyWifiPowersaveOff(ctx, o)
-		},
-		HardwareFn: gateNetworkManager,
+		ApplyFunc:  applyKeepWiFiConnected,
+		HardwareFn: gateWiFi,
 	},
+
+	// ── Storage ────────────────────────────────────────────────────────
+
 	{
-		Name:        "SSD TRIM timer",
-		Slug:        "system",
-		Category:    "System",
-		Description: "Enables periodic TRIM for SSDs, which helps maintain write performance and longevity.",
+		Name:        "Keep SSDs fast (weekly TRIM)",
+		Slug:        "storage",
+		Category:    "Storage",
+		Description: "Tells your SSDs once a week which blocks are free, so writes stay fast as the disk fills up.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "active",
 		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "fstrim.timer") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySSDTrim(ctx, o)
-		},
-		HardwareFn: gateLinux,
+		ApplyFunc:   applySSDTrim,
+		HardwareFn:  gateSSD,
 	},
 
 	// ── SSH ──────────────────────────────────────────────────────────────
@@ -546,47 +543,6 @@ var Registry = []Setting{
 			return applyUFWRemote(ctx, o)
 		},
 		HardwareFn: gateLinux,
-	},
-
-	// ── Automatic updates ────────────────────────────────────────────────
-
-	{
-		Name:     "Automatic security updates",
-		Slug:     "autoupdate",
-		Category: "Automatic Updates",
-		Description: "Installs unattended-upgrades and enables a daily job that applies security " +
-			"updates automatically (security pocket only — normal updates stay manual via " +
-			"'ctdev update'). Recommended for always-on nodes and family machines that don't " +
-			"get regular hands-on attention.",
-		Control:    ControlToggle,
-		Default:    "enabled",
-		OneWay:     true,
-		DetectFunc: detectUnattendedUpgrades,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyUnattendedUpgrades(ctx, o)
-		},
-		HardwareFn: gateLinux,
-	},
-	{
-		Name:     "apt daily job timeout",
-		Slug:     "autoupdate",
-		Category: "Automatic Updates",
-		Description: "Caps how long apt's daily download and upgrade jobs may run before systemd " +
-			"kills them. Both units ship with apt as Type=oneshot, which systemd gives no start " +
-			"timeout at all — so a mirror fetch that stalls instead of failing holds " +
-			"/var/lib/apt/lists/lock indefinitely, and every later apt run (including 'ctdev " +
-			"update') can't lock the index. 'No timeout' removes the cap and restores stock apt.",
-		Control: ControlPicker,
-		Default: "30min",
-		Choices: []PickerChoice{
-			{Value: "15min", Description: "Kill after 15 minutes"},
-			{Value: "30min", Description: "Kill after 30 minutes (recommended)"},
-			{Value: "1h", Description: "Kill after 1 hour — slow links, large upgrades"},
-			{Value: "infinity", Description: "No timeout (systemd default; can wedge apt)"},
-		},
-		DetectFunc: detectAptDailyTimeout,
-		ApplyFunc:  applyAptDailyTimeout,
-		HardwareFn: gateAptDaily,
 	},
 
 	// ── Locale ───────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 `ctdev install <component>` installs the component (pulling in its `Dependencies`
 first) and then runs its configuration step if it has one — a `configure <name>`
-category (e.g. `pihole`) or a dedicated wizard (`caddy`, `mcp-email-server`; see
+category (e.g. `pihole`) or a dedicated wizard (`caddy`; see
 `componentWizards` in `cmd/install.go`). Re-running `install` on something
 already installed says so and jumps straight to configuration. `ctdev configure
 <name>` configures without installing. (Both skipped in `--batch`/`--dry-run`.)
@@ -35,14 +35,13 @@ ctdev configure sleep           # Never-suspend (mask sleep targets)
 ctdev configure locale          # UTF-8 locale (for Mosh)
 ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
-ctdev configure autoupdate      # Automatic security updates + apt-daily job timeout
 ctdev configure macos           # macOS defaults (Dock/Finder/typing/animations) — macOS only
 ctdev configure keyboard        # Key repeat delay/speed (Cinnamon, macOS) + NumLock on boot
+ctdev configure storage         # Weekly SSD TRIM (fstrim.timer) — only on machines with an SSD
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
-ctdev configure mcp-email-server # mailboxes for the MCP email server (+ tailscale serve, attachment policy)
 ctdev configure linear          # this repo's Linear MCP server, as this computer's Linear app (--show)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
