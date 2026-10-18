@@ -19,6 +19,9 @@ type SliderRange struct {
 	Max  float64
 	Step float64
 	Unit string // "ms", "s", "min", "cps", ""
+	// Never adds a "never" value (SliderNever) one step below Min, for
+	// timers where 0 means "don't do it at all".
+	Never bool
 }
 
 type PickerChoice struct {
@@ -51,6 +54,10 @@ type Setting struct {
 	// path (it ignores the value). The wizard offers these as a single
 	// "apply?" question instead of a fake enable/disable choice.
 	OneWay bool
+	// NotNeededFn reports why this machine doesn't need the setting, or ""
+	// when it does. A setting that isn't needed is shown as such and is left
+	// out of what --batch applies.
+	NotNeededFn func(ctx context.Context) string
 }
 
 // SettingState holds runtime state for a setting during TUI interaction.
@@ -59,11 +66,17 @@ type SettingState struct {
 	CurrentValue string // detected system value
 	DesiredValue string // what will be applied (initialized to Default)
 	Enabled      bool   // whether included in apply set
+	NotNeeded    string // why this machine doesn't need the setting; "" when it does
 }
+
+// ValueUnknown is what a DetectFunc returns when it can't read the current
+// value, e.g. a root-only probe under --show or --dry-run, which skip sudo.
+// It is shown as is and never applied.
+const ValueUnknown = "unknown"
 
 // NeedsApply returns true if this setting should be applied.
 func (inst *SettingState) NeedsApply(force bool) bool {
-	if !inst.Enabled {
+	if !inst.Enabled || inst.CurrentValue == ValueUnknown {
 		return false
 	}
 	if force {
@@ -94,11 +107,17 @@ func InitStates(ctx context.Context, settings []Setting) []SettingState {
 		if settings[i].DetectFunc != nil {
 			current = settings[i].DetectFunc(ctx)
 		}
+		notNeeded := ""
+		if settings[i].NotNeededFn != nil {
+			notNeeded = settings[i].NotNeededFn(ctx)
+		}
 		states[i] = SettingState{
 			Setting:      &settings[i],
 			CurrentValue: current,
 			DesiredValue: settings[i].Default,
-			Enabled:      true,
+			// A setting this machine doesn't need isn't applied by default.
+			Enabled:   notNeeded == "",
+			NotNeeded: notNeeded,
 		}
 	}
 	return states

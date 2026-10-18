@@ -20,13 +20,12 @@ recommended defaults without asking, which is what you want in a script.
 
 They fall into three groups.
 
-**Machine behavior** — `ssh`, `ufw`, `sleep`, `locale`, `linger`, `tunnel`,
-`macos`, `gpu`. These change the machine itself: the SSH daemon and key-based
-auth hardening, the firewall, suspend, the UTF-8 locale Mosh needs,
-user-service lingering, the VS Code tunnel, macOS defaults (Dock, Finder,
-typing, faster animations), and the NVIDIA driver and MOK signing. Key repeat
-speed is not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and
-macOS.
+**Machine behavior** — `ssh`, `power`, `macos`, `gpu`. These change the
+machine itself: remote access, power (the power profile, the display,
+idle-suspend and screensaver timers in minutes or never, and "Never suspend,
+even when asked"), macOS defaults (Dock, Finder, typing, faster animations),
+and the NVIDIA driver and MOK signing. Key repeat speed is
+not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and macOS.
 
 **Desktop** — `audio`, `bluetooth`. `bluetooth` installs bluez and Blueman and
 turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
@@ -38,6 +37,16 @@ installed and the service changes it made under
 If removing those packages would also remove one ctdev didn't install (something
 that depends on them), it refuses and names it. Off leaves the dependencies those
 packages pulled in; `sudo apt autoremove` cleans them up.
+
+`ssh` is the one place for remote access. Its settings are the SSH server
+(started on demand by `ssh.socket`, always running, or off), key-only login,
+keep my programs running after I disconnect (systemd lingering), Mosh support
+(the `en_US.UTF-8` locale), open this machine from vscode.dev (the VS Code
+tunnel, which also turns on lingering), and only allow SSH and Mosh from my
+local network (UFW). Each one can be turned off, which removes what ctdev
+added. The firewall blocks every other incoming service unless you open its
+ports first, so on a DNS or proxy host run `ctdev configure ssh` without
+`--batch` and leave it off.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 Each needs its tool: on a machine without git or the AWS CLI, it asks "Git isn't

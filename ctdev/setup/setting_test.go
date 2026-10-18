@@ -19,6 +19,8 @@ func TestNeedsApply(t *testing.T) {
 		{"enabled force always true", true, true, "same", "same", true},
 		{"enabled same values no force", true, false, "same", "same", false},
 		{"enabled different values", true, false, "old", "new", true},
+		{"unknown current is never applied", true, false, ValueUnknown, "new", false},
+		{"unknown current ignores force", true, true, ValueUnknown, "new", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -262,4 +264,21 @@ func TestCategories(t *testing.T) {
 			t.Errorf("expected empty, got %v", cats)
 		}
 	})
+}
+
+func TestInitStatesNotNeeded(t *testing.T) {
+	settings := []Setting{
+		{Name: "needed", Default: "on", NotNeededFn: func(context.Context) string { return "" }},
+		{Name: "not needed", Default: "on", NotNeededFn: func(context.Context) string { return "no reason to" }},
+	}
+	states := InitStates(context.Background(), settings)
+	if states[0].NotNeeded != "" || !states[0].Enabled {
+		t.Errorf("needed setting: NotNeeded=%q Enabled=%v, want \"\" and true", states[0].NotNeeded, states[0].Enabled)
+	}
+	if states[1].NotNeeded != "no reason to" {
+		t.Errorf("NotNeeded = %q, want the reason", states[1].NotNeeded)
+	}
+	if states[1].NeedsApply(false) || states[1].NeedsApply(true) {
+		t.Error("a setting this machine doesn't need must not be applied by default, even with force")
+	}
 }

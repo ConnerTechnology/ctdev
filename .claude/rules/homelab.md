@@ -16,9 +16,6 @@ ctdev has no "homelab mode" — you compose a node from individual components an
 running Pi-hole behind a Caddy reverse proxy is `docs/node-recipes/pihole-node.md`; the
 per-component traps are in `pihole.md` and `beszel.md`.
 
-Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
-default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.
-
 Secrets are **never stored in the repo**. Each is entered at `configure` time and
 stored only on the host that needs it; if lost, just reconfigure:
 - **restic** (repo + credentials + password) → `/etc/restic/restic.env`, written by
