@@ -172,7 +172,7 @@ func skipf(format string, a ...any) Result {
 // ctdev normally installs to ~/.local/bin, which sudo's secure_path excludes, so
 // `sudo ctdev doctor` fails with "command not found" on a stock Debian or Mint
 // box. `ctdev doctor --root` prompts once up front and elevates only the checks
-// that need it. what completes the sentence — "for disk health".
+// that need it. `what` completes the sentence — "for disk health".
 func needsRootSkip(what string) Result {
 	return skipf("needs root — re-run with 'ctdev doctor --root' %s", what)
 }
