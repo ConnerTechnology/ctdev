@@ -368,9 +368,10 @@ func (m *Model) renderRow(i int) string {
 
 	parts := []string{"  " + name}
 	if st.Enabled {
-		parts = append(parts, styles.Dimmed.Render(st.CurrentValue+" →"), styles.Warning.Render(val))
+		parts = append(parts, styles.Dimmed.Render(setup.DisplayValue(s, st.CurrentValue)+" →"),
+			styles.Warning.Render(setup.DisplayValue(s, val)))
 	} else {
-		parts = append(parts, styles.Value.Render(val))
+		parts = append(parts, styles.Value.Render(setup.DisplayValue(s, val)))
 	}
 	if st.NotNeeded != "" && !st.Enabled && st.CurrentValue != s.Default {
 		parts = append(parts, styles.Dimmed.Render("not needed"))
@@ -393,16 +394,15 @@ func (m *Model) footerView() string {
 			desc = ansi.Truncate(desc, m.width-4, "…")
 		}
 		b.WriteString("  " + styles.Dimmed.Render(desc) + "\n")
-		detail := fmt.Sprintf("Current: %s", st.CurrentValue)
+		detail := fmt.Sprintf("Current: %s", setup.DisplayValue(s, st.CurrentValue))
 		if st.NotNeeded != "" {
 			detail += fmt.Sprintf(" · Not needed: %s", st.NotNeeded)
 		} else if s.Default != "" {
-			detail += fmt.Sprintf(" · Recommended: %s", s.Default)
+			detail += fmt.Sprintf(" · Recommended: %s", setup.DisplayValue(s, s.Default))
 		}
 		if r := s.Slider; r != nil {
-			detail += fmt.Sprintf(" · Range: %s–%s%s (←/→ step %s)",
-				setup.FormatSliderVal(r.Min, r.Step), setup.FormatSliderVal(r.Max, r.Step), r.Unit,
-				setup.FormatSliderVal(r.Step, r.Step))
+			detail += fmt.Sprintf(" · Range: %s (←/→ step %s)",
+				setup.SliderRangeLabel(r), setup.FormatSliderVal(r.Step, r.Step))
 		}
 		b.WriteString("  " + styles.Help.Render(detail) + "\n")
 	}

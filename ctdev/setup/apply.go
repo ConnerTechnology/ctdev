@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -180,79 +179,6 @@ func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error
 	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
-// autoUpgradesConf enables the apt periodic jobs that unattended-upgrades
-// hooks into. The package's stock 50unattended-upgrades already restricts
-// upgrades to the security pocket, so this stays security-only by default.
-const autoUpgradesConf = `// Written by ctdev (configure autoupdate).
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Unattended-Upgrade "1";
-`
-
-const autoUpgradesConfPath = "/etc/apt/apt.conf.d/20auto-upgrades"
-
-// applyUnattendedUpgrades installs unattended-upgrades and turns on the
-// daily security-update run.
-func applyUnattendedUpgrades(ctx context.Context, o sysutil.Opts) error {
-	if err := applyPackages(ctx, o, []string{"unattended-upgrades"}); err != nil {
-		return err
-	}
-	return sysutil.SudoWriteFile(ctx, o, autoUpgradesConf, autoUpgradesConfPath)
-}
-
-// detectUnattendedUpgrades reports "enabled" only when both the package and
-// the periodic config that actually triggers it are present.
-func detectUnattendedUpgrades(ctx context.Context) string {
-	if !detectPackageInstalled(ctx, "unattended-upgrades") {
-		return "disabled"
-	}
-	b, err := os.ReadFile(autoUpgradesConfPath)
-	if err != nil || !strings.Contains(string(b), `Unattended-Upgrade "1"`) {
-		return "disabled"
-	}
-	return "enabled"
-}
-
-// aptDailyUnits are the two stock apt jobs that take /var/lib/apt/lists/lock.
-// Both ship with the apt package and are driven by their own timers.
-var aptDailyUnits = []string{"apt-daily.service", "apt-daily-upgrade.service"}
-
-// aptDailyTimeoutConf caps a single unit's start timeout. %s is the timespan.
-const aptDailyTimeoutConf = `# Written by ctdev (configure autoupdate).
-# Both apt-daily units are Type=oneshot, which systemd gives an infinite start
-# timeout. A fetch that stalls rather than fails then holds the apt lock for as
-# long as the machine is up, and every later apt run — including ctdev update —
-# can't lock. This cap lets systemd kill the run instead.
-[Service]
-TimeoutStartSec=%s
-`
-
-func aptDailyDropInPath(unit string) string {
-	return filepath.Join("/etc/systemd/system", unit+".d", "ctdev-timeout.conf")
-}
-
-// applyAptDailyTimeout writes (or removes) the start-timeout drop-in for both
-// apt-daily units. "infinity" removes the drop-in rather than writing it out,
-// so turning the cap off restores stock apt behavior instead of leaving a
-// ctdev file behind that merely restates the default.
-func applyAptDailyTimeout(ctx context.Context, o sysutil.Opts, value string) error {
-	for _, unit := range aptDailyUnits {
-		path := aptDailyDropInPath(unit)
-		if value == "infinity" {
-			if err := sysutil.SudoRun(ctx, o, "rm", "-f", path); err != nil {
-				return fmt.Errorf("remove %s: %w", path, err)
-			}
-			continue
-		}
-		if err := sysutil.SudoRun(ctx, o, "mkdir", "-p", filepath.Dir(path)); err != nil {
-			return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-		}
-		if err := sysutil.SudoWriteFile(ctx, o, fmt.Sprintf(aptDailyTimeoutConf, value), path); err != nil {
-			return fmt.Errorf("write %s: %w", path, err)
-		}
-	}
-	return sysutil.SudoRun(ctx, o, "systemctl", "daemon-reload")
-}
-
 // applyNvidiaSigning runs the GPU signing setup via the gpu package. It only
 // runs once the user has said yes, or in --batch when signing is needed, so
 // RunSetup doesn't ask about Secure Boot a second time.
@@ -324,30 +250,6 @@ func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
 	return nil
 }
 
-// applyWireplumberLDAC copies the WirePlumber LDAC config from the ctdev repo.
-func applyWireplumberLDAC(ctx context.Context, o sysutil.Opts) error {
-	confDir := "/etc/wireplumber/wireplumber.conf.d"
-	confDst := filepath.Join(confDir, "51-ldac-hq.conf")
-
-	if err := sysutil.SudoRun(ctx, o, "mkdir", "-p", confDir); err != nil {
-		return fmt.Errorf("mkdir wireplumber conf dir: %w", err)
-	}
-
-	content, err := Configs.ReadFile("configs/wireplumber/51-ldac-hq.conf")
-	if err != nil {
-		return fmt.Errorf("read embedded wireplumber config: %w", err)
-	}
-	if err := sysutil.SudoWriteFile(ctx, o, string(content), confDst); err != nil {
-		return fmt.Errorf("copy wireplumber config: %w", err)
-	}
-
-	// Restart PipeWire stack to pick up new config; best-effort.
-	_ = sysutil.Run(ctx, o, "systemctl", "--user", "restart",
-		"pipewire", "pipewire-pulse", "wireplumber")
-
-	return nil
-}
-
 // applyLogitechKVMFix installs a udev rule and systemd user service to restart Solaar
 // when the Logi Bolt receiver reconnects after a KVM switch.
 func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {
@@ -400,8 +302,18 @@ func applyHideDrives(ctx context.Context, o sysutil.Opts) error {
 	return sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 }
 
-// applySSDTrim enables the fstrim.timer systemd unit for periodic SSD TRIM.
-func applySSDTrim(ctx context.Context, o sysutil.Opts) error {
+// applySSDTrim turns the fstrim.timer systemd unit (weekly SSD TRIM) on for
+// "active" and off for anything else.
+func applySSDTrim(ctx context.Context, o sysutil.Opts, value string) error {
+	if value != "active" {
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "stop", "fstrim.timer"); err != nil {
+			return fmt.Errorf("stop fstrim.timer: %w", err)
+		}
+		if err := sysutil.SudoRun(ctx, o, "systemctl", "disable", "fstrim.timer"); err != nil {
+			return fmt.Errorf("disable fstrim.timer: %w", err)
+		}
+		return nil
+	}
 	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", "fstrim.timer"); err != nil {
 		return fmt.Errorf("enable fstrim.timer: %w", err)
 	}
@@ -418,127 +330,21 @@ func applyUpdateGrub(ctx context.Context, o sysutil.Opts) error {
 
 // ── Remote access ────────────────────────────────────────────────────────
 
-// lanCIDRs are the RFC1918 private ranges UFW rules are scoped to. Inter-VLAN
-// enforcement is delegated to the gateway firewall (see remote-access design).
-var lanCIDRs = []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"}
-
-// sleepTargets are the systemd targets masked to keep an always-on box awake.
-var sleepTargets = []string{"sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"}
-
-const sshdDropIn = "/etc/ssh/sshd_config.d/99-ctdev.conf"
-
-const sshHardeningConf = `# Managed by ctdev — remote access (key-based SSH)
-PubkeyAuthentication yes
-KbdInteractiveAuthentication no
-ClientAliveInterval 60
-ClientAliveCountMax 3
-`
+// wifiPowersaveConfPath is the NetworkManager drop-in ctdev owns for it.
+const wifiPowersaveConfPath = "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
 
 const wifiPowersaveConf = `[connection]
 # Managed by ctdev — keep the WiFi adapter from dropping off the network while idle.
 wifi.powersave = 2
 `
 
-// applySSHServer enables and starts the OpenSSH server.
-func applySSHServer(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoRun(ctx, o, "systemctl", "enable", "--now", "ssh")
-}
-
-// applySSHKeyAuth writes an sshd drop-in for key-based login. Password auth is
-// only disabled once an authorized key is present, so a key-less run can't lock
-// the user out. The config is validated with `sshd -t` before reload.
-func applySSHKeyAuth(ctx context.Context, o sysutil.Opts) error {
-	content := sshHardeningConf
-	if hasAuthorizedKey() {
-		content += "PasswordAuthentication no\n"
-	} else {
-		fmt.Fprintln(o.Stdout, "  note: no ~/.ssh/authorized_keys yet — leaving password auth enabled until a key is added; re-run after adding your key")
+// applyKeepWiFiConnected writes, or for "not installed" removes, the
+// NetworkManager drop-in disabling WiFi power save. It intentionally does NOT
+// restart NetworkManager — doing so over a remote session could drop the
+// connection; the change takes effect on the next restart.
+func applyKeepWiFiConnected(ctx context.Context, o sysutil.Opts, v string) error {
+	if v == "not installed" {
+		return sysutil.SudoRun(ctx, o, "rm", "-f", wifiPowersaveConfPath)
 	}
-	if err := sysutil.SudoWriteFile(ctx, o, content, sshdDropIn); err != nil {
-		return err
-	}
-	if err := sysutil.SudoRun(ctx, o, "sshd", "-t"); err != nil {
-		return fmt.Errorf("sshd config validation failed: %w", err)
-	}
-	return sysutil.SudoRun(ctx, o, "systemctl", "reload", "ssh")
-}
-
-// hasAuthorizedKey reports whether ~/.ssh/authorized_keys has at least one key.
-func hasAuthorizedKey() bool {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	data, err := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "#") {
-			return true
-		}
-	}
-	return false
-}
-
-// applyUFWRemote opens SSH + Mosh from private LAN ranges and enables UFW.
-func applyUFWRemote(ctx context.Context, o sysutil.Opts) error {
-	if !sysutil.CommandExists("ufw") {
-		if err := applyPackages(ctx, o, []string{"ufw"}); err != nil {
-			return fmt.Errorf("install ufw: %w", err)
-		}
-	}
-	for _, cidr := range lanCIDRs {
-		if err := sysutil.SudoRun(ctx, o, "ufw", "allow", "from", cidr, "to", "any", "port", "22", "proto", "tcp"); err != nil {
-			return fmt.Errorf("ufw allow ssh from %s: %w", cidr, err)
-		}
-		if err := sysutil.SudoRun(ctx, o, "ufw", "allow", "from", cidr, "to", "any", "port", "60000:61000", "proto", "udp"); err != nil {
-			return fmt.Errorf("ufw allow mosh from %s: %w", cidr, err)
-		}
-	}
-	return sysutil.SudoRun(ctx, o, "ufw", "--force", "enable")
-}
-
-// applyUTF8Locale generates en_US.UTF-8 (required by Mosh).
-func applyUTF8Locale(ctx context.Context, o sysutil.Opts) error {
-	if err := sysutil.SudoRun(ctx, o, "locale-gen", "en_US.UTF-8"); err != nil {
-		return fmt.Errorf("locale-gen: %w", err)
-	}
-	return sysutil.SudoRun(ctx, o, "update-locale", "LANG=en_US.UTF-8")
-}
-
-// applySuspendMask masks the sleep/suspend/hibernate targets.
-func applySuspendMask(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoRun(ctx, o, "systemctl", append([]string{"mask"}, sleepTargets...)...)
-}
-
-// applyWifiPowersaveOff writes a NetworkManager drop-in disabling WiFi power
-// save. It intentionally does NOT restart NetworkManager — doing so over a
-// remote session could drop the connection; it takes effect on next restart.
-func applyWifiPowersaveOff(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoWriteFile(ctx, o, wifiPowersaveConf, "/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
-}
-
-// applyLinger enables systemd lingering for the current user so user services
-// (VS Code tunnel, tmux) survive without an active login session.
-func applyLinger(ctx context.Context, o sysutil.Opts) error {
-	u, err := user.Current()
-	if err != nil {
-		return err
-	}
-	return sysutil.SudoRun(ctx, o, "loginctl", "enable-linger", u.Username)
-}
-
-// applyCodeTunnelService installs the VS Code tunnel as a user service.
-// Authentication (`code tunnel user login`) remains a one-time manual step.
-func applyCodeTunnelService(ctx context.Context, o sysutil.Opts) error {
-	if !sysutil.CommandExists("code") {
-		return fmt.Errorf("VS Code (code) not found — install the vscode component first")
-	}
-	if err := sysutil.Run(ctx, o, "code", "tunnel", "service", "install", "--accept-server-license-terms"); err != nil {
-		return fmt.Errorf("code tunnel service install: %w", err)
-	}
-	fmt.Fprintln(o.Stdout, "  run 'code tunnel user login' once to authenticate, then reach this machine at https://vscode.dev")
-	return nil
+	return sysutil.SudoWriteFile(ctx, o, wifiPowersaveConf, wifiPowersaveConfPath)
 }

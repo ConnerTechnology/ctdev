@@ -33,7 +33,7 @@ func init() {
 
 // alreadyInstalled is the canonical install-time "is this already present?"
 // check. It delegates to the registry entry's IsInstalled so detection logic
-// (DetectApps, DetectCmd, DetectPath) lives in exactly one place rather than
+// (Detect, DetectApps, DetectCmd, DetectPath) lives in exactly one place rather than
 // being duplicated inline in each installer.
 func alreadyInstalled(name string) bool {
 	c := componentByName[name]

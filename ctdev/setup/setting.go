@@ -19,6 +19,9 @@ type SliderRange struct {
 	Max  float64
 	Step float64
 	Unit string // "ms", "s", "min", "cps", ""
+	// Never adds a "never" value (SliderNever) one step below Min, for
+	// timers where 0 means "don't do it at all".
+	Never bool
 }
 
 type PickerChoice struct {
@@ -69,9 +72,14 @@ type SettingState struct {
 	NotNeeded    string // why this machine doesn't need the setting; "" when it does
 }
 
+// ValueUnknown is what a DetectFunc returns when it can't read the current
+// value, e.g. a root-only probe under --show or --dry-run, which skip sudo.
+// It is shown as is and never applied.
+const ValueUnknown = "unknown"
+
 // NeedsApply returns true if this setting should be applied.
 func (inst *SettingState) NeedsApply(force bool) bool {
-	if !inst.Enabled {
+	if !inst.Enabled || inst.CurrentValue == ValueUnknown {
 		return false
 	}
 	if force {

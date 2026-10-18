@@ -51,7 +51,7 @@ func gpuSettingsForTest(applied *[]string) []setup.Setting {
 	for i := range settings {
 		name := settings[i].Name
 		settings[i].HardwareFn = nil
-		settings[i].DetectFunc = func(context.Context) string { return "unknown" }
+		settings[i].DetectFunc = func(context.Context) string { return "off" }
 		settings[i].ApplyFunc = func(context.Context, sysutil.Opts, string) error {
 			*applied = append(*applied, name)
 			return nil
@@ -115,7 +115,7 @@ func TestGPUShow_SaysWhyAndWhetherNeeded(t *testing.T) {
 	states := setup.InitStates(context.Background(), settings)
 	out := plain(captureStdout(t, func() {
 		for i := range states {
-			showSetting(&states[i])
+			showSetting(&states[i], wizardLabelWidth)
 		}
 	}))
 	for _, s := range settings {

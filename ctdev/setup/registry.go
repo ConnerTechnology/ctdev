@@ -49,10 +49,10 @@ var Registry = []Setting{
 		HardwareFn: detectNvidiaLoaded,
 	},
 	{
-		Name:        "GRUB menu style",
+		Name:        "Boot menu at startup",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "Controls how the GRUB boot menu appears. 'menu' always shows it, 'hidden' skips it unless Shift is held, 'countdown' shows a timer.",
+		Description: "Seeing the menu at startup lets you pick another system or a recovery entry when this one won't boot.",
 		Control:     ControlPicker,
 		Default:     "menu",
 		Choices: []PickerChoice{
@@ -68,10 +68,10 @@ var Registry = []Setting{
 		HardwareFn: gateGrub,
 	},
 	{
-		Name:        "GRUB timeout",
+		Name:        "Boot menu wait time",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "How many seconds the GRUB menu waits before booting the default entry.",
+		Description: "Gives you time to pick an entry before the default one starts on its own; 0 starts it right away.",
 		Control:     ControlSlider,
 		Default:     "10",
 		Slider:      &SliderRange{Min: 0, Max: 30, Step: 1, Unit: "s"},
@@ -83,10 +83,10 @@ var Registry = []Setting{
 		HardwareFn: gateGrub,
 	},
 	{
-		Name:        "OS prober",
+		Name:        "Other operating systems in the boot menu",
 		Slug:        "boot",
 		Category:    "Boot",
-		Description: "Lets GRUB detect other operating systems (e.g. Windows) and add them to the boot menu. Useful for dual-boot setups.",
+		Description: "Lets you start Windows or another installed system from the boot menu; turn it off on a host whose VMs use LVM volumes or raw disks, where scanning them can damage those systems.",
 		Control:     ControlToggle,
 		Default:     "enabled",
 		DetectFunc:  detectGrubOSProber,
@@ -107,9 +107,9 @@ var Registry = []Setting{
 		Name:        "Power profile",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "Sets the system-wide power profile. 'performance' maximizes speed, 'balanced' is the middle ground, 'power-saver' extends battery life.",
+		Description: "Balanced is the middle ground; performance trades power for speed, power-saver the reverse.",
 		Control:     ControlPicker,
-		Default:     "performance",
+		Default:     "balanced",
 		Choices: []PickerChoice{
 			{Value: "performance", Description: "Maximum performance"},
 			{Value: "balanced", Description: "Balance between performance and power"},
@@ -120,42 +120,54 @@ var Registry = []Setting{
 		HardwareFn: gatePowerProfiles,
 	},
 	{
-		Name:        "Display sleep",
+		Name:        "Turn off the display after",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "How long the system waits on AC power before turning off the display.",
+		Description: "Saves power and the panel when nobody is looking, on AC power.",
 		Control:     ControlSlider,
-		Default:     "3600",
-		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
+		Default:     "60",
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
-			return detectDconfInt(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac")
+			return detectDconfMinutes(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v)
+			return applyDconfMinutes(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v, "")
 		},
 		HardwareFn: gateCinnamon,
 	},
 	{
-		Name:        "Inactive sleep",
+		Name:        "Suspend when idle after",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "How long the system waits on AC power with no user activity before suspending.",
+		Description: "Saves power on AC when nobody uses the machine; never keeps it awake for remote use.",
 		Control:     ControlSlider,
-		Default:     "2700",
-		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
+		Default:     SliderNever,
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
-			return detectDconfInt(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
+			return detectDconfMinutes(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
+			return applyDconfMinutes(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v, "")
 		},
-		HardwareFn: gateCinnamon,
+		HardwareFn:  gateCinnamon,
+		NotNeededFn: suspendNotNeeded,
 	},
 	{
-		Name:        "Lock on suspend",
+		Name:        neverSuspendName,
 		Slug:        "power",
 		Category:    "Power",
-		Description: "Whether the screen locks automatically when the system suspends.",
+		Description: "Keeps an always-on machine reachable: masks systemd's sleep targets so nothing, not even the menu, can suspend it.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectSuspendMasked,
+		ApplyFunc:   applyNeverSuspend,
+		HardwareFn:  gateLinux,
+	},
+	{
+		Name:        "Lock the screen on suspend",
+		Slug:        "power",
+		Category:    "Power",
+		Description: "Asks for your password when the machine wakes from suspend.",
 		Control:     ControlToggle,
 		Default:     "true",
 		DetectFunc: func(ctx context.Context) string {
@@ -164,13 +176,14 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v)
 		},
-		HardwareFn: gateCinnamon,
+		HardwareFn:  gateCinnamon,
+		NotNeededFn: suspendNotNeeded,
 	},
 	{
-		Name:        "Screensaver lock",
+		Name:        "Lock the screen with the screensaver",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "Whether the screensaver locks the screen when it activates.",
+		Description: "Asks for your password when the screensaver ends.",
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc: func(ctx context.Context) string {
@@ -182,18 +195,20 @@ var Registry = []Setting{
 		HardwareFn: gateCinnamon,
 	},
 	{
-		Name:        "Idle delay",
+		Name:        "Start the screensaver after",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "How long the system waits with no input before activating the screensaver.",
+		Description: "Blanks the screen when nobody uses it; never leaves it on.",
 		Control:     ControlSlider,
-		Default:     "1800",
-		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
+		Default:     SliderNever,
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
-			return detectDconfInt(ctx, "/org/cinnamon/desktop/session/idle-delay")
+			return detectDconfMinutes(ctx, "/org/cinnamon/desktop/session/idle-delay")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyDconf(ctx, o, "/org/cinnamon/desktop/session/idle-delay", v)
+			// idle-delay is a uint32; an untyped write would store an int32
+			// the schema ignores.
+			return applyDconfMinutes(ctx, o, "/org/cinnamon/desktop/session/idle-delay", v, "uint32")
 		},
 		HardwareFn: gateCinnamon,
 	},
@@ -360,65 +375,47 @@ var Registry = []Setting{
 	// ── Audio ──────────────────────────────────────────────────────────
 
 	{
-		Name:        "Bluetooth/audio packages",
+		Name:        "Sound system (PipeWire)",
 		Slug:        "audio",
 		Category:    "Audio",
-		Description: "Installs the core Bluetooth and audio stack: PipeWire, WirePlumber, Bluetooth codecs, and PulseAudio compatibility.",
+		Description: "Installs PipeWire, WirePlumber and the PulseAudio tools, so apps play sound and you can control it from the desktop and the command line.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(ctx context.Context) string {
-			pkgs := []string{"pipewire-audio", "bluez", "blueman", "libspa-0.2-bluetooth", "pulseaudio-utils"}
-			for _, p := range pkgs {
-				if !detectPackageInstalled(ctx, p) {
-					return "not installed"
-				}
-			}
-			return "installed"
+		DetectFunc:  func(ctx context.Context) string { return detectPackages(ctx, soundSystemPackages) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyOwnedPackages(ctx, o, "sound-system", soundSystemPackages, v)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyPackages(ctx, o, []string{
-				"pipewire-audio", "bluez", "blueman",
-				"libspa-0.2-bluetooth", "pulseaudio-utils",
-			})
-		},
-		HardwareFn: gateDesktop,
+		HardwareFn: allOf(gateDesktop, gateSoundCard),
 	},
 	{
-		Name:        "Bluetooth service",
-		Slug:        "bluetooth",
-		Category:    "Bluetooth",
-		Description: "Enables and starts the system Bluetooth daemon so devices can pair and connect.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "active",
-		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "bluetooth.service") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySystemdEnable(ctx, o, "bluetooth.service")
-		},
-		HardwareFn: gateLinux,
-	},
-	{
-		Name:        "WirePlumber LDAC config",
+		Name:        "Bluetooth headphones",
 		Slug:        "audio",
 		Category:    "Audio",
-		Description: "Copies a WirePlumber config that prioritizes LDAC codec for high-quality Bluetooth audio, then restarts the PipeWire stack.",
+		Description: "Installs PipeWire's Bluetooth codecs, so Bluetooth headphones and speakers play sound instead of only pairing.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(_ context.Context) string {
-			return detectFileExists("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf")
+		DetectFunc:  func(ctx context.Context) string { return detectPackages(ctx, bluetoothAudioPackages) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyOwnedPackages(ctx, o, "bluetooth-audio", bluetoothAudioPackages, v)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyWireplumberLDAC(ctx, o)
-		},
-		HardwareFn: gateDesktop,
+		HardwareFn: allOf(gateDesktop, gateBluetoothAdapter),
 	},
 	{
-		Name:        "Event sounds",
+		Name:        "Hi-fi Bluetooth audio",
 		Slug:        "audio",
 		Category:    "Audio",
-		Description: "Controls whether desktop event sounds (alerts, notifications) play.",
+		Description: "Prefers the LDAC codec and the high-fidelity profile, so Bluetooth headphones sound their best instead of phone-call quality.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func(_ context.Context) string { return detectFileExists(ldacConfPath) },
+		ApplyFunc:   applyLDAC,
+		HardwareFn:  allOf(gateDesktop, gateBluetoothAdapter),
+	},
+	{
+		Name:        "Alert sounds",
+		Slug:        "audio",
+		Category:    "Audio",
+		Description: "Plays a sound for desktop alerts and notifications. Off keeps the desktop quiet.",
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc: func(ctx context.Context) string {
@@ -428,6 +425,33 @@ var Registry = []Setting{
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/sound/event-sounds", v)
 		},
 		HardwareFn: gateCinnamon,
+	},
+
+	// ── Bluetooth ──────────────────────────────────────────────────────
+
+	{
+		Name:        "Bluetooth support",
+		Slug:        "bluetooth",
+		Category:    "Bluetooth",
+		Description: "Installs bluez and Blueman, so you can pair and manage Bluetooth devices from the desktop.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func(ctx context.Context) string { return detectPackages(ctx, bluetoothPackages) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyOwnedPackages(ctx, o, "bluetooth", bluetoothPackages, v)
+		},
+		HardwareFn: allOf(gateDesktop, gateBluetoothAdapter),
+	},
+	{
+		Name:        "Bluetooth on at startup",
+		Slug:        "bluetooth",
+		Category:    "Bluetooth",
+		Description: "Runs the Bluetooth service now and at every boot, so paired devices connect without a trip to the settings.",
+		Control:     ControlToggle,
+		Default:     "active",
+		DetectFunc:  detectBluetoothService,
+		ApplyFunc:   applyBluetoothService,
+		HardwareFn:  allOf(gateDesktop, gateBluetoothAdapter),
 	},
 
 	// ── Desktop ────────────────────────────────────────────────────────
@@ -490,192 +514,110 @@ var Registry = []Setting{
 	// ── Network ────────────────────────────────────────────────────────
 
 	{
-		Name:        "WiFi power save off",
+		Name:        "Keep WiFi connected when idle",
 		Slug:        "network",
 		Category:    "Network",
-		Description: "Drops a NetworkManager config that disables WiFi power saving so the adapter doesn't drop off the network while idle. Takes effect after the next NetworkManager restart or reboot.",
+		Description: "Stops WiFi power saving, so the machine stays reachable over WiFi while idle instead of dropping off the network. Takes effect after the next reboot or NetworkManager restart.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
 		DetectFunc: func(_ context.Context) string {
-			return detectFileExists("/etc/NetworkManager/conf.d/wifi-powersave-off.conf")
+			return detectFileExists(wifiPowersaveConfPath)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyWifiPowersaveOff(ctx, o)
-		},
-		HardwareFn: gateNetworkManager,
-	},
-	{
-		Name:        "SSD TRIM timer",
-		Slug:        "system",
-		Category:    "System",
-		Description: "Enables periodic TRIM for SSDs, which helps maintain write performance and longevity.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "active",
-		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "fstrim.timer") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySSDTrim(ctx, o)
-		},
-		HardwareFn: gateLinux,
+		ApplyFunc:  applyKeepWiFiConnected,
+		HardwareFn: gateWiFi,
 	},
 
-	// ── SSH ──────────────────────────────────────────────────────────────
+	// ── Storage ────────────────────────────────────────────────────────
+
+	{
+		Name:        "Keep SSDs fast (weekly TRIM)",
+		Slug:        "storage",
+		Category:    "Storage",
+		Description: "Tells your SSDs once a week which blocks are free, so writes stay fast as the disk fills up.",
+		Control:     ControlToggle,
+		Default:     "active",
+		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "fstrim.timer") },
+		ApplyFunc:   applySSDTrim,
+		HardwareFn:  gateSSD,
+	},
+
+	// ── SSH & remote access ──────────────────────────────────────────────
+	// Everything that lets you reach this machine from somewhere else. Each
+	// setting has an off path that removes what ctdev added (setup/remote.go).
 
 	{
 		Name:        "SSH server",
 		Slug:        "ssh",
-		Category:    "SSH",
-		Description: "Enables and starts the OpenSSH server so you can connect to this machine over SSH.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "active",
-		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ssh.service") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySSHServer(ctx, o)
-		},
-		HardwareFn: gateLinux,
-	},
-	{
-		Name:        "SSH key-based auth",
-		Slug:        "ssh",
-		Category:    "SSH",
-		Description: "Hardens sshd for key-based login (pubkey on, keyboard-interactive off, keepalives). Password auth is disabled only once an authorized key exists, so you can't lock yourself out.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/ssh/sshd_config.d/99-ctdev.conf") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySSHKeyAuth(ctx, o)
-		},
-		HardwareFn: gateLinux,
-	},
-
-	// ── Firewall ─────────────────────────────────────────────────────────
-
-	{
-		Name:        "Firewall (UFW)",
-		Slug:        "ufw",
-		Category:    "Firewall",
-		Description: "Allows SSH (22/tcp) and Mosh (60000:61000/udp) from private LAN ranges and enables UFW. VLAN/subnet enforcement is left to your gateway firewall. Heads up: on a DNS or web host (Pi-hole, reverse proxy) UFW's default-deny will block those services unless you open their ports first.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "active",
-		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "ufw.service") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyUFWRemote(ctx, o)
-		},
-		HardwareFn: gateLinux,
-	},
-
-	// ── Automatic updates ────────────────────────────────────────────────
-
-	{
-		Name:     "Automatic security updates",
-		Slug:     "autoupdate",
-		Category: "Automatic Updates",
-		Description: "Installs unattended-upgrades and enables a daily job that applies security " +
-			"updates automatically (security pocket only — normal updates stay manual via " +
-			"'ctdev update'). Recommended for always-on nodes and family machines that don't " +
-			"get regular hands-on attention.",
-		Control:    ControlToggle,
-		Default:    "enabled",
-		OneWay:     true,
-		DetectFunc: detectUnattendedUpgrades,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyUnattendedUpgrades(ctx, o)
-		},
-		HardwareFn: gateLinux,
-	},
-	{
-		Name:     "apt daily job timeout",
-		Slug:     "autoupdate",
-		Category: "Automatic Updates",
-		Description: "Caps how long apt's daily download and upgrade jobs may run before systemd " +
-			"kills them. Both units ship with apt as Type=oneshot, which systemd gives no start " +
-			"timeout at all — so a mirror fetch that stalls instead of failing holds " +
-			"/var/lib/apt/lists/lock indefinitely, and every later apt run (including 'ctdev " +
-			"update') can't lock the index. 'No timeout' removes the cap and restores stock apt.",
-		Control: ControlPicker,
-		Default: "30min",
+		Category:    "SSH & Remote Access",
+		Description: "Lets you connect to this machine over SSH. \"On demand\" starts the server only when a connection arrives (ssh.socket), so it costs nothing while idle.",
+		Control:     ControlPicker,
+		Default:     sshOnDemand,
 		Choices: []PickerChoice{
-			{Value: "15min", Description: "Kill after 15 minutes"},
-			{Value: "30min", Description: "Kill after 30 minutes (recommended)"},
-			{Value: "1h", Description: "Kill after 1 hour — slow links, large upgrades"},
-			{Value: "infinity", Description: "No timeout (systemd default; can wedge apt)"},
+			{Value: sshOnDemand, Description: "Started when someone connects, via ssh.socket (recommended)"},
+			{Value: sshAlwaysOn, Description: "Always running, via ssh.service"},
+			{Value: sshOff, Description: "No SSH server; new connections are refused"},
 		},
-		DetectFunc: detectAptDailyTimeout,
-		ApplyFunc:  applyAptDailyTimeout,
-		HardwareFn: gateAptDaily,
-	},
-
-	// ── Locale ───────────────────────────────────────────────────────────
-
-	{
-		Name:        "UTF-8 locale (Mosh)",
-		Slug:        "locale",
-		Category:    "Locale",
-		Description: "Generates the en_US.UTF-8 locale. Mosh refuses to start without a UTF-8 locale.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  detectUTF8Locale,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyUTF8Locale(ctx, o)
-		},
+		DetectFunc: detectSSHServer,
+		ApplyFunc:  applySSHServer,
 		HardwareFn: gateLinux,
 	},
-
-	// ── Sleep ────────────────────────────────────────────────────────────
-
 	{
-		Name:        "Never suspend",
-		Slug:        "sleep",
-		Category:    "Sleep",
-		Description: "Masks the sleep, suspend, hibernate and hybrid-sleep systemd targets so an always-on machine stays reachable.",
+		Name:        "Key-only login",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Turns password login off once ~/.ssh/authorized_keys has your key, so a guessed password can't get in. Until a key is there, passwords keep working so you can't lock yourself out.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "enabled",
-		DetectFunc:  detectSuspendMasked,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySuspendMask(ctx, o)
-		},
+		DetectFunc:  detectSSHKeyOnly,
+		ApplyFunc:   applySSHKeyOnly,
+		// Gated on Linux, not on sshd: the SSH server setting before it
+		// installs openssh-server in the same run.
 		HardwareFn: gateLinux,
 	},
-
-	// ── Service lingering ────────────────────────────────────────────────
-
 	{
-		Name:        "User service lingering",
-		Slug:        "linger",
-		Category:    "Service Lingering",
-		Description: "Enables systemd lingering for your user so user services (VS Code tunnel, tmux) keep running without an active login session.",
+		Name:        "Keep my programs running after I disconnect",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Lets tmux sessions and background services (like the VS Code tunnel) keep running after you log out or your connection drops.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "enabled",
 		DetectFunc:  detectLinger,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyLinger(ctx, o)
-		},
-		HardwareFn: gateLinux,
+		ApplyFunc:   applyLinger,
+		HardwareFn:  gateLinux,
 	},
-
-	// ── VS Code tunnel ───────────────────────────────────────────────────
-
 	{
-		Name:        "VS Code tunnel service",
-		Slug:        "tunnel",
-		Category:    "VS Code Tunnel",
-		Description: "Installs the VS Code tunnel as a background service so you can open this machine from vscode.dev in a browser (e.g. iPad Safari). Requires VS Code; run 'code tunnel user login' once to authenticate.",
+		Name:        "Mosh support",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Generates the en_US.UTF-8 locale. Mosh, the SSH that survives sleep and roaming, refuses to start without it.",
 		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  detectCodeTunnelService,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyCodeTunnelService(ctx, o)
-		},
-		// The tunnel is installed as a systemd user service, so Linux only.
-		HardwareFn: gateLinux,
+		Default:     "enabled",
+		DetectFunc:  detectMoshLocale,
+		ApplyFunc:   applyMoshLocale,
+		HardwareFn:  gateMosh,
+	},
+	{
+		Name:        "Open this machine from vscode.dev",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Runs the VS Code tunnel in the background so you can open this machine from vscode.dev in any browser (an iPad, say). Also turns on \"Keep my programs running\", which it needs. Run 'code tunnel user login' once to sign in.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectCodeTunnel,
+		ApplyFunc:   applyCodeTunnel,
+		// The tunnel is a systemd user service installed by VS Code's CLI.
+		HardwareFn: gateVSCode,
+	},
+	{
+		Name:        "Only allow SSH and Mosh from my local network (firewall)",
+		Slug:        "ssh",
+		Category:    "SSH & Remote Access",
+		Description: "Turns on the UFW firewall and allows SSH and Mosh only from private LAN ranges. Heads up: it blocks every other incoming service (Pi-hole, a web server) unless you open that service's ports first.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectUFW,
+		ApplyFunc:   applyUFW,
+		HardwareFn:  gateLinux,
 	},
 
 	// ── Pi-hole DNS ──────────────────────────────────────────────────────

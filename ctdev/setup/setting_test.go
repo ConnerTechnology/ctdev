@@ -19,6 +19,8 @@ func TestNeedsApply(t *testing.T) {
 		{"enabled force always true", true, true, "same", "same", true},
 		{"enabled same values no force", true, false, "same", "same", false},
 		{"enabled different values", true, false, "old", "new", true},
+		{"unknown current is never applied", true, false, ValueUnknown, "new", false},
+		{"unknown current ignores force", true, true, ValueUnknown, "new", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -111,7 +113,7 @@ func TestInitStates(t *testing.T) {
 
 func TestRegistryHasAllSlugs(t *testing.T) {
 	slugs := Slugs(Registry)
-	expected := []string{"gpu", "boot", "power", "keyboard", "mouse", "audio", "bluetooth", "desktop", "network", "system"}
+	expected := []string{"gpu", "boot", "power", "keyboard", "mouse", "audio", "bluetooth", "desktop", "network", "system", "storage"}
 	for _, slug := range expected {
 		found := false
 		for _, s := range slugs {
