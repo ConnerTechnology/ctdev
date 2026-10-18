@@ -21,12 +21,12 @@ recommended defaults without asking, which is what you want in a script.
 They fall into three groups.
 
 **Machine behavior** — `ssh`, `ufw`, `sleep`, `locale`, `linger`, `tunnel`,
-`autoupdate`, `macos`, `gpu`. These change the machine itself: the SSH daemon
-and key-based auth hardening, the firewall, suspend, the UTF-8 locale Mosh
-needs, user-service lingering, the VS Code tunnel, automatic security updates,
-macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
-and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
-sliders on both Cinnamon and macOS.
+`macos`, `gpu`. These change the machine itself: the SSH daemon and key-based
+auth hardening, the firewall, suspend, the UTF-8 locale Mosh needs,
+user-service lingering, the VS Code tunnel, macOS defaults (Dock, Finder,
+typing, faster animations), and the NVIDIA driver and MOK signing. Key repeat
+speed is not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and
+macOS.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 Each needs its tool: on a machine without git or the AWS CLI, it asks "Git isn't
@@ -38,14 +38,13 @@ component's own install check, so an AWS CLI v1 counts as missing. When
 `aws configure sso` to create one. `ctdev install git` and `ctdev install aws` run
 these wizards afterward.
 
-**Component wizards** — `pihole`, `caddy`, `restic`,
-`mcp-email-server`. These belong to a component and mostly run for you when you install
-it; running `configure` directly reconfigures without reinstalling. `restic` and
-`mcp-email-server` ask for secrets and refuse `--batch`. `caddy --batch` skips its
-prompts and takes the domain, email and token from `--domain`, `--acme-email`,
-`CF_API_TOKEN` or the existing `~/caddy/.env`. `pihole --batch` applies the
-category's defaults, which also set the upstream to Cloudflare, so run it
-interactively.
+**Component wizards** — `pihole`, `caddy`, `restic`. These belong to a component
+and mostly run for you when you install it; running `configure` directly
+reconfigures without reinstalling. `restic` asks for secrets and refuses
+`--batch`. `caddy --batch` skips its prompts and takes the domain, email and
+token from `--domain`, `--acme-email`, `CF_API_TOKEN` or the existing
+`~/caddy/.env`. `pihole --batch` applies the category's defaults, which also set
+the upstream to Cloudflare, so run it interactively.
 
 **Claude Code** — `claude-code` isn't a wizard: `ctdev configure claude-code` diffs
 `~/.claude/settings.json` and `CLAUDE.md` against ctdev's baseline and asks before replacing

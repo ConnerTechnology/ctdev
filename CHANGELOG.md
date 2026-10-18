@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`ctdev configure storage`** is a new category holding SSD TRIM, renamed "Keep SSDs
+  fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
+  discards, and it now has an off switch: turning it off stops and disables
+  `fstrim.timer`. It is no longer under `configure system`.
+- **`ctdev configure network`: "WiFi power save off" is now "Keep WiFi connected when
+  idle"**, with a one-line reason in the wizard. It shows only on machines with a WiFi
+  adapter, not on every NetworkManager machine, and it can now be turned off: choosing
+  "not installed" removes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`.
+- **`ctdev configure boot` names its settings by what you get, each with a one-line
+  "why":** "Boot menu at startup" (was "GRUB menu style"), "Boot menu wait time" (was
+  "GRUB timeout") and "Other operating systems in the boot menu" (was "OS prober"). The
+  recommended defaults stay menu, 10 s and on.
+- **`ctdev install git`** now runs `ctdev configure git` afterward.
+- **`ctdev configure aws` and `ctdev configure git` install their tool first** when it's
+  missing, after asking "AWS CLI isn't installed. Install it now? [Y/n]" (or "Git
+  isn't…"). With `--batch` they install without asking.
+- **`ctdev configure aws` with no profiles** in `~/.aws/config` offers to run
+  `aws configure sso` instead of exiting.
+
+### Removed
+- **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
+  automatic security updates (unattended-upgrades) and the apt daily job timeout. The
+  node recipes no longer run it. Nothing is uninstalled: a machine already set up keeps
+  the `unattended-upgrades` package, `/etc/apt/apt.conf.d/20auto-upgrades` and the
+  `ctdev-timeout.conf` drop-ins for `apt-daily.service` and `apt-daily-upgrade.service`,
+  and they keep working. Remove them by hand if you no longer want them.
+- **ctdev no longer installs the mcp-email-server.** The `mcp-email-server` component,
+  its `ctdev configure mcp-email-server` wizard, its rules and the AI / MCP node recipe
+  (`docs/node-recipes/ai-node.md`) are gone. There is no uninstall path:
+  `ctdev uninstall mcp-email-server` now reports an unknown component. A node that had
+  it keeps, until you remove each by hand:
+  - the `mcp-email-server` container, still running and restarting with the node:
+    `docker compose -f ~/mcp-email-server/docker-compose.yml down`
+  - the `mcp-email-server:local` image: `docker image rm mcp-email-server:local`
+  - the `tailscale serve` rule that published it to the tailnet, on port 443, or 8443 on
+    a node that also ran caddy (`MCP_SERVE_PORT` in `~/mcp-email-server/.env`).
+    `sudo tailscale serve --https=<port> off` clears everything served on that port, not
+    just this proxy, so first check with `tailscale serve status` that nothing else
+    uses it.
+  - `~/mcp-email-server/`, whose `config/managed.sqlite3` holds every mailbox password
+    unencrypted: `rm -rf ~/mcp-email-server`. If it is backed up, remove it from the
+    includes in `ctdev backup paths` (the ✕ on its chip, then Save & Close). Older
+    restic snapshots keep the passwords until each backup run's `forget --prune` drops
+    them, by default once they fall outside 7 daily, 4 weekly and 6 monthly snapshots.
+
 ### Added
 - **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
   several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
@@ -12,14 +58,6 @@ All notable changes to this project will be documented in this file.
   Homebrew's package rather than AWS's installer (chosen in CTD-90). A v1 `aws` already
   on the machine doesn't count as installed: v2 goes in over it. Run `ctdev install aws --force` to update the Linux install. It
   then runs `ctdev configure aws`.
-
-### Changed
-- **`ctdev install git`** now runs `ctdev configure git` afterward.
-- **`ctdev configure aws` and `ctdev configure git` install their tool first** when it's
-  missing, after asking "AWS CLI isn't installed. Install it now? [Y/n]" (or "Git
-  isn't…"). With `--batch` they install without asking.
-- **`ctdev configure aws` with no profiles** in `~/.aws/config` offers to run
-  `aws configure sso` instead of exiting.
 
 ## [14.2.0] - 2026-10-15
 

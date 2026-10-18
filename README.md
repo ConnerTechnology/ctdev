@@ -61,8 +61,6 @@ access point to change a setting.
 - [Pi-hole / homelab node](docs/node-recipes/pihole-node.md) — Pi-hole behind a
   Caddy reverse proxy with a Let's Encrypt wildcard cert, nothing exposed to the
   internet
-- [AI / MCP node](docs/node-recipes/ai-node.md) — an always-on machine holding
-  the credentials the laptops should not, reachable only over Tailscale
 
 ## What it does to a device
 
