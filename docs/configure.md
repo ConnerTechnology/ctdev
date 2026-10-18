@@ -20,13 +20,21 @@ recommended defaults without asking, which is what you want in a script.
 
 They fall into three groups.
 
-**Machine behavior** — `ssh`, `ufw`, `sleep`, `locale`, `linger`, `tunnel`,
-`autoupdate`, `macos`, `gpu`. These change the machine itself: the SSH daemon
-and key-based auth hardening, the firewall, suspend, the UTF-8 locale Mosh
-needs, user-service lingering, the VS Code tunnel, automatic security updates,
+**Machine behavior** — `ssh`, `sleep`, `autoupdate`, `macos`, `gpu`. These
+change the machine itself: remote access, suspend, automatic security updates,
 macOS defaults (Dock, Finder, typing, faster animations), and the NVIDIA driver
 and MOK signing. Key repeat speed is not in `macos`: it is in `keyboard`, as
 sliders on both Cinnamon and macOS.
+
+`ssh` is the one place for remote access. Its settings are the SSH server
+(started on demand by `ssh.socket`, always running, or off), key-only login,
+keep my programs running after I disconnect (systemd lingering), Mosh support
+(the `en_US.UTF-8` locale), open this machine from vscode.dev (the VS Code
+tunnel, which also turns on lingering), and only allow SSH and Mosh from my
+local network (UFW). Each one can be turned off, which removes what ctdev
+added. The firewall blocks every other incoming service unless you open its
+ports first, so on a DNS or proxy host run `ctdev configure ssh` without
+`--batch` and leave it off.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 

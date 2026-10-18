@@ -6,12 +6,10 @@ published to the LAN or the internet.
 
 ```bash
 ctdev install zsh git mosh tailscale docker btop
-ctdev configure ssh --batch              # SSH server + key-based auth hardening
-ctdev configure locale --batch           # UTF-8 locale, for Mosh
-ctdev configure linger --batch           # user services keep running after logout
+ctdev configure ssh                      # SSH server, key-only login, Mosh, keep programs
+                                         # running; leave the firewall off (see below)
 ctdev configure sleep --batch            # never suspend
 ctdev configure autoupdate --batch       # automatic security updates
-# skip `ctdev configure ufw`: Docker's iptables rules sit ahead of UFW (see below)
 sudo tailscale up                        # join the tailnet
 ctdev install mcp-email-server           # MCP server that reads your mailboxes over IMAP
 ctdev configure mcp-email-server         # add mailboxes, publish it to the tailnet

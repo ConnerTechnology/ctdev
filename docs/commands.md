@@ -29,12 +29,9 @@ ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
-ctdev configure ssh             # SSH server + key-based auth hardening
-ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
+ctdev configure ssh             # Remote access: SSH server, key-only login, keep programs running,
+                                #   Mosh, vscode.dev tunnel, LAN-only firewall (UFW)
 ctdev configure sleep           # Never-suspend (mask sleep targets)
-ctdev configure locale          # UTF-8 locale (for Mosh)
-ctdev configure linger          # User-service lingering
-ctdev configure tunnel          # VS Code tunnel service
 ctdev configure autoupdate      # Automatic security updates + apt-daily job timeout
 ctdev configure macos           # macOS defaults (Dock/Finder/typing/animations) — macOS only
 ctdev configure keyboard        # Key repeat delay/speed (Cinnamon, macOS) + NumLock on boot

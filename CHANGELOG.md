@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure ssh` is the one place for remote access.** `configure linger`,
+  `locale`, `tunnel` and `ufw` are gone, and their settings joined `ssh` under plain
+  names: SSH server, key-only login, keep my programs running after I disconnect
+  (lingering), Mosh support (the `en_US.UTF-8` locale), open this machine from
+  vscode.dev (the VS Code tunnel), and only allow SSH and Mosh from my local network
+  (UFW). Each one can now be turned off, removing what ctdev added: the SSH server
+  units, the sshd drop-in, lingering, the `en_US.UTF-8` locale if ctdev generated it,
+  the tunnel service, and ctdev's UFW rules (UFW itself turns off only when no other
+  rules are left). Turning on vscode.dev also turns on lingering, which the tunnel
+  needs.
+- **The SSH server defaults to starting on demand** through `ssh.socket` instead of
+  `ssh.service` always running. The setting is a choice of on demand, always on, or
+  off, and installs `openssh-server` when it is missing.
+- **Mosh support no longer changes the system's default language.** It generates
+  `en_US.UTF-8` without running `update-locale`.
+- **`configure ssh --batch` now also applies the firewall**, so on a DNS or proxy
+  host run `ctdev configure ssh` interactively and leave the firewall off. The node
+  recipes say so.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added
