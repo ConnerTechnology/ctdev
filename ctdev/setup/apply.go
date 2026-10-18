@@ -327,9 +327,6 @@ func applyUpdateGrub(ctx context.Context, o sysutil.Opts) error {
 
 // ── Remote access ────────────────────────────────────────────────────────
 
-// sleepTargets are the systemd targets masked to keep an always-on box awake.
-var sleepTargets = []string{"sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"}
-
 // wifiPowersaveConfPath is the NetworkManager drop-in ctdev owns for it.
 const wifiPowersaveConfPath = "/etc/NetworkManager/conf.d/wifi-powersave-off.conf"
 
@@ -337,11 +334,6 @@ const wifiPowersaveConf = `[connection]
 # Managed by ctdev — keep the WiFi adapter from dropping off the network while idle.
 wifi.powersave = 2
 `
-
-// applySuspendMask masks the sleep/suspend/hibernate targets.
-func applySuspendMask(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoRun(ctx, o, "systemctl", append([]string{"mask"}, sleepTargets...)...)
-}
 
 // applyKeepWiFiConnected writes, or for "not installed" removes, the
 // NetworkManager drop-in disabling WiFi power save. It intentionally does NOT

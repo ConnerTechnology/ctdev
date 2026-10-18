@@ -19,7 +19,7 @@ ctdev install zsh git gh node go docker tailscale vscode claude-code tmux   # or
 # 3. apply the system settings you want
 ctdev configure ssh --batch      # SSH server, key-only login, Mosh, keep programs running,
                                  # vscode.dev tunnel (if VS Code is installed), LAN-only firewall
-ctdev configure sleep --batch    # never suspend (always-on box)
+ctdev configure power --batch    # never suspend (always-on box)
 # on a DNS/proxy host (Pi-hole/Caddy), run `ctdev configure ssh` without --batch
 # and leave the firewall off: it blocks every service whose ports aren't opened
 ```

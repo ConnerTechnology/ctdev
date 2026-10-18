@@ -237,19 +237,6 @@ func detectLogitechBolt() bool {
 	return strings.Contains(string(out), "046d:c548")
 }
 
-// detectSuspendMasked reports "enabled" when all sleep targets are masked.
-// `systemctl is-enabled` prints "masked" with a non-zero exit, so the captured
-// stdout is checked rather than the error.
-func detectSuspendMasked(ctx context.Context) string {
-	for _, t := range sleepTargets {
-		out, _ := exec.CommandContext(ctx, "systemctl", "is-enabled", t).Output()
-		if strings.TrimSpace(string(out)) != "masked" {
-			return "disabled"
-		}
-	}
-	return "enabled"
-}
-
 func detectMouseSpeed(ctx context.Context) string {
 	return detectDconfString(ctx, "/org/gnome/desktop/peripherals/mouse/speed")
 }

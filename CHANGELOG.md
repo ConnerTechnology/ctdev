@@ -71,6 +71,23 @@ All notable changes to this project will be documented in this file.
   host run `ctdev configure ssh` interactively and leave the firewall off. The Pi-hole
   recipe says so.
 
+- **`ctdev configure sleep` is gone; "Never suspend, even when asked" is in `ctdev
+  configure power`,** next to the idle-suspend timer, and it can now be turned off, which
+  unmasks the sleep targets. Use `ctdev configure power --batch` where you ran
+  `configure sleep --batch`.
+- **`configure power`'s timers are in minutes and can be set to never.** The display,
+  idle-suspend and screensaver timers take `never` (or `0`), and `--show` reads an
+  idle delay of 0 as "never" instead of "uint32 0". A hand-set timer that isn't whole
+  minutes shows exactly, in seconds ("90 s"). The screensaver timer is now written as the
+  `uint32` its schema expects.
+- **With suspend turned off, the idle-suspend timer and "Lock the screen on suspend" show
+  as not needed** and aren't applied unless you ask for them.
+- **`ctdev configure <category> --show` widens its name column to fit the longest
+  setting name,** so plain names no longer wrap.
+- **`configure power`'s settings have plain names, a one-line why, and new recommended
+  defaults:** balanced power profile, display off after 60 min, never suspend when idle,
+  never start the screensaver.
+
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
   automatic security updates (unattended-upgrades) and the apt daily job timeout. The

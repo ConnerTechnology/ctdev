@@ -265,3 +265,20 @@ func TestCategories(t *testing.T) {
 		}
 	})
 }
+
+func TestInitStatesNotNeeded(t *testing.T) {
+	settings := []Setting{
+		{Name: "needed", Default: "on", NotNeededFn: func(context.Context) string { return "" }},
+		{Name: "not needed", Default: "on", NotNeededFn: func(context.Context) string { return "no reason to" }},
+	}
+	states := InitStates(context.Background(), settings)
+	if states[0].NotNeeded != "" || !states[0].Enabled {
+		t.Errorf("needed setting: NotNeeded=%q Enabled=%v, want \"\" and true", states[0].NotNeeded, states[0].Enabled)
+	}
+	if states[1].NotNeeded != "no reason to" {
+		t.Errorf("NotNeeded = %q, want the reason", states[1].NotNeeded)
+	}
+	if states[1].NeedsApply(false) || states[1].NeedsApply(true) {
+		t.Error("a setting this machine doesn't need must not be applied by default, even with force")
+	}
+}

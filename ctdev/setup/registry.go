@@ -103,9 +103,9 @@ var Registry = []Setting{
 		Name:        "Power profile",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "Sets the system-wide power profile. 'performance' maximizes speed, 'balanced' is the middle ground, 'power-saver' extends battery life.",
+		Description: "Balanced is the middle ground; performance trades power for speed, power-saver the reverse.",
 		Control:     ControlPicker,
-		Default:     "performance",
+		Default:     "balanced",
 		Choices: []PickerChoice{
 			{Value: "performance", Description: "Maximum performance"},
 			{Value: "balanced", Description: "Balance between performance and power"},
@@ -116,42 +116,54 @@ var Registry = []Setting{
 		HardwareFn: gatePowerProfiles,
 	},
 	{
-		Name:        "Display sleep",
+		Name:        "Turn off the display after",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "How long the system waits on AC power before turning off the display.",
+		Description: "Saves power and the panel when nobody is looking, on AC power.",
 		Control:     ControlSlider,
-		Default:     "3600",
-		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
+		Default:     "60",
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
-			return detectDconfInt(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac")
+			return detectDconfMinutes(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v)
+			return applyDconfMinutes(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-display-ac", v, "")
 		},
 		HardwareFn: gateCinnamon,
 	},
 	{
-		Name:        "Inactive sleep",
+		Name:        "Suspend when idle after",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "How long the system waits on AC power with no user activity before suspending.",
+		Description: "Saves power on AC when nobody uses the machine; never keeps it awake for remote use.",
 		Control:     ControlSlider,
-		Default:     "2700",
-		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
+		Default:     SliderNever,
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
-			return detectDconfInt(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
+			return detectDconfMinutes(ctx, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v)
+			return applyDconfMinutes(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/sleep-inactive-ac-timeout", v, "")
 		},
-		HardwareFn: gateCinnamon,
+		HardwareFn:  gateCinnamon,
+		NotNeededFn: suspendNotNeeded,
 	},
 	{
-		Name:        "Lock on suspend",
+		Name:        neverSuspendName,
 		Slug:        "power",
 		Category:    "Power",
-		Description: "Whether the screen locks automatically when the system suspends.",
+		Description: "Keeps an always-on machine reachable: masks systemd's sleep targets so nothing, not even the menu, can suspend it.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  detectSuspendMasked,
+		ApplyFunc:   applyNeverSuspend,
+		HardwareFn:  gateLinux,
+	},
+	{
+		Name:        "Lock the screen on suspend",
+		Slug:        "power",
+		Category:    "Power",
+		Description: "Asks for your password when the machine wakes from suspend.",
 		Control:     ControlToggle,
 		Default:     "true",
 		DetectFunc: func(ctx context.Context) string {
@@ -160,13 +172,14 @@ var Registry = []Setting{
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/cinnamon/settings-daemon/plugins/power/lock-on-suspend", v)
 		},
-		HardwareFn: gateCinnamon,
+		HardwareFn:  gateCinnamon,
+		NotNeededFn: suspendNotNeeded,
 	},
 	{
-		Name:        "Screensaver lock",
+		Name:        "Lock the screen with the screensaver",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "Whether the screensaver locks the screen when it activates.",
+		Description: "Asks for your password when the screensaver ends.",
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc: func(ctx context.Context) string {
@@ -178,18 +191,20 @@ var Registry = []Setting{
 		HardwareFn: gateCinnamon,
 	},
 	{
-		Name:        "Idle delay",
+		Name:        "Start the screensaver after",
 		Slug:        "power",
 		Category:    "Power",
-		Description: "How long the system waits with no input before activating the screensaver.",
+		Description: "Blanks the screen when nobody uses it; never leaves it on.",
 		Control:     ControlSlider,
-		Default:     "1800",
-		Slider:      &SliderRange{Min: 300, Max: 7200, Step: 300, Unit: "s"},
+		Default:     SliderNever,
+		Slider:      minutesTimer(),
 		DetectFunc: func(ctx context.Context) string {
-			return detectDconfInt(ctx, "/org/cinnamon/desktop/session/idle-delay")
+			return detectDconfMinutes(ctx, "/org/cinnamon/desktop/session/idle-delay")
 		},
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyDconf(ctx, o, "/org/cinnamon/desktop/session/idle-delay", v)
+			// idle-delay is a uint32; an untyped write would store an int32
+			// the schema ignores.
+			return applyDconfMinutes(ctx, o, "/org/cinnamon/desktop/session/idle-delay", v, "uint32")
 		},
 		HardwareFn: gateCinnamon,
 	},
@@ -599,23 +614,6 @@ var Registry = []Setting{
 		DetectFunc:  detectUFW,
 		ApplyFunc:   applyUFW,
 		HardwareFn:  gateLinux,
-	},
-
-	// ── Sleep ────────────────────────────────────────────────────────────
-
-	{
-		Name:        "Never suspend",
-		Slug:        "sleep",
-		Category:    "Sleep",
-		Description: "Masks the sleep, suspend, hibernate and hybrid-sleep systemd targets so an always-on machine stays reachable.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "enabled",
-		DetectFunc:  detectSuspendMasked,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySuspendMask(ctx, o)
-		},
-		HardwareFn: gateLinux,
 	},
 
 	// ── Pi-hole DNS ──────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ ctdev configure git             # Configure git user and SSH signing key (instal
 ctdev configure aws             # Pick the AWS profile; offers `aws configure sso` when there is none (installs the AWS CLI first if missing)
 ctdev configure ssh             # Remote access: SSH server, key-only login, keep programs running,
                                 #   Mosh, vscode.dev tunnel, LAN-only firewall (UFW)
-ctdev configure sleep           # Never-suspend (mask sleep targets)
+ctdev configure power           # Power profile, display/suspend/screensaver timers (minutes or never), never suspend
 ctdev configure macos           # macOS defaults (Dock/Finder/typing/animations) — macOS only
 ctdev configure keyboard        # Key repeat delay/speed (Cinnamon, macOS) + NumLock on boot
 ctdev configure audio           # PipeWire sound system, Bluetooth audio (codecs, LDAC), alert sounds

@@ -20,9 +20,11 @@ recommended defaults without asking, which is what you want in a script.
 
 They fall into three groups.
 
-**Machine behavior** — `ssh`, `sleep`, `macos`, `gpu`. These change the
-machine itself: remote access, suspend, macOS defaults (Dock, Finder, typing,
-faster animations), and the NVIDIA driver and MOK signing. Key repeat speed is
+**Machine behavior** — `ssh`, `power`, `macos`, `gpu`. These change the
+machine itself: remote access, power (the power profile, the display,
+idle-suspend and screensaver timers in minutes or never, and "Never suspend,
+even when asked"), macOS defaults (Dock, Finder, typing, faster animations),
+and the NVIDIA driver and MOK signing. Key repeat speed is
 not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and macOS.
 
 **Desktop** — `audio`, `bluetooth`. `bluetooth` installs bluez and Blueman and

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/ConnerTechnology/ctdev/ctdev/setup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -134,29 +136,6 @@ func TestRunCategoryWizardOn_ShowOnlyRendersSetting(t *testing.T) {
 	}
 }
 
-func TestFormatSliderVal(t *testing.T) {
-	tests := []struct {
-		val  float64
-		step float64
-		want string
-	}{
-		{3.0, 1.0, "3"},
-		{10.0, 5.0, "10"},
-		{0.0, 1.0, "0"},
-		{1.5, 0.5, "1.5"},
-		{0.65, 0.05, "0.65"},
-		{0.0, 0.1, "0"},
-		{100.0, 25.0, "100"},
-		{0.999, 0.001, "0.999"},
-	}
-	for _, tt := range tests {
-		got := formatSliderVal(tt.val, tt.step)
-		if got != tt.want {
-			t.Errorf("formatSliderVal(%v, %v) = %q, want %q", tt.val, tt.step, got, tt.want)
-		}
-	}
-}
-
 func TestPromptSlider_EnterDefaults(t *testing.T) {
 	orig := stdinScanner
 	t.Cleanup(func() { stdinScanner = orig })
@@ -248,5 +227,118 @@ func TestApplySettings_MacKeyRepeatNotePrintsOnce(t *testing.T) {
 	}
 	if !strings.Contains(out, "2 applied") {
 		t.Errorf("expected 2 applied; output:\n%s", out)
+	}
+}
+
+func TestPromptSlider_Never(t *testing.T) {
+	orig := stdinScanner
+	t.Cleanup(func() { stdinScanner = orig })
+	ctx := context.Background()
+	slider := &setup.Setting{
+		Name:    "Test timer",
+		Control: setup.ControlSlider,
+		Default: setup.SliderNever,
+		Slider:  &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true},
+	}
+
+	tests := []struct{ input, want string }{
+		{"never", setup.SliderNever},
+		{"Never", setup.SliderNever},
+		{"0", setup.SliderNever},
+		{"3", "5"},
+		{"45", "45"},
+		{"\n", "60"}, // Enter keeps the current value
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			stdinScanner = bufio.NewScanner(strings.NewReader(tt.input + "\n"))
+			st := &setup.SettingState{Setting: slider, CurrentValue: "60", DesiredValue: setup.SliderNever}
+			var got string
+			out := captureStdout(t, func() {
+				var err error
+				got, err = promptSlider(ctx, st)
+				if err != nil {
+					t.Errorf("promptSlider: %v", err)
+				}
+			})
+			if got != tt.want {
+				t.Errorf("promptSlider(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+			if !strings.Contains(out, "never, 5–120min") {
+				t.Errorf("range should offer never; got %q", out)
+			}
+		})
+	}
+}
+
+func TestShowSetting_SliderUnit(t *testing.T) {
+	s := &setup.Setting{
+		Name:    "Test timer",
+		Control: setup.ControlSlider,
+		Default: setup.SliderNever,
+		Slider:  &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true},
+	}
+	out := captureStdout(t, func() { showSetting(&setup.SettingState{Setting: s, CurrentValue: "60"}, wizardLabelWidth) })
+	if !strings.Contains(out, "60 min") || !strings.Contains(out, "recommended: never") {
+		t.Errorf("show = %q, want 60 min and recommended: never", out)
+	}
+	out = captureStdout(t, func() {
+		showSetting(&setup.SettingState{Setting: s, CurrentValue: setup.SliderNever}, wizardLabelWidth)
+	})
+	if strings.Contains(out, "never min") || strings.Contains(out, "recommended") {
+		t.Errorf("show = %q, want a bare never at the recommended value", out)
+	}
+}
+
+func TestShowSetting_NotNeeded(t *testing.T) {
+	s := &setup.Setting{Name: "Lock on suspend", Control: setup.ControlToggle, Default: "true"}
+	st := &setup.SettingState{Setting: s, CurrentValue: "false", NotNeeded: "suspend is turned off, so this has no effect"}
+	out := ansi.Strip(captureStdout(t, func() { showSetting(st, wizardLabelWidth) }))
+	if !strings.Contains(out, "(not needed: suspend is turned off, so this has no effect)") || strings.Contains(out, "recommended") {
+		t.Errorf("show = %q, want the not-needed reason instead of a recommendation", out)
+	}
+}
+
+func TestPromptSetting_NotNeededDefaultsToSkip(t *testing.T) {
+	orig := stdinScanner
+	t.Cleanup(func() { stdinScanner = orig })
+	ctx := context.Background()
+	s := &setup.Setting{Name: "Suspend timer", Control: setup.ControlSlider, Default: setup.SliderNever,
+		Slider: &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true}}
+	reason := "suspend is turned off, so this has no effect"
+
+	// Enter keeps it out of the apply set.
+	stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+	st := &setup.SettingState{Setting: s, CurrentValue: "30", DesiredValue: s.Default, NotNeeded: reason}
+	var changed bool
+	out := ansi.Strip(captureStdout(t, func() {
+		var err error
+		changed, err = promptSetting(ctx, st)
+		if err != nil {
+			t.Errorf("promptSetting: %v", err)
+		}
+	}))
+	if changed || st.Enabled {
+		t.Errorf("Enter on a not-needed setting: changed=%v enabled=%v, want false/false", changed, st.Enabled)
+	}
+	if !strings.Contains(out, "Not needed on this machine: "+reason) {
+		t.Errorf("wizard should give the reason; got %q", out)
+	}
+	if strings.Contains(out, "recommended") {
+		t.Errorf("wizard shouldn't recommend a setting this machine doesn't need; got %q", out)
+	}
+
+	// Yes, then a value, changes it anyway.
+	stdinScanner = bufio.NewScanner(strings.NewReader("y\nnever\n"))
+	st = &setup.SettingState{Setting: s, CurrentValue: "30", DesiredValue: s.Default, NotNeeded: reason}
+	captureStdout(t, func() {
+		var err error
+		changed, err = promptSetting(ctx, st)
+		if err != nil {
+			t.Errorf("promptSetting: %v", err)
+		}
+	})
+	if !changed || !st.Enabled || st.DesiredValue != setup.SliderNever {
+		t.Errorf("yes on a not-needed setting: changed=%v enabled=%v desired=%q, want true/true/never", changed, st.Enabled, st.DesiredValue)
 	}
 }
