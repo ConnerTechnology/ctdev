@@ -28,6 +28,17 @@ typing, faster animations), and the NVIDIA driver and MOK signing. Key repeat
 speed is not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and
 macOS.
 
+**Desktop** — `audio`, `bluetooth`. `bluetooth` installs bluez and Blueman and
+turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
+PulseAudio tools, plus Bluetooth audio (PipeWire's Bluetooth codecs and an LDAC
+config), and switches alert sounds. Neither installs the other's packages.
+Turning a setting off removes only what ctdev added: ctdev records the packages it
+installed and the service changes it made under
+`~/.local/state/ctdev/configure-added/`, and leaves anything the machine already had.
+If removing those packages would also remove one ctdev didn't install (something
+that depends on them), it refuses and names it. Off leaves the dependencies those
+packages pulled in; `sudo apt autoremove` cleans them up.
+
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 Each needs its tool: on a machine without git or the AWS CLI, it asks "Git isn't
 installed. Install it now? [Y/n]" (or "AWS CLI isn't…") and installs the `git` or

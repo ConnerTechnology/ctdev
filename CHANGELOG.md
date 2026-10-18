@@ -32,6 +32,19 @@ All notable changes to this project will be documented in this file.
   isn't…"). With `--batch` they install without asking.
 - **`ctdev configure aws` with no profiles** in `~/.aws/config` offers to run
   `aws configure sso` instead of exiting.
+- **`ctdev configure bluetooth` sets up only Bluetooth, and `configure audio` only audio.**
+  `bluetooth` installs bluez and Blueman ("Bluetooth support") and turns on
+  `bluetooth.service` ("Bluetooth on at startup"), so on a machine without bluez it now
+  installs it before enabling the service. `audio` installs PipeWire, WirePlumber and the
+  PulseAudio tools ("Sound system (PipeWire)"), PipeWire's Bluetooth codecs ("Bluetooth
+  headphones"), the LDAC config ("Hi-fi Bluetooth audio") and switches "Alert sounds".
+  Installs skip apt's recommends, so Blueman no longer pulls in
+  `pulseaudio-module-bluetooth`. Each setting has a one-line reason, shows only on a
+  machine with the hardware it needs (a Bluetooth adapter, a sound card), and can be
+  turned off: off removes only the packages and service changes ctdev recorded adding,
+  under `~/.local/state/ctdev/configure-added/`, or the LDAC config file. A removal that
+  would also take a package ctdev didn't install is refused, and the dependencies an
+  install pulled in stay until `sudo apt autoremove`.
 
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:

@@ -37,6 +37,8 @@ ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service
 ctdev configure macos           # macOS defaults (Dock/Finder/typing/animations) — macOS only
 ctdev configure keyboard        # Key repeat delay/speed (Cinnamon, macOS) + NumLock on boot
+ctdev configure audio           # PipeWire sound system, Bluetooth audio (codecs, LDAC), alert sounds
+ctdev configure bluetooth       # bluez + Blueman, and bluetooth.service on at startup
 ctdev configure storage         # Weekly SSD TRIM (fstrim.timer) — only on machines with an SSD
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)

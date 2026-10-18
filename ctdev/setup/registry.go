@@ -356,65 +356,47 @@ var Registry = []Setting{
 	// ── Audio ──────────────────────────────────────────────────────────
 
 	{
-		Name:        "Bluetooth/audio packages",
+		Name:        "Sound system (PipeWire)",
 		Slug:        "audio",
 		Category:    "Audio",
-		Description: "Installs the core Bluetooth and audio stack: PipeWire, WirePlumber, Bluetooth codecs, and PulseAudio compatibility.",
+		Description: "Installs PipeWire, WirePlumber and the PulseAudio tools, so apps play sound and you can control it from the desktop and the command line.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(ctx context.Context) string {
-			pkgs := []string{"pipewire-audio", "bluez", "blueman", "libspa-0.2-bluetooth", "pulseaudio-utils"}
-			for _, p := range pkgs {
-				if !detectPackageInstalled(ctx, p) {
-					return "not installed"
-				}
-			}
-			return "installed"
+		DetectFunc:  func(ctx context.Context) string { return detectPackages(ctx, soundSystemPackages) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyOwnedPackages(ctx, o, "sound-system", soundSystemPackages, v)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyPackages(ctx, o, []string{
-				"pipewire-audio", "bluez", "blueman",
-				"libspa-0.2-bluetooth", "pulseaudio-utils",
-			})
-		},
-		HardwareFn: gateDesktop,
+		HardwareFn: allOf(gateDesktop, gateSoundCard),
 	},
 	{
-		Name:        "Bluetooth service",
-		Slug:        "bluetooth",
-		Category:    "Bluetooth",
-		Description: "Enables and starts the system Bluetooth daemon so devices can pair and connect.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "active",
-		DetectFunc:  func(ctx context.Context) string { return detectSystemdService(ctx, "bluetooth.service") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applySystemdEnable(ctx, o, "bluetooth.service")
-		},
-		HardwareFn: gateLinux,
-	},
-	{
-		Name:        "WirePlumber LDAC config",
+		Name:        "Bluetooth headphones",
 		Slug:        "audio",
 		Category:    "Audio",
-		Description: "Copies a WirePlumber config that prioritizes LDAC codec for high-quality Bluetooth audio, then restarts the PipeWire stack.",
+		Description: "Installs PipeWire's Bluetooth codecs, so Bluetooth headphones and speakers play sound instead of only pairing.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(_ context.Context) string {
-			return detectFileExists("/etc/wireplumber/wireplumber.conf.d/51-ldac-hq.conf")
+		DetectFunc:  func(ctx context.Context) string { return detectPackages(ctx, bluetoothAudioPackages) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyOwnedPackages(ctx, o, "bluetooth-audio", bluetoothAudioPackages, v)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyWireplumberLDAC(ctx, o)
-		},
-		HardwareFn: gateDesktop,
+		HardwareFn: allOf(gateDesktop, gateBluetoothAdapter),
 	},
 	{
-		Name:        "Event sounds",
+		Name:        "Hi-fi Bluetooth audio",
 		Slug:        "audio",
 		Category:    "Audio",
-		Description: "Controls whether desktop event sounds (alerts, notifications) play.",
+		Description: "Prefers the LDAC codec and the high-fidelity profile, so Bluetooth headphones sound their best instead of phone-call quality.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func(_ context.Context) string { return detectFileExists(ldacConfPath) },
+		ApplyFunc:   applyLDAC,
+		HardwareFn:  allOf(gateDesktop, gateBluetoothAdapter),
+	},
+	{
+		Name:        "Alert sounds",
+		Slug:        "audio",
+		Category:    "Audio",
+		Description: "Plays a sound for desktop alerts and notifications. Off keeps the desktop quiet.",
 		Control:     ControlToggle,
 		Default:     "false",
 		DetectFunc: func(ctx context.Context) string {
@@ -424,6 +406,33 @@ var Registry = []Setting{
 			return applyDconf(ctx, o, "/org/cinnamon/desktop/sound/event-sounds", v)
 		},
 		HardwareFn: gateCinnamon,
+	},
+
+	// ── Bluetooth ──────────────────────────────────────────────────────
+
+	{
+		Name:        "Bluetooth support",
+		Slug:        "bluetooth",
+		Category:    "Bluetooth",
+		Description: "Installs bluez and Blueman, so you can pair and manage Bluetooth devices from the desktop.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  func(ctx context.Context) string { return detectPackages(ctx, bluetoothPackages) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyOwnedPackages(ctx, o, "bluetooth", bluetoothPackages, v)
+		},
+		HardwareFn: allOf(gateDesktop, gateBluetoothAdapter),
+	},
+	{
+		Name:        "Bluetooth on at startup",
+		Slug:        "bluetooth",
+		Category:    "Bluetooth",
+		Description: "Runs the Bluetooth service now and at every boot, so paired devices connect without a trip to the settings.",
+		Control:     ControlToggle,
+		Default:     "active",
+		DetectFunc:  detectBluetoothService,
+		ApplyFunc:   applyBluetoothService,
+		HardwareFn:  allOf(gateDesktop, gateBluetoothAdapter),
 	},
 
 	// ── Desktop ────────────────────────────────────────────────────────
