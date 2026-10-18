@@ -19,6 +19,9 @@ type SliderRange struct {
 	Max  float64
 	Step float64
 	Unit string // "ms", "s", "min", "cps", ""
+	// Never adds a "never" value (SliderNever) one step below Min, for
+	// timers where 0 means "don't do it at all".
+	Never bool
 }
 
 type PickerChoice struct {

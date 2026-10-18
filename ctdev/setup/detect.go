@@ -260,19 +260,6 @@ func detectUTF8Locale(ctx context.Context) string {
 	return "not installed"
 }
 
-// detectSuspendMasked reports "enabled" when all sleep targets are masked.
-// `systemctl is-enabled` prints "masked" with a non-zero exit, so the captured
-// stdout is checked rather than the error.
-func detectSuspendMasked(ctx context.Context) string {
-	for _, t := range sleepTargets {
-		out, _ := exec.CommandContext(ctx, "systemctl", "is-enabled", t).Output()
-		if strings.TrimSpace(string(out)) != "masked" {
-			return "disabled"
-		}
-	}
-	return "enabled"
-}
-
 // detectLinger reports whether systemd lingering is enabled for the current user.
 func detectLinger(ctx context.Context) string {
 	u, err := user.Current()

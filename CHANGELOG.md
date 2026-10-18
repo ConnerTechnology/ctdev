@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev configure sleep` is gone; "Never suspend, even when asked" is in `ctdev
+  configure power`,** next to the idle-suspend timer, and it can now be turned off, which
+  unmasks the sleep targets. Use `ctdev configure power --batch` where you ran
+  `configure sleep --batch`.
+- **`configure power`'s timers are in minutes and can be set to never.** The display,
+  idle-suspend and screensaver timers take `never` (or `0`), and `--show` reads an
+  idle delay of 0 as "never" instead of "uint32 0". The screensaver timer is now written
+  as the `uint32` its schema expects.
+- **`configure power`'s settings have plain names, a one-line why, and new recommended
+  defaults:** balanced power profile, display off after 60 min, never suspend when idle,
+  never start the screensaver.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added

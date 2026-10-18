@@ -12,7 +12,7 @@ ctdev install zsh git mosh tailscale smartmontools btop   # base tools, disk hea
 ctdev configure ssh --batch              # SSH server + key-based auth hardening
 ctdev configure locale --batch           # UTF-8 locale, for Mosh
 ctdev configure linger --batch           # user services keep running after logout
-ctdev configure sleep --batch            # never suspend
+ctdev configure power --batch            # never suspend
 ctdev configure autoupdate --batch       # automatic security updates
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker

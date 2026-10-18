@@ -396,9 +396,8 @@ func (m *Model) footerView() string {
 			detail += fmt.Sprintf(" · Recommended: %s", s.Default)
 		}
 		if r := s.Slider; r != nil {
-			detail += fmt.Sprintf(" · Range: %s–%s%s (←/→ step %s)",
-				setup.FormatSliderVal(r.Min, r.Step), setup.FormatSliderVal(r.Max, r.Step), r.Unit,
-				setup.FormatSliderVal(r.Step, r.Step))
+			detail += fmt.Sprintf(" · Range: %s (←/→ step %s)",
+				setup.SliderRangeLabel(r), setup.FormatSliderVal(r.Step, r.Step))
 		}
 		b.WriteString("  " + styles.Help.Render(detail) + "\n")
 	}

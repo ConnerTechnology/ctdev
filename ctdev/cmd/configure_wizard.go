@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/setup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -28,7 +29,6 @@ var slugDescriptions = map[string]string{
 	"ssh":        "SSH",
 	"ufw":        "Firewall (UFW)",
 	"locale":     "Locale",
-	"sleep":      "Sleep & Suspend",
 	"linger":     "Service Lingering",
 	"tunnel":     "VS Code Tunnel",
 	"autoupdate": "Automatic Updates",
@@ -51,7 +51,10 @@ func slugDescription(slug string) string {
 	return slug
 }
 
-var wizardLabelStyle = styles.Label(26)
+// wizardLabelWidth is the narrowest --show label column; a category with a
+// longer setting name widens it so plain names never wrap.
+const wizardLabelWidth = 26
+
 var wizardValueStyle = styles.Value
 var wizardHeaderStyle = styles.Header
 
@@ -93,8 +96,12 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 	fmt.Println()
 
 	if showOnly {
+		width := wizardLabelWidth
 		for i := range states {
-			showSetting(&states[i])
+			width = max(width, len(states[i].Setting.Name)+1)
+		}
+		for i := range states {
+			showSetting(&states[i], width)
 		}
 		fmt.Println()
 		return nil
@@ -143,15 +150,16 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
 
-// showSetting displays the current value of a setting (read-only).
-func showSetting(state *setup.SettingState) {
+// showSetting displays the current value of a setting (read-only), with its
+// name in a label column width wide.
+func showSetting(state *setup.SettingState, width int) {
 	s := state.Setting
-	label := wizardLabelStyle.Render(s.Name)
-	value := wizardValueStyle.Render(state.CurrentValue)
+	label := styles.Label(width).Render(s.Name)
+	value := wizardValueStyle.Render(setup.DisplayValue(s, state.CurrentValue))
 
 	marker := ""
 	if state.CurrentValue != s.Default {
-		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", s.Default))
+		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", setup.DisplayValue(s, s.Default)))
 	}
 	fmt.Printf("  %s %s%s\n", label, value, marker)
 }
@@ -167,10 +175,10 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 	if s.Default != "" && s.Default != current {
 		// Default is documented as "our recommended value" — say so; --batch
 		// applies exactly these.
-		fmt.Printf("  %s %s %s\n", styles.Dimmed.Render("Current:"), current,
-			styles.Dimmed.Render(fmt.Sprintf("(recommended: %s)", s.Default)))
+		fmt.Printf("  %s %s %s\n", styles.Dimmed.Render("Current:"), setup.DisplayValue(s, current),
+			styles.Dimmed.Render(fmt.Sprintf("(recommended: %s)", setup.DisplayValue(s, s.Default))))
 	} else {
-		fmt.Printf("  %s %s\n", styles.Dimmed.Render("Current:"), current)
+		fmt.Printf("  %s %s\n", styles.Dimmed.Render("Current:"), setup.DisplayValue(s, current))
 	}
 
 	// One-way settings (install/enable actions with no off path) get a single
@@ -320,14 +328,8 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 		return state.CurrentValue, nil
 	}
 
-	unit := ""
-	if r.Unit != "" {
-		unit = r.Unit
-	}
-
-	fmt.Printf("  %s range: %s–%s%s (step %s)\n",
-		styles.Dimmed.Render("Valid"),
-		formatSliderVal(r.Min, r.Step), formatSliderVal(r.Max, r.Step), unit,
+	fmt.Printf("  %s range: %s (step %s)\n",
+		styles.Dimmed.Render("Valid"), setup.SliderRangeLabel(r),
 		formatSliderVal(r.Step, r.Step))
 	// Enter keeps the current value; when nothing is set yet there is nothing
 	// to keep, so Enter takes the recommended value instead.
@@ -348,7 +350,13 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 		return enterValue, nil
 	}
 
+	if r.Never && strings.EqualFold(input, setup.SliderNever) {
+		return setup.SliderNever, nil
+	}
 	val, err := strconv.ParseFloat(input, 64)
+	if r.Never && err == nil && val == 0 {
+		return setup.SliderNever, nil
+	}
 	if err != nil {
 		fmt.Printf("  %s\n", styles.Dimmed.Render("Invalid number, keeping current value."))
 		return state.CurrentValue, nil

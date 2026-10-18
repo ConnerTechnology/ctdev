@@ -31,7 +31,7 @@ ctdev configure git             # Configure git user and SSH signing key
 ctdev configure aws             # Configure AWS profile
 ctdev configure ssh             # SSH server + key-based auth hardening
 ctdev configure ufw             # UFW firewall (SSH/Mosh from private ranges)
-ctdev configure sleep           # Never-suspend (mask sleep targets)
+ctdev configure power           # Power profile, display/suspend/screensaver timers (minutes or never), never suspend
 ctdev configure locale          # UTF-8 locale (for Mosh)
 ctdev configure linger          # User-service lingering
 ctdev configure tunnel          # VS Code tunnel service

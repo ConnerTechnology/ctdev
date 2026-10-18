@@ -250,3 +250,63 @@ func TestApplySettings_MacKeyRepeatNotePrintsOnce(t *testing.T) {
 		t.Errorf("expected 2 applied; output:\n%s", out)
 	}
 }
+
+func TestPromptSlider_Never(t *testing.T) {
+	orig := stdinScanner
+	t.Cleanup(func() { stdinScanner = orig })
+	ctx := context.Background()
+	slider := &setup.Setting{
+		Name:    "Test timer",
+		Control: setup.ControlSlider,
+		Default: setup.SliderNever,
+		Slider:  &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true},
+	}
+
+	tests := []struct{ input, want string }{
+		{"never", setup.SliderNever},
+		{"Never", setup.SliderNever},
+		{"0", setup.SliderNever},
+		{"3", "5"},
+		{"45", "45"},
+		{"\n", "60"}, // Enter keeps the current value
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			stdinScanner = bufio.NewScanner(strings.NewReader(tt.input + "\n"))
+			st := &setup.SettingState{Setting: slider, CurrentValue: "60", DesiredValue: setup.SliderNever}
+			var got string
+			out := captureStdout(t, func() {
+				var err error
+				got, err = promptSlider(ctx, st)
+				if err != nil {
+					t.Errorf("promptSlider: %v", err)
+				}
+			})
+			if got != tt.want {
+				t.Errorf("promptSlider(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+			if !strings.Contains(out, "never, 5–120min") {
+				t.Errorf("range should offer never; got %q", out)
+			}
+		})
+	}
+}
+
+func TestShowSetting_SliderUnit(t *testing.T) {
+	s := &setup.Setting{
+		Name:    "Test timer",
+		Control: setup.ControlSlider,
+		Default: setup.SliderNever,
+		Slider:  &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true},
+	}
+	out := captureStdout(t, func() { showSetting(&setup.SettingState{Setting: s, CurrentValue: "60"}, wizardLabelWidth) })
+	if !strings.Contains(out, "60 min") || !strings.Contains(out, "recommended: never") {
+		t.Errorf("show = %q, want 60 min and recommended: never", out)
+	}
+	out = captureStdout(t, func() {
+		showSetting(&setup.SettingState{Setting: s, CurrentValue: setup.SliderNever}, wizardLabelWidth)
+	})
+	if strings.Contains(out, "never min") || strings.Contains(out, "recommended") {
+		t.Errorf("show = %q, want a bare never at the recommended value", out)
+	}
+}

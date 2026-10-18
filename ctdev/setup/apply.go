@@ -419,9 +419,6 @@ func applyUpdateGrub(ctx context.Context, o sysutil.Opts) error {
 // enforcement is delegated to the gateway firewall (see remote-access design).
 var lanCIDRs = []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"}
 
-// sleepTargets are the systemd targets masked to keep an always-on box awake.
-var sleepTargets = []string{"sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"}
-
 const sshdDropIn = "/etc/ssh/sshd_config.d/99-ctdev.conf"
 
 const sshHardeningConf = `# Managed by ctdev — remote access (key-based SSH)
@@ -503,11 +500,6 @@ func applyUTF8Locale(ctx context.Context, o sysutil.Opts) error {
 		return fmt.Errorf("locale-gen: %w", err)
 	}
 	return sysutil.SudoRun(ctx, o, "update-locale", "LANG=en_US.UTF-8")
-}
-
-// applySuspendMask masks the sleep/suspend/hibernate targets.
-func applySuspendMask(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.SudoRun(ctx, o, "systemctl", append([]string{"mask"}, sleepTargets...)...)
 }
 
 // applyWifiPowersaveOff writes a NetworkManager drop-in disabling WiFi power

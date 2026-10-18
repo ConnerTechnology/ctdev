@@ -18,7 +18,7 @@ ctdev install zsh git gh node go docker tailscale vscode claude-code tmux   # or
 
 # 3. apply the system settings you want
 ctdev configure ssh --batch      # SSH server + key-based auth hardening
-ctdev configure sleep --batch    # never suspend (always-on box)
+ctdev configure power --batch    # never suspend (always-on box)
 ctdev configure locale --batch   # en_US.UTF-8 (for Mosh)
 ctdev configure linger --batch   # keep user services alive without a login
 ctdev configure tunnel --batch   # VS Code tunnel (optional)
