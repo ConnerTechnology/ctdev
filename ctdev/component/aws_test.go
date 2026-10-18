@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -131,6 +132,12 @@ func TestAWSEmbeddedKeyIsAWSCLITeam(t *testing.T) {
 
 // A zip whose signature doesn't check out must never reach aws/install.
 func TestAWSVerifySignatureRejectsBadSignature(t *testing.T) {
+	// Only Linux verifies the zip; macOS installs through Homebrew. gpg's
+	// import also fails on macOS runners, where long temp paths break its
+	// agent socket.
+	if runtime.GOOS != "linux" {
+		t.Skip("signature check runs only on Linux")
+	}
 	if _, err := exec.LookPath("gpg"); err != nil {
 		t.Skip("gpg not installed")
 	}
