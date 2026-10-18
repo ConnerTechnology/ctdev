@@ -148,10 +148,21 @@ func detectPackages(ctx context.Context, pkgs []string) string {
 // it would take anything ctdev didn't install.
 func applyOwnedPackages(ctx context.Context, o sysutil.Opts, key string, pkgs []string, v string) error {
 	if v == "not installed" {
-		added := readAdded(key)
-		if len(added) == 0 {
+		recorded := readAdded(key)
+		if len(recorded) == 0 {
 			fmt.Fprintf(o.Stdout, "  ctdev didn't install %s; leaving them in place.\n", strings.Join(pkgs, ", "))
 			return nil
+		}
+		// Packages removed since are dropped: apt can't simulate removing a
+		// package it no longer knows, and there is nothing left to undo.
+		var added []string
+		for _, p := range recorded {
+			if packageInstalled(ctx, p) {
+				added = append(added, p)
+			}
+		}
+		if len(added) == 0 {
+			return clearAdded(o, key)
 		}
 		plan, err := simulateRemove(ctx, added)
 		if err != nil {
@@ -168,7 +179,7 @@ func applyOwnedPackages(ctx context.Context, o sysutil.Opts, key string, pkgs []
 			}
 		}
 		if len(blockers) > 0 {
-			return fmt.Errorf("removing %s would also remove %s, which ctdev didn't install; leaving them in place",
+			return fmt.Errorf("removing %s would also remove %s, which ctdev didn't install; remove those first, or keep this setting on",
 				strings.Join(added, ", "), strings.Join(blockers, ", "))
 		}
 		args := append([]string{"apt-get", "remove", "-y", "-qq"}, added...)

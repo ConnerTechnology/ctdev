@@ -3,6 +3,7 @@ package setup
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -232,6 +233,7 @@ func TestPackageSettingsOffRemovesOnlyWhatCtdevAdded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeAudioHost(t, true)
 			logged := fakeRoot(t)
+			packageInstalled = func(context.Context, string) bool { return true }
 			if err := recordAdded(sysutil.Opts{}, tt.key, tt.recorded...); err != nil {
 				t.Fatal(err)
 			}
@@ -396,6 +398,7 @@ func TestPackageSettingOffRefusesWhenRemovalTakesMore(t *testing.T) {
 	if err := recordAdded(sysutil.Opts{}, "bluetooth-audio", "libspa-0.2-bluetooth"); err != nil {
 		t.Fatal(err)
 	}
+	packageInstalled = func(context.Context, string) bool { return true }
 	// The user installed pipewire-audio later; it hard-depends on the codecs.
 	simulateRemove = func(context.Context, []string) (string, error) {
 		return removalPlan("pipewire-audio", "libspa-0.2-bluetooth"), nil
@@ -405,6 +408,9 @@ func TestPackageSettingOffRefusesWhenRemovalTakesMore(t *testing.T) {
 	err := s.ApplyFunc(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}, "not installed")
 	if err == nil || !strings.Contains(err.Error(), "pipewire-audio") {
 		t.Fatalf("want a refusal naming pipewire-audio, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "remove those first, or keep this setting on") {
+		t.Errorf("want a hint on what to do, got %v", err)
 	}
 	if out := logged(); strings.Contains(out, "apt-get remove") {
 		t.Errorf("nothing should be removed, ran:\n%s", out)
@@ -503,4 +509,55 @@ func TestDetectBluetoothServiceNeedsEnabledAndRunning(t *testing.T) {
 			t.Errorf("%s + %s: got %q, want %q", tt.enabled, tt.active, got, tt.want)
 		}
 	}
+}
+
+func TestPackageSettingOffSkipsPackagesAlreadyGone(t *testing.T) {
+	t.Run("some gone", func(t *testing.T) {
+		fakeAudioHost(t, true)
+		logged := fakeRoot(t)
+		packageInstalled = func(_ context.Context, p string) bool { return p == "bluez" }
+		var simulated []string
+		simulateRemove = func(_ context.Context, pkgs []string) (string, error) {
+			simulated = pkgs
+			return removalPlan(pkgs...), nil
+		}
+		if err := recordAdded(sysutil.Opts{}, "bluetooth", "bluez", "blueman"); err != nil {
+			t.Fatal(err)
+		}
+
+		s := settingByName(t, "Bluetooth support")
+		if err := s.ApplyFunc(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}, "not installed"); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(simulated, " "); got != "bluez" {
+			t.Errorf("simulated removing %q, want only the installed %q", got, "bluez")
+		}
+		if out := logged(); !strings.HasSuffix(out, "apt-get remove -y -qq bluez\n") {
+			t.Errorf("want only bluez removed, ran:\n%s", out)
+		}
+		if got := readAdded("bluetooth"); len(got) != 0 {
+			t.Errorf("record not cleared: %v", got)
+		}
+	})
+	t.Run("all gone", func(t *testing.T) {
+		fakeAudioHost(t, true)
+		logged := fakeRoot(t)
+		simulateRemove = func(context.Context, []string) (string, error) {
+			return "", errors.New("E: Unable to locate package blueman")
+		}
+		if err := recordAdded(sysutil.Opts{}, "bluetooth", "bluez", "blueman"); err != nil {
+			t.Fatal(err)
+		}
+
+		s := settingByName(t, "Bluetooth support")
+		if err := s.ApplyFunc(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}, "not installed"); err != nil {
+			t.Fatalf("packages already gone should just clear the record, got %v", err)
+		}
+		if out := logged(); out != "" {
+			t.Errorf("nothing should run, ran:\n%s", out)
+		}
+		if got := readAdded("bluetooth"); len(got) != 0 {
+			t.Errorf("record not cleared: %v", got)
+		}
+	})
 }
