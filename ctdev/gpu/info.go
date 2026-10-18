@@ -1,6 +1,7 @@
 package gpu
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
@@ -18,24 +19,32 @@ type StatusCheck struct {
 
 // GatherStatus runs all GPU signing detection checks and returns structured results.
 // If Secure Boot is disabled, it returns early with just that check since signing is not needed.
-func GatherStatus() []StatusCheck {
+func GatherStatus(ctx context.Context) []StatusCheck {
 	var checks []StatusCheck
 
-	// 1. Secure Boot
-	sbEnabled := IsSecureBootEnabled()
-	if !sbEnabled {
+	// 1. Secure Boot. When its state can't be read, the signing checks
+	// still run: signing may be needed.
+	switch SecureBootState(ctx) {
+	case SecureBootOff:
 		checks = append(checks, StatusCheck{
 			Name:   "Secure Boot",
 			Pass:   true,
 			Detail: "disabled (signing not required)",
 		})
 		return checks
+	case SecureBootOn:
+		checks = append(checks, StatusCheck{
+			Name:   "Secure Boot",
+			Pass:   true,
+			Detail: "enabled",
+		})
+	default:
+		checks = append(checks, StatusCheck{
+			Name:   "Secure Boot",
+			Pass:   false,
+			Detail: "unknown (mokutil can't tell)",
+		})
 	}
-	checks = append(checks, StatusCheck{
-		Name:   "Secure Boot",
-		Pass:   true,
-		Detail: "enabled",
-	})
 
 	// 2. NVIDIA driver
 	nvidiaLoaded := IsNvidiaLoaded()
@@ -154,7 +163,7 @@ func GatherStatus() []StatusCheck {
 }
 
 // ShowHardwareInfo writes detailed GPU hardware info to w.
-func ShowHardwareInfo(w io.Writer) {
+func ShowHardwareInfo(ctx context.Context, w io.Writer) {
 	indent := "  "
 
 	if runtime.GOOS == "darwin" {
@@ -162,7 +171,7 @@ func ShowHardwareInfo(w io.Writer) {
 		return
 	}
 
-	showLinuxHardwareInfo(w, indent)
+	showLinuxHardwareInfo(ctx, w, indent)
 }
 
 func showMacHardwareInfo(w io.Writer, indent string) {
@@ -187,7 +196,7 @@ func showMacHardwareInfo(w io.Writer, indent string) {
 	}
 }
 
-func showLinuxHardwareInfo(w io.Writer, indent string) {
+func showLinuxHardwareInfo(ctx context.Context, w io.Writer, indent string) {
 	// Check if NVIDIA hardware is present via lspci
 	hasNvidiaHW := false
 	lspciOut, lspciErr := exec.Command("lspci").Output()
@@ -204,7 +213,7 @@ func showLinuxHardwareInfo(w io.Writer, indent string) {
 		if IsNvidiaLoaded() {
 			showNvidiaDetailedInfo(w, indent)
 		} else {
-			showNvidiaUnloadedInfo(w, indent)
+			showNvidiaUnloadedInfo(ctx, w, indent)
 		}
 
 		// Show any other GPUs (AMD/Intel) via lspci
@@ -315,7 +324,7 @@ func showNvidiaDetailedInfo(w io.Writer, indent string) {
 	}
 }
 
-func showNvidiaUnloadedInfo(w io.Writer, indent string) {
+func showNvidiaUnloadedInfo(ctx context.Context, w io.Writer, indent string) {
 	model := getGPUModel()
 	fmt.Fprintf(w, "%sNVIDIA: %s\n", indent, orDefault(model, "Unknown NVIDIA GPU"))
 	fmt.Fprintf(w, "%s  Driver: Not loaded\n", indent)
@@ -325,7 +334,7 @@ func showNvidiaUnloadedInfo(w io.Writer, indent string) {
 		fmt.Fprintf(w, "%s  Status: Using software rendering (llvmpipe)\n", indent)
 	}
 
-	if IsSecureBootEnabled() {
+	if SecureBootState(ctx) == SecureBootOn {
 		fmt.Fprintf(w, "%s  Note: Secure Boot enabled - driver may need signing\n", indent)
 	}
 }

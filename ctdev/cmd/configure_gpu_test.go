@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
 	"github.com/ConnerTechnology/ctdev/ctdev/setup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -27,6 +28,13 @@ func fakeBins(t *testing.T, scripts map[string]string) {
 		}
 	}
 	t.Setenv("PATH", dir)
+}
+
+// uefi makes this test's "machine" boot through UEFI, whatever the host
+// running the test does, so mokutil's answer is what counts.
+func uefi(t *testing.T) {
+	t.Helper()
+	gpu.SetEFIDirForTest(t, t.TempDir())
 }
 
 // plain strips styling and folds wrapped lines, so a test can look for a
@@ -55,6 +63,7 @@ func gpuSettingsForTest(applied *[]string) []setup.Setting {
 // With Secure Boot off and suspend masked, what --batch runs (InitStates then
 // applySettings) applies neither gpu setting, even with --force.
 func TestGPUBatch_SkipsSettingsThisMachineDoesNotNeed(t *testing.T) {
+	uefi(t)
 	fakeBins(t, map[string]string{
 		"mokutil":   `echo "SecureBoot disabled"`,
 		"systemctl": `echo masked; exit 1`,
@@ -77,6 +86,7 @@ func TestGPUBatch_SkipsSettingsThisMachineDoesNotNeed(t *testing.T) {
 
 // With Secure Boot on and suspend allowed, --batch applies both.
 func TestGPUBatch_AppliesSettingsThisMachineNeeds(t *testing.T) {
+	uefi(t)
 	fakeBins(t, map[string]string{
 		"mokutil":   `echo "SecureBoot enabled"`,
 		"systemctl": `echo static`,
@@ -95,6 +105,7 @@ func TestGPUBatch_AppliesSettingsThisMachineNeeds(t *testing.T) {
 }
 
 func TestGPUShow_SaysWhyAndWhetherNeeded(t *testing.T) {
+	uefi(t)
 	fakeBins(t, map[string]string{
 		"mokutil":   `echo "SecureBoot disabled"`,
 		"systemctl": `echo masked; exit 1`,
@@ -123,6 +134,7 @@ func TestGPUShow_SaysWhyAndWhetherNeeded(t *testing.T) {
 }
 
 func TestGPUWizard_NotNeededDefaultsToSkip(t *testing.T) {
+	uefi(t)
 	fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot disabled"`})
 	var applied []string
 	settings := gpuSettingsForTest(&applied)[:1]
@@ -147,7 +159,8 @@ func TestGPUWizard_NotNeededDefaultsToSkip(t *testing.T) {
 		}
 	}
 
-	// Answering yes applies it anyway, with no second question.
+	// Answering yes queues it; TestGPUWizard_ApplyAnywayAsksOnce follows it
+	// through the real apply.
 	stdinScanner = bufio.NewScanner(strings.NewReader("y\n"))
 	st = &setup.InitStates(ctx, settings)[0]
 	captureStdout(t, func() {
@@ -163,6 +176,7 @@ func TestGPUWizard_NotNeededDefaultsToSkip(t *testing.T) {
 }
 
 func TestGPUWizard_NeededSaysWhyNoOffSwitch(t *testing.T) {
+	uefi(t)
 	fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot enabled"`})
 	var applied []string
 	settings := gpuSettingsForTest(&applied)[:1]
@@ -183,19 +197,67 @@ func TestGPUWizard_NeededSaysWhyNoOffSwitch(t *testing.T) {
 	}
 }
 
-// `configure gpu` runs the signing flow after the settings; with Secure Boot
-// off it skips it and says why, rather than asking again.
-func TestRunGPUSigning_SkipsWhenSecureBootOff(t *testing.T) {
+// Saying yes to "Apply anyway?" runs the real signing setup without it asking
+// about Secure Boot again. Nothing but a fake mokutil is on PATH, so setup
+// stops at its DKMS check before touching anything.
+func TestGPUWizard_ApplyAnywayAsksOnce(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("GPU setup is Linux-only")
 	}
+	uefi(t)
 	fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot disabled"`})
-	var err error
-	out := plain(captureStdout(t, func() { err = runGPUSigning(context.Background(), false) }))
+	settings := setup.FilterBySlug(setup.Registry, "gpu")[:1]
+	settings[0].HardwareFn = nil
+	settings[0].DetectFunc = func(context.Context) string { return "unsigned" }
+	ctx := context.Background()
+	states := setup.InitStates(ctx, settings)
+
+	// Were RunSetup to ask again, it would read this "no" from os.Stdin.
+	r, w, err := os.Pipe()
 	if err != nil {
-		t.Fatalf("runGPUSigning: %v", err)
+		t.Fatal(err)
 	}
-	if !strings.Contains(out, "Driver signing not needed: Secure Boot is off") || strings.Contains(out, "GPU Signing Setup") {
-		t.Errorf("want the skip note and no signing setup; got %q", out)
+	w.WriteString("n\n")
+	w.Close()
+	oldStdin := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = oldStdin })
+
+	stdinScanner = bufio.NewScanner(strings.NewReader("y\n"))
+	out := plain(captureStdout(t, func() {
+		if _, err := promptSetting(ctx, &states[0]); err != nil {
+			t.Errorf("promptSetting: %v", err)
+		}
+		if err := applySettings(ctx, states, false, false, false); err != nil {
+			t.Errorf("applySettings: %v", err)
+		}
+	}))
+	if n := strings.Count(out, "anyway"); n != 1 {
+		t.Errorf("want one 'anyway' question, got %d; output %q", n, out)
+	}
+	if !strings.Contains(out, "NVIDIA DKMS module not found") {
+		t.Errorf("want the real signing setup to run (and stop at DKMS); got %q", out)
+	}
+}
+
+// After the settings, `configure gpu` runs the signing flow only when it's
+// needed. --batch says why it skipped; the wizard already said so.
+func TestGPUSigningNeeded(t *testing.T) {
+	ctx := context.Background()
+	uefi(t)
+	fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot disabled"`})
+	var needed bool
+	out := plain(captureStdout(t, func() { needed = gpuSigningNeeded(ctx, true) }))
+	if needed || !strings.Contains(out, "Driver signing not needed: Secure Boot is off") {
+		t.Errorf("batch, Secure Boot off: needed=%v out=%q, want false and the reason", needed, out)
+	}
+	out = captureStdout(t, func() { needed = gpuSigningNeeded(ctx, false) })
+	if needed || out != "" {
+		t.Errorf("wizard, Secure Boot off: needed=%v out=%q, want false and silence", needed, out)
+	}
+
+	fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot enabled"`})
+	if !gpuSigningNeeded(ctx, true) {
+		t.Error("Secure Boot on: signing should be needed")
 	}
 }

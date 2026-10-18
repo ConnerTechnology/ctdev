@@ -253,11 +253,14 @@ func applyAptDailyTimeout(ctx context.Context, o sysutil.Opts, value string) err
 	return sysutil.SudoRun(ctx, o, "systemctl", "daemon-reload")
 }
 
-// applyNvidiaSigning runs the GPU signing setup via the gpu package.
+// applyNvidiaSigning runs the GPU signing setup via the gpu package. It only
+// runs once the user has said yes, or in --batch when signing is needed, so
+// RunSetup doesn't ask about Secure Boot a second time.
 func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{
-		Stdout: o.Stdout,
-		Stdin:  os.Stdin,
+		Stdout:              o.Stdout,
+		Stdin:               os.Stdin,
+		SecureBootConfirmed: true,
 	})
 }
 

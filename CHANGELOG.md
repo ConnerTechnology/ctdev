@@ -9,10 +9,11 @@ All notable changes to this project will be documented in this file.
   "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
   suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
   in the wizard, the settings browser and `--show`. Driver signing shows as not needed
-  when `mokutil --sb-state` says Secure Boot is off, and the suspend services when
-  suspend is masked. A setting that isn't needed isn't applied by `--batch` (even with
-  `--force`), the wizard asks "Apply anyway?" defaulting to no, and `configure gpu`
-  skips the signing flow and says why. Both stay on-only, and the wizard says why
+  when Secure Boot is off, including on a legacy BIOS machine, which has none, and the
+  suspend services when suspend is masked. When `mokutil` can't tell, signing counts as
+  needed, in `--show` too. A setting that isn't needed isn't applied by `--batch` (even with
+  `--force`), the wizard asks "Apply anyway?" once, defaulting to no, and `configure
+  gpu` skips the signing flow. Both stay on-only, and the wizard says why
   there's no off switch.
 
 ## [14.2.0] - 2026-10-15

@@ -17,7 +17,7 @@ import (
 
 // showGPUStatus prints GPU hardware info and Secure Boot signing status — the
 // read-only `ctdev configure gpu --show` view.
-func showGPUStatus() error {
+func showGPUStatus(ctx context.Context) error {
 	info := platform.Detect()
 	if info.OS != platform.Linux {
 		return fmt.Errorf("GPU info is only supported on Linux")
@@ -33,12 +33,12 @@ func showGPUStatus() error {
 	fmt.Println()
 	fmt.Println(headerStyle.Render("Hardware"))
 
-	gpu.ShowHardwareInfo(os.Stdout)
+	gpu.ShowHardwareInfo(ctx, os.Stdout)
 
 	fmt.Println()
 	fmt.Println(headerStyle.Render("Signing Status"))
 
-	for _, check := range gpu.GatherStatus() {
+	for _, check := range gpu.GatherStatus(ctx) {
 		icon := checkPass
 		if !check.Pass {
 			icon = checkFail
@@ -72,11 +72,19 @@ func runGPUSigning(ctx context.Context, recover bool) error {
 	if recover {
 		return gpu.RunRecover(ctx, opts)
 	}
-	// The wizard already offered signing anyway; --batch never applies a
-	// setting this machine doesn't need.
-	if reason := setup.NvidiaSigningNotNeeded(ctx); reason != "" {
-		fmt.Printf("  %s\n", styles.Dimmed.Render("Driver signing not needed: "+reason+"."))
-		return nil
-	}
 	return gpu.RunSetup(ctx, opts)
+}
+
+// gpuSigningNeeded reports whether `configure gpu` should run the signing
+// flow after the settings. When it shouldn't, --batch says why; the wizard
+// already said so, and already ran signing if the user chose to anyway.
+func gpuSigningNeeded(ctx context.Context, batch bool) bool {
+	reason := setup.NvidiaSigningNotNeeded(ctx)
+	if reason == "" {
+		return true
+	}
+	if batch {
+		fmt.Printf("  %s\n", styles.Dimmed.Render("Driver signing not needed: "+reason+"."))
+	}
+	return false
 }

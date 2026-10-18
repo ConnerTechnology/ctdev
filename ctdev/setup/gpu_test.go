@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
 )
 
 // fakeBins puts shell-script stand-ins for system commands in a fresh
@@ -22,25 +24,52 @@ func fakeBins(t *testing.T, scripts map[string]string) {
 	t.Setenv("PATH", dir)
 }
 
+// uefi makes this test's "machine" boot through UEFI (or not), whatever the
+// host running the test does.
+func uefi(t *testing.T, booted bool) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "efi")
+	if booted {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gpu.SetEFIDirForTest(t, dir)
+}
+
 func TestNvidiaSigningNotNeeded(t *testing.T) {
-	t.Run("Secure Boot off", func(t *testing.T) {
-		fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot disabled"`})
-		if got := NvidiaSigningNotNeeded(context.Background()); !strings.Contains(got, "Secure Boot is off") {
-			t.Errorf("NvidiaSigningNotNeeded = %q, want a 'Secure Boot is off' reason", got)
-		}
-	})
-	t.Run("Secure Boot on", func(t *testing.T) {
-		fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot enabled"`})
-		if got := NvidiaSigningNotNeeded(context.Background()); got != "" {
-			t.Errorf("NvidiaSigningNotNeeded = %q, want needed (\"\")", got)
-		}
-	})
-	t.Run("Secure Boot state unknown", func(t *testing.T) {
-		fakeBins(t, nil) // no mokutil
-		if got := NvidiaSigningNotNeeded(context.Background()); got != "" {
-			t.Errorf("NvidiaSigningNotNeeded = %q, want needed (\"\") when mokutil can't tell", got)
-		}
-	})
+	tests := []struct {
+		name    string
+		uefi    bool
+		mokutil string // script body; "" means no mokutil on PATH
+		needed  bool
+	}{
+		{"Secure Boot on", true, `echo "SecureBoot enabled"`, true},
+		{"Secure Boot off", true, `echo "SecureBoot disabled"`, false},
+		// mokutil writes these to stderr, with a non-zero exit.
+		{"legacy BIOS, mokutil says no EFI variables", true, `echo "EFI variables are not supported on this system" >&2; exit 255`, false},
+		{"firmware without Secure Boot", true, `echo "This system doesn't support Secure Boot" >&2; exit 255`, false},
+		{"legacy BIOS, no /sys/firmware/efi", false, `echo "SecureBoot enabled"`, false},
+		{"mokutil can't tell", true, `echo "Cannot determine secure boot state." >&2; exit 255`, true},
+		{"mokutil missing", true, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uefi(t, tt.uefi)
+			bins := map[string]string{}
+			if tt.mokutil != "" {
+				bins["mokutil"] = tt.mokutil
+			}
+			fakeBins(t, bins)
+			got := NvidiaSigningNotNeeded(context.Background())
+			if tt.needed && got != "" {
+				t.Errorf("NvidiaSigningNotNeeded = %q, want needed (\"\")", got)
+			}
+			if !tt.needed && !strings.Contains(got, "Secure Boot is off") {
+				t.Errorf("NvidiaSigningNotNeeded = %q, want a 'Secure Boot is off' reason", got)
+			}
+		})
+	}
 }
 
 func TestNvidiaSuspendNotNeeded(t *testing.T) {
@@ -91,6 +120,7 @@ func TestGPUSettingsExplainThemselves(t *testing.T) {
 // on a machine with Secure Boot off and suspend masked: both show as not
 // needed and neither is applied, even with --force.
 func TestGPUSettingsNotNeeded(t *testing.T) {
+	uefi(t, true)
 	fakeBins(t, map[string]string{
 		"mokutil":   `echo "SecureBoot disabled"`,
 		"systemctl": `echo masked; exit 1`,
