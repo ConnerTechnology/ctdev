@@ -42,7 +42,7 @@ var Registry = []Setting{
 		NoOffSwitch: "Undoing it would only bring the black screens and freezes after sleep back.",
 		Default:     "enabled",
 		DetectFunc:  detectNvidiaSuspendServices,
-		NotNeededFn: nvidiaSuspendNotNeeded,
+		NotNeededFn: suspendNotNeeded,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyNvidiaSuspendServices(ctx, o)
 		},

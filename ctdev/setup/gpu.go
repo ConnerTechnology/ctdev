@@ -17,13 +17,3 @@ func NvidiaSigningNotNeeded(ctx context.Context) string {
 	}
 	return ""
 }
-
-// nvidiaSuspendNotNeeded reports why this machine doesn't need the NVIDIA
-// suspend services, or "" when it does: they only matter on a machine that
-// can suspend.
-func nvidiaSuspendNotNeeded(ctx context.Context) string {
-	if detectSuspendMasked(ctx) == "enabled" {
-		return "suspend is masked, so this machine never suspends"
-	}
-	return ""
-}

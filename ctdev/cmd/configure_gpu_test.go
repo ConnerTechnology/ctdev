@@ -123,7 +123,7 @@ func TestGPUShow_SaysWhyAndWhetherNeeded(t *testing.T) {
 			t.Errorf("--show should print %q and its why; got %q", s.Name, out)
 		}
 	}
-	for _, reason := range []string{"Secure Boot is off", "never suspends"} {
+	for _, reason := range []string{"Secure Boot is off", "suspend is turned off"} {
 		if !strings.Contains(out, reason) {
 			t.Errorf("--show should say %q; got %q", reason, out)
 		}

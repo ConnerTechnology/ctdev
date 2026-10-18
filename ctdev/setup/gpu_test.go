@@ -72,22 +72,6 @@ func TestNvidiaSigningNotNeeded(t *testing.T) {
 	}
 }
 
-func TestNvidiaSuspendNotNeeded(t *testing.T) {
-	t.Run("suspend masked", func(t *testing.T) {
-		// systemctl is-enabled prints "masked" and exits non-zero for a masked unit.
-		fakeBins(t, map[string]string{"systemctl": `echo masked; exit 1`})
-		if got := nvidiaSuspendNotNeeded(context.Background()); !strings.Contains(got, "never suspends") {
-			t.Errorf("nvidiaSuspendNotNeeded = %q, want a 'never suspends' reason", got)
-		}
-	})
-	t.Run("suspend allowed", func(t *testing.T) {
-		fakeBins(t, map[string]string{"systemctl": `echo static`})
-		if got := nvidiaSuspendNotNeeded(context.Background()); got != "" {
-			t.Errorf("nvidiaSuspendNotNeeded = %q, want needed (\"\")", got)
-		}
-	})
-}
-
 // TestGPUSettingsExplainThemselves pins the gpu category to CTD-90 decision 9:
 // a plain name, a one-line why, on-only with the reason said, and a check
 // whether this machine needs it.
