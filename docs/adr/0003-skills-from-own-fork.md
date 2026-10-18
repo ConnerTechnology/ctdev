@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-09-24
+---
+
 # Skills from our own fork
 
 The engineering skills live in a private `thomasconner/skills` repo, a de-branded fork of

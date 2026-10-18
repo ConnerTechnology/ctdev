@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-10-03
+---
+
 # Linear app credentials are per computer
 
 Claude Code reaches Linear as an app, not as Thomas, so the app's comments and status changes
