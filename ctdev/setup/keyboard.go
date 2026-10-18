@@ -23,19 +23,21 @@ const macKeyRepeatMaxUnits = 8
 // macKeyRepeatRateDefaultCps is the recommended rate: the speed nearest the
 // Linux default of 50 cps. 50 cps is a 20 ms interval; the nearest 15 ms step
 // is 15 ms (KeyRepeat 1), which is 67 cps. (In cps, 67 and 33 are equally far.)
-// 67 cps is faster than System Settings' keyboard slider goes.
+// 67 cps is faster than System Settings' keyboard slider goes. Like the 15 ms
+// unit, that is from community reports, not Apple: the slider's fastest
+// setting writes KeyRepeat 2.
 const macKeyRepeatRateDefaultCps = "67"
 
 // keyRepeatUnitsToCps converts a KeyRepeat value to characters per second,
-// rounded to a whole number, or to one decimal below 1 cps so a very slow
-// rate never reads as 0. ok is false for a value below 1.
+// rounded to a whole number, or to one decimal below 1 cps, never below
+// "0.1", so a very slow rate never reads as 0. ok is false for a value below 1.
 func keyRepeatUnitsToCps(units int) (string, bool) {
 	if units < 1 {
 		return "", false
 	}
 	cps := 1000 / float64(units*keyRepeatUnitMs)
 	if cps < 1 {
-		return strconv.FormatFloat(math.Round(cps*10)/10, 'f', 1, 64), true
+		return strconv.FormatFloat(math.Max(math.Round(cps*10)/10, 0.1), 'f', 1, 64), true
 	}
 	return strconv.Itoa(int(math.Round(cps))), true
 }
@@ -62,6 +64,7 @@ func macKeyRepeatRateChoices() []PickerChoice {
 		cps, _ := keyRepeatUnitsToCps(u)
 		desc := fmt.Sprintf("%s characters per second (a repeat every %d ms)", cps, u*keyRepeatUnitMs)
 		if u == 1 {
+			// Community reports, not Apple: System Settings' fastest is KeyRepeat 2.
 			desc += ", faster than System Settings allows"
 		}
 		choices = append(choices, PickerChoice{Value: cps, Description: desc})

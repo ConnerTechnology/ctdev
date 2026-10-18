@@ -250,3 +250,42 @@ func TestApplySettings_MacKeyRepeatNotePrintsOnce(t *testing.T) {
 		t.Errorf("expected 2 applied; output:\n%s", out)
 	}
 }
+
+func TestPromptPicker_EnterDefault(t *testing.T) {
+	orig := stdinScanner
+	t.Cleanup(func() { stdinScanner = orig })
+	picker := &setup.Setting{
+		Name:    "Test picker",
+		Control: setup.ControlPicker,
+		Default: "67",
+		Choices: []setup.PickerChoice{{Value: "67", Description: "fast"}, {Value: "33", Description: "slower"}},
+	}
+	tests := []struct {
+		name    string
+		current string
+		label   string
+	}{
+		{"matching current shows its number", "33", "[2]"},
+		{"unmatched current shows the value Enter keeps", "6", "[6]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+			st := &setup.SettingState{Setting: picker, CurrentValue: tt.current}
+			var got string
+			out := captureStdout(t, func() {
+				var err error
+				got, err = promptPicker(context.Background(), st)
+				if err != nil {
+					t.Errorf("promptPicker: %v", err)
+				}
+			})
+			if got != tt.current {
+				t.Errorf("Enter returned %q, want current %q", got, tt.current)
+			}
+			if !strings.Contains(out, "Select "+tt.label) {
+				t.Errorf("prompt should show Select %s; got %q", tt.label, out)
+			}
+		})
+	}
+}

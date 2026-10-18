@@ -256,6 +256,8 @@ var Registry = []Setting{
 		Name:     "Key repeat rate",
 		Slug:     "keyboard",
 		Category: "Keyboard",
+		// "Faster than System Settings allows" rests on community reports that
+		// the slider's fastest setting is KeyRepeat 2; Apple doesn't document it.
 		Description: "How many characters per second a held key types, so moving the cursor or deleting with a held key is quick. " +
 			"ctdev offers the eight fastest 15 ms steps (15–120 ms); 67 cps is faster than System Settings allows. " +
 			"Takes effect after logging out and back in.",
