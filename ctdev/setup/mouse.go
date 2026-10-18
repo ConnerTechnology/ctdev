@@ -3,10 +3,13 @@ package setup
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 
@@ -54,6 +57,34 @@ func solaarServicePath() (string, error) {
 		return "", fmt.Errorf("get home dir: %w", err)
 	}
 	return filepath.Join(home, ".config", "systemd", "user", solaarService), nil
+}
+
+// formerCtdevCopies holds the sha256 of every earlier version of an embedded
+// file, so a copy an older ctdev deployed is still recognized as ctdev's.
+// The .xbindkeysrc before 59ad0786 called xdotool instead of D-Bus.
+var formerCtdevCopies = map[string][]string{
+	xbindkeysrcSrc: {"4ecac78359892163906869151e76f57fb10a747d15d53f365ec38caa3faffcff"},
+}
+
+// isFormerCtdevFile reports whether path holds a copy of src that an earlier
+// ctdev deployed.
+func isFormerCtdevFile(path, src string) bool {
+	got, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(got)
+	for _, h := range formerCtdevCopies[src] {
+		if hex.EncodeToString(sum[:]) == h {
+			return true
+		}
+	}
+	return false
+}
+
+// isAnyCtdevFile reports whether path holds the current or an earlier copy of src.
+func isAnyCtdevFile(path, src string) bool {
+	return isCtdevFile(path, src) || isFormerCtdevFile(path, src)
 }
 
 // isCtdevFile reports whether path holds exactly the embedded file src.
@@ -110,40 +141,62 @@ func installState(all, any bool) string {
 	return "not installed"
 }
 
-// newestBackup returns the most recent backup DeployFile made of path, or "".
-// Backup names end in a sortable timestamp (sysutil.BackupPath).
-func newestBackup(path string) string {
-	matches, err := filepath.Glob(path + ".*.bak")
-	if err != nil || len(matches) == 0 {
-		return ""
-	}
-	sort.Strings(matches)
-	return matches[len(matches)-1]
+// backupName matches the names sysutil.BackupPath gives backups of path:
+// <path>.<YYYY-MM-DDTHH-MM-SS>.bak.
+func backupName(path string) *regexp.Regexp {
+	return regexp.MustCompile(`^` + regexp.QuoteMeta(path) +
+		`\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.bak$`)
 }
 
-// restoreBackup puts back the newest backup of path, honoring dry-run.
-// Reports whether one was restored.
-func restoreBackup(o sysutil.Opts, path string) (bool, error) {
-	backup := newestBackup(path)
-	if backup == "" {
-		return false, nil
+// backupsNewestFirst returns the backups DeployFile made of path, newest
+// first. The timestamp in the name sorts chronologically.
+func backupsNewestFirst(path string) []string {
+	matches, err := filepath.Glob(path + ".*.bak")
+	if err != nil {
+		return nil
 	}
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] restore %s from %s\n", path, backup)
+	re := backupName(path)
+	var out []string
+	for _, m := range matches {
+		if re.MatchString(m) {
+			out = append(out, m)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(out)))
+	return out
+}
+
+// restoreBackup puts back the newest backup of path that isn't a copy of src
+// ctdev itself deployed, honoring dry-run. Backups newer than it that are
+// ctdev's copies are removed: they hold nothing of the user's. Reports
+// whether a backup was restored.
+func restoreBackup(o sysutil.Opts, path, src string) (bool, error) {
+	for _, backup := range backupsNewestFirst(path) {
+		if isAnyCtdevFile(backup, src) {
+			if err := removeUserFile(o, backup); err != nil {
+				return false, err
+			}
+			continue
+		}
+		if o.DryRun {
+			fmt.Fprintf(o.Stdout, "[dry-run] restore %s from %s\n", path, backup)
+			return true, nil
+		}
+		if err := os.Rename(backup, path); err != nil {
+			return false, fmt.Errorf("restore %s: %w", path, err)
+		}
+		fmt.Fprintf(o.Stdout, "Restored %s from %s\n", path, backup)
 		return true, nil
 	}
-	if err := os.Rename(backup, path); err != nil {
-		return false, fmt.Errorf("restore %s: %w", path, err)
-	}
-	fmt.Fprintf(o.Stdout, "Restored %s from %s\n", path, backup)
-	return true, nil
+	return false, nil
 }
 
 // ── Middle-click opens the window overview ──────────────────────────────
 
 // detectXbindkeys reports "installed" when xbindkeys and xdotool are present
 // and ctdev's binding config and autostart entry are both in place, and
-// "partly installed" when only one of ctdev's files is.
+// "partly installed" when only some of ctdev's files are (an older ctdev's
+// .xbindkeysrc counts).
 func detectXbindkeys(ctx context.Context) string {
 	rc, autostart, err := xbindkeysPaths()
 	if err != nil {
@@ -153,7 +206,7 @@ func detectXbindkeys(ctx context.Context) string {
 	ourAutostart := isCtdevFile(autostart, xbindkeysAutoSrc)
 	all := ours && ourAutostart &&
 		mousePkgInstalled(ctx, "xbindkeys") && mousePkgInstalled(ctx, "xdotool")
-	return installState(all, ours || ourAutostart)
+	return installState(all, ourAutostart || isAnyCtdevFile(rc, xbindkeysrcSrc))
 }
 
 // setXbindkeys turns the middle-click binding on ("installed") or off.
@@ -204,6 +257,13 @@ func removeXbindkeys(ctx context.Context, o sysutil.Opts) error {
 	if err != nil {
 		return err
 	}
+	// The old bash installer symlinked ~/.xbindkeysrc into its checkout; a
+	// link whose target is gone is ctdev's leftover.
+	if fi, err := os.Lstat(rc); err == nil && fi.Mode()&os.ModeSymlink != 0 && !fileExists(rc) {
+		if err := removeUserFile(o, rc); err != nil {
+			return err
+		}
+	}
 	removedRC, restoredRC := false, false
 	for _, f := range []struct{ path, src string }{
 		{autostart, xbindkeysAutoSrc},
@@ -212,14 +272,14 @@ func removeXbindkeys(ctx context.Context, o sysutil.Opts) error {
 		if !fileExists(f.path) {
 			continue
 		}
-		if !isCtdevFile(f.path, f.src) {
+		if !isAnyCtdevFile(f.path, f.src) {
 			fmt.Fprintf(o.Stdout, "Leaving %s: it differs from ctdev's copy\n", f.path)
 			continue
 		}
 		if err := removeUserFile(o, f.path); err != nil {
 			return err
 		}
-		restored, err := restoreBackup(o, f.path)
+		restored, err := restoreBackup(o, f.path, f.src)
 		if err != nil {
 			return err
 		}

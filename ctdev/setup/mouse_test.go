@@ -519,3 +519,140 @@ func TestMiddleClickInstallsPackagesThroughApplyPackages(t *testing.T) {
 		t.Errorf("on didn't install the packages; ran %v", f.calls)
 	}
 }
+
+// seedBackup writes content as a DeployFile-style backup of path.
+func seedBackup(t *testing.T, path, stamp, content string) string {
+	t.Helper()
+	bak := path + "." + stamp + ".bak"
+	if err := os.WriteFile(bak, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return bak
+}
+
+func TestMiddleClickOffDoesNotRestoreAFormerCtdevConfig(t *testing.T) {
+	f, home := useFakeMouseSystem(t)
+	ctx := context.Background()
+	o := sysutil.Opts{Stdout: &bytes.Buffer{}}
+	old, err := os.ReadFile("testdata/xbindkeysrc-before-59ad0786")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc := filepath.Join(home, ".xbindkeysrc")
+	if err := applyXbindkeys(ctx, o); err != nil {
+		t.Fatal(err)
+	}
+	// The machine first applied an older ctdev, so its newest backup is that copy.
+	seedBackup(t, rc, "2026-01-02T03-04-05", string(old))
+	f.calls, f.starts = nil, 0
+
+	if err := removeXbindkeys(ctx, o); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(rc); !os.IsNotExist(err) {
+		t.Errorf("off left a .xbindkeysrc: %v", err)
+	}
+	if left := listFiles(t, home); len(left) != 0 {
+		t.Errorf("off left %v; a former ctdev backup should go too", left)
+	}
+	if f.starts != 0 {
+		t.Errorf("off started xbindkeys %d times with no user config", f.starts)
+	}
+}
+
+func TestMiddleClickOffRestoresTheUsersFileBehindAFormerCtdevBackup(t *testing.T) {
+	_, home := useFakeMouseSystem(t)
+	ctx := context.Background()
+	o := sysutil.Opts{Stdout: &bytes.Buffer{}}
+	old, err := os.ReadFile("testdata/xbindkeysrc-before-59ad0786")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc := filepath.Join(home, ".xbindkeysrc")
+	if err := applyXbindkeys(ctx, o); err != nil {
+		t.Fatal(err)
+	}
+	seedBackup(t, rc, "2025-06-01T00-00-00", "# mine\n")
+	seedBackup(t, rc, "2026-01-02T03-04-05", string(old))
+	if err := removeXbindkeys(ctx, o); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(rc); err != nil || string(got) != "# mine\n" {
+		t.Errorf(".xbindkeysrc = %q, %v; want the user's file", got, err)
+	}
+}
+
+func TestMiddleClickOffRemovesAFormerCtdevConfig(t *testing.T) {
+	_, home := useFakeMouseSystem(t)
+	old, err := os.ReadFile("testdata/xbindkeysrc-before-59ad0786")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc := filepath.Join(home, ".xbindkeysrc")
+	if err := os.WriteFile(rc, old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeXbindkeys(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(rc); !os.IsNotExist(err) {
+		t.Errorf("off left an older ctdev .xbindkeysrc: %v", err)
+	}
+}
+
+func TestNewestBackupMatchesOnlyBackupPathNames(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".xbindkeysrc")
+	for _, name := range []string{
+		".xbindkeysrc.old.bak",
+		".xbindkeysrc.zzz.bak",
+		".xbindkeysrc.2026-01-02T03-04-05.bak.orig",
+		".xbindkeysrc.2025-06-01T00-00-00.bak",
+		".xbindkeysrc.2026-01-02T03-04-05.bak",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := backupsNewestFirst(path)
+	want := []string{
+		path + ".2026-01-02T03-04-05.bak",
+		path + ".2025-06-01T00-00-00.bak",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("backupsNewestFirst = %v, want %v", got, want)
+	}
+	// BackupPath's own format must match the pattern.
+	if !backupName(path).MatchString(sysutil.BackupPath(path)) {
+		t.Errorf("pattern doesn't match sysutil.BackupPath(%q) = %q", path, sysutil.BackupPath(path))
+	}
+}
+
+func TestMiddleClickOffRemovesADanglingRCSymlink(t *testing.T) {
+	_, home := useFakeMouseSystem(t)
+	rc := filepath.Join(home, ".xbindkeysrc")
+	if err := os.Symlink(filepath.Join(home, "gone", ".xbindkeysrc"), rc); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeXbindkeys(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(rc); !os.IsNotExist(err) {
+		t.Errorf("off left the dangling symlink: %v", err)
+	}
+}
+
+func TestMiddleClickFormerCtdevConfigAloneIsPartlyInstalled(t *testing.T) {
+	_, home := useFakeMouseSystem(t)
+	old, err := os.ReadFile("testdata/xbindkeysrc-before-59ad0786")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".xbindkeysrc"), old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	applyThroughStates(t, middleClickName, "not installed")
+	if left := listFiles(t, home); len(left) != 0 {
+		t.Errorf("off left %v", left)
+	}
+}
