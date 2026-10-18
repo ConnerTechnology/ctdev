@@ -25,10 +25,6 @@ mcp-email-server) for a newer image by digest — without pulling — and update
 (`docker compose pull && up -d`, or a `build --pull` rebuild for the locally-built
 caddy image). `ctdev update --check` lists what's available read-only.
 
-Note: a Pi-hole/DNS host runs `ctdev configure ssh` without `--batch` and leaves
-the firewall off. `--batch` turns the firewall on, and UFW's default-deny blocks
-DNS (53) and the proxy (80/443) unless you open them first.
-
 Secrets are **never stored in the repo**. Each is entered at `configure` time and
 stored only on the host that needs it; if lost, just reconfigure:
 - **restic** (repo + credentials + password) → `/etc/restic/restic.env`, written by
