@@ -13,50 +13,25 @@ leaves the machine beyond the diagnostic probes themselves.
 - **`--root` is how root-only checks run, and it is opt-in.** Never *requiring*
   root hardened into never *asking*, which silently cost SMART health, ufw
   status, container log sizes and the authoritative `sshd -T` read on machines
-  where the operator would gladly have typed a password. `--root` calls
-  `ensureSudo` in `runDoctor` **before** `GatherFacts`, which settles
-  `Facts.Root` once for the whole run — never inside `GatherFacts`, so callers
-  that only want facts never hit a password prompt. Default off: doctor is pointed
-  at machines we do not manage, and demanding a stranger's password uninvited is
-  the behavior the package doc promises it does not have.
+  where the operator would gladly have typed a password. The prompt belongs to
+  `runDoctor`, before `GatherFacts` settles `Facts.Root` — never inside package
+  `diagnose`, so callers that only want facts never hit a password prompt.
 - **A skip never says "re-run with sudo".** ctdev installs to `~/.local/bin`,
   which sudo's `secure_path` excludes on stock Debian/Mint, so `sudo ctdev
   doctor` dies with "command not found" — advice the operator cannot follow.
-  `needsRootSkip` is the single place that wording lives, and it names
-  `ctdev doctor --root`. A check that root cannot unlock (CPU temperature off
-  Linux) must not mention root at all.
-- **Checks** live in `ctdev/diagnose/` as a catalog of struct literals with
-  closures, built as a function of `platform.Info` + `Facts` — the same shape as
-  `cleanup.Task`. Gate at construction time so a wired machine has no Wi-Fi rows
-  rather than a column of "n/a".
-- **Tool and service rows** (`managed.go`) are the one place doctor looks at what
-  ctdev installed. `Facts.Components` gates them, and only `runDoctor` fills it,
-  from `component.InstalledSet()`; `GatherFacts` leaves it empty, and `diagnose`
-  never imports `component`. Empty means no rows, so an unmanaged machine shows
-  none. Building the catalog runs no subprocess, because the sshd unit check is a
-  Fact. tailscaled and docker fail when stopped. sshd counts as running when its
-  service or socket is active, the same logic as `sec.ssh`, and when it's off the
-  row is informational, because turning ssh off is usually deliberate.
-- **`dns.dnssec` and `dns.roots`** (`dnssec.go`) speak DNS on the wire by hand
-  because `net.Resolver` hides the response flags and both verdicts *are* flags.
-  DNSSEC is judged by the bogus name (`dnssec-failed.org` must SERVFAIL), never
+  Every root skip goes through `needsRootSkip`, which names `ctdev doctor --root`.
+  A check that root cannot unlock (CPU temperature off Linux) must not mention
+  root at all.
+- **What ctdev installed reaches `diagnose` only through `Facts.Components`**, which
+  `runDoctor` fills; `diagnose` never imports `component`, so on an unmanaged
+  machine the tool and service rows simply don't exist.
+- **DNSSEC is judged by the bogus name** (`dnssec-failed.org` must SERVFAIL), never
   by the AD bit — stubs in the path (systemd-resolved, MagicDNS) strip AD but pass
-  SERVFAIL through. Root reach runs only when Pi-hole's upstream is on loopback
-  (Unbound) and asks a root server non-recursively: only a real root sets AA; a
-  transparent ISP proxy cannot, and that is the failure mode that broke DNSSEC in
-  the Spencer's Desk Pi-hole write-up pi-01 was compared against on 2026-09-07.
-- **`Check.Network`** marks a check that does network I/O; nothing filters on
-  it since `status` was removed. **`Check.Deep`** marks slow or third-party
-  probes that only run under `--deep`.
-- **`Diagnose(results, facts) []Finding`** is the correlation engine: a pure
-  function that turns combinations into verdicts. Network rules are layered and
-  first-match-wins, because a network fault has one root cause and everything
-  downstream is noise. Hardware verdicts accumulate.
-- **Vendor integrations** (`integration_*.go`) are read-only *by construction* —
-  the `Provider` interface has no action method. They live in package `diagnose`
-  rather than a subpackage to avoid an import cycle.
-- **Credentials** come from flags, environment (`CTDEV_UNIFI_API_KEY`,
-  `CTDEV_SYNOLOGY_PASSWORD`, `CTDEV_PROXMOX_SECRET`, …), or a one-shot prompt
-  held in memory. **Nothing is ever written to the machine being diagnosed.**
-  They are only ever sent to private addresses, and never appear in a report —
-  `visibleData` drops secret-looking keys at the render boundary.
+  SERVFAIL through. Root reach asks a root server non-recursively because only a
+  real root sets AA; a transparent ISP proxy cannot, and that is the failure mode
+  that broke DNSSEC in the Spencer's Desk Pi-hole write-up pi-01 was compared
+  against on 2026-09-07.
+- **A vendor integration's credentials** come only from flags, the environment, or
+  an in-memory prompt. Nothing is ever written to the machine being diagnosed, a
+  credential is sent only to a private address (`IsPrivate`), and none appears in a
+  report.

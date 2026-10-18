@@ -12,17 +12,9 @@ paths:
 # Homelab / Pi-hole nodes
 
 ctdev has no "homelab mode" — you compose a node from individual components and
-`configure` categories, the same way you would a desktop. For a Raspberry Pi
-running Pi-hole behind a Caddy reverse proxy:
-
-The per-component facts are in `.claude/rules/pihole.md`, `caddy.md`,
-`portainer.md`, `beszel.md` and `restic.md`.
-
-Keeping a node current: `ctdev update` refreshes these compose stacks along with
-system packages. It checks each managed stack (pihole, caddy, beszel, portainer)
-for a newer image by digest — without pulling — and updates the ones you select
-(`docker compose pull && up -d`, or a `build --pull` rebuild for the locally-built
-caddy image). `ctdev update --check` lists what's available read-only.
+`configure` categories, the same way you would a desktop. The recipe for a Raspberry Pi
+running Pi-hole behind a Caddy reverse proxy is `docs/node-recipes/pihole-node.md`; the
+per-component traps are in `pihole.md` and `beszel.md`.
 
 Note: a Pi-hole/DNS host should usually **not** run `ctdev configure ufw` — UFW's
 default-deny blocks DNS (53) and the proxy (80/443) unless you open them first.

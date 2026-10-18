@@ -5,12 +5,10 @@ paths:
 ---
 # Install
 
-`install.sh` (repo root) installs just the `ctdev` binary (downloads the latest
-release and verifies it against `SHA256SUMS`; there is no source-build path).
-`install.sh --doctor` instead runs `ctdev doctor` from a temp directory and
-deletes it — nothing installed, no PATH change, no sudo. `install.ps1` is the
-Windows equivalent. There is no all-in-one machine bootstrap — compose a machine from
-individual `ctdev install <component>` and `ctdev configure <category>` calls.
-See README "Fresh Machine Setup".
+`install.sh` installs only the `ctdev` binary from the latest release; there is no source-build
+path and no all-in-one machine bootstrap, so a machine is composed from individual
+`ctdev install <component>` and `ctdev configure <category>` calls (README "Fresh Machine
+Setup"). `install.ps1` is the Windows equivalent, where ctdev runs `doctor` only.
 
-**Flags:** `--help`, `--verbose`, `--dry-run`, `--force`, `--version`, `--refresh-keys`
+The two installers take the same options and change together: `install.sh` accepts
+`--doctor [doctor args]` and `-h`/`--help`; `install.ps1` accepts `-Doctor` and `-DoctorArgs`.
