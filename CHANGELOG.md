@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **`ctdev install gws`** installs the Google Workspace CLI: from Homebrew on macOS, and
+  on Linux as the static build from the latest GitHub release, checked against its
+  published SHA-256 and installed to `/usr/local/bin`. `ctdev update` doesn't update the
+  Linux binary; run `ctdev install gws --force` to get the latest.
 - **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
   several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
   against its PGP signature with the AWS CLI Team key and installed to

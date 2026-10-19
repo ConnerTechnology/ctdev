@@ -39,6 +39,7 @@ var Registry = []Component{
 	// pinning detection to the tarball location made a distro-packaged Go read
 	// as missing. Falling through to a PATH lookup keeps the two in agreement.
 	{Name: "go", Description: "Go toolchain (official tarball)", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, GoInstall: goInstall, GoUninstall: goUninstall, Tags: []string{"golang", "runtime"}},
+	{Name: "gws", Description: "Google Workspace CLI (Drive, Gmail, Calendar, and more)", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: gwsInstall, GoUninstall: gwsUninstall, Tags: []string{"google", "workspace"}},
 	{Name: "helm", Description: "Kubernetes package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Dependencies: []string{"kubectl"}, GoInstall: helmInstall, GoUninstall: helmUninstall, Tags: []string{"kubernetes", "k8s"}},
 	{Name: "jq", Description: "JSON processor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("jq"), GoUninstall: SimplePackageUninstaller("jq"), Tags: []string{"json", "parser"}},
 	{Name: "kubectl", Description: "Kubernetes CLI", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: kubectlInstall, GoUninstall: kubectlUninstall, Tags: []string{"kubernetes", "k8s"}},
