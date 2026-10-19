@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [15.0.0] - 2026-10-19
 
 ### Added
 - **`ctdev install gws`** installs the Google Workspace CLI: from Homebrew on macOS, and
