@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -362,10 +363,29 @@ func (m *Machine) Destination(name string) (*Destination, error) {
 	for _, k := range CredentialNames(d.Address) {
 		d.credentials[k] = vals[k]
 	}
+	// A file saved by v17.0.0 from a forged kit can hold a line restic would
+	// act on, such as RESTIC_PASSWORD_COMMAND (CTD-130). Refuse it rather
+	// than drop it silently, so the person sees the kit wasn't theirs.
+	for _, k := range sortedNames(vals) {
+		if !savedName(k, d.Address) {
+			return nil, fmt.Errorf("%s has a %s line, which ctdev doesn't write and won't run restic with: "+
+				"delete that line, and if you connected with a kit you didn't make yourself, "+
+				"remove this computer's key from another computer and connect again", m.destinationFile(name), k)
+		}
+	}
 	if d.Address == "" || d.computerKey == "" {
 		return nil, fmt.Errorf("%s is incomplete", m.destinationFile(name))
 	}
 	return d, nil
+}
+
+// savedName reports whether save writes the name for a destination at address.
+func savedName(name, address string) bool {
+	switch name {
+	case "RESTIC_REPOSITORY", "CTDEV_SECRET_KEY", "CTDEV_COMPUTER_KEY", "CTDEV_COMPUTER_KEY_ID":
+		return true
+	}
+	return slices.Contains(CredentialNames(address), name)
 }
 
 func (m *Machine) destinationFile(name string) string {
@@ -379,13 +399,10 @@ func (m *Machine) save(d *Destination) error {
 	var b strings.Builder
 	b.WriteString("# ctdev backup destination " + d.Name + ". Secret: keep this file private.\n")
 	fmt.Fprintf(&b, "RESTIC_REPOSITORY=%s\n", d.Address)
-	names := make([]string, 0, len(d.credentials))
-	for k := range d.credentials {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	for _, k := range names {
-		fmt.Fprintf(&b, "%s=%s\n", k, d.credentials[k])
+	for _, k := range CredentialNames(d.Address) {
+		if v, ok := d.credentials[k]; ok {
+			fmt.Fprintf(&b, "%s=%s\n", k, v)
+		}
 	}
 	fmt.Fprintf(&b, "CTDEV_SECRET_KEY=%s\n", d.secretKey)
 	fmt.Fprintf(&b, "CTDEV_COMPUTER_KEY=%s\n", d.computerKey)

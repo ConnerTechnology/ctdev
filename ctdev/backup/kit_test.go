@@ -88,6 +88,78 @@ func TestKitRoundTrip(t *testing.T) {
 	}
 }
 
+// A kit's credential lines are an allowlist: only the names its backend
+// uses. Anything else, such as a variable restic or the loader would act on,
+// refuses the whole kit and names the line (CTD-130).
+func TestParseKitAcceptsOnlyTheBackendsCredentials(t *testing.T) {
+	sk := newSecretKey().String()
+	b2 := Kit{Destination: "example-backups", Address: "b2:example-bucket:website",
+		Credentials: map[string]string{"B2_ACCOUNT_ID": "example-id", "B2_ACCOUNT_KEY": "example-key"}, SecretKey: sk}.String()
+	local := Kit{Destination: "example-backups", Address: "/srv/example-backups", SecretKey: sk}.String()
+	for name, tc := range map[string]struct{ kit, line string }{
+		"a password command":          {local, "RESTIC_PASSWORD_COMMAND: sh -c 'printf %s example'"},
+		"a preloaded library":         {b2, "LD_PRELOAD: /tmp/example.so"},
+		"another backend's":           {b2, "AWS_ACCESS_KEY_ID: example-id"},
+		"restic's repository":         {b2, "RESTIC_REPOSITORY: /srv/elsewhere"},
+		"credentials on a local path": {local, "B2_ACCOUNT_ID: example-id"},
+	} {
+		label, _, _ := strings.Cut(tc.line, ":")
+		_, err := ParseKit(tc.kit + tc.line + "\n")
+		if err == nil || !strings.Contains(err.Error(), label) {
+			t.Errorf("%s: want the kit refused, naming %s; got %v", name, label, err)
+		}
+	}
+	if _, err := ParseKit(b2); err != nil {
+		t.Errorf("a well-formed B2 kit: %v", err)
+	}
+	if _, err := ParseKit(local); err != nil {
+		t.Errorf("a well-formed local kit: %v", err)
+	}
+}
+
+// restic's environment holds only the backend's credentials from the
+// destination, never a RESTIC_ name or anything else, and ctdev's own
+// RESTIC_ variables come last, so nothing earlier overrides them (CTD-130).
+func TestResticEnvironmentTakesOnlyTheBackendsCredentials(t *testing.T) {
+	t.Setenv("RESTIC_PASSWORD_COMMAND", "sh -c 'printf %s inherited'")
+	d := &Destination{Address: "b2:example-bucket:website", m: &Machine{}, credentials: map[string]string{
+		"B2_ACCOUNT_ID": "example-id", "B2_ACCOUNT_KEY": "example-key",
+		"RESTIC_PASSWORD_COMMAND": "sh -c 'printf %s forged'", "RESTIC_PASSWORD": "forged",
+		"RESTIC_REPOSITORY": "/srv/elsewhere", "LD_PRELOAD": "/tmp/example.so",
+	}}
+	env := d.env("example-password", "")
+	at := map[string]int{}
+	for i, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		switch k {
+		case "RESTIC_PASSWORD_COMMAND", "LD_PRELOAD":
+			t.Errorf("restic's environment has %s", kv)
+		case "RESTIC_PASSWORD":
+			if v != "example-password" {
+				t.Errorf("RESTIC_PASSWORD = %q", v)
+			}
+		case "RESTIC_REPOSITORY":
+			if v != d.Address {
+				t.Errorf("RESTIC_REPOSITORY = %q", v)
+			}
+		}
+		at[k] = i
+	}
+	for _, k := range []string{"B2_ACCOUNT_ID", "B2_ACCOUNT_KEY", "RESTIC_REPOSITORY", "RESTIC_PASSWORD"} {
+		if _, ok := at[k]; !ok {
+			t.Errorf("restic's environment has no %s", k)
+		}
+	}
+	for _, k := range []string{"RESTIC_REPOSITORY", "RESTIC_PASSWORD"} {
+		if at[k] < at["B2_ACCOUNT_ID"] || at[k] < at["B2_ACCOUNT_KEY"] {
+			t.Errorf("%s comes before the credentials: %v", k, env)
+		}
+	}
+	if n := strings.Count(strings.Join(env, "\n"), "RESTIC_PASSWORD="); n != 1 {
+		t.Errorf("RESTIC_PASSWORD is set %d times", n)
+	}
+}
+
 func TestBackendAddresses(t *testing.T) {
 	for _, tc := range []struct {
 		addr, label string
