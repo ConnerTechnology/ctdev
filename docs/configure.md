@@ -23,11 +23,11 @@ They fall into three groups.
 **Machine behavior** — `ssh`, `power`, `macos`, `gpu`. These change the
 machine itself: remote access, power (the power profile, the display,
 idle-suspend and screensaver timers in minutes or never, and "Never suspend,
-even when asked"), macOS defaults (Dock, Finder, typing, faster animations),
+even when asked"), macOS defaults (typing, dialogs, screensaver password),
 and the NVIDIA driver and MOK signing. Key repeat speed is
 not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and macOS.
 
-**Desktop** — `audio`, `bluetooth`. `bluetooth` installs bluez and Blueman and
+**Desktop** — `audio`, `bluetooth`, `desktop`. `bluetooth` installs bluez and Blueman and
 turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
 PulseAudio tools, plus Bluetooth audio (PipeWire's Bluetooth codecs and an LDAC
 config), and switches alert sounds. Neither installs the other's packages.
@@ -47,6 +47,15 @@ local network (UFW). Each one can be turned off, which removes what ctdev
 added. The firewall blocks every other incoming service unless you open its
 ports first, so on a DNS or proxy host run `ctdev configure ssh` without
 `--batch` and leave it off.
+
+`desktop` holds how the desktop looks and behaves, on whichever platform you run
+it. On macOS: an auto-hiding Dock, faster animations, Finder's
+list view with path and status bars, and no `.DS_Store` files on network and USB
+drives, each one on or off. On Cinnamon: Nemo's default view, and Hide drives,
+which lists this machine's partitions and hides the ones you check from the file
+manager. It writes `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem
+UUID; checking nothing removes it. `--batch` leaves Hide drives alone, since
+which partitions to hide is this machine's choice.
 
 **Your identity on it** — `git`, `aws`. Name, email, signing key, AWS profile.
 Each needs its tool: on a machine without git or the AWS CLI, it asks "Git isn't

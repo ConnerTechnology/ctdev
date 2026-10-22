@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
+  machine's partitions and you check which to hide from the file manager. It writes
+  `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem UUID for exactly those,
+  and checking nothing removes the rule. The old rule, hard-coded to one computer's
+  partitions, is gone; on a machine that has it, the wizard shows "legacy rule" until
+  you pick. `--batch` leaves Hide drives as it is.
+- **`configure desktop` covers macOS too.** The Dock, Finder and animation defaults move
+  from `configure macos` into `desktop` as four settings you can turn on or off: an
+  auto-hiding Dock, faster animations, Finder list view with path and status bars, and
+  no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
+  macOS goes back to its own default.
 - **`ctdev configure mouse` names its settings by what they do, and each says why.**
   "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
   only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
@@ -22,6 +33,14 @@ All notable changes to this project will be documented in this file.
 - **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
   `configure storage` and the Logitech KVM fix to `configure mouse`.
   `ctdev configure system` now reports an unknown category.
+
+## [16.0.1] - 2026-10-22
+
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.0.2`** (was `v1.0.0`), which
+  narrows the plugin's merge rule to `gh pr merge * --merge`. Run `ctdev repo setup` again in
+  a repo to move it to 1.0.2: it re-points the marketplace and updates the plugin at local
+  scope.
 
 ## [16.0.0] - 2026-10-22
 

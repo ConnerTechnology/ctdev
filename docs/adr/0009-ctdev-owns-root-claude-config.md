@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-10-03
+---
+
 # ctdev owns the root Claude config
 
 `~/.claude/settings.json` and `~/.claude/CLAUDE.md` are one baseline, kept in

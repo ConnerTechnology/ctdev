@@ -12,6 +12,10 @@ const (
 	ControlToggle ControlType = iota
 	ControlSlider
 	ControlPicker
+	// ControlMultiPick checks any number of ChoicesFunc's choices. Its value
+	// is the checked choice values, sorted and comma-joined (JoinPicks), or
+	// PicksNone when nothing is checked.
+	ControlMultiPick
 )
 
 type SliderRange struct {
@@ -43,13 +47,14 @@ type Setting struct {
 	Category    string // human-readable category for display grouping
 	Description string // shown in wizard prompt
 	Control     ControlType
-	Default     string // our recommended value as string
+	Default     string // our recommended value as string; "" means none, so --batch leaves it alone
 	Slider      *SliderRange
 	Choices     []PickerChoice
-	DetectFunc  func(ctx context.Context) string // reads current system value
-	ApplyFunc   ApplyFunc                        // writes value to system
-	HardwareFn  func() bool                      // optional; setting hidden when returns false
-	ApplyGroup  string                           // settings sharing a group run one post-apply hook
+	ChoicesFunc func(ctx context.Context) []PickerChoice // ControlMultiPick: this machine's choices
+	DetectFunc  func(ctx context.Context) string         // reads current system value
+	ApplyFunc   ApplyFunc                                // writes value to system
+	HardwareFn  func() bool                              // optional; setting hidden when returns false
+	ApplyGroup  string                                   // settings sharing a group run one post-apply hook
 	// OneWay marks install/enable-style settings whose ApplyFunc has no off
 	// path (it ignores the value). The wizard offers these as a single
 	// "apply?" question instead of a fake enable/disable choice.
@@ -82,6 +87,11 @@ func (inst *SettingState) NeedsApply(force bool) bool {
 	if !inst.Enabled || inst.CurrentValue == ValueUnknown {
 		return false
 	}
+	if force && inst.Setting != nil && inst.Setting.Default == "" {
+		// No recommendation to force: --force re-applies defaults, and a
+		// per-machine choice has none, so only an actual change applies.
+		return inst.CurrentValue != inst.DesiredValue
+	}
 	if force {
 		return true
 	}
@@ -110,6 +120,11 @@ func InitStates(ctx context.Context, settings []Setting) []SettingState {
 		if settings[i].DetectFunc != nil {
 			current = settings[i].DetectFunc(ctx)
 		}
+		desired := settings[i].Default
+		if desired == "" {
+			// No recommendation (a per-machine choice): keep what is there.
+			desired = current
+		}
 		notNeeded := ""
 		if settings[i].NotNeededFn != nil {
 			notNeeded = settings[i].NotNeededFn(ctx)
@@ -117,7 +132,7 @@ func InitStates(ctx context.Context, settings []Setting) []SettingState {
 		states[i] = SettingState{
 			Setting:      &settings[i],
 			CurrentValue: current,
-			DesiredValue: settings[i].Default,
+			DesiredValue: desired,
 			// A setting this machine doesn't need isn't applied by default.
 			Enabled:   notNeeded == "",
 			NotNeeded: notNeeded,
