@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-09-24
+---
+
 # Repo instructions only
 
 Sessions read this repo's `AGENTS.md` (through `CLAUDE.md`, ADR-0002) and nothing from the user

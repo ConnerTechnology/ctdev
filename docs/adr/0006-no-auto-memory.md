@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-09-24
+---
+
 # No auto memory
 
 Claude Code's auto memory is off (`autoMemoryEnabled: false`). Decisions are captured where they can

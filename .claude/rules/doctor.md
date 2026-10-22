@@ -5,17 +5,13 @@ paths:
 ---
 # ctdev doctor
 
-`ctdev doctor` is the one command that assumes nothing about the machine — it is
-built for diagnosing hardware you did not set up. Every check is read-only, root
-is never required (checks needing it report Skipped and say so), and no data
-leaves the machine beyond the diagnostic probes themselves.
+Why doctor is read-only and `--root` is opt-in:
+`docs/adr/0012-doctor-is-read-only-and-root-is-opt-in.md`. No data leaves the
+machine beyond the diagnostic probes themselves.
 
-- **`--root` is how root-only checks run, and it is opt-in.** Never *requiring*
-  root hardened into never *asking*, which silently cost SMART health, ufw
-  status, container log sizes and the authoritative `sshd -T` read on machines
-  where the operator would gladly have typed a password. The prompt belongs to
-  `runDoctor`, before `GatherFacts` settles `Facts.Root` — never inside package
-  `diagnose`, so callers that only want facts never hit a password prompt.
+- **`--root`:** the prompt belongs to `runDoctor`, before `GatherFacts` settles
+  `Facts.Root` — never inside package `diagnose`, so callers that only want facts
+  never hit a password prompt.
 - **A skip never says "re-run with sudo".** ctdev installs to `~/.local/bin`,
   which sudo's `secure_path` excludes on stock Debian/Mint, so `sudo ctdev
   doctor` dies with "command not found" — advice the operator cannot follow.

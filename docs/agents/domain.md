@@ -9,7 +9,7 @@ codebase. Single-context: one glossary, one ADR directory.
   resolved.
 - **`docs/adr/`** — the decisions, one per file. A new ADR follows `docs/adr/template.md`, which
   adds a date to the skill's format and makes the status required. A superseded ADR is
-  history: the one that replaced it is what holds.
+  history: the one that replaced it is what holds. Numbering starts at 0002; there is no 0001.
 
 ## Use the glossary's vocabulary
 
