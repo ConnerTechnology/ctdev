@@ -30,7 +30,6 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
 | `docs/architecture.md` | The directory map of the Go module |
 | `docs/adding-a-component.md` | The template for a new component, plus the `Root` / Phase 1-2 / `.deb` rules |
-| `RECOVERY.md` | Disaster recovery: restoring a machine from restic |
 | `TROUBLESHOOTING.md` | Symptoms and fixes on a live machine |
 | `CHANGELOG.md` | What shipped in each version |
 

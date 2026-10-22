@@ -23,8 +23,6 @@ ctdev configure caddy --domain example.com --acme-email you@example.com
 ctdev install caddy                      # deploy the proxy stack + bring it up
 ctdev install portainer                  # optional: Docker management web UI
 ctdev install beszel                      # optional: server/container monitoring
-ctdev install restic                      # optional: daily restic backups
-ctdev configure restic                    # set repo + credentials, init, enable timer
 ```
 
 `ctdev install portainer` brings up Portainer CE (a web UI to view and manage
@@ -41,24 +39,9 @@ admin user, click "Add System", put the issued KEY/TOKEN in `~/beszel/.env`,
 then re-run `ctdev install beszel` to start the agent. Keep it off any public
 network (Tailscale only).
 
-`ctdev install restic` installs restic, a daily backup timer, and the backup/restore
-helper scripts. Then `ctdev configure restic` prompts for the repository (any restic
-backend — Backblaze B2, S3, SFTP, or a local/USB path), backend credentials, and a
-repository password (it can generate one), writes `/etc/restic/restic.env` (root-only,
-never committed), seeds default exclude patterns, runs `restic init`, and enables the
-timer. Snapshots are tagged with the hostname, so each machine backs up to its own repo
-and sees only its own snapshots. Backups are **opt-in** — nothing is snapshotted until you
-choose what to include with `ctdev backup paths`, a local web UI that browses the
-filesystem with folder sizes and include/exclude buttons. (Includes are the trees to back
-up; excludes carve junk out of them, e.g. include `~/Repos`, exclude `**/node_modules`.) `ctdev backup now` snapshots immediately; `ctdev backup
-snapshots` lists them; `ctdev restore …` restores — **see [RECOVERY.md](../../RECOVERY.md)
-for the complete disaster-recovery runbook.**
-
-Secrets are **never stored in the repo**. Each (Cloudflare token, restic repo password
-+ backend keys, Beszel KEY/TOKEN, Pi-hole password) is entered at its `configure` step
-and stored only on the host; if lost, you reconfigure. restic backs up the rendered
-`~/<svc>/.env` files, so a restore brings them back — keep the restic repo password
-itself in your password manager, since restic can't restore its own credentials.
+Secrets are **never stored in the repo**. Each (Cloudflare token, Beszel KEY/TOKEN,
+Pi-hole password) is entered at its `configure` step and stored only on the host; if
+lost, you reconfigure from your password manager.
 
 `ctdev configure caddy` writes `~/caddy/.env` (mode 600) and, when Pi-hole is
 present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. Then
@@ -84,6 +67,5 @@ route snippet in `~/caddy/sites/<svc>.caddy`, then `ctdev install caddy` (or
 cert already cover it.
 
 **Secrets.** A node's secrets are entered into its `configure` wizard (or `.env`) and
-live only on that host — nothing secret is committed to the repo. Restoring a node from
-its restic backup brings the `.env` files back; standing up a brand-new node means
-re-entering them from your password manager. **Never commit a secret.**
+live only on that host — nothing secret is committed to the repo. Standing up a
+brand-new node means re-entering them from your password manager. **Never commit a secret.**

@@ -126,8 +126,13 @@ func TestInstallNeedsRoot_RealRegistry(t *testing.T) {
 	if !InstallNeedsRoot("apt", []string{"claude-code", "docker"}, true) {
 		t.Error("docker should need root")
 	}
-	if !InstallNeedsRoot("apt", []string{"restic"}, false) {
-		t.Error("restic redeploys /etc units on every run and should need root")
+	// restic's Linux binary goes to ~/.local/bin, so even a forced install
+	// and its uninstall need no password.
+	if InstallNeedsRoot("apt", []string{"restic"}, true) || UninstallNeedsRoot([]string{"restic"}) {
+		t.Error("restic installs into ~/.local/bin and must not need root")
+	}
+	if !InstallNeedsRoot("apt", []string{"caddy"}, false) {
+		t.Error("caddy brings its stack up through sudo on every run and should need root")
 	}
 }
 
@@ -141,7 +146,7 @@ func TestInstallNeedsRoot_RealRegistryOnBrew(t *testing.T) {
 	if !InstallNeedsRoot("brew", []string{"docker"}, true) {
 		t.Error("Docker Desktop installs a privileged helper and must pre-authorize sudo")
 	}
-	if InstallNeedsRoot("brew", []string{"jq", "fd", "bat", "ripgrep"}, true) {
+	if InstallNeedsRoot("brew", []string{"jq", "fd", "bat", "ripgrep", "restic"}, true) {
 		t.Error("plain Homebrew formulae must not ask for a password")
 	}
 	if InstallNeedsRoot("brew", []string{"chrome", "slack", "vscode"}, true) {
