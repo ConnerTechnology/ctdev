@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -62,6 +63,12 @@ func runBackup(cmd *cobra.Command, _ []string) error {
 			err = backupNow(ctx, m, s)
 		case backupscreen.Configure:
 			err = configureFolder(ctx, m, s)
+		case backupscreen.ListBackups:
+			err = listBackups(ctx, m, s)
+		case backupscreen.StopBackingUp:
+			err = stopBackingUp(m, s)
+		case backupscreen.DeleteAll:
+			err = deleteAllBackups(ctx, m, s)
 		default:
 			return nil
 		}
@@ -151,6 +158,12 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 	if err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}
+	// The folder's keep rules apply after each successful backup, to its
+	// own backups only; one-offs are kept until deleted (CTD-87).
+	var retainErr error
+	if s.Config != nil {
+		retainErr = d.ApplyRetention(ctx, *s.Config)
+	}
 	if m.Opts.DryRun {
 		return nil
 	}
@@ -158,6 +171,207 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 		backupscreen.Files(snap.Files), backupscreen.Bytes(snap.Size), backupscreen.Bytes(snap.Added), snap.ShortID)))
 	if snap.Warning != "" {
 		fmt.Println("  " + styles.Warning.Render("Note: "+snap.Warning+"."))
+	}
+	if retainErr != nil {
+		fmt.Println("  " + styles.Warning.Render("Applying the keep rules failed, so older backups weren't thinned: "+retainErr.Error()))
+	}
+	return nil
+}
+
+// spaceFreed is said after every delete: forget doesn't free space, the
+// weekly maintenance's prune does (CTD-87).
+const spaceFreed = "Space is freed at the next weekly maintenance."
+
+// runScreen runs a Bubble Tea screen to completion.
+func runScreen(screen tea.Model) error {
+	_, err := tea.NewProgram(screen).Run()
+	return err
+}
+
+// folderDestinations are where the folder's backups are: its destination
+// once configured, and for one that isn't, every destination this computer
+// has, since a one-off goes to whichever was chosen.
+func folderDestinations(m *backup.Machine, s backup.Status) ([]*backup.Destination, error) {
+	if s.Config != nil {
+		if s.DestinationMissing {
+			return nil, fmt.Errorf("destination %s isn't set up on this computer: choose Configure to connect to it", s.Config.Destination)
+		}
+		d, err := m.Destination(s.Config.Destination)
+		if err != nil {
+			return nil, err
+		}
+		return []*backup.Destination{d}, nil
+	}
+	names, err := m.Destinations()
+	if err != nil {
+		return nil, err
+	}
+	dests := make([]*backup.Destination, 0, len(names))
+	for _, n := range names {
+		d, err := m.Destination(n)
+		if err != nil {
+			return nil, err
+		}
+		dests = append(dests, d)
+	}
+	return dests, nil
+}
+
+// listBackups is List backups: the folder's backups, then a backup's details
+// with Download as zip and Delete this backup, until Back.
+func listBackups(ctx context.Context, m *backup.Machine, s backup.Status) error {
+	dests, err := folderDestinations(m, s)
+	if err != nil {
+		return err
+	}
+	ref := m.Ref(s.Target, s.Config)
+	where := backup.DisplayPath(m.Home, s.Target)
+	for {
+		var snaps []backup.Snapshot
+		var stored int64
+		owner := map[string]*backup.Destination{}
+		for _, d := range dests {
+			found, err := d.Snapshots(ctx, ref)
+			if err != nil {
+				return err
+			}
+			for _, snap := range found {
+				owner[snap.ID] = d
+			}
+			snaps = append(snaps, found...)
+			if len(found) > 0 {
+				n, err := d.Stored(ctx, ref)
+				if err != nil {
+					return err
+				}
+				stored += n
+			}
+		}
+		if len(snaps) == 0 {
+			fmt.Println("\n  " + where + " has no backups.")
+			return nil
+		}
+		fmt.Println()
+		list := backupscreen.NewList(where, snaps, stored)
+		if err := runScreen(list); err != nil {
+			return err
+		}
+		snap, ok := list.Chosen()
+		if !ok {
+			return nil
+		}
+		latest := true
+		for _, other := range snaps {
+			if other.Time.After(snap.Time) {
+				latest = false
+			}
+		}
+		if err := backupDetail(ctx, m, owner[snap.ID], s.Target, snap, latest); err != nil {
+			return err
+		}
+	}
+}
+
+// backupDetail shows one backup and runs its menu until Back or a delete.
+func backupDetail(ctx context.Context, m *backup.Machine, d *backup.Destination, root string, snap backup.Snapshot, latest bool) error {
+	where := backup.DisplayPath(m.Home, root)
+	for {
+		fmt.Println()
+		detail := backupscreen.NewDetail(where, snap, latest)
+		if err := runScreen(detail); err != nil {
+			return err
+		}
+		switch detail.Chosen() {
+		case backupscreen.Download:
+			fmt.Printf("  Downloading the backup from %s…\n", snap.Time.Local().Format("Jan 2, 3:04 PM"))
+			path, err := m.Download(ctx, d, root, snap)
+			if err != nil {
+				fmt.Println("  " + styles.Error.Render("Download failed: "+err.Error()))
+				continue
+			}
+			if !m.Opts.DryRun {
+				fmt.Println("  " + styles.Success.Render("✓ Saved "+backup.DisplayPath(m.Home, path)))
+			}
+		case backupscreen.DeleteOne:
+			confirm := backupscreen.NewConfirm(fmt.Sprintf("Delete the backup from %s?", snap.Time.Local().Format("Jan 2, 3:04 PM")))
+			if err := runScreen(confirm); err != nil {
+				return err
+			}
+			if !confirm.Confirmed() {
+				fmt.Println("  Nothing was deleted.")
+				continue
+			}
+			if err := d.Delete(ctx, snap); err != nil {
+				return err
+			}
+			if !m.Opts.DryRun {
+				fmt.Println("  " + styles.Success.Render("✓ Deleted backup "+snap.ShortID+".") + " " + spaceFreed)
+			}
+			return nil
+		default:
+			return nil
+		}
+	}
+}
+
+// deleteAllBackups is Delete all backups: after [y/N] and typing the
+// folder's name, it forgets every backup of the folder.
+func deleteAllBackups(ctx context.Context, m *backup.Machine, s backup.Status) error {
+	dests, err := folderDestinations(m, s)
+	if err != nil {
+		return err
+	}
+	where := backup.DisplayPath(m.Home, s.Target)
+	fmt.Println()
+	confirm := backupscreen.NewDeleteAll(where, filepath.Base(s.Target), s.Backups)
+	if err := runScreen(confirm); err != nil {
+		return err
+	}
+	if !confirm.Confirmed() {
+		fmt.Println("  Nothing was deleted.")
+		return nil
+	}
+	ref := m.Ref(s.Target, s.Config)
+	total := 0
+	for _, d := range dests {
+		n, err := d.DeleteAll(ctx, ref)
+		total += n
+		if err != nil {
+			return err
+		}
+	}
+	if !m.Opts.DryRun {
+		deleted := fmt.Sprintf("%d backups", total)
+		if total == 1 {
+			deleted = "1 backup"
+		}
+		fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Deleted %s of %s.", deleted, where)) + " " + spaceFreed)
+	}
+	return nil
+}
+
+// stopBackingUp is Stop backing up: after [y/N], the folder's config file is
+// deleted and it comes off this computer's schedule. Its backups are kept.
+func stopBackingUp(m *backup.Machine, s backup.Status) error {
+	if s.Config == nil {
+		return errors.New("this folder isn't configured, so there's nothing to stop")
+	}
+	where := backup.DisplayPath(m.Home, s.Root)
+	fmt.Println()
+	confirm := backupscreen.NewConfirm("Stop backing up " + where + "?")
+	if err := runScreen(confirm); err != nil {
+		return err
+	}
+	if !confirm.Confirmed() {
+		fmt.Println("  Nothing was changed.")
+		return nil
+	}
+	if err := m.StopBackingUp(s.Root); err != nil {
+		return err
+	}
+	if !m.Opts.DryRun {
+		fmt.Println("  " + styles.Success.Render("✓ Stopped backing up "+where+"."))
+		fmt.Println("  Its backups are kept; choose Delete all backups to remove them.")
 	}
 	return nil
 }
