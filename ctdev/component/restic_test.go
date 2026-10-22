@@ -20,35 +20,46 @@ func dryRunLines(out string) []string {
 	return dry
 }
 
-// restic is only its package: a dry run of install (forced) or uninstall shows
-// one package-manager line and nothing else — no systemd units, no scripts, no
-// system config directory.
-func TestResticDryRunIsOnlyThePackage(t *testing.T) {
-	pm := platform.Detect().PackageManager
-	if pm != "apt" && pm != "brew" {
-		t.Skipf("restic installs via apt or Homebrew; this host uses %q", pm)
-	}
-	c := FindByName("restic")
-	if c == nil {
-		t.Fatal("restic is not in the registry")
-	}
-	// apt-get says install/remove; brew says install/uninstall.
-	for _, tc := range []struct {
+// restic is only its binary: a dry run of install (forced) or uninstall shows
+// one line and nothing else — no systemd units, no scripts, no system config
+// directory. On Linux that line is the pinned upstream release going into
+// ~/.local/bin (apt's restic is too old); on macOS it is Homebrew.
+func TestResticDryRunIsOnlyTheBinary(t *testing.T) {
+	type step struct {
 		name string
 		run  func(context.Context, ExecOpts) error
-		verb string
-	}{
-		{"install", c.GoInstall, " install "},
-		{"uninstall", c.GoUninstall, map[string]string{"apt": " remove ", "brew": " uninstall "}[pm]},
-	} {
+		want []string // substrings the one dry-run line must contain
+	}
+	var steps []step
+	switch platform.Detect().OS {
+	case platform.Linux:
+		steps = []step{
+			{"install", resticInstall, []string{"download restic/restic v" + resticVersion, "/.local/bin/restic"}},
+			{"uninstall", resticUninstall, []string{"rm -f", "/.local/bin/restic"}},
+		}
+	case platform.MacOS:
+		steps = []step{
+			{"install", resticInstall, []string{"brew install restic"}},
+			{"uninstall", resticUninstall, []string{"brew uninstall restic"}},
+		}
+	default:
+		t.Skip("restic installs on Linux and macOS only")
+	}
+	for _, s := range steps {
 		var buf bytes.Buffer
 		opts := ExecOpts{DryRun: true, Force: true, Stdout: &buf, Stderr: &buf}
-		if err := tc.run(context.Background(), opts); err != nil {
-			t.Fatalf("%s dry run: %v", tc.name, err)
+		if err := s.run(context.Background(), opts); err != nil {
+			t.Fatalf("%s dry run: %v", s.name, err)
 		}
 		dry := dryRunLines(buf.String())
-		if len(dry) != 1 || !strings.Contains(dry[0], tc.verb) || !strings.HasSuffix(dry[0], " restic") {
-			t.Errorf("%s: want one package%sline, got:\n%s", tc.name, tc.verb, buf.String())
+		if len(dry) != 1 {
+			t.Errorf("%s: want one dry-run line, got:\n%s", s.name, buf.String())
+			continue
+		}
+		for _, w := range s.want {
+			if !strings.Contains(dry[0], w) {
+				t.Errorf("%s: dry-run line %q lacks %q", s.name, dry[0], w)
+			}
 		}
 	}
 }

@@ -165,3 +165,73 @@ func TestVerifyChecksumFileMissing(t *testing.T) {
 		t.Error("expected error for missing file in checksums")
 	}
 }
+
+// A pinned bz2 release installs into a user-owned directory without sudo, and
+// only after its checksum matches.
+func TestDownloadGitHubBinary_PinnedBz2UserInstall(t *testing.T) {
+	// bzip2 of "fake restic binary\n"; the stdlib has no bzip2 writer.
+	archive, _ := hex.DecodeString("425a6839314159265359d8ec154c000004d180001040003b291c202000228d0f49b53c8400007d12451fd3484c17eb177245385090d8ec154c")
+	sum := sha256.Sum256(archive)
+	for _, tc := range []struct {
+		name    string
+		sums    string
+		wantErr bool
+	}{
+		{"checksum matches", hex.EncodeToString(sum[:]) + "  tool_1.2.3.bz2\n", false},
+		{"checksum mismatch", strings.Repeat("0", 64) + "  tool_1.2.3.bz2\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1.2.3/tool_1.2.3.bz2":
+					w.Write(archive)
+				case "/v1.2.3/SHA256SUMS":
+					fmt.Fprint(w, tc.sums)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+
+			dest := filepath.Join(t.TempDir(), "bin", "tool")
+			ver, err := DownloadGitHubBinary(context.Background(), Opts{Stdout: os.Stdout}, GitHubBinarySpec{
+				Repo:    "example/tool",
+				Version: "1.2.3",
+				ArchiveURL: func(ver, goos, goarch string) string {
+					return fmt.Sprintf("%s/v%s/tool_%s.bz2", srv.URL, ver, ver)
+				},
+				ChecksumURL: func(ver, goos, goarch string) string {
+					return fmt.Sprintf("%s/v%s/SHA256SUMS", srv.URL, ver)
+				},
+				InstallDest: dest,
+				ArchFormat:  "bz2",
+				UserInstall: true,
+			})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("want a checksum error, got none")
+				}
+				if _, statErr := os.Stat(dest); statErr == nil {
+					t.Error("binary installed despite a checksum mismatch")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ver != "1.2.3" {
+				t.Errorf("version = %q, want the pin", ver)
+			}
+			got, err := os.ReadFile(dest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != "fake restic binary\n" {
+				t.Errorf("installed contents = %q", got)
+			}
+			if fi, err := os.Stat(dest); err != nil || fi.Mode().Perm()&0o100 == 0 {
+				t.Errorf("installed binary is not executable: %v", err)
+			}
+		})
+	}
+}

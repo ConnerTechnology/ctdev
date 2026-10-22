@@ -126,6 +126,11 @@ func TestInstallNeedsRoot_RealRegistry(t *testing.T) {
 	if !InstallNeedsRoot("apt", []string{"claude-code", "docker"}, true) {
 		t.Error("docker should need root")
 	}
+	// restic's Linux binary goes to ~/.local/bin, so even a forced install
+	// and its uninstall need no password.
+	if InstallNeedsRoot("apt", []string{"restic"}, true) || UninstallNeedsRoot([]string{"restic"}) {
+		t.Error("restic installs into ~/.local/bin and must not need root")
+	}
 	if !InstallNeedsRoot("apt", []string{"caddy"}, false) {
 		t.Error("caddy brings its stack up through sudo on every run and should need root")
 	}
