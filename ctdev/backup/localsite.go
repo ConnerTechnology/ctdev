@@ -1,0 +1,74 @@
+package backup
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+)
+
+// siteState is what was at a local destination's path before creation, which
+// decides what a failed creation may remove.
+type siteState int
+
+const (
+	siteUnknown  siteState = iota // couldn't tell, or a symlink: never removed
+	siteMissing                   // nothing there: restic made it all
+	siteEmptyDir                  // an empty directory: restic made what's inside
+	siteFull                      // a directory with files in it
+)
+
+type localSite struct {
+	path  string
+	state siteState
+}
+
+// inspectLocal looks at a local path without following a symlink. Only a
+// definite "doesn't exist" counts as missing; any other error is unknown.
+func inspectLocal(path string) localSite {
+	s := localSite{path: path}
+	fi, err := os.Lstat(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		s.state = siteMissing
+	case err != nil, fi.Mode()&fs.ModeSymlink != 0, !fi.IsDir():
+		s.state = siteUnknown
+	default:
+		entries, err := os.ReadDir(path)
+		switch {
+		case err != nil:
+			s.state = siteUnknown
+		case len(entries) == 0:
+			s.state = siteEmptyDir
+		default:
+			s.state = siteFull
+		}
+	}
+	return s
+}
+
+// cleanup removes what a failed creation left at the site, and reports what
+// it did as part of err.
+func (s localSite) cleanup(err error) error {
+	// Look again: the path must still be a real directory, not a symlink.
+	if fi, lerr := os.Lstat(s.path); lerr == nil && (fi.Mode()&fs.ModeSymlink != 0 || !fi.IsDir()) {
+		return fmt.Errorf("%w; %s isn't a plain folder now, so the half-created repository there was left: delete it before trying again", err, s.path)
+	}
+	switch s.state {
+	case siteMissing:
+		if rerr := os.RemoveAll(s.path); rerr != nil {
+			return fmt.Errorf("%w; removing the half-created repository at %s also failed: %v", err, s.path, rerr)
+		}
+	case siteEmptyDir:
+		entries, _ := os.ReadDir(s.path)
+		for _, e := range entries {
+			if rerr := os.RemoveAll(filepath.Join(s.path, e.Name())); rerr != nil {
+				return fmt.Errorf("%w; emptying the half-created repository at %s also failed: %v", err, s.path, rerr)
+			}
+		}
+	default:
+		return fmt.Errorf("%w; ctdev couldn't tell what was at %s before, so the half-created repository there was left: delete restic's config, data, index, keys, locks and snapshots there before trying again", err, s.path)
+	}
+	return fmt.Errorf("%w (the half-created repository at %s was removed)", err, s.path)
+}

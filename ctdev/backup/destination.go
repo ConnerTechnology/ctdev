@@ -145,10 +145,9 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 	}
 	// Note what was at a local path before, so a failure removes only what
 	// restic made there.
-	var existed, wasEmpty bool
+	var site localSite
 	if isLocal(address) {
-		entries, err := os.ReadDir(address)
-		existed, wasEmpty = err == nil, err == nil && len(entries) == 0
+		site = inspectLocal(address)
 	}
 
 	// Find restic first, so a missing one isn't mistaken for a failed init.
@@ -162,40 +161,25 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 		if strings.Contains(err.Error(), "already") {
 			return Setup{}, fmt.Errorf("%s already holds a restic repository: connect to it with its Emergency Kit, or choose another address", address)
 		}
-		return Setup{}, abandon(d, existed, wasEmpty, fmt.Errorf("create the repository at %s: %w", address, err))
+		return Setup{}, abandon(d, site, fmt.Errorf("create the repository at %s: %w", address, err))
 	}
 	s, err := m.finishCreate(ctx, d, master, sk, initial)
 	if err != nil {
 		// Nobody has a kit for this repository yet, so it must not be left
 		// behind, including after Ctrl-C.
-		return Setup{}, abandon(d, existed, wasEmpty, err)
+		return Setup{}, abandon(d, site, err)
 	}
 	return s, nil
 }
 
 // abandon cleans up after a creation that failed past restic init. A local
-// repository ctdev made is removed; one in a folder that held files already,
-// or at a remote backend, can't be safely removed from here, so the error
-// says what to delete.
-func abandon(d *Destination, existed, wasEmpty bool, err error) error {
-	switch {
-	case !isLocal(d.Address):
+// repository is removed as far as inspectLocal says is safe; one at a remote
+// backend can't be removed from here, so the error says what to delete.
+func abandon(d *Destination, site localSite, err error) error {
+	if !isLocal(d.Address) {
 		return fmt.Errorf("%w; the repository at %s was left half-created: delete it at the provider before trying again", err, d.Address)
-	case !existed:
-		if rerr := os.RemoveAll(d.Address); rerr != nil {
-			return fmt.Errorf("%w; removing the half-created repository at %s also failed: %v", err, d.Address, rerr)
-		}
-	case wasEmpty:
-		entries, _ := os.ReadDir(d.Address)
-		for _, e := range entries {
-			if rerr := os.RemoveAll(filepath.Join(d.Address, e.Name())); rerr != nil {
-				return fmt.Errorf("%w; emptying the half-created repository at %s also failed: %v", err, d.Address, rerr)
-			}
-		}
-	default:
-		return fmt.Errorf("%w; %s held files before, so the half-created repository there was left: delete restic's config, data, index, keys, locks and snapshots there before trying again", err, d.Address)
 	}
-	return fmt.Errorf("%w (the half-created repository at %s was removed)", err, d.Address)
+	return site.cleanup(err)
 }
 
 // finishCreate adds the three keys to a just-initialized repository, removes
