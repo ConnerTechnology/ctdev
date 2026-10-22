@@ -190,8 +190,9 @@ func (m *Machine) DownloadFromAll(ctx context.Context, d *Destination, cwd strin
 			return "", err
 		}
 		// A parent this user can't write to, such as /home for a folder
-		// recorded as ~, is treated as one that isn't here.
-		if writable(dir) {
+		// recorded as ~, is treated as one that isn't here. A dry run
+		// writes nothing, not even the probe.
+		if m.Opts.DryRun || writable(dir) {
 			return m.downloadInto(ctx, d, filepath.Join(dir, zipName(original, snap)), snap)
 		}
 	}

@@ -84,7 +84,13 @@ computer, that `ctdev backup --all` shows, and this folder's `.ctdev-backup.json
 folder's ID, so its backups continue that history. Use it for a folder rebuilt on a new computer, or
 one whose backing up was stopped. Only folders with an ID can be continued, not one-off backups,
 and the list leaves out any folder this computer still backs up, since two folders sharing an ID
-would share their keep rules and deletes. Going Back from the list starts a new history instead.
+would share their keep rules and deletes. Going Back from the list (or q or esc) starts a new
+history instead; Ctrl+C cancels Configure.
+
+The list can't tell whether another computer still backs a folder up. Linking to one that it does
+makes this folder share that folder's keep rules and deletes: retention counts both folders'
+backups together, and Delete all backups in either removes both. Link only a folder that was rebuilt
+or moved here, not one that is still in use elsewhere.
 
 In a subfolder, Configure reconfigures the backed-up folder above it; a folder inside a backed-up
 folder can't be set up as one of its own. Configuring a folder that contains a backed-up folder is
@@ -245,8 +251,9 @@ Backups section.
 ## Every folder: `ctdev backup --all`
 
 `ctdev backup --all` is the whole destination rather than the folder you're in. It works from any
-directory and writes no folder config or other folder data into it. Its first line names the destination and what it holds, with
-the space stored measured once when `--all` starts:
+directory and writes nothing into it, except a download that falls back there (below). Its first
+line names the destination and what it holds, with the space stored measured once when `--all`
+starts:
 
 ```text
 example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored
