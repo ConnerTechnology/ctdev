@@ -147,11 +147,11 @@ func TestActionsRefuseAnEmptyTarget(t *testing.T) {
 	}
 	ctx := context.Background()
 	var s backup.Status // what a status that couldn't find the folder looks like
-	if err := backupNow(ctx, m, s); err == nil {
-		t.Error("backupNow with no target: want an error")
+	if err := backupNow(ctx, m, s); err == nil || err.Error() != "no folder to act on" {
+		t.Errorf("backupNow with no target: want \"no folder to act on\", got %v", err)
 	}
-	if err := configureFolder(ctx, m, s); err == nil {
-		t.Error("configureFolder with no target: want an error")
+	if err := configureFolder(ctx, m, s); err == nil || err.Error() != "no folder to act on" {
+		t.Errorf("configureFolder with no target: want \"no folder to act on\", got %v", err)
 	}
 }
 

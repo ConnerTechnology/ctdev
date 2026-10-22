@@ -59,13 +59,24 @@ func TestANewDestinationNeedsAnEmptyFolder(t *testing.T) {
 	m := testMachine(t, "example-laptop")
 	full := filepath.Join(m.Home, "Documents")
 	repo := filepath.Join(m.Home, "old-backups")
-	for dir, file := range map[string]string{full: "notes.txt", repo: "config"} {
+	stray := filepath.Join(m.Home, "settings")
+	for dir, file := range map[string]string{full: "notes.txt", repo: "config", stray: "config"} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, file), []byte("example\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// A repository has keys/ and data/ beside its config.
+	for _, d := range []string{"keys", "data"} {
+		if err := os.Mkdir(filepath.Join(repo, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A lone file called config doesn't make a folder a repository.
+	if _, err := m.CheckNewAddress("~/settings", ""); err == nil || !strings.Contains(err.Error(), "isn't a restic repository") {
+		t.Errorf("a folder with just a config file: want a refusal, got %v", err)
 	}
 	if _, err := m.CheckNewAddress("~/Documents", ""); err == nil || !strings.Contains(err.Error(), "isn't a restic repository") {
 		t.Errorf("a folder of files: want a refusal, got %v", err)

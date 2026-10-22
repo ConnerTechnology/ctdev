@@ -4,6 +4,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +87,83 @@ func TestARepositoryReachedThroughASymlinkIsStillInside(t *testing.T) {
 	d := &Destination{Name: "example-backups", Address: filepath.Join(link, "backups"), m: m, computerKey: "example"}
 	if _, err := m.Backup(context.Background(), d, root, nil); err == nil || !strings.Contains(err.Error(), "inside") {
 		t.Errorf("Backup: want an inside error, got %v", err)
+	}
+}
+
+// A path that was missing when inspected but is a symlink by cleanup time
+// is left alone, link and target both.
+func TestCleanupLeavesASymlinkThatAppearedSince(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "backups")
+	site := inspectLocal(path)
+	if site.state != siteMissing {
+		t.Fatalf("state = %v, want missing", site.state)
+	}
+	target := filepath.Join(dir, "elsewhere")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "notes.txt"), []byte("example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	err := site.cleanup(errors.New("example failure"))
+	if err == nil || !strings.Contains(err.Error(), "was left") {
+		t.Errorf("want a note that it was left, got %v", err)
+	}
+	if fi, err := os.Lstat(path); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the symlink is gone or changed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "notes.txt")); err != nil {
+		t.Errorf("the link's target lost its file: %v", err)
+	}
+}
+
+// makeLayout puts restic's repository layout at dir, plus a stray file that
+// arrived during creation.
+func makeLayout(t *testing.T, dir string) {
+	t.Helper()
+	for _, d := range []string{"data/00", "index", "keys", "locks", "snapshots"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{"config", "keys/example", "stray.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("example\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Cleanup removes restic's layout and nothing else: a file that arrived in
+// the folder during creation stays, and so do the folders holding it.
+func TestCleanupRemovesOnlyResticsLayout(t *testing.T) {
+	for name, existed := range map[string]bool{"an empty folder": true, "a new path": false} {
+		base := t.TempDir()
+		path := filepath.Join(base, "made", "backups")
+		if existed {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		site := inspectLocal(path)
+		makeLayout(t, path)
+		if err := site.cleanup(errors.New("example failure")); err == nil {
+			t.Fatalf("%s: cleanup must still report the failure", name)
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			t.Fatalf("%s: %s is gone though it holds a stray file: %v", name, path, err)
+		}
+		if len(entries) != 1 || entries[0].Name() != "stray.txt" {
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Errorf("%s: left %v, want only stray.txt", name, names)
+		}
 	}
 }
 
