@@ -68,9 +68,9 @@ list. The file holds only the folder's random ID, the destination's name, the sc
 retention, so it's safe to commit; in a git repo, commit it, and a clone on another computer finds
 the folder's backups. ctdev never edits `.gitignore`.
 
-Configure is refused inside a folder that is already backed up ("Already backed up as part of …").
-Configuring a folder that contains a backed-up folder is allowed, with a warning that the inner
-folder will be in both folders' backups.
+In a subfolder, Configure reconfigures the backed-up folder above it; a folder inside a backed-up
+folder can't be set up as one of its own. Configuring a folder that contains a backed-up folder is
+allowed, with a warning that the inner folder will be in both folders' backups.
 
 ### Creating a destination
 

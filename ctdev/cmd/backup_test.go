@@ -195,27 +195,28 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 	if s := m.Status(ctx, dir); !s.Scheduled || s.DestinationMissing {
 		t.Errorf("after Configure: scheduled %v, destination missing %v", s.Scheduled, s.DestinationMissing)
 	}
-}
 
-// From a subfolder of a backed-up folder, Configure is refused.
-func TestConfigureIsRefusedInASubfolder(t *testing.T) {
-	dir := backupFolderForTest(t)
-	if err := backup.WriteConfig(dir, backup.NewConfig("example-backups")); err != nil {
-		t.Fatal(err)
-	}
+	// From a subfolder, Configure reconfigures the backed-up folder above it,
+	// starting from its current values.
 	docs := filepath.Join(dir, "docs")
 	if err := os.MkdirAll(docs, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	stdinScanner = bufio.NewScanner(strings.NewReader(strings.Join([]string{
+		"",                 // destination: 1) example-backups, the current one
+		"3",                // Weekly
+		"", "", "", "", "", // keep the retention
+	}, "\n") + "\n"))
+	out = captureStdout(t, func() { cfgErr = configureFolder(ctx, m, m.Status(ctx, docs)) })
+	if cfgErr != nil {
+		t.Fatalf("configureFolder from a subfolder: %v\n%s", cfgErr, out)
+	}
+	again, err := backup.ReadConfig(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cfgErr error
-	out := captureStdout(t, func() { cfgErr = configureFolder(ctx, m, m.Status(ctx, docs)) })
-	if cfgErr != nil || !strings.Contains(out, "Already backed up as part of ~/Projects/website") {
-		t.Errorf("err %v, output %q", cfgErr, out)
+	if again.Schedule != backup.Weekly || again.ID != cfg.ID || again.Keep != cfg.Keep {
+		t.Errorf("reconfigured from a subfolder: %+v, want weekly with the same ID and retention", again)
 	}
 	if _, err := os.Stat(filepath.Join(docs, backup.ConfigFileName)); !os.IsNotExist(err) {
 		t.Error("no config file may be written in the subfolder")

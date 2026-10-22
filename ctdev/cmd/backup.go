@@ -164,13 +164,11 @@ func pickDestinationForOnce(ctx context.Context, m *backup.Machine, folder strin
 // configureFolder sets up the folder (or reconfigures it, starting from its
 // current values): destination, schedule and retention.
 func configureFolder(ctx context.Context, m *backup.Machine, s backup.Status) error {
+	// From a subfolder, this is the backed-up folder above it: status, menu
+	// and actions all apply to the backed-up folder (CTD-87). The menu never
+	// offers setting up a new folder inside one, which the package refuses.
 	target := s.Target
 	where := backup.DisplayPath(m.Home, target)
-	if s.Root != "" && s.Root != s.Cwd {
-		// From a subfolder, Configure would set up the subfolder inside the
-		// backed-up folder; CheckConfigurable refuses that.
-		target = s.Cwd
-	}
 	contained, err := backup.CheckConfigurable(target)
 	var inside *backup.InsideError
 	if errors.As(err, &inside) {
