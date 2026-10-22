@@ -4,6 +4,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +87,37 @@ func TestARepositoryReachedThroughASymlinkIsStillInside(t *testing.T) {
 	d := &Destination{Name: "example-backups", Address: filepath.Join(link, "backups"), m: m, computerKey: "example"}
 	if _, err := m.Backup(context.Background(), d, root, nil); err == nil || !strings.Contains(err.Error(), "inside") {
 		t.Errorf("Backup: want an inside error, got %v", err)
+	}
+}
+
+// A path that was missing when inspected but is a symlink by cleanup time
+// is left alone, link and target both.
+func TestCleanupLeavesASymlinkThatAppearedSince(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "backups")
+	site := inspectLocal(path)
+	if site.state != siteMissing {
+		t.Fatalf("state = %v, want missing", site.state)
+	}
+	target := filepath.Join(dir, "elsewhere")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "notes.txt"), []byte("example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	err := site.cleanup(errors.New("example failure"))
+	if err == nil || !strings.Contains(err.Error(), "was left") {
+		t.Errorf("want a note that it was left, got %v", err)
+	}
+	if fi, err := os.Lstat(path); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the symlink is gone or changed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "notes.txt")); err != nil {
+		t.Errorf("the link's target lost its file: %v", err)
 	}
 }
 
