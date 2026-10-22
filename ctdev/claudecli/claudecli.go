@@ -116,8 +116,9 @@ type InstallResult struct {
 	AvailableVersion string `json:"availableVersion"`
 }
 
-// Stale reports whether the plugin was already installed at an older version
-// than its marketplace now offers.
+// Stale reports whether the plugin was already installed at a different
+// version than its marketplace now offers: newer after a pin moves forward,
+// older after one moves back. Either way the pin wins.
 func (r InstallResult) Stale() bool {
 	return r.InstalledVersion != "" && r.AvailableVersion != "" && r.InstalledVersion != r.AvailableVersion
 }
