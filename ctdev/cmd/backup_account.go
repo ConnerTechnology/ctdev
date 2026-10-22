@@ -481,8 +481,12 @@ func updateFromKit(ctx context.Context, m *backup.Machine, kit string) (*backup.
 // another computer's lost-computer flow revoked the credentials this one
 // has: paste the new kit, or quit with the error.
 func unreadable(ctx context.Context, m *backup.Machine, d *backup.Destination, readErr error) (*backup.Destination, error) {
-	if errors.Is(readErr, backup.ErrWrongPassword) {
+	switch {
+	case errors.Is(readErr, backup.ErrWrongPassword):
 		return nil, fmt.Errorf("this computer's key no longer opens %s: it may have been removed from another computer", d.Name)
+	case errors.Is(readErr, backup.ErrNoRestic), ctx.Err() != nil:
+		// A new kit can't help with these.
+		return nil, readErr
 	}
 	fmt.Println("\n  " + styles.Error.Render("Can't read "+d.Name+": "+readErr.Error()))
 	fmt.Println("  If its credentials were replaced on another computer, paste the new Emergency Kit.")
