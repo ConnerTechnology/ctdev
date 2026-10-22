@@ -15,6 +15,8 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/backupscreen"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -81,7 +83,13 @@ func runBackup(cmd *cobra.Command, _ []string) error {
 // the folder isn't backed up or its last backup failed, so it works as a check.
 func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io.Writer) error {
 	s := m.Status(ctx, cwd)
-	fmt.Fprint(out, backupscreen.Status(s, m.Home))
+	text := backupscreen.Status(s, m.Home)
+	if f, ok := out.(*os.File); !ok || !term.IsTerminal(f.Fd()) {
+		// The plain theme keeps bold for NO_COLOR, but a pipe or a log
+		// should get no escape codes at all.
+		text = ansi.Strip(text)
+	}
+	fmt.Fprint(out, text)
 	switch {
 	case s.Config == nil:
 		return fmt.Errorf("%s isn't backed up: run ctdev backup in a terminal and choose Configure", backup.DisplayPath(m.Home, s.Target))

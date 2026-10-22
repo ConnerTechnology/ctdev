@@ -12,7 +12,6 @@ import (
 
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
 )
 
@@ -101,7 +100,11 @@ func runBackupBatch(t *testing.T) (string, error) {
 	backupCmd.SetOut(&out)
 	t.Cleanup(func() { backupCmd.SetOut(nil) })
 	err := backupCmd.RunE(backupCmd, nil)
-	return ansi.Strip(out.String()), err
+	// Output that isn't a terminal carries no styling at all.
+	if strings.Contains(out.String(), "\x1b") {
+		t.Errorf("status to a non-terminal has ANSI escapes: %q", out.String())
+	}
+	return out.String(), err
 }
 
 // Without a terminal, ctdev backup prints the status and fails in a folder
