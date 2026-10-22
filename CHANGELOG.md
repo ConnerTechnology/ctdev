@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [17.0.0] - 2026-10-22
+
+### Added
+- **`ctdev backup` backs up the folder you're in.** Run it in a folder to set it up: it
+  creates or connects a destination (a Secret Key and master password make the account
+  key, each computer gets its own key, and you get a Recovery Code and an Emergency Kit),
+  then backs the folder up with restic, run as you. The folder's settings live in
+  `.ctdev-backup.json`. From then on the screen shows the folder's status and offers
+  "Back up now". Without a terminal, or with `--batch`, it prints the status and exits 1
+  when the folder isn't set up, the last backup failed, or the destination can't be read.
+  Listing backups, stopping and deleting them are shown dimmed as coming soon. The
+  encryption model is ADR-0016. See `docs/backups.md`.
 
 ### Changed
 - **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
@@ -42,8 +53,15 @@ All notable changes to this project will be documented in this file.
   the same way. The recommended mouse speed is now 0.46, and the slider moves in steps
   of 0.01. The current speed shows rounded to that step, so a desktop-set 0.46218… reads
   as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
+- **`ctdev install restic` installs only restic**: apt on Linux, and now Homebrew on macOS.
+  It no longer sets up systemd units, scripts or `/etc/restic`.
 
 ### Removed
+- **The whole-machine restic backup is gone** (breaking). `ctdev configure restic`,
+  `ctdev backup now | snapshots | paths | test | enable | disable` and `ctdev restore` no
+  longer exist, along with the restic systemd units and scripts, `/etc/restic` handling,
+  the path-picker web page, the healthcheck ping and `RECOVERY.md`. Nothing on a machine
+  is removed; no machine runs the old setup. Per-folder `ctdev backup` replaces it.
 - **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
   `configure storage` and the Logitech KVM fix to `configure mouse`.
   `ctdev configure system` now reports an unknown category.
