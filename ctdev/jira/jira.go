@@ -37,8 +37,11 @@ const (
 // ServerName is the MCP server's name in Claude Code.
 const ServerName = "atlassian"
 
-// MCPURL is Atlassian's Rovo MCP server (Jira and Confluence Cloud).
-const MCPURL = "https://mcp.atlassian.com/v2/mcp"
+// MCPURL is Atlassian's Rovo MCP server (Jira and Confluence Cloud). Without
+// ?tools=all, its v2 endpoint lists only a few primary tools and reaches the
+// rest through generic discover and execute tools, which an allow list can't
+// tell apart; with it, every tool has its own name (CON-139).
+const MCPURL = "https://mcp.atlassian.com/v2/mcp?tools=all"
 
 // TokensURL is where a person creates an Atlassian API token.
 const TokensURL = "https://id.atlassian.com/manage-profile/security/api-tokens"
