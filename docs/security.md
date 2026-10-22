@@ -48,8 +48,8 @@ ctdev follows them, as the uninstaller does for `XDG_CACHE_HOME`.
 ## Secrets
 
 **No secret is ever stored in this repository.** Every secret ctdev handles —
-a Cloudflare API token, a Pi-hole password, a Beszel key, a Linear app secret, a Jira API
-token — is entered at its `configure` step and written only to the device that
+a Cloudflare API token, a Pi-hole password, a Beszel key, a Linear app secret,
+a Jira API token — is entered at its `configure` step and written only to the device that
 needs it, with a file mode that restricts it to its owner.
 
 The consequence is deliberate: lose a device and you re-enter its secrets from
