@@ -55,6 +55,9 @@ func ThisMachine(o sysutil.Opts) (*Machine, error) {
 // resticBin is the restic to run: ~/.local/bin/restic, where
 // `ctdev install restic` puts it on Linux, when it's there, else restic on
 // PATH. A scheduled run doesn't get the user's shell PATH.
+// resticBin is the restic to run: ~/.local/bin/restic, where
+// `ctdev install restic` puts it on Linux, when it's there, else restic on
+// PATH. A scheduled run doesn't get the user's shell PATH.
 func (m *Machine) resticBin() string {
 	if m.Restic != "" {
 		return m.Restic
@@ -134,9 +137,13 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 	if master == "" {
 		return Setup{}, errors.New("the master password can't be empty")
 	}
+	address, err := m.CheckAddress(nd.Address, "")
+	if err != nil {
+		return Setup{}, err
+	}
 	sk := newSecretKey()
 	d := &Destination{
-		Name: nd.Name, Address: nd.Address, m: m,
+		Name: nd.Name, Address: address, m: m,
 		credentials: nd.Credentials, secretKey: sk.String(), computerKey: randomPassword(),
 	}
 	recovery := newRecoveryCode()
@@ -147,9 +154,9 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 	initial := randomPassword()
 	if _, err := d.restic(ctx, run{password: initial, args: []string{"init", "--json"}}); err != nil {
 		if strings.Contains(err.Error(), "already") {
-			return Setup{}, fmt.Errorf("%s already holds a restic repository: connect to it with its Emergency Kit, or choose another address", nd.Address)
+			return Setup{}, fmt.Errorf("%s already holds a restic repository: connect to it with its Emergency Kit, or choose another address", address)
 		}
-		return Setup{}, fmt.Errorf("create the repository at %s: %w", nd.Address, err)
+		return Setup{}, fmt.Errorf("create the repository at %s: %w", address, err)
 	}
 	accountID, err := d.addKey(ctx, initial, accountUser, ctdevHost, account)
 	if err != nil {
@@ -199,8 +206,12 @@ func (m *Machine) ConnectDestination(ctx context.Context, kitText, master string
 	if err != nil {
 		return nil, err
 	}
+	address, err := m.CheckAddress(kit.Address, "")
+	if err != nil {
+		return nil, err
+	}
 	d := &Destination{
-		Name: kit.Destination, Address: kit.Address, m: m,
+		Name: kit.Destination, Address: address, m: m,
 		credentials: kit.Credentials, secretKey: sk.String(), computerKey: randomPassword(),
 	}
 	account := accountPassword(master, sk)

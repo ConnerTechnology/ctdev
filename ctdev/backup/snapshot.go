@@ -67,6 +67,9 @@ type Snapshot struct {
 // one-off: tagged with the path and hostname only. The result is recorded in
 // this machine's state.
 func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *Config) (Snapshot, error) {
+	if err := d.notInside(root); err != nil {
+		return Snapshot{}, err
+	}
 	ref := m.Ref(root, cfg)
 	args := []string{"backup", ".", "--json", "--retry-lock", retryLock, "--host", m.Hostname,
 		"--tag", tagPath + tagValue(ref.Path), "--tag", tagHost + tagValue(m.Hostname)}
@@ -221,6 +224,9 @@ func (d *Destination) files(ctx context.Context, id string) ([]string, error) {
 func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cfg Config) error {
 	root, err := filepath.Abs(root)
 	if err != nil {
+		return err
+	}
+	if err := d.notInside(root); err != nil {
 		return err
 	}
 	if _, err := CheckConfigurable(root); err != nil {

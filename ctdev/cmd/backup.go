@@ -103,7 +103,7 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 		}
 		d, err = m.Destination(s.Config.Destination)
 	} else {
-		d, err = pickDestinationForOnce(ctx, m)
+		d, err = pickDestinationForOnce(ctx, m, s.Target)
 	}
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 
 // pickDestinationForOnce is this computer's destination for a one-off
 // backup: the only one, a choice among several, or a new one set up now.
-func pickDestinationForOnce(ctx context.Context, m *backup.Machine) (*backup.Destination, error) {
+func pickDestinationForOnce(ctx context.Context, m *backup.Machine, folder string) (*backup.Destination, error) {
 	names, err := m.Destinations()
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func pickDestinationForOnce(ctx context.Context, m *backup.Machine) (*backup.Des
 	switch len(names) {
 	case 0:
 		fmt.Println("\n  This computer has no backup destination yet. Set one up first.")
-		return chooseDestination(ctx, m, "")
+		return chooseDestination(ctx, m, "", folder)
 	case 1:
 		return m.Destination(names[0])
 	}
@@ -198,7 +198,7 @@ func configureFolder(ctx context.Context, m *backup.Machine, s backup.Status) er
 	}
 	fmt.Println()
 	fmt.Println(styles.Title.Render("  Configure backups of " + where))
-	d, err := chooseDestination(ctx, m, cfg.Destination)
+	d, err := chooseDestination(ctx, m, cfg.Destination, target)
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func configureFolder(ctx context.Context, m *backup.Machine, s backup.Status) er
 // chooseDestination picks one of this computer's destinations, or sets up a
 // new one by creating it or connecting to an existing one. preferred, the
 // folder's current destination, is the default.
-func chooseDestination(ctx context.Context, m *backup.Machine, preferred string) (*backup.Destination, error) {
+func chooseDestination(ctx context.Context, m *backup.Machine, preferred, folder string) (*backup.Destination, error) {
 	names, err := m.Destinations()
 	if err != nil {
 		return nil, err
@@ -258,14 +258,14 @@ func chooseDestination(ctx context.Context, m *backup.Machine, preferred string)
 	case choice >= 1 && choice <= len(names):
 		return m.Destination(names[choice-1])
 	case choice == create:
-		return createDestination(ctx, m, preferred)
+		return createDestination(ctx, m, preferred, folder)
 	case choice == connect:
 		return connectDestination(ctx, m)
 	}
 	return nil, fmt.Errorf("invalid choice %d", choice)
 }
 
-func createDestination(ctx context.Context, m *backup.Machine, name string) (*backup.Destination, error) {
+func createDestination(ctx context.Context, m *backup.Machine, name, folder string) (*backup.Destination, error) {
 	if m.Opts.DryRun {
 		return nil, backup.ErrDryRun
 	}
@@ -274,9 +274,18 @@ func createDestination(ctx context.Context, m *backup.Machine, name string) (*ba
 	if err != nil {
 		return nil, err
 	}
-	address, creds, err := promptBackend(ctx)
-	if err != nil {
-		return nil, err
+	var address string
+	var creds map[string]string
+	for {
+		if address, creds, err = promptBackend(ctx); err != nil {
+			return nil, err
+		}
+		// Check before asking for anything else: a local path inside the
+		// folder would back the repository up into itself.
+		if address, err = m.CheckAddress(address, folder); err == nil {
+			break
+		}
+		fmt.Println("  " + styles.Warning.Render(err.Error()+": choose another place."))
 	}
 	fmt.Println()
 	fmt.Println(styles.Dimmed.Render("  The master password and a Secret Key ctdev generates together unlock the backups."))

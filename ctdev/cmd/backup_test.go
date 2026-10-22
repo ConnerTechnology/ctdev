@@ -153,9 +153,11 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 	saved := stdinScanner
 	t.Cleanup(func() { stdinScanner = saved })
 	stdinScanner = bufio.NewScanner(strings.NewReader(strings.Join([]string{
-		"",                // destination: 1) Create a new destination
-		"example-backups", // its name
-		"4",               // local path
+		"",                            // destination: 1) Create a new destination
+		"example-backups",             // its name
+		"4",                           // local path
+		"~/Projects/website/.backups", // inside the folder: refused, asked again
+		"4",
 		repo,
 		master, master,
 		"",                 // Enter once the kit and Recovery Code are saved
@@ -173,7 +175,7 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 	if cfgErr != nil {
 		t.Fatalf("configureFolder: %v\n%s", cfgErr, out)
 	}
-	for _, want := range []string{"Emergency Kit", "Secret Key:", "Recovery Code", "can't be decrypted"} {
+	for _, want := range []string{"back the repository up into itself", "Emergency Kit", "Secret Key:", "Recovery Code", "can't be decrypted"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("setup output is missing %q", want)
 		}
