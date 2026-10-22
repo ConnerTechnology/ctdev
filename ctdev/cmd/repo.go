@@ -22,7 +22,7 @@ import (
 // auto-update, so a repo gets a new library version only when ctdev's pin
 // moves and `ctdev repo setup` runs again.
 const (
-	pluginMarketplace = "ConnerTechnology/engineering@v1.0.2"
+	pluginMarketplace = "ConnerTechnology/engineering@v1.1.0"
 	pluginID          = "connertechnology@connertechnology"
 	setupSkill        = "/connertechnology:setup"
 )

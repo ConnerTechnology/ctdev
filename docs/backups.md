@@ -6,7 +6,8 @@ Backup is about the folder you're in. A folder is set up once, then backed up wh
 Per-folder backup is arriving in steps under
 [CTD-87](https://linear.app/conner-technology/issue/CTD-87). This page describes what ships today:
 the status screen, Configure, Back up now, List backups, Stop backing up, Delete all backups,
-scheduled backups with their health, and each destination's weekly maintenance and data check.
+scheduled backups with their health, each destination's weekly maintenance and data check, and
+`ctdev backup --all`.
 
 ## Running `ctdev backup`
 
@@ -83,6 +84,20 @@ list, and installs this computer's hourly runner ([Scheduled backups](#scheduled
 file holds only the folder's random ID, the destination's name, the schedule and the
 retention, so it's safe to commit; in a git repo, commit it, and a clone on another computer finds
 the folder's backups. ctdev never edits `.gitignore`.
+
+Configuring a folder for the first time, when the destination already holds other folders' backups,
+offers "Connect to an existing folder's backups". You pick a folder from the same list, grouped by
+computer, that `ctdev backup --all` shows, and this folder's `.ctdev-backup.json` takes that
+folder's ID, so its backups continue that history. Use it for a folder rebuilt on a new computer, or
+one whose backing up was stopped. Only folders with an ID can be continued, not one-off backups,
+and the list leaves out any folder this computer still backs up, since two folders sharing an ID
+would share their keep rules and deletes. Going Back from the list (or q or esc) starts a new
+history instead; Ctrl+C cancels Configure.
+
+The list can't tell whether another computer still backs a folder up. Linking to one that it does
+makes this folder share that folder's keep rules and deletes: retention counts both folders'
+backups together, and Delete all backups in either removes both. Link only a folder that was rebuilt
+or moved here, not one that is still in use elsewhere.
 
 In a subfolder, Configure reconfigures the backed-up folder above it; a folder inside a backed-up
 folder can't be set up as one of its own. Configuring a folder that contains a backed-up folder is
@@ -181,11 +196,12 @@ computer's list. It then asks whether to also delete all the folder's backups, f
 saying yes has you type the folder's name, as Delete all backups does, and forgets every backup with
 the folder's ID before its config file goes. A backup that finishes in the meantime, such as a
 scheduled one that was already running, isn't in the list you confirmed, so it's kept; ctdev lists
-the folder's backups again afterwards and says so.
+the folder's backups again afterwards and says so, and `ctdev backup --all` lists it.
 
-Otherwise ctdev says "Its N backups are kept under this folder's ID." `ctdev backup` then shows
-the folder as not backed up, and since the folder no longer has that ID, List backups there shows
-only its one-offs.
+Otherwise ctdev says "Its N backups are kept under this folder's ID", and that `ctdev backup
+--all` lists them and Configure's "Connect to an existing folder's backups" resumes the history.
+`ctdev backup` then shows the folder as not backed up, and since the folder no longer has that ID,
+List backups there shows only its one-offs.
 
 Stop backing up refuses when the destination can't be read or isn't set up on this computer, so the
 chance to delete the backups is never skipped without saying so. When it takes the last folder off
@@ -276,6 +292,76 @@ lock instead of failing, so a backup that starts meanwhile waits for them.
 The marker is a restic snapshot of one small file, tagged `ctdev-maintenance`, so it's encrypted
 like the backups and any computer's key can read and write it. It isn't a folder's backup: it never
 shows in a folder's list or count. Only the newest result is kept.
+
+## Every folder: `ctdev backup --all`
+
+`ctdev backup --all` is the whole destination rather than the folder you're in. It works from any
+directory and writes nothing into it, except a download that falls back there (below). Its first
+line names the destination and what it holds, with the space stored measured once when `--all`
+starts:
+
+```text
+example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored
+```
+
+The menu is List backups · Computers · Emergency Kit and password · Quit. Computers and Emergency
+Kit and password are dimmed for now. With several destinations on this computer, `--all` asks which
+one first. "Computers" counts hostnames, so a computer set up again under the same name counts once.
+
+List backups shows every backed-up folder in the destination, grouped by computer, with this
+computer first. Each entry is the folder's path as it was on that computer, with its latest backup,
+that backup's size and the number of backups:
+
+```text
+Folders in example-backups
+
+  example-desktop (this computer)
+  > ~/Documents/notes   Oct 21, 9:12 PM    52.0 kB  3 backups
+
+  example-laptop
+    ~/Downloads/scans   Oct 2, 8:05 AM      3.4 MB  1 backup
+    ~/Projects/website  Oct 20, 9:10 PM     1.2 GB  14 backups
+
+    Back
+```
+
+A folder backed up from two computers appears under each. One-off backups, which have no folder ID,
+are grouped by path and computer. Picking a folder opens the same backup list as List backups in a
+folder, with Download as zip and Delete this backup; a folder with an ID lists its backups from
+every computer.
+
+A download under `--all` goes beside where the folder would be on this computer, when that parent
+folder exists here: `~/Projects/website`'s zip goes in `~/Projects`. Otherwise it goes in the current
+directory, or, when that is inside a backed-up folder, beside that folder. The same fallback applies
+when you can't write to that parent, as for a folder recorded as `~`. It never lands inside a
+backed-up folder.
+
+Piped or with `--batch`, `ctdev backup --all` prints each destination's first line and its folders.
+
+### Setting up a new computer
+
+On a computer with no destination, `ctdev backup --all` first offers "Connect to an existing
+destination" or "Create a new destination". To connect, paste the Emergency Kit and type the master
+password. ctdev checks them by opening the repository before it saves anything; a wrong password or
+kit saves nothing. It then adds this computer's own key, labeled with its hostname, and saves the
+destination to `~/.config/ctdev/backup/destinations/<name>.env`.
+
+Creating a local destination here needs an absolute path or one starting with `~/`, since `--all`
+runs from any directory: `~/Backups` works, `Backups` doesn't. As in Configure, the path can't be
+inside a backed-up folder and must be a new or empty folder.
+
+### Finding a folder's backups from another computer
+
+1. Install restic with `ctdev install restic`.
+2. Run `ctdev backup --all` and connect to the destination with its Emergency Kit and master
+   password.
+3. Choose List backups, then the folder: under the computer that backed it up, by its path there.
+4. Choose a backup, then Download as zip, and copy what you need out of the zip.
+
+To keep backing the folder up on this computer, run `ctdev backup` in it, choose Configure, and
+pick the folder under "Connect to an existing folder's backups". A git clone of a folder whose
+`.ctdev-backup.json` is committed already has the folder's ID, so Configure continues its history
+without that step.
 
 ## Where things are kept
 

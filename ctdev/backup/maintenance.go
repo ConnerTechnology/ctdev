@@ -404,31 +404,13 @@ var _ io.Writer = (*countWriter)(nil)
 // one per folder ID, and one per one-off path and computer. Snapshots
 // without ctdev's path tag, the markers among them, aren't backups.
 func (d *Destination) latestPerFolder(ctx context.Context) ([]Snapshot, error) {
-	out, err := d.restic(ctx, d.asComputer("", "snapshots", "--json", "--retry-lock", retryLock))
+	all, err := d.snapshots(ctx, "snapshots", "--json", "--retry-lock", retryLock)
 	if err != nil {
 		return nil, err
 	}
-	var raw []struct {
-		ID       string    `json:"id"`
-		Time     time.Time `json:"time"`
-		Hostname string    `json:"hostname"`
-		Tags     []string  `json:"tags"`
-	}
-	if err := json.Unmarshal(out, &raw); err != nil {
-		return nil, fmt.Errorf("read restic's snapshot list: %w", err)
-	}
 	type key struct{ id, path, host string }
 	latest := map[key]Snapshot{}
-	for _, r := range raw {
-		s := Snapshot{ID: r.ID, Time: r.Time, Host: r.Hostname}
-		for _, t := range r.Tags {
-			switch {
-			case strings.HasPrefix(t, tagFolder):
-				s.FolderID = strings.TrimPrefix(t, tagFolder)
-			case strings.HasPrefix(t, tagPath):
-				s.Path = untagValue(strings.TrimPrefix(t, tagPath))
-			}
-		}
+	for _, s := range all {
 		if s.Path == "" {
 			continue
 		}

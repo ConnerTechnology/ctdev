@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // StopBackingUp makes the folder at root no longer backed up: it deletes the
@@ -167,7 +168,12 @@ func zipName(root string, snap Snapshot) string {
 // or when that is inside a backed-up folder, beside the outermost one, so a
 // download is never itself backed up (CTD-87).
 func downloadDir(root string) (string, error) {
-	dir := filepath.Dir(root)
+	return outsideBackedUp(filepath.Dir(root))
+}
+
+// outsideBackedUp is dir, or when dir is inside a backed-up folder, the
+// parent of the outermost one around it.
+func outsideBackedUp(dir string) (string, error) {
 	for {
 		enclosing, err := nearestConfig(dir)
 		if err != nil {
@@ -195,7 +201,69 @@ func (m *Machine) Download(ctx context.Context, d *Destination, root string, sna
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, zipName(root, snap))
+	return m.downloadInto(ctx, d, filepath.Join(dir, zipName(root, snap)), snap)
+}
+
+// DownloadFromAll is Download for a backup found under `ctdev backup --all`,
+// whose folder may be on another computer. The zip goes beside where the
+// folder would be on this computer, when that parent exists here; otherwise
+// into cwd, or beside the backed-up folder cwd is in. Like Download, it
+// never lands inside a backed-up folder (CTD-87).
+func (m *Machine) DownloadFromAll(ctx context.Context, d *Destination, cwd string, snap Snapshot) (string, error) {
+	if snap.Path == "" {
+		return "", errors.New("the backup doesn't record its folder's path")
+	}
+	original := m.localPath(snap.Path)
+	cwd, err := filepath.Abs(cwd)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(original) {
+		original = filepath.Base(original) // only its name is any use here
+	} else if fi, err := os.Stat(filepath.Dir(original)); err == nil && fi.IsDir() {
+		dir, err := outsideBackedUp(filepath.Dir(original))
+		if err != nil {
+			return "", err
+		}
+		// A parent this user can't write to, such as /home for a folder
+		// recorded as ~, is treated as one that isn't here. A dry run
+		// writes nothing, not even the probe.
+		if m.Opts.DryRun || writable(dir) {
+			return m.downloadInto(ctx, d, filepath.Join(dir, zipName(original, snap)), snap)
+		}
+	}
+	dir, err := outsideBackedUp(cwd)
+	if err != nil {
+		return "", err
+	}
+	return m.downloadInto(ctx, d, filepath.Join(dir, zipName(original, snap)), snap)
+}
+
+// writable reports whether a file can be created in dir.
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".ctdev-write-check-*")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
+}
+
+// localPath is a recorded display path (~/…) as a path on this computer.
+func (m *Machine) localPath(display string) string {
+	if display == "~" {
+		return m.Home
+	}
+	if rest, ok := strings.CutPrefix(display, "~/"); ok {
+		return filepath.Join(m.Home, filepath.FromSlash(rest))
+	}
+	return filepath.FromSlash(display)
+}
+
+// downloadInto writes a backup as a zip at path; see Download.
+func (m *Machine) downloadInto(ctx context.Context, d *Destination, path string, snap Snapshot) (string, error) {
+	dir := filepath.Dir(path)
 	exists := func() error {
 		return fmt.Errorf("%s already exists: move it away to download this backup again", path)
 	}

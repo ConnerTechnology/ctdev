@@ -87,6 +87,14 @@ func TestMaintenanceRunsWeeklyAndRotatesTheSlice(t *testing.T) {
 	if s.Backups != 2 {
 		t.Errorf("status counts %d backups, want 2", s.Backups)
 	}
+	// Nor is it a folder in ctdev backup --all.
+	o, err := d.Overview(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.FolderCount != 1 || len(o.Folders) != 1 || o.Folders[0].Backups != 2 || o.Folders[0].Ref.FolderID != cfg.ID {
+		t.Errorf("--all overview = %+v, want just the folder's 2 backups", o)
+	}
 }
 
 // Before any maintenance, the status says the data check hasn't run.
