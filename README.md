@@ -39,8 +39,8 @@ updates, the GPU driver, your git identity. Interactive by default, or
 components, the runtimes they manage and the container stacks ctdev brought up,
 then you pick what to install.
 
-**[Backups](docs/backups.md).** Per-folder backup with restic is being rebuilt;
-`ctdev install restic` installs the binary in the meantime.
+**[Backups](docs/backups.md).** `ctdev backup` shows whether the folder you're in
+is backed up, sets it up with a destination, and backs it up whole with restic.
 
 **[Doctor](docs/doctor.md).** A read-only health report for a machine and the
 network it sits on — hardware, OS, DNS, routing, the path out — with a

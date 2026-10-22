@@ -13,7 +13,7 @@ them is plain Markdown with relative links, readable on GitHub as it stands.
 - [Components](components/README.md) — everything `ctdev install` can put on a machine
 - [Configure](configure.md) — system settings, by category
 - [Update](update.md) — packages, components and stacks
-- [Backups](backups.md) — per-folder backup, being rebuilt
+- [Backups](backups.md) — per-folder backup with restic
 - [Doctor](doctor.md) — diagnosing a machine and the network it sits on
 
 ## Node recipes

@@ -4,6 +4,7 @@
 
 ```
 ctdev/                 Go module root
+  backup/              Per-folder backup over restic: folders, destinations and keys, status
   cmd/                 Cobra command handlers
   claudecli/           Drives the claude CLI for a repo: local-scope MCP servers, the plugin, the hand-off
   cleanup/             Disk-reclaim task catalog (Linux + macOS), scan/run

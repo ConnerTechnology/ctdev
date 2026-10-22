@@ -46,7 +46,8 @@ ctdev configure jira            # this repo's Atlassian MCP server (local scope)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev repo setup                # install git, gh, Claude Code and the connertechnology plugin for this repo, then start /connertechnology:setup
-ctdev backup                    # Per-folder backup, being rebuilt (CTD-87): prints that it is coming
+ctdev backup                    # The folder you're in: its backup status, then Configure or Back up now
+ctdev backup --batch            # Status only (also when piped); exits non-zero if not backed up or the last backup failed
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev doctor                    # Diagnose any machine: network, hardware, OS, security
 ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint
