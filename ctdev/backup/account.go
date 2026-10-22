@@ -41,17 +41,17 @@ func (d *Destination) Unlock(ctx context.Context, master string) (*Account, erro
 		return nil, err
 	}
 	password := accountPassword(master, sk)
-	id, err := d.openAs(ctx, password, d.accountKeyHint(ctx), accountUser)
+	id, err := d.openAs(ctx, password, d.keyHint(ctx, accountUser), accountUser)
 	if err != nil {
 		return nil, err
 	}
 	return &Account{d: d, master: master, password: password, keyID: id}, nil
 }
 
-// accountKeyHint is the account key's ID as this computer's key lists it, or
-// "" when it can't: restic then tries every key, each at the cost of a slow
-// key derivation.
-func (d *Destination) accountKeyHint(ctx context.Context) string {
+// keyHint is the ID of ctdev's key labeled user as this computer's key lists
+// it, or "" when it can't: restic then tries every key, each at the cost of
+// a slow key derivation.
+func (d *Destination) keyHint(ctx context.Context, user string) string {
 	if d.computerKey == "" {
 		return ""
 	}
@@ -60,7 +60,7 @@ func (d *Destination) accountKeyHint(ctx context.Context) string {
 		return ""
 	}
 	for _, k := range keys {
-		if k.UserName == accountUser && k.HostName == ctdevHost {
+		if k.UserName == user && k.HostName == ctdevHost {
 			return k.ID
 		}
 	}
@@ -391,7 +391,7 @@ func (d *Destination) recover(ctx context.Context, code, master string, newCode 
 	if master == "" {
 		return Recovery{}, errors.New("the master password can't be empty")
 	}
-	codeID, err := d.openAs(ctx, code, "", recoveryUser)
+	codeID, err := d.openAs(ctx, code, d.keyHint(ctx, recoveryUser), recoveryUser)
 	if err != nil {
 		return Recovery{}, err
 	}

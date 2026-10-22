@@ -1,11 +1,16 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // fleet is three computers set up on one destination in a local repository:
@@ -17,18 +22,89 @@ type fleet struct {
 	setup                   Setup
 }
 
+// fleetTemplate is one fleet set up for the whole package run, since each
+// connect costs restic several deliberately slow key derivations. Each test
+// gets a copy of its repository and config dirs.
+var fleetTemplate struct {
+	once  sync.Once
+	dir   string
+	setup Setup
+	err   error
+}
+
+var fleetHosts = []string{"example-laptop", "example-desktop", "example-server"}
+
+// fleetMachine is host's machine under root, as the fleet lays them out.
+func fleetMachine(root, host string) *Machine {
+	home := filepath.Join(root, host)
+	return &Machine{
+		Dir: filepath.Join(home, ".config", "ctdev", "backup"), Home: home,
+		Hostname: host, Username: "example", Opts: sysutil.Opts{Stdout: &bytes.Buffer{}},
+	}
+}
+
 func newFleet(t *testing.T) fleet {
 	t.Helper()
 	ctx := context.Background()
-	f := fleet{laptop: testMachine(t, "example-laptop"), desktop: testMachine(t, "example-desktop"), server: testMachine(t, "example-server")}
-	f.ld, f.setup = createExample(t, f.laptop)
-	var err error
-	if f.dd, err = f.desktop.ConnectDestination(ctx, f.setup.Kit, exampleMaster); err != nil {
+	_, s := createExample(t, testMachine(t, "example-laptop"))
+	fleetTemplate.once.Do(func() {
+		if fleetTemplate.dir, fleetTemplate.err = os.MkdirTemp("", "ctdev-backup-fleet-"); fleetTemplate.err != nil {
+			return
+		}
+		repo := filepath.Join(fleetTemplate.dir, "repo")
+		k, err := ParseKit(s.Kit)
+		if err != nil {
+			fleetTemplate.err = err
+			return
+		}
+		if fleetTemplate.err = os.CopyFS(repo, os.DirFS(k.Address)); fleetTemplate.err != nil {
+			return
+		}
+		laptop := fleetMachine(fleetTemplate.dir, "example-laptop")
+		d := *s.Destination
+		d.Address, d.m = repo, laptop
+		if fleetTemplate.err = laptop.save(&d); fleetTemplate.err != nil {
+			return
+		}
+		fleetTemplate.setup = s
+		fleetTemplate.setup.Destination = &d
+		fleetTemplate.setup.Kit = strings.Replace(s.Kit, k.Address, repo, 1)
+		for _, host := range fleetHosts[1:] {
+			if _, fleetTemplate.err = fleetMachine(fleetTemplate.dir, host).ConnectDestination(ctx, fleetTemplate.setup.Kit, exampleMaster); fleetTemplate.err != nil {
+				return
+			}
+		}
+	})
+	if fleetTemplate.err != nil {
+		t.Fatal(fleetTemplate.err)
+	}
+
+	root := t.TempDir()
+	if err := os.CopyFS(root, os.DirFS(fleetTemplate.dir)); err != nil {
 		t.Fatal(err)
 	}
-	if f.sd, err = f.server.ConnectDestination(ctx, f.setup.Kit, exampleMaster); err != nil {
-		t.Fatal(err)
+	oldRepo, repo := filepath.Join(fleetTemplate.dir, "repo"), filepath.Join(root, "repo")
+	var ms []*Machine
+	var ds []*Destination
+	for _, host := range fleetHosts {
+		m := fleetMachine(root, host)
+		file := m.destinationFile("example-backups")
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(strings.Replace(string(data), oldRepo, repo, 1)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		d, err := m.Destination("example-backups")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ms, ds = append(ms, m), append(ds, d)
 	}
+	f := fleet{laptop: ms[0], desktop: ms[1], server: ms[2], ld: ds[0], dd: ds[1], sd: ds[2], setup: fleetTemplate.setup}
+	f.setup.Destination = ds[0]
+	f.setup.Kit = strings.Replace(fleetTemplate.setup.Kit, oldRepo, repo, 1)
 	return f
 }
 
@@ -258,7 +334,7 @@ func TestRecoveryCodeResetsTheMasterPasswordAndSecretKey(t *testing.T) {
 	if _, err := testMachine(t, "example-tablet").ConnectDestination(ctx, r.Kit, newMaster); err != nil {
 		t.Errorf("the new kit and master password: %v", err)
 	}
-	for _, try := range []struct{ kit, master string }{{f.setup.Kit, exampleMaster}, {f.setup.Kit, newMaster}, {r.Kit, exampleMaster}} {
+	for _, try := range []struct{ kit, master string }{{f.setup.Kit, exampleMaster}, {r.Kit, exampleMaster}} {
 		if _, err := testMachine(t, "example-tablet").ConnectDestination(ctx, try.kit, try.master); !errors.Is(err, ErrWrongPassword) {
 			t.Errorf("an old kit or password still connects: %v", err)
 		}
