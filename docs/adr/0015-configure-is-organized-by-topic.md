@@ -12,6 +12,8 @@ check already hides what doesn't apply, which is the reason the record gives. De
 
 ## Consequences
 
-The `macos` category is broken up by topic: Dock, Finder and animations move into `desktop`, and
-typing into `keyboard`. That work is CTD-94 and CTD-95. Until both land, the code still has a
-`macos` category (`ctdev/setup/registry.go`), so the code and this decision disagree.
+The `macos` category is broken up by topic: Dock, Finder and animations move into `desktop`
+(CTD-94), and typing into `keyboard` (CTD-95). Its last three settings went by topic too, as
+Thomas decided on 2026-10-22 in CTD-95: the volume click into `audio`, expanded save and print
+dialogs into `desktop`, and the password right after the screensaver into `power`. The code has
+no `macos` category; `ctdev configure macos` reports an unknown category.

@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [17.0.0] - 2026-10-22
+
+### Added
+- **`ctdev backup` backs up the folder you're in.** Run it in a folder to set it up: it
+  creates or connects a destination (a Secret Key and master password make the account
+  key, each computer gets its own key, and you get a Recovery Code and an Emergency Kit),
+  then backs the folder up with restic, run as you. The folder's settings live in
+  `.ctdev-backup.json`. From then on the screen shows the folder's status and offers
+  "Back up now". Without a terminal, or with `--batch`, it prints the status and exits 1
+  when the folder isn't set up, the last backup failed, or the destination can't be read.
+  Listing backups, stopping and deleting them are shown dimmed as coming soon. The
+  encryption model is ADR-0016. See `docs/backups.md`.
 
 ### Changed
 - **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
@@ -16,6 +27,47 @@ All notable changes to this project will be documented in this file.
   auto-hiding Dock, faster animations, Finder list view with path and status bars, and
   no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
   macOS goes back to its own default.
+- **`ctdev configure keyboard` holds the macOS typing settings, and shows the repeat rate
+  in characters per second on every machine.** On macOS ctdev offers the eight fastest
+  15 ms steps (15–120 ms, 67 cps down to 8 cps), converted to and from `KeyRepeat` behind
+  the scenes; a Mac set slower shows its own rate. The recommended rate is 67 cps, the
+  step nearest the Linux default of 50 cps and faster than System Settings allows; the
+  delay stays 195 ms. "Type exactly what I type" (no smart quotes, dashes, autocorrect,
+  auto-capitalize or double-space period) and "Holding a key repeats it" (no accent popup)
+  move here from `configure macos`, and each has an off switch that deletes the keys ctdev
+  wrote. "NumLock on boot" can be turned off, which removes numlockx.
+- **The last macOS defaults moved by topic, each with an off switch** that deletes its
+  keys: "Click when changing volume" is in `ctdev configure audio`, "Expanded save and
+  print dialogs" in `configure desktop`, and "Ask for the password right after the
+  screensaver" in `configure power`. Each shows only on macOS and is on by default, as
+  before.
+- **`ctdev configure mouse` names its settings by what they do, and each says why.**
+  "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
+  only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
+  Logitech mouse working after a KVM switch"; it also shows while it's installed, so it
+  can be turned off after the receiver is unplugged. Both can now be turned off: off
+  removes the xbindkeys config and autostart entry and puts back any file of yours they
+  replaced (an edited config is left alone, and the xbindkeys and xdotool packages stay),
+  or the Logitech udev rule and Solaar user service. A half-installed setting shows as
+  "partly installed", so either choice repairs or removes it. `ctdev reset` removes both
+  the same way. The recommended mouse speed is now 0.46, and the slider moves in steps
+  of 0.01. The current speed shows rounded to that step, so a desktop-set 0.46218… reads
+  as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
+- **`ctdev install restic` installs only restic**: apt on Linux, and now Homebrew on macOS.
+  It no longer sets up systemd units, scripts or `/etc/restic`.
+
+### Removed
+- **The whole-machine restic backup is gone** (breaking). `ctdev configure restic`,
+  `ctdev backup now | snapshots | paths | test | enable | disable` and `ctdev restore` no
+  longer exist, along with the restic systemd units and scripts, `/etc/restic` handling,
+  the path-picker web page, the healthcheck ping and `RECOVERY.md`. Nothing on a machine
+  is removed; no machine runs the old setup. Per-folder `ctdev backup` replaces it.
+- **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
+  `configure storage` and the Logitech KVM fix to `configure mouse`.
+  `ctdev configure system` now reports an unknown category.
+- **`ctdev configure macos` is gone.** Its settings are in `desktop`, `keyboard`, `audio`
+  and `power`, by topic; `ctdev configure macos` now reports an unknown category. Where
+  you ran `configure macos --batch`, run those four categories instead.
 
 ## [16.0.1] - 2026-10-22
 

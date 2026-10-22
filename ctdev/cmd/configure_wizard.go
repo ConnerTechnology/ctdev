@@ -25,12 +25,10 @@ var slugDescriptions = map[string]string{
 	"bluetooth": "Bluetooth",
 	"desktop":   "Desktop",
 	"network":   "Network & WiFi",
-	"system":    "System",
 	"storage":   "Storage",
 	"ssh":       "SSH & Remote Access",
 	"pihole":    "Pi-hole DNS",
 	"caddy":     "Caddy reverse proxy",
-	"macos":     "macOS Defaults",
 }
 
 // slugOrder is derived from setup.Registry so adding a setting with a brand
@@ -320,15 +318,23 @@ func promptPicker(ctx context.Context, state *setup.SettingState) (string, error
 	s := state.Setting
 
 	defaultIdx := 1
+	matched := false
 	for i, c := range s.Choices {
 		marker := " "
 		if c.Value == state.CurrentValue {
 			marker = "*"
 			defaultIdx = i + 1
+			matched = true
 		}
 		fmt.Printf("   %s%d) %s — %s\n", marker, i+1, c.Value, styles.Dimmed.Render(c.Description))
 	}
-	fmt.Printf("  Select [%d]: ", defaultIdx)
+	// Enter keeps the current value, so when it matches no choice the prompt
+	// names that value rather than a choice number.
+	enterLabel := strconv.Itoa(defaultIdx)
+	if !matched && state.CurrentValue != "" {
+		enterLabel = state.CurrentValue
+	}
+	fmt.Printf("  Select [%s]: ", enterLabel)
 
 	input, ok := readLineCtx(ctx)
 	if !ok {

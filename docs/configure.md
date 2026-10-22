@@ -20,17 +20,21 @@ recommended defaults without asking, which is what you want in a script.
 
 They fall into three groups.
 
-**Machine behavior** — `ssh`, `power`, `macos`, `gpu`. These change the
-machine itself: remote access, power (the power profile, the display,
-idle-suspend and screensaver timers in minutes or never, and "Never suspend,
-even when asked"), macOS defaults (typing, dialogs, screensaver password),
-and the NVIDIA driver and MOK signing. Key repeat speed is
-not in `macos`: it is in `keyboard`, as sliders on both Cinnamon and macOS.
+**Machine behavior** — `ssh`, `power`, `gpu`. These change the machine itself:
+remote access, power (the power profile, the display, idle-suspend and
+screensaver timers in minutes or never, "Never suspend, even when asked", and on
+macOS a password right after the screensaver), and the NVIDIA driver and MOK
+signing. Categories are topics, not operating systems: each setting shows only
+on the platform it applies to, so there is no `macos` category. Typing is in
+`keyboard`, which shows the repeat rate in characters per second on both
+Cinnamon and macOS and holds the macOS text-substitution and press-and-hold
+settings.
 
 **Desktop** — `audio`, `bluetooth`, `desktop`. `bluetooth` installs bluez and Blueman and
 turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
 PulseAudio tools, plus Bluetooth audio (PipeWire's Bluetooth codecs and an LDAC
-config), and switches alert sounds. Neither installs the other's packages.
+config), and switches alert sounds; on macOS it has the click when you change
+the volume. Neither installs the other's packages.
 Turning a setting off removes only what ctdev added: ctdev records the packages it
 installed and the service changes it made under
 `~/.local/state/ctdev/configure-added/`, and leaves anything the machine already had.
@@ -50,8 +54,8 @@ ports first, so on a DNS or proxy host run `ctdev configure ssh` without
 
 `desktop` holds how the desktop looks and behaves, on whichever platform you run
 it. On macOS: an auto-hiding Dock, faster animations, Finder's
-list view with path and status bars, and no `.DS_Store` files on network and USB
-drives, each one on or off. On Cinnamon: Nemo's default view, and Hide drives,
+list view with path and status bars, no `.DS_Store` files on network and USB
+drives, and expanded save and print dialogs, each one on or off. On Cinnamon: Nemo's default view, and Hide drives,
 which lists this machine's partitions and hides the ones you check from the file
 manager. It writes `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem
 UUID; checking nothing removes it. `--batch` leaves Hide drives alone, since
