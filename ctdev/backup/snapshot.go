@@ -60,7 +60,12 @@ type Snapshot struct {
 	Files    int   // files in the backup
 	Size     int64 // bytes in the backup
 	Added    int64 // new data the backup added to the destination
-	Warning  string
+
+	FilesNew     int           // files the backup found new since the one before
+	FilesChanged int           // files changed since the one before
+	Duration     time.Duration // how long the backup took
+
+	Warning string
 }
 
 // Backup backs up the whole folder at root to d, as the user, from inside
@@ -151,9 +156,13 @@ func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error
 		Hostname string    `json:"hostname"`
 		Tags     []string  `json:"tags"`
 		Summary  *struct {
-			Files int   `json:"total_files_processed"`
-			Bytes int64 `json:"total_bytes_processed"`
-			Added int64 `json:"data_added"`
+			Start   time.Time `json:"backup_start"`
+			End     time.Time `json:"backup_end"`
+			New     int       `json:"files_new"`
+			Changed int       `json:"files_changed"`
+			Files   int       `json:"total_files_processed"`
+			Bytes   int64     `json:"total_bytes_processed"`
+			Added   int64     `json:"data_added"`
 		} `json:"summary"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
@@ -170,8 +179,10 @@ func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error
 				s.Path = untagValue(strings.TrimPrefix(t, tagPath))
 			}
 		}
-		if r.Summary != nil {
-			s.Files, s.Size, s.Added = r.Summary.Files, r.Summary.Bytes, r.Summary.Added
+		if sum := r.Summary; sum != nil {
+			s.Files, s.Size, s.Added = sum.Files, sum.Bytes, sum.Added
+			s.FilesNew, s.FilesChanged = sum.New, sum.Changed
+			s.Duration = sum.End.Sub(sum.Start)
 		}
 		snaps = append(snaps, s)
 	}
