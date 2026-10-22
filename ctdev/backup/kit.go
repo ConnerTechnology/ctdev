@@ -64,10 +64,12 @@ func parseSecretKey(s string) (secretKey, error) {
 
 // Argon2id parameters for the account key: RFC 9106's second recommended
 // option (t=3, 64 MiB), which keeps a guess slow without stalling a laptop.
+// One lane rather than the RFC's four, because libsodium fixes parallelism at
+// one: any libsodium-based tool can then rederive the key without ctdev.
 const (
 	argonTime    = 3
 	argonMemory  = 64 * 1024
-	argonThreads = 4
+	argonThreads = 1
 	argonKeyLen  = 32
 )
 

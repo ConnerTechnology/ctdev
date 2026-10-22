@@ -42,6 +42,20 @@ func TestAccountPasswordNeedsBothSecrets(t *testing.T) {
 	}
 }
 
+// The expected value came from libsodium (PyNaCl's argon2id.kdf with
+// opslimit 3 and memlimit 64 MiB), not from this code, so the derivation is
+// pinned to the standard Argon2id and to these parameters.
+func TestAccountPasswordKnownAnswer(t *testing.T) {
+	var k secretKey
+	for i := range k {
+		k[i] = byte(i)
+	}
+	const want = "513bf0e0b88fc0e18a848f9421a28f5d70e8a9a15a36fbf32871cbe16d936845"
+	if got := accountPassword("correct horse example staple", k); got != want {
+		t.Errorf("accountPassword = %s, want %s", got, want)
+	}
+}
+
 func TestKitRoundTrip(t *testing.T) {
 	k := newSecretKey()
 	kit := Kit{
