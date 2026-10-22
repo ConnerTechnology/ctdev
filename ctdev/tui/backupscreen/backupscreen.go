@@ -280,6 +280,17 @@ func Status(s backup.Status, home string) string {
 	} else {
 		row("Backups", fmt.Sprintf("%d · oldest %s · %s stored", s.Backups, s.Oldest.Local().Format("Jan 2"), Bytes(s.Stored)), false)
 	}
+	if s.DataCheckRead {
+		// The destination's weekly maintenance, whichever computer ran it.
+		switch c := s.DataCheck; {
+		case c == nil:
+			row("Data check", "not run yet", false)
+		case c.Failed():
+			row("Data check", c.Finished.Local().Format("Jan 2")+" · "+c.Reason(), true)
+		default:
+			row("Data check", c.Finished.Local().Format("Jan 2")+" · OK", false)
+		}
+	}
 	if s.ReadErr != nil {
 		row("Problem", strings.ReplaceAll(s.ReadErr.Error(), "\n", "; "), true)
 	}

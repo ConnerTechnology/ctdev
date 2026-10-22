@@ -67,6 +67,12 @@ type Status struct {
 	Hostname string
 	Stored   int64 // space they take in the destination
 
+	// DataCheck is the configured folder's destination's last weekly
+	// maintenance, read from the destination; nil when none has run.
+	// DataCheckRead says it was read, so nil means "not run yet".
+	DataCheck     *DataCheck
+	DataCheckRead bool
+
 	ReadErr error // the destination couldn't be read
 }
 
@@ -121,6 +127,11 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 			s.ReadErr = errors.Join(s.ReadErr, err)
 		} else {
 			dests = append(dests, d)
+			if s.DataCheck, err = d.LastDataCheck(ctx); err != nil {
+				s.ReadErr = errors.Join(s.ReadErr, err)
+			} else {
+				s.DataCheckRead = true
+			}
 		}
 	} else {
 		names, err := m.Destinations()

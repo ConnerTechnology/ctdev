@@ -295,6 +295,33 @@ func TestStatusOfAFailedBackup(t *testing.T) {
 	}
 }
 
+// The destination's weekly data check has its own line once it's been read:
+// not run yet, OK, or failed in red with the reason.
+func TestStatusDataCheckLine(t *testing.T) {
+	s := configured()
+	if got := plain(Status(s, home)); strings.Contains(got, "Data check") {
+		t.Errorf("a data check that wasn't read shows:\n%s", got)
+	}
+	s.DataCheckRead = true
+	if got := plain(Status(s, home)); !strings.Contains(got, "  Data check     not run yet\n") {
+		t.Errorf("status:\n%s", got)
+	}
+	at := time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local)
+	s.DataCheck = &backup.DataCheck{Host: "example-desktop", Started: at, Finished: at, Slice: 3, OK: true}
+	if got := plain(Status(s, home)); !strings.Contains(got, "  Data check     Oct 20 · OK\n") {
+		t.Errorf("status:\n%s", got)
+	}
+	s.DataCheck = &backup.DataCheck{Host: "example-desktop", Started: at, Finished: at, Slice: 3, Step: backup.StepCheck, Error: "damaged pack 0123abcd"}
+	got := Status(s, home)
+	want := "Oct 20 · failed at check: damaged pack 0123abcd"
+	if !strings.Contains(plain(got), "  Data check     "+want+"\n") {
+		t.Errorf("status:\n%s", plain(got))
+	}
+	if !strings.Contains(got, styles.Error.Render(want)) {
+		t.Errorf("a failed data check isn't in red:\n%q", got)
+	}
+}
+
 // A keep-rules failure shows in yellow on the Keeping line; the backup it
 // followed still shows as succeeded.
 func TestStatusOfARetentionFailure(t *testing.T) {

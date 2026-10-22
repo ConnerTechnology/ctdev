@@ -43,14 +43,42 @@ func backupChecks(f Facts) []Check {
 			},
 		}}
 	}
-	checks := make([]Check, 0, len(f.Backups))
+	checks := make([]Check, 0, len(f.Backups)+len(f.BackupDataChecks))
 	for _, b := range f.Backups {
 		checks = append(checks, Check{
 			ID: "backup." + b.Path, Name: b.Path, Group: GroupBackups,
 			Run: func(context.Context, Facts) Result { return backupResult(b) },
 		})
 	}
+	for _, c := range f.BackupDataChecks {
+		checks = append(checks, Check{
+			ID: "backup.datacheck." + c.Destination, Name: "Data check: " + c.Destination, Group: GroupBackups,
+			Run: func(context.Context, Facts) Result { return dataCheckResult(c) },
+		})
+	}
 	return checks
+}
+
+// BackupDataCheck is a backup destination's last weekly data check, which
+// whichever computer found it due ran and recorded in the destination.
+type BackupDataCheck struct {
+	Destination string
+	Finished    time.Time
+	Host        string // the computer that ran it
+	Slice       int    // the part of the stored data it read
+	Slices      int    // out of how many
+	OK          bool
+	Step        string // the step that failed
+	Error       string // why
+}
+
+func dataCheckResult(c BackupDataCheck) Result {
+	day := c.Finished.Local().Format("Jan 2")
+	if !c.OK {
+		return failf("The backups in "+c.Destination+" may not restore. The weekly maintenance checks again a week after this one; restic's troubleshooting guide covers repairing damaged packs.",
+			"%s · failed at %s: %s", day, c.Step, c.Error)
+	}
+	return okf("%s · OK · read slice %d of %d · by %s", day, c.Slice, c.Slices, c.Host)
 }
 
 func backupResult(b BackupFolder) Result {

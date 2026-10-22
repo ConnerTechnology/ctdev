@@ -77,6 +77,27 @@ func TestMaintenanceRunsWeeklyAndRotatesTheSlice(t *testing.T) {
 	if err != nil || len(ms) != 1 {
 		t.Errorf("markers = %+v, %v; want only the latest result", ms, err)
 	}
+
+	// The folder's status shows the destination's data check, and counts
+	// only the folder's backups.
+	s := m.Status(ctx, root)
+	if s.ReadErr != nil || !s.DataCheckRead || s.DataCheck == nil || !s.DataCheck.OK || s.DataCheck.Slice != 2 {
+		t.Errorf("status data check = %+v (read %v, err %v), want slice 2 OK", s.DataCheck, s.DataCheckRead, s.ReadErr)
+	}
+	if s.Backups != 2 {
+		t.Errorf("status counts %d backups, want 2", s.Backups)
+	}
+}
+
+// Before any maintenance, the status says the data check hasn't run.
+func TestStatusBeforeAnyDataCheck(t *testing.T) {
+	requireRestic(t)
+	m := testMachine(t, "example-laptop")
+	_, root, _ := scheduledExample(t, m)
+	s := m.Status(context.Background(), root)
+	if s.ReadErr != nil || !s.DataCheckRead || s.DataCheck != nil {
+		t.Errorf("status data check = %+v (read %v, err %v), want read and none yet", s.DataCheck, s.DataCheckRead, s.ReadErr)
+	}
 }
 
 // Two computers share a destination: after one maintains it, the other sees

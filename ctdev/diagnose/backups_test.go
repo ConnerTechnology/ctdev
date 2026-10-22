@@ -63,6 +63,36 @@ func TestBackupsSectionShowsEachScheduledFolder(t *testing.T) {
 	}
 }
 
+// Each destination's weekly data check is a row: OK with its date and
+// slice, or failed with the step and reason.
+func TestBackupsSectionShowsEachDestinationsDataCheck(t *testing.T) {
+	at := time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local)
+	f := Facts{Platform: platform.Info{OS: platform.Linux}, BackupDataChecks: []BackupDataCheck{
+		{Destination: "example-backups", Finished: at, Host: "example-desktop", Slice: 3, Slices: 20, OK: true},
+		{Destination: "example-usb", Finished: at, Host: "example-laptop", Slice: 7, Slices: 20, Step: "check", Error: "damaged pack 0123abcd"},
+	}}
+	rows := backupRows(t, f)
+	for name, want := range map[string]struct {
+		severity Severity
+		detail   string
+	}{
+		"Data check: example-backups": {OK, "Oct 20 · OK · read slice 3 of 20 · by example-desktop"},
+		"Data check: example-usb":     {Fail, "Oct 20 · failed at check: damaged pack 0123abcd"},
+	} {
+		got, ok := rows[name]
+		if !ok {
+			t.Errorf("no row for %s in %v", name, rows)
+			continue
+		}
+		if got.Severity != want.severity || got.Detail != want.detail {
+			t.Errorf("%s: %v %q, want %v %q", name, got.Severity, got.Detail, want.severity, want.detail)
+		}
+		if got.Severity == Fail && got.Advice == "" {
+			t.Errorf("%s: no advice", name)
+		}
+	}
+}
+
 // A machine with nothing scheduled has no Backups section at all.
 func TestNoBackupsSectionWithNothingScheduled(t *testing.T) {
 	if rows := backupRows(t, Facts{Platform: platform.Info{OS: platform.MacOS}}); len(rows) != 0 {

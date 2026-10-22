@@ -92,6 +92,44 @@ func TestDoctorFactsCarryBackupHealth(t *testing.T) {
 	}
 }
 
+// Each destination's data check reaches doctor from the copy the hourly
+// runner keeps in state.json, for the destinations this computer has.
+func TestDoctorFactsCarryTheDataCheck(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	m, err := backup.ThisMachine(sysutil.Opts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, errText := doctorDataCheckFacts(m); len(got) != 0 || errText != "" {
+		t.Errorf("with nothing set up: %v, %q", got, errText)
+	}
+	if err := os.MkdirAll(filepath.Join(m.Dir, "destinations"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(m.Dir, "destinations", "example-backups.env"), []byte("RESTIC_REPOSITORY=/example/repo\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state := `{"folders":{},"destinations":{` +
+		`"example-backups":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":false,"step":"check","error":"damaged pack 0123abcd"}},` +
+		`"example-gone":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":true}}}}`
+	if err := os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, errText := doctorDataCheckFacts(m)
+	want := diagnose.BackupDataCheck{
+		Destination: "example-backups", Finished: time.Date(2026, 10, 20, 3, 10, 0, 0, time.UTC),
+		Host: "example-desktop", Slice: 3, Slices: 20, Step: "check", Error: "damaged pack 0123abcd",
+	}
+	if errText != "" || len(got) != 1 || !got[0].Finished.Equal(want.Finished) {
+		t.Fatalf("facts = %+v, %q; want only %+v", got, errText, want)
+	}
+	got[0].Finished = want.Finished
+	if got[0] != want {
+		t.Errorf("facts = %+v, want %+v", got[0], want)
+	}
+}
+
 // The set-up instructions promise that setting CTDEV_UNIFI_API_KEY is enough.
 // Requiring the endpoint separately made that promise false, and left the tool
 // refusing to talk to a controller it had just finished identifying.
