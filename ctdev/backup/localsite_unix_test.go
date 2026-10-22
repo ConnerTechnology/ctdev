@@ -72,6 +72,23 @@ func TestFailedCreateRemovesTheFoldersItMade(t *testing.T) {
 	}
 }
 
+// A path through a symlink into the folder is still inside it.
+func TestARepositoryReachedThroughASymlinkIsStillInside(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	root := exampleFolder(t, m)
+	link := filepath.Join(m.Home, "site")
+	if err := os.Symlink(root, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.CheckAddress("~/site/.backups", root); err == nil || !strings.Contains(err.Error(), "inside") {
+		t.Errorf("CheckAddress through a symlink: want an inside error, got %v", err)
+	}
+	d := &Destination{Name: "example-backups", Address: filepath.Join(link, "backups"), m: m, computerKey: "example"}
+	if _, err := m.Backup(context.Background(), d, root, nil); err == nil || !strings.Contains(err.Error(), "inside") {
+		t.Errorf("Backup: want an inside error, got %v", err)
+	}
+}
+
 // A failed creation at a symlink leaves the link and what it points at.
 func TestFailedCreateLeavesASymlinkAlone(t *testing.T) {
 	m := testMachine(t, "example-laptop")

@@ -90,13 +90,30 @@ func (m *Machine) CheckNewAddress(address, folder string) (string, error) {
 }
 
 // within reports whether p is dir or below it.
+// Both sides have their symlinks resolved first, so a path that reaches dir
+// through a link still counts.
 func within(p, dir string) bool {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return false
 	}
-	rel, err := filepath.Rel(dir, p)
+	rel, err := filepath.Rel(resolve(dir), resolve(p))
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// resolve evaluates the symlinks in the longest part of p that exists, and
+// keeps the rest, which may not exist yet, as it is.
+func resolve(p string) string {
+	rest := ""
+	for q := filepath.Clean(p); ; q = filepath.Dir(q) {
+		if r, err := filepath.EvalSymlinks(q); err == nil {
+			return filepath.Join(r, rest)
+		}
+		if filepath.Dir(q) == q {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(q), rest)
+	}
 }
 
 // notInside refuses to back up, or configure, a folder holding d's repository.
