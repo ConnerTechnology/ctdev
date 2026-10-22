@@ -748,29 +748,16 @@ func connectDestination(ctx context.Context, m *backup.Machine) (*backup.Destina
 	if m.Opts.DryRun {
 		return nil, backup.ErrDryRun
 	}
-	fmt.Println()
-	fmt.Println("  Paste the Emergency Kit, then press Enter on an empty line:")
-	var lines []string
-	for {
-		line, ok := readLineCtx(ctx)
-		if !ok {
-			return nil, errPromptCancelled
-		}
-		if line != "" {
-			lines = append(lines, line)
-			continue
-		}
-		if len(lines) == 0 {
-			continue
-		}
-		if _, err := backup.ParseKit(strings.Join(lines, "\n")); err != nil {
-			fmt.Println("  " + styles.Warning.Render(err.Error()+": paste the whole kit again."))
-			lines = nil
-			continue
-		}
-		break
+	kit, err := readKit(ctx)
+	if err != nil {
+		return nil, err
 	}
-	kit := strings.Join(lines, "\n")
+	if m.KitIsSetUp(kit) {
+		// An updated kit, after a new Secret Key or a lost computer
+		// elsewhere: this computer's own key vouches for it.
+		fmt.Println("  This computer is already set up on that destination; updating it from the kit.")
+		return updateFromKit(ctx, m, kit)
+	}
 	for range 3 {
 		master, err := promptSecretRequiredCtx(ctx, "Master password", "")
 		if err != nil {
@@ -780,6 +767,18 @@ func connectDestination(ctx context.Context, m *backup.Machine) (*backup.Destina
 		d, err := m.ConnectDestination(ctx, kit, master)
 		if errors.Is(err, backup.ErrWrongPassword) {
 			fmt.Println("  " + styles.Warning.Render("That master password and Secret Key don't open the destination. Nothing was saved."))
+			fmt.Println("    1) Try the master password again")
+			fmt.Println("    2) Use a Recovery Code (sets a new master password and Secret Key)")
+			fmt.Printf("  %s ", styles.Dimmed.Render("Choice [1]:"))
+			choice, err := promptChoiceCtx(ctx, 1)
+			if err != nil {
+				return nil, err
+			}
+			if choice == 2 {
+				return recoveryReset(ctx, "the destination", func(ctx context.Context, code, master string, newCode bool) (backup.Recovery, error) {
+					return m.RecoverFromKit(ctx, kit, code, master, newCode)
+				})
+			}
 			continue
 		}
 		if err != nil {

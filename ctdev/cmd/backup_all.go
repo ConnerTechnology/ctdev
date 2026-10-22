@@ -48,7 +48,15 @@ func allSession(ctx context.Context, m *backup.Machine, cwd string) error {
 	for {
 		o, err := d.Overview(ctx)
 		if err != nil {
-			return err
+			// Revoked credentials, after another computer's lost-computer
+			// flow, are fixed by pasting the new kit.
+			if d, err = unreadable(ctx, m, d, err); err != nil {
+				if errors.Is(err, errPromptCancelled) {
+					return cancelToClean(err)
+				}
+				return err
+			}
+			continue
 		}
 		if stored < 0 {
 			if stored, err = storedAll(ctx, d, o); err != nil {
@@ -60,10 +68,16 @@ func allSession(ctx context.Context, m *backup.Machine, cwd string) error {
 		if err := runScreen(screen); err != nil {
 			return err
 		}
-		if screen.Chosen() != backupscreen.ListBackups {
+		switch screen.Chosen() {
+		case backupscreen.ListBackups:
+			err = listAllFolders(ctx, m, d, cwd, o)
+		case backupscreen.Computers:
+			err = manageComputers(ctx, d)
+		case backupscreen.EmergencyKit:
+			d, err = kitAndPassword(ctx, m, d)
+		default:
 			return nil
 		}
-		err = listAllFolders(ctx, m, d, cwd, o)
 		if errors.Is(err, errPromptCancelled) {
 			if ctx.Err() != nil {
 				return nil
