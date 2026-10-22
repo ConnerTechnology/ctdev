@@ -79,7 +79,7 @@ func runBackupScheduled(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	m.Notifier = scheduledNotifier
-	results, err := m.RunScheduled(cmdContext(cmd))
+	results, maint, err := m.RunScheduled(cmdContext(cmd))
 	for _, r := range results {
 		line := backup.DisplayPath(m.Home, r.Path) + ": " + string(r.Outcome)
 		switch {
@@ -92,6 +92,18 @@ func runBackupScheduled(cmd *cobra.Command, _ []string) error {
 			line += ", but retention failed: " + r.RetentionErr.Error()
 		}
 		fmt.Fprintln(out, line)
+	}
+	for _, r := range maint {
+		// Only a run worth a line in the journal: one this computer made,
+		// or one that couldn't be checked for.
+		switch {
+		case r.Ran && r.Check != nil && r.Check.OK:
+			fmt.Fprintf(out, "%s: weekly maintenance done, data check %d/%d OK\n", r.Destination, r.Check.Slice, backup.Slices)
+		case r.Ran && r.Check != nil:
+			fmt.Fprintf(out, "%s: weekly maintenance %s\n", r.Destination, r.Check.Reason())
+		case r.Err != nil:
+			fmt.Fprintf(out, "%s: weekly maintenance: %s\n", r.Destination, r.Err)
+		}
 	}
 	return err
 }

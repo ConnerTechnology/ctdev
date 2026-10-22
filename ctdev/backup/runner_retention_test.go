@@ -2,6 +2,8 @@ package backup
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,7 +32,7 @@ func TestRunScheduledAppliesRetention(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "change.txt"), []byte{byte('a' + i)}, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		results, err := m.RunScheduled(ctx)
+		results, _, err := m.RunScheduled(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -47,8 +49,23 @@ func TestRunScheduledAppliesRetention(t *testing.T) {
 	}
 }
 
+// recentCheck is a maintenance a day before noon, so none is due.
+var recentCheck = DataCheck{Host: "example-desktop", Started: noon.Add(-24 * time.Hour), Finished: noon.Add(-24 * time.Hour), Slice: 1, OK: true}
+
+// markerList is restic snapshots --json's output for one marker holding c.
+func markerList(t *testing.T, c DataCheck) string {
+	t.Helper()
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return `[{"id":"0123456789abcdef","time":"2026-10-21T12:00:00Z","tags":["` + tagMarker + `","` +
+		tagMarkerData + base64.RawURLEncoding.EncodeToString(data) + `"]}]`
+}
+
 // retentionStandin gives m a destination whose restic backs up and, while
-// the file it returns exists, fails every forget.
+// the file it returns exists, fails every forget. Its maintenance ran a day
+// ago.
 func retentionStandin(t *testing.T, m *Machine) (failForget string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -58,7 +75,7 @@ func retentionStandin(t *testing.T, m *Machine) (failForget string) {
 case "$1" in
 version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
 backup) echo '{"message_type":"summary","snapshot_id":"0123456789abcdef","total_files_processed":1,"total_bytes_processed":1,"data_added":1,"backup_end":"2026-10-22T12:00:00Z"}' ;;
-snapshots) echo '[]' ;;
+snapshots) case "$*" in *ctdev-maintenance*) echo '` + markerList(t, recentCheck) + `' ;; *) echo '[]' ;; esac ;;
 forget) if [ -e "` + failForget + `" ]; then echo "Fatal: example failure" >&2; exit 1; fi ;;
 esac
 `
@@ -86,7 +103,7 @@ func TestARetentionFailureIsRecordedApartFromTheBackup(t *testing.T) {
 	m, root, n := failingMachine(t)
 	failForget := retentionStandin(t, m)
 
-	results, err := m.RunScheduled(context.Background())
+	results, _, err := m.RunScheduled(context.Background())
 	if err != nil {
 		t.Errorf("err = %v, want none: the backup succeeded", err)
 	}
@@ -110,7 +127,7 @@ func TestARetentionFailureIsRecordedApartFromTheBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	at(m, noon.Add(25*time.Hour))
-	if _, err := m.RunScheduled(context.Background()); err != nil {
+	if _, _, err := m.RunScheduled(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if r, _, _ := m.lastRun(root); r.RetentionError != "" {

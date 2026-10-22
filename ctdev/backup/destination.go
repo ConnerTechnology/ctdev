@@ -47,6 +47,8 @@ type Machine struct {
 	capture func(ctx context.Context, name string, args ...string) ([]byte, error)
 	// lingerDir is systemd's /var/lib/systemd/linger; tests point it elsewhere.
 	lingerDir string
+	// pickFn picks the maintenance's test-download file; nil means at random.
+	pickFn func(n int) int
 
 	lockMu    sync.Mutex
 	lockDepth int
@@ -418,7 +420,7 @@ type resticKey struct {
 }
 
 func (d *Destination) keys(ctx context.Context, password string) ([]resticKey, error) {
-	out, err := d.restic(ctx, run{password: password, args: []string{"key", "list", "--json"}})
+	out, err := d.restic(ctx, run{password: password, args: []string{"key", "list", "--json", "--retry-lock", retryLock}})
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +445,7 @@ type Computer struct {
 // Computers lists the computers that have a key on the destination, by
 // hostname, leaving out the account key and the Recovery Code.
 func (d *Destination) Computers(ctx context.Context) ([]Computer, error) {
-	out, err := d.restic(ctx, d.asComputer("", "key", "list", "--json"))
+	out, err := d.restic(ctx, d.asComputer("", "key", "list", "--json", "--retry-lock", retryLock))
 	if err != nil {
 		return nil, err
 	}

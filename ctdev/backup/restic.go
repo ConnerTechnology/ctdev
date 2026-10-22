@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -33,6 +34,9 @@ type run struct {
 	keyHint     string // the key to try first; restic otherwise tries each in turn
 	dir         string // working directory
 	args        []string
+	stdin       []byte    // what restic reads on stdin, such as backup --stdin's file
+	stdout      io.Writer // where restic's output goes instead of being returned, such as a dump
+	stderr      io.Writer // also gets restic's stderr, for a caller that reads more than the error
 }
 
 // restic runs restic as the user (never through sudo) and returns its
@@ -49,6 +53,15 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 	cmd.Env = d.env(r.password, r.keyHint)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if r.stdout != nil {
+		cmd.Stdout = r.stdout
+	}
+	if r.stderr != nil {
+		cmd.Stderr = io.MultiWriter(&stderr, r.stderr)
+	}
+	if r.stdin != nil {
+		cmd.Stdin = bytes.NewReader(r.stdin)
+	}
 	if r.newPassword != "" {
 		pr, pw, err := os.Pipe()
 		if err != nil {

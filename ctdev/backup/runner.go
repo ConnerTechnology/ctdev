@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"sort"
 )
 
 // Outcome is what a scheduled run did with one folder.
@@ -37,27 +38,34 @@ type ScheduledRun struct {
 // missing. The error joins every folder's failure, so the run itself shows as
 // failed in the journal or log.
 //
+// Then, for each destination those folders use, it reads the weekly
+// maintenance's marker in the destination, keeps a copy of the result in
+// state.json for ctdev doctor, and runs the maintenance when it's due
+// (maintainIfDue). A data check that failed notifies once, as a failing
+// folder does.
+//
 // It holds this computer's backup lock for the whole run. When another run
 // holds it, this one returns nothing and no error: that run covers the hour.
-// A dry run writes nothing at all, the lock file included.
-func (m *Machine) RunScheduled(ctx context.Context) ([]ScheduledRun, error) {
+// A dry run writes nothing at all, the lock file included, and leaves the
+// maintenance alone.
+func (m *Machine) RunScheduled(ctx context.Context) ([]ScheduledRun, []Maintenance, error) {
 	if !m.Opts.DryRun {
 		unlock, err := m.runLock()
 		if errors.Is(err, errLocked) {
-			return nil, nil
+			return nil, nil, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer unlock()
 	}
 	folders, err := m.scheduledFolders()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	runs, err := m.runs()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var results []ScheduledRun
 	var errs []error
@@ -71,10 +79,53 @@ func (m *Machine) RunScheduled(ctx context.Context) ([]ScheduledRun, error) {
 		}
 		results = append(results, r)
 	}
-	if !m.Opts.DryRun {
-		errs = append(errs, m.notifyChanges(ctx, folders))
+	if m.Opts.DryRun {
+		return results, nil, errors.Join(errs...)
 	}
-	return results, errors.Join(errs...)
+	maint := m.maintainDestinations(ctx, folders)
+	for _, r := range maint {
+		if r.Err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", r.Destination, r.Err))
+		}
+	}
+	errs = append(errs, m.notifyChanges(ctx, folders))
+	return results, maint, errors.Join(errs...)
+}
+
+// maintainDestinations does the weekly maintenance part of a scheduled run
+// for every destination a listed folder uses, recording each result in
+// state.json. A folder that's missing, or whose destination isn't set up
+// here, already failed its backup and is left out.
+func (m *Machine) maintainDestinations(ctx context.Context, folders []folderEntry) []Maintenance {
+	byDest := map[string][]listedFolder{}
+	for _, e := range folders {
+		if cfg, why := m.findListed(e); why == "" {
+			byDest[cfg.Destination] = append(byDest[cfg.Destination], listedFolder{Root: e.Path, Config: cfg})
+		}
+	}
+	names := make([]string, 0, len(byDest))
+	for name := range byDest {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []Maintenance
+	for _, name := range names {
+		if ctx.Err() != nil {
+			break
+		}
+		d, err := m.Destination(name)
+		if err != nil {
+			continue
+		}
+		r := m.maintainIfDue(ctx, d, byDest[name])
+		if r.Check != nil {
+			if err := m.recordDataCheck(name, *r.Check); err != nil {
+				r.Err = errors.Join(r.Err, err)
+			}
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) ScheduledRun {
@@ -190,6 +241,32 @@ func (m *Machine) notifyChanges(ctx context.Context, folders []folderEntry) erro
 		// A notification that couldn't be shown isn't retried: there's no
 		// desktop to show it on, and ctdev backup and doctor still say so.
 		if err := m.updateRun(e.Path, func(r *Run) { r.Alerted = failing }); err != nil {
+			return err
+		}
+	}
+	// The same for each destination's data check, which every computer
+	// sees, so each notifies its own desktop once.
+	dests, err := m.destinationStates()
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(dests))
+	for name := range dests {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		s := dests[name]
+		failing := s.DataCheck.Failed()
+		if failing == s.Alerted {
+			continue
+		}
+		if failing {
+			_ = n.Notify(ctx, "Backup data check failed", name+": "+s.DataCheck.Reason())
+		} else {
+			_ = n.Notify(ctx, "Backup data check passing again", name+": the data check passed.")
+		}
+		if err := m.updateDestination(name, func(s *DestinationState) { s.Alerted = failing }); err != nil {
 			return err
 		}
 	}

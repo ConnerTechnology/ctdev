@@ -93,7 +93,7 @@ func TestDryRunOverAFailingFolderDoesntNotify(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Opts.DryRun = true
-	_, _ = m.RunScheduled(context.Background())
+	_, _, _ = m.RunScheduled(context.Background())
 	if len(n.sent) != 0 {
 		t.Errorf("a dry run notified: %v", n.sent)
 	}

@@ -222,7 +222,7 @@ func (d *Destination) Stored(ctx context.Context, snaps []Snapshot) (int64, erro
 
 // files lists the paths in a backup.
 func (d *Destination) files(ctx context.Context, id string) ([]string, error) {
-	out, err := d.restic(ctx, d.asComputer("", "ls", "--json", id))
+	out, err := d.restic(ctx, d.asComputer("", "ls", "--json", "--retry-lock", retryLock, id))
 	if err != nil {
 		return nil, err
 	}

@@ -74,6 +74,35 @@ func (m *Machine) Health() ([]FolderHealth, error) {
 	return out, nil
 }
 
+// DestinationCheck is a destination's last weekly maintenance, as this
+// computer's hourly runner last read it from the destination.
+type DestinationCheck struct {
+	Destination string
+	Check       DataCheck
+}
+
+// DataChecks is the last maintenance result of each destination this
+// computer is set up on, as its hourly runner last saw it. Like Health, it
+// reads only files in ~/.config/ctdev/backup, so ctdev doctor can call it.
+// A destination the runner hasn't checked yet has none.
+func (m *Machine) DataChecks() ([]DestinationCheck, error) {
+	states, err := m.destinationStates()
+	if err != nil {
+		return nil, err
+	}
+	names, err := m.Destinations()
+	if err != nil {
+		return nil, err
+	}
+	var out []DestinationCheck
+	for _, name := range names { // sorted
+		if s, ok := states[name]; ok {
+			out = append(out, DestinationCheck{Destination: name, Check: s.DataCheck})
+		}
+	}
+	return out, nil
+}
+
 // schedule is the entry's schedule: daily for an entry written before the
 // schedule was recorded, the same default Interval gives.
 func (e folderEntry) schedule() Schedule {

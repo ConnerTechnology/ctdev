@@ -16,7 +16,7 @@ func TestASecondRunScheduledExitsWhileOneRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results, err := m.RunScheduled(context.Background())
+	results, _, err := m.RunScheduled(context.Background())
 	unlock()
 	if err != nil || len(results) != 0 || len(n.sent) != 0 {
 		t.Errorf("while locked: results %v, err %v, notifications %v; want nothing", results, err, n.sent)
@@ -24,7 +24,7 @@ func TestASecondRunScheduledExitsWhileOneRuns(t *testing.T) {
 	if r, ok, _ := m.lastRun(root); ok {
 		t.Errorf("while locked, state was written: %+v", r)
 	}
-	if results, _ := m.RunScheduled(context.Background()); len(results) != 1 {
+	if results, _, _ := m.RunScheduled(context.Background()); len(results) != 1 {
 		t.Errorf("after the lock is released: %v, want the folder run", results)
 	}
 }
@@ -55,7 +55,7 @@ func TestRunScheduledDryRunWritesNothing(t *testing.T) {
 	}
 
 	m.Opts.DryRun = true
-	results, _ := m.RunScheduled(context.Background())
+	results, _, _ := m.RunScheduled(context.Background())
 	outcome := map[string]Outcome{}
 	for _, r := range results {
 		outcome[r.Path] = r.Outcome
@@ -90,7 +90,7 @@ func TestAMovedFolderConfiguredAgainIsNotLeftMissing(t *testing.T) {
 	if err := m.Configure(ctx, d, old, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.RunScheduled(ctx); err != nil {
+	if _, _, err := m.RunScheduled(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,7 +102,7 @@ func TestAMovedFolderConfiguredAgainIsNotLeftMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	at(m, noon.Add(-time.Hour))
-	if _, err := m.RunScheduled(ctx); err == nil {
+	if _, _, err := m.RunScheduled(ctx); err == nil {
 		t.Fatal("the run after the move didn't report the folder missing")
 	}
 	if h := health(t, m); len(h) != 1 || h[0].State != HealthMissing {
@@ -113,7 +113,7 @@ func TestAMovedFolderConfiguredAgainIsNotLeftMissing(t *testing.T) {
 	if err := m.Configure(ctx, d, moved, cfg); err != nil {
 		t.Fatal(err)
 	}
-	results, err := m.RunScheduled(ctx)
+	results, _, err := m.RunScheduled(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

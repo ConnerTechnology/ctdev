@@ -212,6 +212,50 @@ func (r Run) Failed() bool { return r.Error != "" }
 
 type stateFile struct {
 	Folders map[string]Run `json:"folders"`
+	// Destinations is this computer's copy of each destination's last
+	// maintenance result, by destination name, so ctdev doctor can show it
+	// without a network call.
+	Destinations map[string]DestinationState `json:"destinations,omitempty"`
+}
+
+// DestinationState is what this computer last saw of a destination's weekly
+// maintenance.
+type DestinationState struct {
+	DataCheck DataCheck `json:"data_check"`
+	// Alerted means a "data check failed" notification went out and no
+	// "passing again" one has since.
+	Alerted bool `json:"alerted,omitempty"`
+}
+
+// recordDataCheck keeps c as the destination's last maintenance result.
+func (m *Machine) recordDataCheck(name string, c DataCheck) error {
+	return m.updateDestination(name, func(s *DestinationState) { s.DataCheck = c })
+}
+
+func (m *Machine) updateDestination(name string, change func(*DestinationState)) error {
+	unlock, err := m.stateLock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	var s stateFile
+	if err := readJSON(m.stateFile(), &s); err != nil {
+		return err
+	}
+	if s.Destinations == nil {
+		s.Destinations = map[string]DestinationState{}
+	}
+	d := s.Destinations[name]
+	change(&d)
+	s.Destinations[name] = d
+	return writeJSON(m.stateFile(), s)
+}
+
+// destinationStates is every destination's record in state.json.
+func (m *Machine) destinationStates() (map[string]DestinationState, error) {
+	var s stateFile
+	err := readJSON(m.stateFile(), &s)
+	return s.Destinations, err
 }
 
 // updateRun changes the folder's record in state.json.
