@@ -55,9 +55,6 @@ func ThisMachine(o sysutil.Opts) (*Machine, error) {
 // resticBin is the restic to run: ~/.local/bin/restic, where
 // `ctdev install restic` puts it on Linux, when it's there, else restic on
 // PATH. A scheduled run doesn't get the user's shell PATH.
-// resticBin is the restic to run: ~/.local/bin/restic, where
-// `ctdev install restic` puts it on Linux, when it's there, else restic on
-// PATH. A scheduled run doesn't get the user's shell PATH.
 func (m *Machine) resticBin() string {
 	if m.Restic != "" {
 		return m.Restic
@@ -146,8 +143,13 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 		Name: nd.Name, Address: address, m: m,
 		credentials: nd.Credentials, secretKey: sk.String(), computerKey: randomPassword(),
 	}
-	recovery := newRecoveryCode()
-	account := accountPassword(master, sk)
+	// Note what was at a local path before, so a failure removes only what
+	// restic made there.
+	var existed, wasEmpty bool
+	if isLocal(address) {
+		entries, err := os.ReadDir(address)
+		existed, wasEmpty = err == nil, err == nil && len(entries) == 0
+	}
 
 	// restic init labels its first key with whoever ran it. Init with a
 	// throwaway key, add the three labeled keys, then remove the throwaway.
@@ -156,8 +158,47 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 		if strings.Contains(err.Error(), "already") {
 			return Setup{}, fmt.Errorf("%s already holds a restic repository: connect to it with its Emergency Kit, or choose another address", address)
 		}
-		return Setup{}, fmt.Errorf("create the repository at %s: %w", address, err)
+		return Setup{}, abandon(d, existed, wasEmpty, fmt.Errorf("create the repository at %s: %w", address, err))
 	}
+	s, err := m.finishCreate(ctx, d, master, sk, initial)
+	if err != nil {
+		// Nobody has a kit for this repository yet, so it must not be left
+		// behind, including after Ctrl-C.
+		return Setup{}, abandon(d, existed, wasEmpty, err)
+	}
+	return s, nil
+}
+
+// abandon cleans up after a creation that failed past restic init. A local
+// repository ctdev made is removed; one in a folder that held files already,
+// or at a remote backend, can't be safely removed from here, so the error
+// says what to delete.
+func abandon(d *Destination, existed, wasEmpty bool, err error) error {
+	switch {
+	case !isLocal(d.Address):
+		return fmt.Errorf("%w; the repository at %s was left half-created: delete it at the provider before trying again", err, d.Address)
+	case !existed:
+		if rerr := os.RemoveAll(d.Address); rerr != nil {
+			return fmt.Errorf("%w; removing the half-created repository at %s also failed: %v", err, d.Address, rerr)
+		}
+	case wasEmpty:
+		entries, _ := os.ReadDir(d.Address)
+		for _, e := range entries {
+			if rerr := os.RemoveAll(filepath.Join(d.Address, e.Name())); rerr != nil {
+				return fmt.Errorf("%w; emptying the half-created repository at %s also failed: %v", err, d.Address, rerr)
+			}
+		}
+	default:
+		return fmt.Errorf("%w; %s held files before, so the half-created repository there was left: delete restic's config, data, index, keys, locks and snapshots there before trying again", err, d.Address)
+	}
+	return fmt.Errorf("%w (the half-created repository at %s was removed)", err, d.Address)
+}
+
+// finishCreate adds the three keys to a just-initialized repository, removes
+// the throwaway key, and saves the destination.
+func (m *Machine) finishCreate(ctx context.Context, d *Destination, master string, sk secretKey, initial string) (Setup, error) {
+	recovery := newRecoveryCode()
+	account := accountPassword(master, sk)
 	accountID, err := d.addKey(ctx, initial, accountUser, ctdevHost, account)
 	if err != nil {
 		return Setup{}, err
