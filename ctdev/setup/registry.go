@@ -215,6 +215,19 @@ var Registry = []Setting{
 		},
 		HardwareFn: gateCinnamon,
 	},
+	{
+		Name:        "Ask for the password right after the screensaver",
+		Slug:        "power",
+		Category:    "Power",
+		Description: "Asks for your password the moment the screensaver ends, with no grace period, so a Mac you walk away from stays locked. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macPowerScreensaverPassword) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macPowerScreensaverPassword, v)
+		},
+		HardwareFn: gateMacOS,
+	},
 
 	// ── Keyboard ───────────────────────────────────────────────────────
 
@@ -298,9 +311,11 @@ var Registry = []Setting{
 		Description: "Stops macOS swapping in curly quotes and long dashes, fixing spelling, capitalizing and adding periods as you type, which breaks code and commands. Off puts back the macOS defaults.",
 		Control:     ControlToggle,
 		Default:     "enabled",
-		DetectFunc:  macTypeAsTyped.detect,
-		ApplyFunc:   macTypeAsTyped.apply,
-		HardwareFn:  gateMacOS,
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macKeyboardTypeAsTyped) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macKeyboardTypeAsTyped, v)
+		},
+		HardwareFn: gateMacOS,
 	},
 	{
 		Name:        "Holding a key repeats it",
@@ -309,9 +324,11 @@ var Registry = []Setting{
 		Description: "Holding a key repeats it instead of opening the accent popup, so a held arrow or Delete key keeps going. Off brings back the accent popup.",
 		Control:     ControlToggle,
 		Default:     "enabled",
-		DetectFunc:  macHoldToRepeat.detect,
-		ApplyFunc:   macHoldToRepeat.apply,
-		HardwareFn:  gateMacOS,
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macKeyboardHoldToRepeat) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macKeyboardHoldToRepeat, v)
+		},
+		HardwareFn: gateMacOS,
 	},
 	{
 		Name:        "NumLock on boot",
@@ -444,6 +461,19 @@ var Registry = []Setting{
 		},
 		HardwareFn: gateCinnamon,
 	},
+	{
+		Name:        "Click when changing volume",
+		Slug:        "audio",
+		Category:    "Audio",
+		Description: "Plays a click as you change the volume, so you hear how loud it is before anything else plays. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macAudioVolumeClick) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macAudioVolumeClick, v)
+		},
+		HardwareFn: gateMacOS,
+	},
 
 	// ── Bluetooth ──────────────────────────────────────────────────────
 
@@ -565,6 +595,20 @@ var Registry = []Setting{
 			return applyMacDefaults(ctx, o, macDesktopDSStore, v)
 		},
 		ApplyGroup: macFinderGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "Expanded save and print dialogs",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Opens Save and Print dialogs with all their options showing, so you can pick a folder or print settings without an extra click. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDialogs) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopDialogs, v)
+		},
 		HardwareFn: gateMacOS,
 	},
 
@@ -764,24 +808,5 @@ var Registry = []Setting{
 			return applyPiholeHostResolver(ctx, o)
 		},
 		HardwareFn: gatePiholeHostResolver,
-	},
-
-	// ── macOS ────────────────────────────────────────────────────────────
-
-	{
-		Name:     "macOS defaults",
-		Slug:     "macos",
-		Category: "macOS",
-		Description: "Applies opinionated macOS defaults: volume-change feedback sound, " +
-			"expanded save/print dialogs, and password required immediately after screensaver. " +
-			"Typing is in the keyboard category; Dock, Finder and animations are in desktop.",
-		Control:    ControlToggle,
-		OneWay:     true,
-		Default:    "applied",
-		DetectFunc: detectMacOSDefaults,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return ApplyMacOSDefaults(ctx, o)
-		},
-		HardwareFn: gateMacOS,
 	},
 }

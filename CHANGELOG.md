@@ -25,6 +25,16 @@ All notable changes to this project will be documented in this file.
   auto-capitalize or double-space period) and "Holding a key repeats it" (no accent popup)
   move here from `configure macos`, and each has an off switch that deletes the keys ctdev
   wrote. "NumLock on boot" can be turned off, which removes numlockx.
+- **The last macOS defaults moved by topic, each with an off switch** that deletes its
+  keys: "Click when changing volume" is in `ctdev configure audio`, "Expanded save and
+  print dialogs" in `configure desktop`, and "Ask for the password right after the
+  screensaver" in `configure power`. Each shows only on macOS and is on by default, as
+  before.
+
+### Removed
+- **`ctdev configure macos` is gone.** Its settings are in `desktop`, `keyboard`, `audio`
+  and `power`, by topic; `ctdev configure macos` now reports an unknown category. Where
+  you ran `configure macos --batch`, run those four categories instead.
 
 ## [16.0.1] - 2026-10-22
 

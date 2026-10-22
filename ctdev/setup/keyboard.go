@@ -2,7 +2,6 @@ package setup
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -93,57 +92,6 @@ func applyMacKeyRepeatRate(ctx context.Context, o sysutil.Opts, cps string) erro
 	}
 	return writeMacKeyRepeatUnits(ctx, o, "KeyRepeat", units)
 }
-
-// macBoolKeys is an on/off setting made of NSGlobalDomain bool keys that ctdev
-// sets to false. On writes every key; off deletes them, which puts back the
-// macOS default.
-type macBoolKeys []string
-
-// detect returns "enabled" when every key reads back false.
-func (k macBoolKeys) detect(ctx context.Context) string {
-	for _, key := range k {
-		out, ok := defaultsRead(ctx, "NSGlobalDomain", key)
-		if !ok || out != "0" {
-			return "disabled"
-		}
-	}
-	return "enabled"
-}
-
-// apply writes every key false for "enabled" and deletes every key that is
-// set for "disabled". It tries every key and joins the failures.
-func (k macBoolKeys) apply(ctx context.Context, o sysutil.Opts, v string) error {
-	var errs []error
-	for _, key := range k {
-		switch v {
-		case "enabled":
-			defaultsWrite(ctx, o, &errs, "NSGlobalDomain", key, "-bool", "false")
-		case "disabled":
-			// `defaults delete` fails on a missing key; only delete what is there.
-			if _, ok := defaultsRead(ctx, "NSGlobalDomain", key); !ok {
-				continue
-			}
-			if err := macExec(ctx, o, "defaults", "delete", "NSGlobalDomain", key); err != nil {
-				errs = append(errs, fmt.Errorf("defaults delete NSGlobalDomain %s: %w", key, err))
-			}
-		default:
-			return fmt.Errorf("unknown value %q: want enabled or disabled", v)
-		}
-	}
-	return errors.Join(errs...)
-}
-
-// macTypeAsTyped turns off macOS's automatic text changes.
-var macTypeAsTyped = macBoolKeys{
-	"NSAutomaticQuoteSubstitutionEnabled",
-	"NSAutomaticDashSubstitutionEnabled",
-	"NSAutomaticSpellingCorrectionEnabled",
-	"NSAutomaticCapitalizationEnabled",
-	"NSAutomaticPeriodSubstitutionEnabled",
-}
-
-// macHoldToRepeat turns off the accent popup, so a held key repeats.
-var macHoldToRepeat = macBoolKeys{"ApplePressAndHoldEnabled"}
 
 // detectNumlockx reports whether the numlockx package is installed.
 func detectNumlockx(ctx context.Context) string {

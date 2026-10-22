@@ -381,3 +381,19 @@ func TestPromptSetting_NotNeededDefaultsToSkip(t *testing.T) {
 		t.Errorf("yes on a not-needed setting: changed=%v enabled=%v desired=%q, want true/true/never", changed, st.Enabled, st.DesiredValue)
 	}
 }
+
+// The macos category was split by topic (CTD-94, CTD-95), so `configure
+// macos` is an unknown category, not silently a full sweep.
+func TestConfigureMacOSCategoryGone(t *testing.T) {
+	configure := childCommand(t, rootCmd, "configure")
+	if hasSubcommand(configure, "macos") {
+		t.Error("configure macos should be gone (split into audio, desktop, keyboard and power)")
+	}
+	err := runConfigureAll(configure, []string{"macos"})
+	if err == nil || !strings.Contains(err.Error(), "unknown configure category") {
+		t.Errorf("configure macos: got %v, want an unknown configure category error", err)
+	}
+	if _, ok := slugDescriptions["macos"]; ok {
+		t.Error("slugDescriptions still names macos")
+	}
+}

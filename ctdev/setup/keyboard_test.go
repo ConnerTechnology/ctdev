@@ -113,62 +113,6 @@ func TestDetectMacKeyRepeatRate(t *testing.T) {
 	}
 }
 
-func TestMacBoolKeysOnOff(t *testing.T) {
-	ctx := context.Background()
-	keys := macBoolKeys{"A", "B"}
-	f := &fakeDefaults{values: map[string]string{"NSGlobalDomain Other": "1"}}
-	useFake(t, f)
-	var buf bytes.Buffer
-
-	if got := keys.detect(ctx); got != "disabled" {
-		t.Errorf("unset: detect = %q, want disabled", got)
-	}
-	if err := keys.apply(ctx, sysutil.Opts{Stdout: &buf}, "enabled"); err != nil {
-		t.Fatalf("enable: %v", err)
-	}
-	want := [][]string{
-		{"write", "NSGlobalDomain", "A", "-bool", "false"},
-		{"write", "NSGlobalDomain", "B", "-bool", "false"},
-	}
-	if got := f.writes(); !reflect.DeepEqual(got, want) {
-		t.Errorf("enable writes %v, want %v", got, want)
-	}
-	if got := keys.detect(ctx); got != "enabled" {
-		t.Errorf("after enable: detect = %q, want enabled", got)
-	}
-
-	// Off removes exactly what on added, and nothing else.
-	delete(f.values, "NSGlobalDomain B") // one key already gone: no failing delete
-	if err := keys.apply(ctx, sysutil.Opts{Stdout: &buf}, "disabled"); err != nil {
-		t.Fatalf("disable: %v", err)
-	}
-	if !reflect.DeepEqual(f.values, map[string]string{"NSGlobalDomain Other": "1"}) {
-		t.Errorf("after disable values = %v", f.values)
-	}
-	if got := keys.detect(ctx); got != "disabled" {
-		t.Errorf("after disable: detect = %q, want disabled", got)
-	}
-
-	// A key set to true by hand isn't "enabled".
-	f.values["NSGlobalDomain A"] = "0"
-	f.values["NSGlobalDomain B"] = "1"
-	if got := keys.detect(ctx); got != "disabled" {
-		t.Errorf("one key true: detect = %q, want disabled", got)
-	}
-
-	if err := keys.apply(ctx, sysutil.Opts{Stdout: &buf}, "maybe"); err == nil {
-		t.Error("unknown value: expected an error")
-	}
-
-	f.failWrite = map[string]bool{"NSGlobalDomain A": true}
-	if err := keys.apply(ctx, sysutil.Opts{Stdout: &buf}, "enabled"); err == nil {
-		t.Error("failed write: expected an error")
-	}
-	if f.values["NSGlobalDomain B"] != "0" {
-		t.Error("a failed write should not stop the next key")
-	}
-}
-
 func TestApplyNumlockxOff(t *testing.T) {
 	var got []string
 	orig := removePackages

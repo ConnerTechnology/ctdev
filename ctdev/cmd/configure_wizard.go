@@ -30,7 +30,6 @@ var slugDescriptions = map[string]string{
 	"ssh":       "SSH & Remote Access",
 	"pihole":    "Pi-hole DNS",
 	"caddy":     "Caddy reverse proxy",
-	"macos":     "macOS Defaults",
 }
 
 // slugOrder is derived from setup.Registry so adding a setting with a brand
