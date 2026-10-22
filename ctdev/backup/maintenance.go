@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand/v2"
 	"slices"
 	"strconv"
@@ -397,8 +396,6 @@ func (w *countWriter) Write(p []byte) (int, error) {
 	*w += countWriter(len(p))
 	return len(p), nil
 }
-
-var _ io.Writer = (*countWriter)(nil)
 
 // latestPerFolder is the newest backup of each folder in the destination:
 // one per folder ID, and one per one-off path and computer. Snapshots
