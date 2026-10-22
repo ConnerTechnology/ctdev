@@ -223,7 +223,7 @@ func Status(s backup.Status, home string) string {
 		switch {
 		case !s.Scheduled:
 			sched += " · not scheduled on this computer"
-		case !s.NextDue.After(time.Now()):
+		case !s.NextDue.After(s.At):
 			sched += " · due now"
 		default:
 			sched += " · next due " + when(s.NextDue)

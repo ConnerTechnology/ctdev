@@ -26,6 +26,8 @@ func configured() backup.Status {
 		Size: 1_200_000_000, Files: 4812,
 		Last:      &backup.Run{LastAttempt: time.Date(2026, 10, 21, 21, 12, 0, 0, time.Local), LastSuccess: time.Date(2026, 10, 21, 21, 12, 0, 0, time.Local)},
 		Scheduled: true, NextDue: time.Date(2026, 10, 22, 21, 12, 0, 0, time.Local),
+		// The status carries the time it was taken, so no test depends on today.
+		At:      time.Date(2026, 10, 22, 12, 0, 0, 0, time.Local),
 		Backups: 14, Oldest: time.Date(2026, 9, 2, 2, 0, 0, 0, time.Local), Stored: 1_600_000_000,
 	}
 }
@@ -169,6 +171,14 @@ func TestStatusLines(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("status is missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestScheduleIsDueOnceNextDuePasses(t *testing.T) {
+	s := configured()
+	s.At = s.NextDue.Add(time.Minute)
+	if got := plain(Status(s, home)); !strings.Contains(got, "daily · due now") {
+		t.Errorf("status:\n%s", got)
 	}
 }
 

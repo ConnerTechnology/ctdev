@@ -46,6 +46,9 @@ type Status struct {
 	Scheduled bool      // on this computer's schedule list
 	NextDue   time.Time // when Scheduled
 
+	// At is when the status was taken; "due now" is judged against it.
+	At time.Time
+
 	Backups int       // the folder's backups in the destination
 	Oldest  time.Time // the oldest of them
 	Latest  time.Time // the newest of them, from any computer
@@ -67,7 +70,7 @@ func (s Status) Failed() bool { return s.Last != nil && s.Last.Failed() }
 // Status reports on the backed-up folder at or above cwd. Problems reading
 // the folder or the destination land in ReadErr, so a status can always be shown.
 func (m *Machine) Status(ctx context.Context, cwd string) Status {
-	s := Status{Hostname: m.Hostname}
+	s := Status{Hostname: m.Hostname, At: time.Now()}
 	f, err := Find(cwd)
 	s.Folder = f
 	if err != nil {
@@ -143,7 +146,7 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 	if s.Scheduled {
 		// No time of day: the next backup is due an interval after the last
 		// success, and right away when there hasn't been one.
-		s.NextDue = time.Now()
+		s.NextDue = s.At
 		if s.Last != nil && !s.Last.LastSuccess.IsZero() {
 			s.NextDue = s.Last.LastSuccess.Add(f.Config.Schedule.Interval())
 		}
