@@ -1,0 +1,158 @@
+package backup
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+// ErrWrongPassword means restic found no key the password opens: a wrong
+// master password or Secret Key, or a computer key that has been removed.
+var ErrWrongPassword = errors.New("wrong master password or Secret Key")
+
+// ErrNoRestic means the restic binary isn't installed.
+var ErrNoRestic = errors.New("restic isn't installed: run ctdev install restic")
+
+// retryLock is how long an operation waits for a lock held by another
+// computer, such as the weekly data check, before failing (CTD-87).
+const retryLock = "30m"
+
+// run is one restic invocation against a destination.
+type run struct {
+	password    string // reaches restic as RESTIC_PASSWORD, never argv
+	newPassword string // for key add: handed over on fd 3, never argv
+	keyHint     string // the key to try first; restic otherwise tries each in turn
+	dir         string // working directory
+	args        []string
+}
+
+// restic runs restic as the user (never through sudo) and returns its
+// stdout. Secrets travel in the environment and on a pipe, so they never show
+// in argv, where any user on the machine could read them in ps.
+func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
+	bin := d.m.resticBin()
+	if _, err := exec.LookPath(bin); err != nil {
+		return nil, ErrNoRestic
+	}
+	cmd := exec.CommandContext(ctx, bin, r.args...)
+	cmd.Dir = r.dir
+	cmd.Env = d.env(r.password, r.keyHint)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if r.newPassword != "" {
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			return nil, err
+		}
+		defer pr.Close()
+		cmd.ExtraFiles = []*os.File{pr} // fd 3 in the child
+		go func() {
+			_, _ = pw.WriteString(r.newPassword)
+			pw.Close()
+		}()
+	}
+	err := cmd.Run()
+	if err == nil {
+		return stdout.Bytes(), nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		switch exit.ExitCode() {
+		case 12: // restic: wrong password or no key found
+			return stdout.Bytes(), ErrWrongPassword
+		case 3: // restic backup: snapshot made, but some files couldn't be read
+			return stdout.Bytes(), errPartial
+		}
+	}
+	return stdout.Bytes(), fmt.Errorf("restic %s: %s", r.args[0], resticMessage(stderr.Bytes(), err))
+}
+
+// errPartial is restic backup's "snapshot created, some files unreadable".
+var errPartial = errors.New("some files couldn't be read")
+
+// resticMessage pulls the error out of restic's stderr: the exit_error
+// message in --json mode, or the last line otherwise.
+func resticMessage(stderr []byte, err error) string {
+	var last string
+	sc := bufio.NewScanner(bytes.NewReader(stderr))
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		var msg struct {
+			Type    string `json:"message_type"`
+			Message string `json:"message"`
+		}
+		if json.Unmarshal([]byte(line), &msg) == nil && msg.Type == "exit_error" {
+			return msg.Message
+		}
+		last = line
+	}
+	if last == "" {
+		return err.Error()
+	}
+	return last
+}
+
+// scrubbedEnv names variables dropped from the inherited environment, so a
+// RESTIC_PASSWORD or AWS key in the user's shell can't redirect a run to
+// another repository or key.
+var scrubbedEnv = []string{
+	"RESTIC_REPOSITORY", "RESTIC_REPOSITORY_FILE",
+	"RESTIC_PASSWORD", "RESTIC_PASSWORD_FILE", "RESTIC_PASSWORD_COMMAND",
+	"RESTIC_KEY_HINT", "RESTIC_HOST",
+	"B2_ACCOUNT_ID", "B2_ACCOUNT_KEY",
+	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE",
+}
+
+func (d *Destination) env(password, keyHint string) []string {
+	drop := map[string]bool{}
+	for _, k := range scrubbedEnv {
+		drop[k] = true
+	}
+	var env []string
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if !drop[k] {
+			env = append(env, kv)
+		}
+	}
+	env = append(env, "RESTIC_REPOSITORY="+d.Address, "RESTIC_PASSWORD="+password)
+	if keyHint != "" {
+		// Each key restic tries costs a deliberately slow scrypt, so name ours.
+		env = append(env, "RESTIC_KEY_HINT="+keyHint)
+	}
+	for k, v := range d.credentials {
+		env = append(env, k+"="+v)
+	}
+	return env
+}
+
+// asComputer is a run with this computer's own key.
+func (d *Destination) asComputer(dir string, args ...string) run {
+	return run{password: d.computerKey, keyHint: d.computerKeyID, dir: dir, args: args}
+}
+
+// dryRun prints a restic command instead of running it. The command line has
+// no secrets in it, so it's safe to show.
+func (d *Destination) dryRun(r run) {
+	fmt.Fprintf(d.m.out(), "[dry-run] restic %s\n", strings.Join(quoteArgs(r.args), " "))
+}
+
+func quoteArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		if strings.ContainsAny(a, " \t'\"") {
+			a = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+		}
+		out[i] = a
+	}
+	return out
+}
