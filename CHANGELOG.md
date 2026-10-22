@@ -2,9 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [16.0.0] - 2026-10-22
+
+### Added
+- **`ctdev repo setup`** sets up the git repo you're in for Claude Code, whether the repo is
+  yours or someone else's, without committing anything to it. It installs git, gh and
+  Claude Code when they're missing, and signs gh in to GitHub if it isn't. It installs the
+  `connertechnology` plugin at local scope from the private `ConnerTechnology/engineering`
+  marketplace, pinned to `v1.0.0` and cloned over gh's login. Then it starts Claude Code on
+  `/connertechnology:setup`. `.claude/settings.local.json` is added to `.git/info/exclude`
+  unless something already ignores it. Running it again changes nothing.
+- **`ctdev configure jira`** adds Atlassian's Rovo MCP server (`atlassian`) to the repo at
+  local scope, where it signs in as you with OAuth. It also saves your Atlassian API token
+  for scripts in `~/.config/ctdev/jira/<site>.env` (owner-only), after checking it with
+  the site. Scripts read it with `ctdev jira auth-header --site <site>`.
 
 ### Changed
+- **`ctdev configure linear` writes nothing in the repo.** The `linear` server is added at
+  local scope (`claude mcp add-json --scope local`, kept in `~/.claude.json`) instead of in
+  `.mcp.json`, and the "whose repo is this?" question is gone. A repo set up the old way
+  keeps working: the wizard offers its `.mcp.json` workspace and says the entry can be
+  removed.
 - **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
   "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
   suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why

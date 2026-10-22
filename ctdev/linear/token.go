@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/secretfile"
 	"github.com/ConnerTechnology/ctdev/ctdev/state"
 )
 
@@ -109,7 +110,7 @@ func writeCache(workspace string, t CachedToken) error {
 	if err != nil {
 		return err
 	}
-	return writePrivate(CachePath(workspace), data)
+	return secretfile.WritePrivate(CachePath(workspace), data)
 }
 
 // sortedScopes normalizes a scope list, comma- or space-separated, to a sorted
