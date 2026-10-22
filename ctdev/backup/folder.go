@@ -1,7 +1,7 @@
 // Package backup is per-folder backup: a folder configured once is backed up
 // whole, with restic, to a destination this machine knows. It owns finding the
 // backed-up folder, the folder's config file, this machine's state under
-// ~/.config/ctdev/backup, destinations and their keys (ADR-0012), and the
+// ~/.config/ctdev/backup, destinations and their keys (ADR-0016), and the
 // restic runs. The `ctdev backup` command is a thin layer over it.
 package backup
 

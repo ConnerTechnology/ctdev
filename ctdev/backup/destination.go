@@ -120,7 +120,7 @@ const (
 )
 
 // CreateDestination initializes a new restic repository with three keys
-// (ADR-0012): the account key, whose password is derived from the master
+// (ADR-0016): the account key, whose password is derived from the master
 // password and a new Secret Key and never stored; this computer's random key,
 // labeled with its hostname; and the Recovery Code's key. It saves the
 // destination for this machine and returns the kit and Recovery Code to show.

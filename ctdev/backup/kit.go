@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// The two-secret model is ADR-0012: a destination's account key is a restic
+// The two-secret model is ADR-0016: a destination's account key is a restic
 // key whose password is Argon2id(master password, Secret Key), so neither
 // secret alone opens the repository and a stolen bucket can't be guessed
 // offline without the Secret Key.
