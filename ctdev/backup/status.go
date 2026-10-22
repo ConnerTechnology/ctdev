@@ -109,7 +109,7 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 	var entry folderEntry
 	if f.Config != nil {
 		s.Destination = f.Config.Destination
-		if entry, s.Scheduled, err = m.scheduled(f.Root, f.Config.ID); err != nil {
+		if entry, s.Scheduled, err = m.scheduledEntry(f.Root, f.Config.ID); err != nil {
 			s.ReadErr = errors.Join(s.ReadErr, err)
 		}
 		if names, err := m.Destinations(); err != nil {
@@ -156,7 +156,7 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 			if last := snaps[len(snaps)-1]; last.Time.After(s.Latest) {
 				s.Latest, s.LatestHost = last.Time, last.Host
 			}
-			stored, err := d.Stored(ctx, ref)
+			stored, err := d.Stored(ctx, snaps)
 			s.ReadErr = errors.Join(s.ReadErr, err)
 			s.Stored += stored
 		}

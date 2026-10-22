@@ -303,7 +303,7 @@ func TestLaunchdAgentChangedDuringARunWaits(t *testing.T) {
 
 	// Another process's scheduled run holds the lock.
 	other := &Machine{Dir: m.Dir}
-	unlock, err := other.lock(false)
+	unlock, err := other.runLock()
 	if err != nil {
 		t.Fatal(err)
 	}

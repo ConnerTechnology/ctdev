@@ -29,10 +29,9 @@ const (
 
 // Item is one menu entry.
 type Item struct {
-	Action     Action
-	Label      string
-	Dimmed     bool // unavailable: shown, but the cursor skips it
-	ComingSoon bool // not built yet: choosing it says so
+	Action Action
+	Label  string
+	Dimmed bool // unavailable: shown, but the cursor skips it
 }
 
 // Model is the status and menu screen.
@@ -41,7 +40,6 @@ type Model struct {
 	items  []Item
 	cursor int
 	chosen Action
-	flash  string
 }
 
 // New builds the screen for a folder's status. home turns paths into ~/….
@@ -65,15 +63,15 @@ func menu(s backup.Status) []Item {
 		return items
 	}
 	noBackups := !s.HasBackups()
-	list := Item{Action: ListBackups, Label: "List backups", Dimmed: noBackups, ComingSoon: true}
-	deleteAll := Item{Action: DeleteAll, Label: "Delete all backups", Dimmed: noBackups, ComingSoon: true}
+	list := Item{Action: ListBackups, Label: "List backups", Dimmed: noBackups}
+	deleteAll := Item{Action: DeleteAll, Label: "Delete all backups", Dimmed: noBackups}
 	quit := Item{Action: Quit, Label: "Quit"}
 	if s.Config != nil {
 		return []Item{
 			{Action: BackUpNow, Label: "Back up now"},
 			list,
 			{Action: Configure, Label: "Configure"},
-			{Action: StopBackingUp, Label: "Stop backing up", ComingSoon: true},
+			{Action: StopBackingUp, Label: "Stop backing up"},
 			deleteAll,
 			quit,
 		}
@@ -82,7 +80,7 @@ func menu(s backup.Status) []Item {
 		{Action: Configure, Label: "Configure"},
 		{Action: BackUpNow, Label: "Back up now (once)"},
 		list,
-		{Action: StopBackingUp, Label: "Stop backing up", Dimmed: true, ComingSoon: true},
+		{Action: StopBackingUp, Label: "Stop backing up", Dimmed: true},
 		deleteAll,
 		quit,
 	}
@@ -115,7 +113,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.flash = ""
 	switch k.String() {
 	case "up", "k", "shift+tab":
 		m.cursor = m.next(m.cursor, -1)
@@ -127,10 +124,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "enter", "space":
 		it := m.items[m.cursor]
 		if it.Dimmed {
-			return m, nil
-		}
-		if it.ComingSoon {
-			m.flash = it.Label + " is coming soon."
 			return m, nil
 		}
 		m.chosen = it.Action
@@ -156,13 +149,7 @@ func (m *Model) View() tea.View {
 		default:
 			b.WriteString("    " + it.Label)
 		}
-		if it.ComingSoon {
-			b.WriteString(styles.Dimmed.Render("  (coming soon)"))
-		}
 		b.WriteString("\n")
-	}
-	if m.flash != "" {
-		b.WriteString("\n  " + styles.Warning.Render(m.flash) + "\n")
 	}
 	b.WriteString("\n  " + styles.Help.Render("↑/↓ move · enter choose · q quit") + "\n")
 	return tea.NewView(b.String())

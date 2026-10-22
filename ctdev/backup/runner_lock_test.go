@@ -12,7 +12,7 @@ import (
 func TestASecondRunScheduledExitsWhileOneRuns(t *testing.T) {
 	m, root, n := failingMachine(t)
 	other := &Machine{Dir: m.Dir}
-	unlock, err := other.lock(false)
+	unlock, err := other.runLock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestRunScheduledDryRunWritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	// listed took the lock to write folders.json; start from no lock file.
-	if err := os.Remove(m.lockFile()); err != nil {
+	if err := os.Remove(m.stateLockFile()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,7 +63,7 @@ func TestRunScheduledDryRunWritesNothing(t *testing.T) {
 	if outcome[gone] != Missing || outcome[root] != Failed {
 		t.Errorf("outcomes = %v, want gone missing and the folder failed (no destination)", outcome)
 	}
-	for _, f := range []string{m.stateFile(), m.lockFile()} {
+	for _, f := range []string{m.stateFile(), m.stateLockFile(), m.runLockFile()} {
 		if _, err := os.Stat(f); err == nil {
 			t.Errorf("a dry run wrote %s", f)
 		}

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -402,6 +403,37 @@ func TestRemovedBackupCommandsAreUnknown(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "unknown") {
 			t.Errorf("ctdev %s: want an unknown-command error, got %v", name, err)
+		}
+	}
+}
+
+// Stop backing up offers to delete the folder's backups, so it refuses when
+// it can't see them, rather than stop without that chance. It refuses before
+// asking anything, and the folder stays backed up.
+func TestStopBackingUpRefusesWhenTheBackupsCantBeRead(t *testing.T) {
+	dir := backupFolderForTest(t)
+	cfg := backup.NewConfig("example-backups")
+	if err := backup.WriteConfig(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, s := range map[string]backup.Status{
+		"unreadable": {Folder: backup.Folder{Cwd: dir, Root: dir, Config: &cfg}, Target: dir,
+			Destination: "example-backups", ReadErr: errors.New("example failure")},
+		"not set up here": {Folder: backup.Folder{Cwd: dir, Root: dir, Config: &cfg}, Target: dir,
+			Destination: "example-backups", DestinationMissing: true},
+	} {
+		err := stopBackingUp(context.Background(), m, s)
+		if err == nil {
+			t.Errorf("%s: want a refusal", name)
+		} else if name == "unreadable" && !strings.Contains(err.Error(), "can't read the backups of ~/Projects/website") {
+			t.Errorf("%s: error %q doesn't say why", name, err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, backup.ConfigFileName)); err != nil {
+			t.Errorf("%s: the config file is gone: %v", name, err)
 		}
 	}
 }

@@ -31,11 +31,11 @@ ctdev configure git             # Configure git user and SSH signing key (instal
 ctdev configure aws             # Pick the AWS profile; offers `aws configure sso` when there is none (installs the AWS CLI first if missing)
 ctdev configure ssh             # Remote access: SSH server, key-only login, keep programs running,
                                 #   Mosh, vscode.dev tunnel, LAN-only firewall (UFW)
-ctdev configure power           # Power profile, display/suspend/screensaver timers (minutes or never), never suspend
-ctdev configure macos           # macOS defaults (typing/dialogs/screensaver password) — macOS only
-ctdev configure desktop         # Dock, Finder, animations (macOS); Nemo view + Hide drives (Cinnamon)
-ctdev configure keyboard        # Key repeat delay/speed (Cinnamon, macOS) + NumLock on boot
-ctdev configure audio           # PipeWire sound system, Bluetooth audio (codecs, LDAC), alert sounds
+ctdev configure power           # Power profile, display/suspend/screensaver timers (minutes or never), never suspend,
+                                #   password right after the screensaver (macOS)
+ctdev configure desktop         # Dock, Finder, animations, save/print dialogs (macOS); Nemo view + Hide drives (Cinnamon)
+ctdev configure keyboard        # Key repeat delay (ms) and rate (cps) on Cinnamon and macOS, macOS typing, NumLock on boot
+ctdev configure audio           # PipeWire sound system, Bluetooth audio (codecs, LDAC), alert sounds, volume click (macOS)
 ctdev configure bluetooth       # bluez + Blueman, and bluetooth.service on at startup
 ctdev configure storage         # Weekly SSD TRIM (fstrim.timer) — only on machines with an SSD
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
@@ -46,7 +46,8 @@ ctdev configure jira            # this repo's Atlassian MCP server (local scope)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev repo setup                # install git, gh, Claude Code and the connertechnology plugin for this repo, then start /connertechnology:setup
-ctdev backup                    # The folder you're in: its backup status, then Configure or Back up now
+ctdev backup                    # The folder you're in: its backup status, then a menu: Back up now, List backups
+                                #   (details, Download as zip, Delete this backup), Configure, Stop backing up, Delete all backups
 ctdev backup --batch            # Status only (also when piped); exits non-zero if not backed up, or the last backup failed or is overdue
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev doctor                    # Diagnose any machine: network, hardware, OS, security

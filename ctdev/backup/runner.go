@@ -39,7 +39,7 @@ type ScheduledRun struct {
 // A dry run writes nothing at all, the lock file included.
 func (m *Machine) RunScheduled(ctx context.Context) ([]ScheduledRun, error) {
 	if !m.Opts.DryRun {
-		unlock, err := m.lock(false)
+		unlock, err := m.runLock()
 		if errors.Is(err, errLocked) {
 			return nil, nil
 		}

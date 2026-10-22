@@ -48,7 +48,8 @@ type Machine struct {
 
 	lockMu    sync.Mutex
 	lockDepth int
-	lockHeld  *os.File
+	lockHeld  *os.File // the state lock
+	runHeld   *os.File // the run lock
 }
 
 // ThisMachine is the machine ctdev is running on, as the current user.

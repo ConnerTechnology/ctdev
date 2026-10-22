@@ -136,14 +136,19 @@ func TestDimmedItemsCantBeChosen(t *testing.T) {
 	}
 }
 
-func TestComingSoonItemsSaySoAndStay(t *testing.T) {
-	m := New(configured(), home)
-	press(m, key(tea.KeyDown), key(tea.KeyEnter))
-	if m.Chosen() != None {
-		t.Errorf("List backups isn't built yet; chosen = %v", m.Chosen())
+func TestEveryAvailableItemCanBeChosen(t *testing.T) {
+	for i, want := range []Action{BackUpNow, ListBackups, Configure, StopBackingUp, DeleteAll, Quit} {
+		m := New(configured(), home)
+		for range i {
+			press(m, key(tea.KeyDown))
+		}
+		press(m, key(tea.KeyEnter))
+		if m.Chosen() != want {
+			t.Errorf("item %d: chosen = %v, want %v", i, m.Chosen(), want)
+		}
 	}
-	if !strings.Contains(plain(m.View().Content), "List backups is coming soon") {
-		t.Errorf("view doesn't say it's coming soon:\n%s", plain(m.View().Content))
+	if strings.Contains(plain(New(configured(), home).View().Content), "coming soon") {
+		t.Error("nothing on the menu is coming soon any more")
 	}
 }
 

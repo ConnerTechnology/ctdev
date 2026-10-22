@@ -113,7 +113,7 @@ func TestInitStates(t *testing.T) {
 
 func TestRegistryHasAllSlugs(t *testing.T) {
 	slugs := Slugs(Registry)
-	expected := []string{"gpu", "boot", "power", "keyboard", "mouse", "audio", "bluetooth", "desktop", "network", "system", "storage"}
+	expected := []string{"gpu", "boot", "power", "keyboard", "mouse", "audio", "bluetooth", "desktop", "network", "storage"}
 	for _, slug := range expected {
 		found := false
 		for _, s := range slugs {
@@ -179,24 +179,6 @@ func TestRegistrySlugCounts(t *testing.T) {
 			t.Errorf("slug %q has no settings", slug)
 		}
 	}
-}
-
-func TestLogitechKVMFixHasHardwareFn(t *testing.T) {
-	for _, s := range Registry {
-		if s.Name == "Logitech KVM mouse fix" {
-			if s.HardwareFn == nil {
-				t.Error("Logitech KVM mouse fix should have HardwareFn set")
-			}
-			if s.DetectFunc == nil {
-				t.Error("Logitech KVM mouse fix should have DetectFunc set")
-			}
-			if s.ApplyFunc == nil {
-				t.Error("Logitech KVM mouse fix should have ApplyFunc set")
-			}
-			return
-		}
-	}
-	t.Fatal("Logitech KVM mouse fix not found in Registry")
 }
 
 func TestHideDrivesHasHardwareFn(t *testing.T) {
