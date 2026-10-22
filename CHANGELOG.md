@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [16.0.1] - 2026-10-22
+
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.0.2`** (was `v1.0.0`), which
+  narrows the plugin's merge rule to `gh pr merge * --merge`. Run `ctdev repo setup` again in
+  a repo to move it to 1.0.2: it re-points the marketplace and updates the plugin at local
+  scope.
+
 ## [16.0.0] - 2026-10-22
 
 ### Added
