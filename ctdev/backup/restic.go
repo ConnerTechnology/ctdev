@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 )
 
 // ErrWrongPassword means restic found no key the password opens: a wrong
@@ -37,8 +40,8 @@ type run struct {
 // in argv, where any user on the machine could read them in ps.
 func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 	bin := d.m.resticBin()
-	if _, err := exec.LookPath(bin); err != nil {
-		return nil, ErrNoRestic
+	if err := checkRestic(ctx, bin); err != nil {
+		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, bin, r.args...)
 	cmd.Dir = r.dir
@@ -71,6 +74,65 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 		}
 	}
 	return stdout.Bytes(), fmt.Errorf("restic %s: %s", r.args[0], resticMessage(stderr.Bytes(), err))
+}
+
+// minRestic is the oldest restic whose JSON output ctdev reads: 0.17 added
+// the summary to `snapshots --json` and the backup's start and end times.
+// Ubuntu 22.04 and 24.04 ship older ones in apt.
+var minRestic = [3]int{0, 17, 0}
+
+// resticChecked caches checkRestic per binary path for the process.
+var resticChecked sync.Map
+
+// checkRestic makes sure the binary exists and is new enough.
+func checkRestic(ctx context.Context, bin string) error {
+	if err, ok := resticChecked.Load(bin); ok {
+		if err == nil {
+			return nil
+		}
+		return err.(error)
+	}
+	var err error
+	path, lerr := exec.LookPath(bin)
+	if lerr != nil {
+		err = ErrNoRestic
+	} else if out, verr := exec.CommandContext(ctx, path, "version").Output(); verr != nil {
+		err = fmt.Errorf("run restic version: %w", verr)
+	} else {
+		err = resticVersionOK(string(out))
+	}
+	if ctx.Err() == nil {
+		if err == nil {
+			resticChecked.Store(bin, nil)
+		} else {
+			resticChecked.Store(bin, err)
+		}
+	}
+	return err
+}
+
+var resticVersion = regexp.MustCompile(`^restic (\d+)\.(\d+)\.(\d+)`)
+
+// resticVersionOK reads `restic version` output.
+func resticVersionOK(out string) error {
+	m := resticVersion.FindStringSubmatch(strings.TrimSpace(out))
+	if m == nil {
+		return fmt.Errorf("can't read restic's version from %q", strings.TrimSpace(out))
+	}
+	var v [3]int
+	for i := range v {
+		v[i], _ = strconv.Atoi(m[i+1])
+	}
+	for i := range v {
+		if v[i] != minRestic[i] {
+			if v[i] < minRestic[i] {
+				return fmt.Errorf("restic %d.%d.%d is too old: ctdev needs %d.%d or newer (get it from github.com/restic/restic/releases)",
+					v[0], v[1], v[2], minRestic[0], minRestic[1])
+			}
+			break
+		}
+	}
+	return nil
 }
 
 // errPartial is restic backup's "snapshot created, some files unreadable".
