@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/claudecli"
 	"github.com/ConnerTechnology/ctdev/ctdev/gitrepo"
@@ -21,7 +22,7 @@ import (
 // auto-update, so a repo gets a new library version only when ctdev's pin
 // moves and `ctdev repo setup` runs again.
 const (
-	pluginMarketplace = "ConnerTechnology/engineering@connertechnology--v1.0.0"
+	pluginMarketplace = "ConnerTechnology/engineering@v1.0.0"
 	pluginID          = "connertechnology@connertechnology"
 	setupSkill        = "/connertechnology:setup"
 )
@@ -120,7 +121,13 @@ func setupRepo(ctx context.Context, batch bool) error {
 		}
 	}
 
-	if err := excludeSettingsLocal(ctx, repo); err != nil {
+	// In a worktree Claude Code keeps settings.local.json in the main
+	// checkout, so that is the work tree whose git status it must stay out of.
+	main, err := repo.MainRoot(ctx)
+	if err != nil {
+		return err
+	}
+	if err := excludeSettingsLocal(ctx, gitrepo.Repo{Root: main}); err != nil {
 		return err
 	}
 	if flagDryRun {
@@ -128,7 +135,7 @@ func setupRepo(ctx context.Context, batch bool) error {
 		fmt.Printf("  [dry-run] would start: claude %q\n", setupSkill)
 		return nil
 	}
-	settingsPath := repo.Path(settingsLocalFile)
+	settingsPath := filepath.Join(main, filepath.FromSlash(settingsLocalFile))
 	before, err := os.ReadFile(settingsPath)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

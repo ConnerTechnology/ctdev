@@ -55,7 +55,11 @@ func jiraWizard(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	local, hasLocal, err := claudecli.LocalMCPServer(repo.Root, jira.ServerName)
+	project, err := repo.MainRoot(ctx)
+	if err != nil {
+		return err
+	}
+	local, hasLocal, err := claudecli.LocalMCPServer(project, jira.ServerName)
 	if err != nil {
 		return err
 	}

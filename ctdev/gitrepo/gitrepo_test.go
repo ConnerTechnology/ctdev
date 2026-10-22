@@ -149,6 +149,24 @@ func TestExcludeFileInWorktree(t *testing.T) {
 	}
 }
 
+func TestMainRoot(t *testing.T) {
+	r := initRepo(t)
+	ctx := context.Background()
+	if got, err := r.MainRoot(ctx); err != nil || got != r.Root {
+		t.Errorf("main checkout: got %q, %v, want %q", got, err, r.Root)
+	}
+	runGit(t, r.Root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-q", "--allow-empty", "-m", "init")
+	wt := filepath.Join(t.TempDir(), "wt")
+	runGit(t, r.Root, "worktree", "add", "-q", wt)
+	w, err := Find(ctx, wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := w.MainRoot(ctx); err != nil || got != r.Root {
+		t.Errorf("worktree: got %q, %v, want %q", got, err, r.Root)
+	}
+}
+
 func TestIsTracked(t *testing.T) {
 	r := initRepo(t)
 	writeFile(t, r, testFile)

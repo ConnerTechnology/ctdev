@@ -52,6 +52,24 @@ func (r Repo) Path(rel string) string {
 	return filepath.Join(r.Root, filepath.FromSlash(rel))
 }
 
+// MainRoot is the main checkout's work tree: Root itself, except in a linked
+// worktree, where it is the checkout that owns the .git directory. Claude Code
+// keys a project's local MCP servers by it and keeps its
+// .claude/settings.local.json there, so every worktree of a repo shares them.
+// When the git directory isn't a work tree's .git (a submodule, say), it is
+// Root.
+func (r Repo) MainRoot(ctx context.Context) (string, error) {
+	out, err := gitOutput(ctx, r.Root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return "", fmt.Errorf("cannot find the main checkout: %w", err)
+	}
+	common := filepath.Clean(strings.TrimSpace(out))
+	if filepath.Base(common) != ".git" {
+		return r.Root, nil
+	}
+	return filepath.Dir(common), nil
+}
+
 // ExcludeFile is the repo's info/exclude, wherever git keeps it, which in a
 // worktree is not under the work tree's own .git.
 func (r Repo) ExcludeFile(ctx context.Context) (string, error) {

@@ -58,7 +58,11 @@ func linearWizard(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	local, hasLocal, err := claudecli.LocalMCPServer(repo.Root, linear.ServerName)
+	project, err := repo.MainRoot(ctx)
+	if err != nil {
+		return err
+	}
+	local, hasLocal, err := claudecli.LocalMCPServer(project, linear.ServerName)
 	if err != nil {
 		return err
 	}
