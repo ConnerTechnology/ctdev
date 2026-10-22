@@ -47,8 +47,9 @@ type Machine struct {
 	capture func(ctx context.Context, name string, args ...string) ([]byte, error)
 	// lingerDir is systemd's /var/lib/systemd/linger; tests point it elsewhere.
 	lingerDir string
-	// pickFn picks the maintenance's test-download file; nil means at random.
-	pickFn func(n int) int
+	// pickFn picks the maintenance's test-download file among paths; nil
+	// means at random.
+	pickFn func(paths []string) int
 
 	lockMu    sync.Mutex
 	lockDepth int

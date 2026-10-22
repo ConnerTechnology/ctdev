@@ -368,7 +368,7 @@ func (m *Machine) testDownload(ctx context.Context, d *Destination) error {
 		if len(files) == 0 {
 			continue // an empty folder has nothing to read back
 		}
-		f := files[m.pick(len(files))]
+		f := m.pick(files)
 		var n countWriter
 		r := d.asComputer("", "dump", "--retry-lock", retryLock, s.ID, f.path)
 		r.stdout = &n
@@ -382,12 +382,16 @@ func (m *Machine) testDownload(ctx context.Context, d *Destination) error {
 	return nil
 }
 
-// pick chooses one of n things at random: a file to test-download.
-func (m *Machine) pick(n int) int {
+// pick chooses the file to test-download, at random.
+func (m *Machine) pick(files []fileSize) fileSize {
 	if m.pickFn != nil {
-		return m.pickFn(n)
+		paths := make([]string, len(files))
+		for i, f := range files {
+			paths[i] = f.path
+		}
+		return files[m.pickFn(paths)]
 	}
-	return rand.IntN(n)
+	return files[rand.IntN(len(files))]
 }
 
 type countWriter int64

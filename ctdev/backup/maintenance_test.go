@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -251,9 +252,10 @@ func biggestPack(t *testing.T, repo string) string {
 }
 
 // corruptExample backs up a folder with a 1 MB file at noon, maintaining the
-// destination, then corrupts the data pack on disk: everything but its
-// header, so every file in the backup is damaged. It returns the pack and
-// the slice that reads it.
+// destination, then corrupts the data pack on disk: zeroes all but its last
+// 4 KB, which hold the pack's header. The 1 MB file's blob is damaged; a
+// small file's blob near the end of the pack may not be. It returns the pack
+// and the slice that reads it.
 func corruptExample(t *testing.T, m *Machine) (d *Destination, pack string, slice int) {
 	t.Helper()
 	d, root, _ := scheduledExample(t, m)
@@ -350,6 +352,9 @@ func TestTheTestDownloadCatchesDamageTheSliceMissed(t *testing.T) {
 	m := testMachine(t, "example-laptop")
 	d, _, slice := corruptExample(t, m)
 	dueWithSlice(t, d, slice%Slices+1)
+	// The large file: a small file's blob can sit in the pack's last 4 KB,
+	// which corruptExample leaves whole.
+	m.pickFn = func(paths []string) int { return slices.Index(paths, "/example.bin") }
 
 	c, _ := failedRun(t, m)
 	if c.Step != StepDownload || !strings.Contains(c.Error, "from the backup of ~/Projects/website") {
