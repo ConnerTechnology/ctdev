@@ -48,7 +48,7 @@ ctdev configure <category> --batch  # Apply a category's defaults non-interactiv
 ctdev repo setup                # install git, gh, Claude Code and the connertechnology plugin for this repo, then start /connertechnology:setup
 ctdev backup                    # The folder you're in: its backup status, then a menu: Back up now, List backups
                                 #   (details, Download as zip, Delete this backup), Configure, Stop backing up, Delete all backups
-ctdev backup --batch            # Status only (also when piped); exits non-zero if not backed up or the last backup failed
+ctdev backup --batch            # Status only (also when piped); exits non-zero if not backed up, or the last backup failed or is overdue
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev doctor                    # Diagnose any machine: network, hardware, OS, security
 ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint

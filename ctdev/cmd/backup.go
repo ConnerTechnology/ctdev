@@ -30,13 +30,67 @@ var backupCmd = &cobra.Command{
 	Long: "Show whether the folder you're in is backed up, with its status and a menu. " +
 		"ctdev looks up from the current directory for the nearest .ctdev-backup.json, the way " +
 		"git finds its repository. Without a terminal, or with --batch, it prints the status " +
-		"only, and exits non-zero when the folder isn't backed up or its last backup failed.",
+		"only, and exits non-zero when the folder isn't backed up, or its last backup failed " +
+		"or is overdue.",
 	Args: cobra.NoArgs,
 	RunE: runBackup,
 }
 
+// backupRunScheduledCmd is what the hourly systemd user timer or launchd
+// agent runs. It's hidden: people back up with ctdev backup.
+var backupRunScheduledCmd = &cobra.Command{
+	Use:    "run-scheduled",
+	Short:  "Back up the scheduled folders that are due (run hourly by the scheduler)",
+	Args:   cobra.NoArgs,
+	Hidden: true,
+	RunE:   runBackupScheduled,
+}
+
 func init() {
 	rootCmd.AddCommand(backupCmd)
+	backupCmd.AddCommand(backupRunScheduledCmd)
+}
+
+// installScheduler is the scheduler install Configure does; tests replace it
+// so they never touch this computer's real user timers or launch agents.
+var installScheduler = (*backup.Machine).InstallScheduler
+
+// removeSchedulerIfIdle is Stop backing up's scheduler removal, replaced by
+// tests for the same reason.
+var removeSchedulerIfIdle = (*backup.Machine).RemoveSchedulerIfIdle
+
+// unscheduleIfIdle removes this computer's hourly runner once Stop backing
+// up has taken the last folder off its list. The folder is already stopped,
+// so a failure here only warns.
+func unscheduleIfIdle(ctx context.Context, m *backup.Machine) {
+	if _, err := removeSchedulerIfIdle(m, ctx); err != nil {
+		fmt.Println("  " + styles.Warning.Render("Couldn't remove the hourly backup runner: "+err.Error()))
+	}
+}
+
+// scheduledNotifier is run-scheduled's notifier; nil is the desktop's.
+// Tests set it so they never pop up a real notification.
+var scheduledNotifier backup.Notifier
+
+func runBackupScheduled(cmd *cobra.Command, _ []string) error {
+	out := cmd.OutOrStdout()
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: out, DryRun: flagDryRun})
+	if err != nil {
+		return err
+	}
+	m.Notifier = scheduledNotifier
+	results, err := m.RunScheduled(cmdContext(cmd))
+	for _, r := range results {
+		line := backup.DisplayPath(m.Home, r.Path) + ": " + string(r.Outcome)
+		switch {
+		case r.Err != nil:
+			line += ": " + r.Err.Error()
+		case r.Outcome == backup.BackedUp && r.Snapshot.ShortID != "":
+			line += " as " + r.Snapshot.ShortID
+		}
+		fmt.Fprintln(out, line)
+	}
+	return err
 }
 
 func runBackup(cmd *cobra.Command, _ []string) error {
@@ -87,8 +141,10 @@ func runBackup(cmd *cobra.Command, _ []string) error {
 }
 
 // backupStatusOnly prints the status for a pipe or --batch, and fails when
-// the folder isn't backed up, its destination can't be reached or read, or
-// its last backup failed, so it works as a check.
+// the folder isn't backed up, its last backup failed or is overdue, or its
+// destination can't be reached or read, so it works as a check. This
+// computer's own record of a failure or an overdue backup is the more useful
+// error, so it comes before the destination's.
 func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io.Writer) error {
 	s := m.Status(ctx, cwd)
 	text := backupscreen.Status(s, m.Home)
@@ -98,17 +154,20 @@ func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io
 		text = ansi.Strip(text)
 	}
 	fmt.Fprint(out, text)
+	where := backup.DisplayPath(m.Home, s.Target)
 	switch {
 	case s.ConfigErr != nil:
 		return s.ConfigErr
 	case s.Config == nil:
-		return fmt.Errorf("%s isn't backed up: run ctdev backup in a terminal and choose Configure", backup.DisplayPath(m.Home, s.Target))
+		return fmt.Errorf("%s isn't backed up: run ctdev backup in a terminal and choose Configure", where)
+	case s.Failed():
+		return fmt.Errorf("the last backup of %s failed", where)
+	case s.Overdue:
+		return fmt.Errorf("the backup of %s is overdue: no success in twice its %s interval", where, s.Config.Schedule)
 	case s.DestinationMissing:
 		return fmt.Errorf("destination %s isn't set up on this computer: run ctdev backup in a terminal and choose Configure", s.Destination)
 	case s.ReadErr != nil:
-		return fmt.Errorf("can't read the backups of %s: %w", backup.DisplayPath(m.Home, s.Target), s.ReadErr)
-	case s.Failed():
-		return fmt.Errorf("the last backup of %s failed", backup.DisplayPath(m.Home, s.Target))
+		return fmt.Errorf("can't read the backups of %s: %w", where, s.ReadErr)
 	}
 	return nil
 }
@@ -182,8 +241,8 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 // weekly maintenance's prune does (CTD-87).
 const spaceFreed = "Space is freed at the next weekly maintenance."
 
-// runScreen runs a Bubble Tea screen to completion.
-func runScreen(screen tea.Model) error {
+// runScreen runs a Bubble Tea screen to completion; tests answer it instead.
+var runScreen = func(screen tea.Model) error {
 	_, err := tea.NewProgram(screen).Run()
 	return err
 }
@@ -423,6 +482,7 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 		if err := m.StopAndDelete(ctx, d, s.Root, listed); err != nil {
 			return err
 		}
+		unscheduleIfIdle(ctx, m)
 		if !m.Opts.DryRun {
 			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted its backups.", where)) + " " + spaceFreed)
 		}
@@ -432,6 +492,7 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 	if err := m.StopBackingUp(s.Root); err != nil {
 		return err
 	}
+	unscheduleIfIdle(ctx, m)
 	if m.Opts.DryRun {
 		return nil
 	}
@@ -529,12 +590,21 @@ func configureFolder(ctx context.Context, m *backup.Machine, s backup.Status) er
 	if err := m.Configure(ctx, d, target, cfg); err != nil {
 		return err
 	}
+	// Rewritten every time, so a ctdev that has moved is picked up.
+	schedErr := installScheduler(m, ctx)
 	if m.Opts.DryRun {
-		return nil
+		return schedErr
 	}
 	fmt.Println()
 	fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ %s backs up %s to %s.", where, cfg.Schedule, d.Name)))
-	fmt.Println("  " + styles.Dimmed.Render("Scheduled runs come in a later ctdev release; until then, use Back up now."))
+	if schedErr != nil {
+		// The folder is configured; only the hourly runner is missing, and
+		// the status says "not scheduled on this computer" until it's fixed.
+		fmt.Println("  " + styles.Warning.Render("Couldn't schedule backups on this computer: "+schedErr.Error()))
+		fmt.Println("  " + styles.Dimmed.Render("Use Back up now, and choose Configure again to retry."))
+	} else {
+		fmt.Println("  " + styles.Dimmed.Render("Scheduled backups run hourly; ctdev backup shows when the next one is due."))
+	}
 	return nil
 }
 

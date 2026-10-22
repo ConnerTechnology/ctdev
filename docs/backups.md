@@ -5,8 +5,8 @@ Backup is about the folder you're in. A folder is set up once, then backed up wh
 
 Per-folder backup is arriving in steps under
 [CTD-87](https://linear.app/conner-technology/issue/CTD-87). This page describes what ships today:
-the status screen, Configure, Back up now, List backups, Stop backing up and Delete all backups.
-Scheduled runs and `ctdev backup --all` come next.
+the status screen, Configure, Back up now, List backups, Stop backing up, Delete all backups, and
+scheduled backups with their health. `ctdev backup --all` comes next.
 
 ## Running `ctdev backup`
 
@@ -26,12 +26,21 @@ In a subfolder, the status and menu are the backed-up folder's. Then come the st
   Size now       1.2 GB · 4,812 files
   Last backup    Oct 21, 9:12 PM · succeeded
   Schedule       daily · next due Oct 22, 9:12 PM
+                 runs only while you're logged in
   Keeping        24 hourly, 7 daily, 4 weekly, 12 monthly, 3 yearly
   Backups        14 · oldest Sep 2 · 1.6 GB stored
 ```
 
-A failed last backup shows in red. A folder whose config file came from elsewhere, such as a git
-clone, shows "not scheduled on this computer" until you run Configure on it here.
+These show in red:
+
+- **A failed last backup**, with restic's error.
+- **Overdue**: no successful backup on this computer within twice the schedule, such as 48 hours
+  for a daily folder.
+- **"not scheduled on this computer"**: the folder isn't on this computer's list, as with a git
+  clone, or this computer's hourly runner isn't installed. Run Configure here to fix either.
+
+"runs only while you're logged in" shows on Linux only ([Scheduled backups](#scheduled-backups)
+says why).
 
 Below the status is a menu you move through with the arrow keys. Items that don't apply are dimmed
 and can't be chosen.
@@ -47,7 +56,8 @@ always dimmed in a folder that isn't configured.
 ### Without a terminal
 
 Piped (`ctdev backup | cat`) or with `--batch`, `ctdev backup` prints the status and no menu. It
-exits non-zero when the folder isn't backed up or its last backup failed, so it works as a check.
+exits non-zero when the folder isn't backed up, or its last backup failed or is overdue, so it works
+as a check.
 
 ## Configure
 
@@ -58,13 +68,13 @@ Reconfiguring a folder starts from its current values.
   one (below). A destination is one restic repository, shared by every folder and computer that
   backs up to it: Backblaze B2, S3 or S3-compatible, SFTP, or a local path or USB drive.
 - **Schedule.** Hourly, Daily (the default) or Weekly: a backup is due that long after the last
-  successful one. There's no time of day. Scheduled runs arrive in a later release; until then,
-  use Back up now.
+  successful one. There's no time of day.
 - **Retention.** How many hourly, daily, weekly, monthly and yearly backups to keep. The defaults
   are 24, 7, 4, 12 and 3.
 
-Configure writes `.ctdev-backup.json` at the folder's root and adds the folder to this computer's
-list. The file holds only the folder's random ID, the destination's name, the schedule and the
+Configure writes `.ctdev-backup.json` at the folder's root, adds the folder to this computer's
+list, and installs this computer's hourly runner ([Scheduled backups](#scheduled-backups)). The
+file holds only the folder's random ID, the destination's name, the schedule and the
 retention, so it's safe to commit; in a git repo, commit it, and a clone on another computer finds
 the folder's backups. ctdev never edits `.gitignore`.
 
@@ -165,7 +175,63 @@ the folder as not backed up, and since the folder no longer has that ID, List ba
 only its one-offs.
 
 Stop backing up refuses when the destination can't be read or isn't set up on this computer, so the
-chance to delete the backups is never skipped without saying so.
+chance to delete the backups is never skipped without saying so. When it takes the last folder off
+this computer's list, it also removes the hourly runner ([Scheduled backups](#scheduled-backups)).
+
+## Scheduled backups
+
+Each computer has one hourly runner, installed by Configure and running as you:
+
+- **Linux:** a systemd user timer, `~/.config/systemd/user/ctdev-backup.timer`, with its service
+  `ctdev-backup.service`. It first runs at the top of the next hour. `Persistent=true` runs a
+  missed hour once the computer is back on.
+- **macOS:** a launchd agent, `~/Library/LaunchAgents/io.connertechnology.ctdev.backup.plist`,
+  logging to `~/Library/Logs/ctdev-backup.log`. It runs once right after Configure loads it, then
+  at the top of every hour; an hour missed while the Mac slept runs when it wakes.
+
+Both run `ctdev backup run-scheduled` by ctdev's absolute path, since the runner has no shell PATH.
+Configuring again rewrites them, which picks up a ctdev that has moved. On macOS, reloading the
+agent would stop a backup it's making, so an agent already loaded with this ctdev and this plist is
+left alone, and while a scheduled backup is running Configure changes nothing and says to choose
+Configure again after it finishes. If systemd won't enable the timer, Configure puts back whatever
+units were there before: a scheduler that worked keeps working, and on a computer that had none the
+status shows "not scheduled on this computer". Only one scheduled run happens at a time; one that
+starts while another is running exits without doing anything. Configure and Back up now never wait
+for a scheduled backup to finish.
+
+Every hour, the runner backs up each folder on this computer's list whose schedule is due: an hour,
+a day or a week after its last successful backup. A computer that was asleep catches up on its next
+run. After each backup it applies the folder's keep rules ([Retention](#retention)); if that fails,
+the backup still counts, but the failure is the run's error and shows in red. Each folder's result
+is recorded in `state.json`.
+
+A listed folder that has been moved or deleted, or whose `.ctdev-backup.json` is gone or now holds
+another folder's ID, is skipped and recorded as missing. Run `ctdev backup` in its new place and
+choose Configure: once a scheduled run has recorded the old place as missing, Configure removes it
+from the list and says so. A folder on a drive that isn't mounted, which was fine at its last run,
+stays on the list.
+
+**On Linux, scheduled backups run only while you're logged in.** A systemd user timer stops at
+logout unless lingering is on, and ctdev never turns lingering on. A computer you stay logged in to,
+or log back in to, catches up. If you've turned lingering on yourself, the status leaves out "runs
+only while you're logged in".
+
+On Linux, `systemctl --user list-timers ctdev-backup.timer` shows when the runner last ran and runs
+next, and `journalctl --user -u ctdev-backup.service` shows what it did.
+
+### When a backup fails
+
+When a scheduled folder starts failing, or goes missing, you get one desktop notification:
+`notify-send` on Linux, `osascript` on macOS. You get another when it's backing up again. A folder
+that keeps failing doesn't notify every hour. A computer with no desktop session, or without the
+tool, gets no notification; `ctdev backup` and `ctdev doctor` still show the problem.
+
+### In `ctdev doctor`
+
+`ctdev doctor` has a Backups section with a row for each folder on this computer's list: OK, failed
+(with the error), overdue or missing. It reads only `folders.json` and `state.json`, so it makes no
+network calls, doesn't run restic and needs no root. A computer with nothing scheduled has no
+Backups section.
 
 ## Where things are kept
 
@@ -173,8 +239,8 @@ chance to delete the backups is never skipped without saying so.
 | --- | --- |
 | `.ctdev-backup.json` in the folder | `id`, `destination`, `schedule`, `keep`; no secrets |
 | `~/.config/ctdev/backup/destinations/<name>.env` (0600) | The destination's address, backend credentials, Secret Key and this computer's key |
-| `~/.config/ctdev/backup/folders.json` | The folders this computer backs up on a schedule |
-| `~/.config/ctdev/backup/state.json` | Each folder's last attempt, last success and error on this computer |
+| `~/.config/ctdev/backup/folders.json` | The folders this computer backs up on a schedule, with each one's schedule and when it was added |
+| `~/.config/ctdev/backup/state.json` | Each folder's last attempt, last success, error and whether it's missing on this computer, and whether a "failing" notification is out |
 
 restic gives every key full power over the repository, so whoever has a computer's
 `destinations/<name>.env` can read and delete that destination's backups. Keep the file private.
