@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.1.0`** (was `v1.0.2`), which
+  runs the engineering skills on Jira Cloud as well as Linear, through one tracker layer, and
+  files requests as `request`-labeled issues. Run `ctdev repo setup` again in a repo to move it
+  to 1.1.0, then `/connertechnology:setup` to add the new allow-list entries.
+
 ## [17.0.0] - 2026-10-22
 
 ### Added
