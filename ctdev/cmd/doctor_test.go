@@ -72,15 +72,17 @@ func TestDoctorFactsCarryBackupHealth(t *testing.T) {
 		}
 	}
 	write("folders.json", `{"folders":[{"path":"`+folder+`","id":"00000000-0000-4000-8000-000000000000","schedule":"weekly","added":"2026-01-01T00:00:00Z"}]}`)
-	write("state.json", `{"folders":{"`+folder+`":{"last_attempt":"2026-01-02T00:00:00Z","last_success":"2026-01-01T00:00:00Z","error":"example failure"}}}`)
+	write("state.json", `{"folders":{"`+folder+`":{"last_attempt":"2026-01-02T00:00:00Z","last_success":"2026-01-01T00:00:00Z","error":"example failure","retention_error":"example retention failure"}}}`)
 
 	got, errText := doctorBackupFacts(m)
 	want := diagnose.BackupFolder{
 		Path: "~/Projects/website", Schedule: "weekly", State: diagnose.BackupFailed,
 		LastSuccess: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Error: "example failure",
+		RetentionError: "example retention failure",
 	}
 	if errText != "" || len(got) != 1 || got[0].Path != want.Path || got[0].Schedule != want.Schedule ||
-		got[0].State != want.State || !got[0].LastSuccess.Equal(want.LastSuccess) || got[0].Error != want.Error {
+		got[0].State != want.State || !got[0].LastSuccess.Equal(want.LastSuccess) || got[0].Error != want.Error ||
+		got[0].RetentionError != want.RetentionError {
 		t.Errorf("facts = %+v, %q; want %+v", got, errText, want)
 	}
 

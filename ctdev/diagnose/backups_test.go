@@ -32,6 +32,7 @@ func TestBackupsSectionShowsEachScheduledFolder(t *testing.T) {
 		{Path: "~/Documents/taxes", Schedule: "daily", State: BackupFailed, LastSuccess: last, Error: "example failure"},
 		{Path: "~/Photos", Schedule: "weekly", State: BackupOverdue, LastSuccess: last},
 		{Path: "~/Old", Schedule: "daily", State: BackupMissing, Error: "the folder isn't there any more"},
+		{Path: "~/Music", Schedule: "daily", State: BackupOK, LastSuccess: last, RetentionError: "example failure"},
 	}}
 	rows := backupRows(t, f)
 	for name, want := range map[string]struct {
@@ -43,6 +44,7 @@ func TestBackupsSectionShowsEachScheduledFolder(t *testing.T) {
 		"~/Documents/taxes":  {Fail, "failed: example failure"},
 		"~/Photos":           {Fail, "overdue: weekly, no backup since Oct 21, 9:12 PM"},
 		"~/Old":              {Fail, "missing: the folder isn't there any more"},
+		"~/Music":            {Warn, "daily · last backup Oct 21, 9:12 PM · retention failed: example failure"},
 	} {
 		got, ok := rows[name]
 		if !ok {
@@ -52,12 +54,12 @@ func TestBackupsSectionShowsEachScheduledFolder(t *testing.T) {
 		if got.Severity != want.severity || got.Detail != want.detail {
 			t.Errorf("%s: %v %q, want %v %q", name, got.Severity, got.Detail, want.severity, want.detail)
 		}
-		if got.Severity == Fail && !strings.Contains(got.Advice, "ctdev backup") {
+		if got.Severity != OK && !strings.Contains(got.Advice, "ctdev backup") {
 			t.Errorf("%s: advice %q doesn't say what to run", name, got.Advice)
 		}
 	}
-	if len(rows) != 5 {
-		t.Errorf("%d backup rows, want 5", len(rows))
+	if len(rows) != 6 {
+		t.Errorf("%d backup rows, want 6", len(rows))
 	}
 }
 

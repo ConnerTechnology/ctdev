@@ -161,7 +161,7 @@ func TestStopAndDeleteWhoseForgetFailsChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := m.StopAndDelete(context.Background(), d, root, []Snapshot{{ID: "0123456789abcdef"}})
+	_, err := m.StopAndDelete(context.Background(), d, root, []Snapshot{{ID: "0123456789abcdef"}})
 	if err == nil {
 		t.Fatal("want the forget's failure")
 	}

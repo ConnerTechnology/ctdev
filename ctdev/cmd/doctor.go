@@ -278,6 +278,8 @@ func doctorBackupFacts(m *backup.Machine) ([]diagnose.BackupFolder, string) {
 			State:       diagnose.BackupState(h.State),
 			LastSuccess: h.Run.LastSuccess,
 			Error:       h.Run.Error,
+
+			RetentionError: h.Run.RetentionError,
 		})
 	}
 	return out, ""

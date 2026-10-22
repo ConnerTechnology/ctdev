@@ -295,6 +295,21 @@ func TestStatusOfAFailedBackup(t *testing.T) {
 	}
 }
 
+// A keep-rules failure shows in yellow on the Keeping line; the backup it
+// followed still shows as succeeded.
+func TestStatusOfARetentionFailure(t *testing.T) {
+	s := configured()
+	s.Last.RetentionError = "example failure"
+	got := Status(s, home)
+	want := "24 hourly, 7 daily, 4 weekly, 12 monthly, 3 yearly · retention failed: example failure"
+	if !strings.Contains(got, styles.Warning.Render(want)) {
+		t.Errorf("the retention failure isn't in yellow on the Keeping line:\n%q", got)
+	}
+	if !strings.Contains(plain(got), "Oct 21, 9:12 PM · succeeded") {
+		t.Errorf("status:\n%s", plain(got))
+	}
+}
+
 // Last backup is the folder's newest from any computer, named when it isn't
 // this one.
 func TestLastBackupComesFromTheDestination(t *testing.T) {

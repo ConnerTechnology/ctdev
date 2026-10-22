@@ -27,6 +27,9 @@ type BackupFolder struct {
 	State       BackupState
 	LastSuccess time.Time // zero when it has never backed up
 	Error       string    // why it failed, or why it's missing
+	// RetentionError is why its keep rules didn't apply after its last
+	// successful backup. The backup still counts as succeeded.
+	RetentionError string
 }
 
 // backupChecks is a row per scheduled folder. Every one is local: the facts
@@ -66,10 +69,15 @@ func backupResult(b BackupFolder) Result {
 		return failf("Move the folder back, or run 'ctdev backup' in its new place and choose Configure.",
 			"missing: %s", b.Error)
 	}
-	if b.LastSuccess.IsZero() {
-		return okf("%s · no backup yet", b.Schedule)
+	detail := b.Schedule + " · no backup yet"
+	if !b.LastSuccess.IsZero() {
+		detail = b.Schedule + " · last backup " + backupTime(b.LastSuccess)
 	}
-	return okf("%s · last backup %s", b.Schedule, backupTime(b.LastSuccess))
+	if b.RetentionError != "" {
+		return warnf("Older backups weren't thinned. Run 'ctdev backup' in that folder and choose Back up now to apply the keep rules again.",
+			"%s · retention failed: %s", detail, b.RetentionError)
+	}
+	return okf("%s", detail)
 }
 
 func backupTime(t time.Time) string { return t.Local().Format("Jan 2, 3:04 PM") }

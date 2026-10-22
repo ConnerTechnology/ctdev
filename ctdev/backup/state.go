@@ -195,6 +195,10 @@ type Run struct {
 	LastAttempt time.Time `json:"last_attempt"`
 	LastSuccess time.Time `json:"last_success,omitzero"`
 	Error       string    `json:"error,omitempty"`
+	// RetentionError is why applying the folder's keep rules after its last
+	// successful backup failed. The backup still succeeded, so it isn't
+	// Error; it's cleared the next time the keep rules apply.
+	RetentionError string `json:"retention_error,omitempty"`
 	// Missing means a scheduled run found the folder gone, or its config
 	// file gone or holding another folder's ID, and skipped it.
 	Missing bool `json:"missing,omitempty"`

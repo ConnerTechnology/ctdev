@@ -36,14 +36,30 @@ func (m *Machine) StopBackingUp(root string) error {
 // exactly snaps, the folder's backups from every computer as listed by its ID
 // for the confirmation. They go first, while the config file still holds the
 // ID; if forgetting fails, the folder stays configured and scheduled.
-func (m *Machine) StopAndDelete(ctx context.Context, d *Destination, root string, snaps []Snapshot) error {
+//
+// A backup that finished after snaps was listed, such as a scheduled one
+// that was running, isn't deleted. Afterwards the folder's backups are
+// listed again by its ID, and any found are returned, so the caller can say
+// they're kept.
+func (m *Machine) StopAndDelete(ctx context.Context, d *Destination, root string, snaps []Snapshot) (appeared []Snapshot, err error) {
+	cfg, err := ReadConfig(root)
+	if err != nil {
+		return nil, err
+	}
 	if err := d.DeleteBackups(ctx, snaps); err != nil {
-		return err
+		return nil, err
 	}
 	if err := m.StopBackingUp(root); err != nil {
-		return fmt.Errorf("the folder's %d backups were deleted, but stopping backing it up failed: %w", len(snaps), err)
+		return nil, fmt.Errorf("the folder's %d backups were deleted, but stopping backing it up failed: %w", len(snaps), err)
 	}
-	return nil
+	if m.Opts.DryRun {
+		return nil, nil
+	}
+	appeared, err = d.Snapshots(ctx, Ref{FolderID: cfg.ID})
+	if err != nil {
+		return nil, fmt.Errorf("the folder's %d backups were deleted and it's no longer backed up, but checking for backups made meanwhile failed: %w", len(snaps), err)
+	}
+	return appeared, nil
 }
 
 // Delete forgets one backup. It doesn't prune: the space is freed at the
@@ -105,6 +121,26 @@ func (d *Destination) ApplyRetention(ctx context.Context, cfg Config) error {
 		return nil
 	}
 	_, err := d.restic(ctx, r)
+	return err
+}
+
+// Retain applies the configured folder at root's keep rules, as
+// ApplyRetention does, and records the outcome in state.json apart from the
+// backup's: a failure doesn't make the backup a failure, and the next
+// success clears it. Back up now, a scheduled run and the weekly maintenance
+// all apply them this way.
+func (m *Machine) Retain(ctx context.Context, d *Destination, root string, cfg Config) error {
+	err := d.ApplyRetention(ctx, cfg)
+	if m.Opts.DryRun {
+		return err
+	}
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	if rerr := m.updateRun(root, func(r *Run) { r.RetentionError = msg }); rerr != nil {
+		return errors.Join(err, rerr)
+	}
 	return err
 }
 

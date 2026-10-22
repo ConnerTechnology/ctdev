@@ -196,6 +196,9 @@ func Status(s backup.Status, home string) string {
 		}
 		fmt.Fprintf(&b, "  %s %s\n", label.Render(name), value)
 	}
+	warn := func(name, value string) {
+		fmt.Fprintf(&b, "  %s %s\n", label.Render(name), styles.Warning.Render(value))
+	}
 
 	size := Bytes(s.Size) + " · " + Files(s.Files)
 	if s.Unreadable > 0 {
@@ -260,7 +263,13 @@ func Status(s backup.Status, home string) string {
 			fmt.Fprintf(&b, "  %s %s\n", label.Render(""), styles.Dimmed.Render("runs only while you're logged in"))
 		}
 		k := s.Config.Keep
-		row("Keeping", fmt.Sprintf("%d hourly, %d daily, %d weekly, %d monthly, %d yearly", k.Hourly, k.Daily, k.Weekly, k.Monthly, k.Yearly), false)
+		keeping := fmt.Sprintf("%d hourly, %d daily, %d weekly, %d monthly, %d yearly", k.Hourly, k.Daily, k.Weekly, k.Monthly, k.Yearly)
+		if s.Last != nil && s.Last.RetentionError != "" {
+			// The backup succeeded, so this is a warning, not a failure.
+			warn("Keeping", keeping+" · retention failed: "+s.Last.RetentionError)
+		} else {
+			row("Keeping", keeping, false)
+		}
 	} else {
 		row("Schedule", "none: this folder isn't configured", false)
 		row("Keeping", "one-off backups, until you delete them", false)

@@ -88,6 +88,9 @@ func runBackupScheduled(cmd *cobra.Command, _ []string) error {
 		case r.Outcome == backup.BackedUp && r.Snapshot.ShortID != "":
 			line += " as " + r.Snapshot.ShortID
 		}
+		if r.RetentionErr != nil {
+			line += ", but retention failed: " + r.RetentionErr.Error()
+		}
 		fmt.Fprintln(out, line)
 	}
 	return err
@@ -218,10 +221,11 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 		return fmt.Errorf("backup failed: %w", err)
 	}
 	// The folder's keep rules apply after each successful backup, to its
-	// own backups only; one-offs are kept until deleted (CTD-87).
+	// own backups only; one-offs are kept until deleted (CTD-87). A failure
+	// is recorded apart from the backup, as a scheduled run records it.
 	var retainErr error
 	if s.Config != nil {
-		retainErr = d.ApplyRetention(ctx, *s.Config)
+		retainErr = m.Retain(ctx, d, s.Target, *s.Config)
 	}
 	if m.Opts.DryRun {
 		return nil
@@ -479,12 +483,22 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 	}
 
 	if deleteToo {
-		if err := m.StopAndDelete(ctx, d, s.Root, listed); err != nil {
+		appeared, err := m.StopAndDelete(ctx, d, s.Root, listed)
+		if err != nil {
 			return err
 		}
 		unscheduleIfIdle(ctx, m)
 		if !m.Opts.DryRun {
 			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted its backups.", where)) + " " + spaceFreed)
+			if n := len(appeared); n > 0 {
+				// A backup that was running, here or on another computer,
+				// finished after the list was confirmed.
+				kept := fmt.Sprintf("%d backups were made while deleting, so they're kept under this folder's ID.", n)
+				if n == 1 {
+					kept = "A backup was made while deleting, so it's kept under this folder's ID."
+				}
+				fmt.Println("  " + styles.Warning.Render(kept))
+			}
 		}
 		return nil
 	}

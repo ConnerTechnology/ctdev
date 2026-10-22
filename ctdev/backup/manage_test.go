@@ -291,8 +291,12 @@ func TestStopAndDeleteRemovesTheBackupsFromEveryComputer(t *testing.T) {
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("listed %d (%v), want both computers' backups", len(listed), err)
 	}
-	if err := m.StopAndDelete(ctx, d, root, listed); err != nil {
+	appeared, err := m.StopAndDelete(ctx, d, root, listed)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(appeared) != 0 {
+		t.Errorf("appeared = %+v, want none", appeared)
 	}
 	if left := countBackups(t, m, d, root, &cfg); left != 0 {
 		t.Errorf("%d backups with the folder's ID are left", left)
@@ -305,6 +309,32 @@ func TestStopAndDeleteRemovesTheBackupsFromEveryComputer(t *testing.T) {
 	}
 	if n := countBackups(t, m, d, other, &otherCfg); n != 1 {
 		t.Errorf("the other folder has %d backups, want its 1 untouched", n)
+	}
+}
+
+// A backup that finishes between the listing and the delete, such as a
+// scheduled one that was running, isn't in the list, so it's kept: Stop and
+// delete lists again by the folder's ID afterwards and returns it, so the
+// caller can say so.
+func TestStopAndDeleteReturnsABackupThatAppearedMeanwhile(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	root, cfg := configuredExample(t, m, d)
+	backUp(t, m, d, root, &cfg)
+	listed, err := d.Snapshots(ctx, m.Ref(root, &cfg))
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("listed %d (%v), want 1", len(listed), err)
+	}
+	late := backUp(t, m, d, root, &cfg)
+
+	appeared, err := m.StopAndDelete(ctx, d, root, listed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(appeared) != 1 || appeared[0].ID != late.ID {
+		t.Errorf("appeared = %+v, want the backup made after the listing, %s", appeared, late.ShortID)
 	}
 }
 

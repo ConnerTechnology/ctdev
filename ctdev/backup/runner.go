@@ -24,6 +24,9 @@ type ScheduledRun struct {
 	Outcome  Outcome
 	Err      error    // why it failed or is missing
 	Snapshot Snapshot // the backup made, when BackedUp
+	// RetentionErr is why the keep rules didn't apply after the backup. The
+	// backup still succeeded, so it isn't Err.
+	RetentionErr error
 }
 
 // RunScheduled is what the hourly runner does: back up each folder on this
@@ -103,7 +106,7 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 			res.Outcome, res.Err = Failed, err
 			return res
 		}
-		res.Outcome, res.Err = BackedUp, d.ApplyRetention(ctx, cfg)
+		res.Outcome, res.RetentionErr = BackedUp, m.Retain(ctx, d, e.Path, cfg)
 		return res
 	}
 	if last.Missing {
@@ -139,15 +142,8 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 	res.Outcome = BackedUp
 	// The folder's keep rules apply after each successful backup, to its own
 	// backups only (CTD-87). A failure doesn't undo the backup, which stays
-	// the last success, but it is the run's error, so the folder shows as
-	// failed until a run thins its backups.
-	if err := d.ApplyRetention(ctx, cfg); err != nil {
-		res.Err = fmt.Errorf("backed up, but applying the keep rules failed: %w", err)
-		msg := res.Err.Error()
-		if rerr := m.updateRun(e.Path, func(r *Run) { r.Error = msg }); rerr != nil {
-			res.Err = errors.Join(res.Err, rerr)
-		}
-	}
+	// the last success: it's recorded apart, as Back up now records it.
+	res.RetentionErr = m.Retain(ctx, d, e.Path, cfg)
 	return res
 }
 
