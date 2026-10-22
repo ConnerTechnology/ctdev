@@ -257,8 +257,7 @@ func (m *Machine) finishCreate(ctx context.Context, d *Destination, master strin
 	if err := m.save(d); err != nil {
 		return Setup{}, err
 	}
-	kit := Kit{Destination: d.Name, Address: d.Address, Credentials: d.credentials, SecretKey: d.secretKey}
-	return Setup{Destination: d, Kit: kit.String(), RecoveryCode: recovery}, nil
+	return Setup{Destination: d, Kit: d.kit().String(), RecoveryCode: recovery}, nil
 }
 
 // ConnectDestination sets this machine up on an existing destination from its
@@ -305,6 +304,11 @@ func (m *Machine) ConnectDestination(ctx context.Context, kitText, master string
 		return nil, err
 	}
 	return d, nil
+}
+
+// kit is the destination's Emergency Kit as this computer has it.
+func (d *Destination) kit() Kit {
+	return Kit{Destination: d.Name, Address: d.Address, Credentials: d.credentials, SecretKey: d.secretKey}
 }
 
 func (m *Machine) checkNewName(name string) error {
@@ -389,10 +393,18 @@ func (m *Machine) save(d *Destination) error {
 	return secretfile.WritePrivate(m.destinationFile(d.Name), []byte(b.String()))
 }
 
-// addKey adds a restic key and returns its ID.
+// addKey adds a restic key, opening the repository with password, and
+// returns the new key's ID.
 func (d *Destination) addKey(ctx context.Context, password, user, host, newPassword string) (string, error) {
+	return d.addKeyHinted(ctx, password, "", user, host, newPassword)
+}
+
+// addKeyHinted is addKey given the ID of the key password opens, which
+// saves restic trying each key in turn.
+func (d *Destination) addKeyHinted(ctx context.Context, password, hint, user, host, newPassword string) (string, error) {
 	out, err := d.restic(ctx, run{
 		password:    password,
+		keyHint:     hint,
 		newPassword: newPassword,
 		args:        []string{"key", "add", "--retry-lock", retryLock, "--user", user, "--host", host, "--new-password-file", "/dev/fd/3"},
 	})
@@ -418,7 +430,12 @@ type resticKey struct {
 }
 
 func (d *Destination) keys(ctx context.Context, password string) ([]resticKey, error) {
-	out, err := d.restic(ctx, run{password: password, args: []string{"key", "list", "--json"}})
+	return d.keysHinted(ctx, password, "")
+}
+
+// keysHinted is keys, trying the key hint names first.
+func (d *Destination) keysHinted(ctx context.Context, password, hint string) ([]resticKey, error) {
+	out, err := d.restic(ctx, run{password: password, keyHint: hint, args: []string{"key", "list", "--json"}})
 	if err != nil {
 		return nil, err
 	}
@@ -435,6 +452,7 @@ func parseKeys(out []byte) ([]resticKey, error) {
 
 // Computer is one computer with access to a destination.
 type Computer struct {
+	ID           string // its restic key
 	Hostname     string
 	Added        time.Time
 	ThisComputer bool
@@ -457,8 +475,14 @@ func (d *Destination) Computers(ctx context.Context) ([]Computer, error) {
 			continue
 		}
 		added, _ := time.ParseInLocation("2006-01-02 15:04:05", k.Created, time.Local)
-		cs = append(cs, Computer{Hostname: k.HostName, Added: added, ThisComputer: k.Current})
+		cs = append(cs, Computer{ID: k.ID, Hostname: k.HostName, Added: added, ThisComputer: k.Current})
 	}
-	sort.Slice(cs, func(i, j int) bool { return cs[i].Hostname < cs[j].Hostname })
+	// A computer set up twice under one hostname has two keys, oldest first.
+	sort.SliceStable(cs, func(i, j int) bool {
+		if cs[i].Hostname != cs[j].Hostname {
+			return cs[i].Hostname < cs[j].Hostname
+		}
+		return cs[i].Added.Before(cs[j].Added)
+	})
 	return cs, nil
 }
