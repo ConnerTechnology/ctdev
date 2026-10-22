@@ -13,7 +13,7 @@ import (
 // backup.Destination.Overview returns it on example-desktop.
 func exampleOverview() backup.Overview {
 	return backup.Overview{
-		Computers: 2, FolderCount: 3, Stored: 1_600_000_000,
+		Computers: 2, FolderCount: 3,
 		Folders: []backup.FoundFolder{
 			{Ref: backup.Ref{FolderID: "11111111-1111-4111-8111-111111111111"}, Host: "example-desktop", Path: "~/Documents/notes",
 				Backups: 3, Latest: time.Date(2026, 10, 21, 21, 12, 0, 0, time.Local), Size: 52_000},
@@ -26,11 +26,11 @@ func exampleOverview() backup.Overview {
 }
 
 func TestAllHeader(t *testing.T) {
-	m := NewAll("example-backups", "Backblaze B2", exampleOverview())
+	m := NewAll("example-backups", "Backblaze B2", exampleOverview(), 1_600_000_000)
 	if got, want := firstLine(m), "example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored"; got != want {
 		t.Errorf("header = %q\nwant     %q", got, want)
 	}
-	m = NewAll("example-backups", "local path", backup.Overview{Computers: 1, FolderCount: 1, Stored: 30})
+	m = NewAll("example-backups", "local path", backup.Overview{Computers: 1, FolderCount: 1}, 30)
 	if got, want := firstLine(m), "example-backups (local path) · 1 computer · 1 folder · 30 B stored"; got != want {
 		t.Errorf("header = %q\nwant     %q", got, want)
 	}
@@ -46,7 +46,7 @@ func TestAllMenu(t *testing.T) {
 		"with folders": {exampleOverview(), "Computers,Emergency Kit and password"},
 		"empty":        {backup.Overview{Computers: 1}, "List backups,Computers,Emergency Kit and password"},
 	} {
-		labels, dimmed := items(NewAll("example-backups", "local path", tc.o))
+		labels, dimmed := items(NewAll("example-backups", "local path", tc.o, 0))
 		if got, want := strings.Join(labels, ","), "List backups,Computers,Emergency Kit and password,Quit"; got != want {
 			t.Errorf("%s: items = %s\nwant %s", name, got, want)
 		}
@@ -55,12 +55,12 @@ func TestAllMenu(t *testing.T) {
 		}
 	}
 
-	m := NewAll("example-backups", "local path", exampleOverview())
+	m := NewAll("example-backups", "local path", exampleOverview(), 0)
 	press(m, key(tea.KeyEnter))
 	if m.Chosen() != ListBackups {
 		t.Errorf("chosen = %v, want List backups", m.Chosen())
 	}
-	m = NewAll("example-backups", "local path", exampleOverview())
+	m = NewAll("example-backups", "local path", exampleOverview(), 0)
 	press(m, key(tea.KeyDown), key(tea.KeyEnter))
 	if m.Chosen() != Quit {
 		t.Errorf("chosen = %v, want Quit: the dimmed items are skipped", m.Chosen())

@@ -26,9 +26,8 @@ type FoundFolder struct {
 
 // Overview is the whole destination, for `ctdev backup --all`.
 type Overview struct {
-	Computers   int   // computers with a key on the destination
-	FolderCount int   // distinct folders: one per ID, and one per one-off path and computer
-	Stored      int64 // space every backup takes, after deduplication and compression
+	Computers   int // computers with a key on the destination, by hostname
+	FolderCount int // distinct folders: one per ID, and one per one-off path and computer
 
 	// Folders are grouped by computer, this computer first and the rest by
 	// hostname, and by path within a computer.
@@ -44,7 +43,13 @@ func (d *Destination) Overview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return o, err
 	}
-	o.Computers = len(computers)
+	// A computer set up again, after a reinstall say, has a second key
+	// under the same hostname.
+	hosts := map[string]bool{}
+	for _, c := range computers {
+		hosts[c.Hostname] = true
+	}
+	o.Computers = len(hosts)
 
 	snaps, err := d.snapshots(ctx, "snapshots", "--json", "--retry-lock", retryLock)
 	if err != nil {
@@ -86,17 +91,38 @@ func (d *Destination) Overview(ctx context.Context) (Overview, error) {
 		}
 		return cmp.Or(cmp.Compare(a.Host, b.Host), cmp.Compare(a.Path, b.Path), cmp.Compare(a.Ref.FolderID, b.Ref.FolderID))
 	})
-
-	if len(snaps) > 0 {
-		if o.Stored, err = d.storedAll(ctx); err != nil {
-			return o, err
-		}
-	}
 	return o, nil
 }
 
-// storedAll is the space every backup in the destination takes.
-func (d *Destination) storedAll(ctx context.Context) (int64, error) {
+// Linkable is the folders in o that Configure's "Connect to an existing
+// folder's backups" may offer: those with an ID, less any this computer
+// still backs up, meaning on its schedule list at a path that exists and
+// still holds that ID's config. Two live folders sharing an ID would share
+// retention and deletes.
+func (m *Machine) Linkable(o Overview) ([]FoundFolder, error) {
+	var list foldersFile
+	if err := readJSON(m.foldersFile(), &list); err != nil {
+		return nil, err
+	}
+	live := map[string]bool{}
+	for _, e := range list.Folders {
+		if cfg, err := ReadConfig(e.Path); err == nil && cfg.ID == e.ID {
+			live[e.ID] = true
+		}
+	}
+	var linkable []FoundFolder
+	for _, f := range o.Folders {
+		if f.Ref.FolderID != "" && !live[f.Ref.FolderID] {
+			linkable = append(linkable, f)
+		}
+	}
+	return linkable, nil
+}
+
+// StoredAll is the space every backup in the destination takes, after
+// deduplication and compression. restic reads every backup's tree for it, so
+// it's slower than Overview, which leaves it out.
+func (d *Destination) StoredAll(ctx context.Context) (int64, error) {
 	out, err := d.restic(ctx, d.asComputer("", "stats", "--json", "--retry-lock", retryLock, "--mode", "raw-data"))
 	if err != nil {
 		return 0, err

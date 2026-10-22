@@ -29,20 +29,28 @@ func runBackupAll(ctx context.Context, m *backup.Machine, cwd string, out io.Wri
 	if isBatchMode() {
 		return allStatusOnly(ctx, m, out)
 	}
-	d, err := destinationForAll(ctx, m)
+	d, err := destinationForAll(ctx, m, cwd)
 	if errors.Is(err, errPromptCancelled) {
 		return cancelToClean(err)
 	}
 	if err != nil {
 		return err
 	}
+	// The stored figure reads every backup, so it's taken once a session
+	// rather than on every return to the menu.
+	stored := int64(-1)
 	for {
 		o, err := d.Overview(ctx)
 		if err != nil {
 			return err
 		}
+		if stored < 0 {
+			if stored, err = storedAll(ctx, d, o); err != nil {
+				return err
+			}
+		}
 		fmt.Println()
-		screen := backupscreen.NewAll(d.Name, d.Backend(), o)
+		screen := backupscreen.NewAll(d.Name, d.Backend(), o, stored)
 		if err := runScreen(screen); err != nil {
 			return err
 		}
@@ -83,10 +91,14 @@ func allStatusOnly(ctx context.Context, m *backup.Machine, out io.Writer) error 
 		if err != nil {
 			return fmt.Errorf("can't read %s: %w", name, err)
 		}
+		stored, err := storedAll(ctx, d, o)
+		if err != nil {
+			return fmt.Errorf("can't read %s: %w", name, err)
+		}
 		if i > 0 {
 			text += "\n"
 		}
-		text += backupscreen.AllHeader(d.Name, d.Backend(), o) + backupscreen.FolderList(o.Folders, m.Hostname)
+		text += backupscreen.AllHeader(d.Name, d.Backend(), o, stored) + backupscreen.FolderList(o.Folders, m.Hostname)
 	}
 	if f, ok := out.(*os.File); !ok || !term.IsTerminal(f.Fd()) {
 		text = ansi.Strip(text)
@@ -95,10 +107,19 @@ func allStatusOnly(ctx context.Context, m *backup.Machine, out io.Writer) error 
 	return nil
 }
 
+// storedAll is the space the destination's backups take, or 0 with none.
+func storedAll(ctx context.Context, d *backup.Destination, o backup.Overview) (int64, error) {
+	if o.FolderCount == 0 {
+		return 0, nil
+	}
+	return d.StoredAll(ctx)
+}
+
 // destinationForAll is the destination --all shows: this computer's only
 // one, a choice among several, or with none, one connected or created now.
-// Either way it's saved to ~/.config/ctdev only.
-func destinationForAll(ctx context.Context, m *backup.Machine) (*backup.Destination, error) {
+// Either way it's saved to ~/.config/ctdev only, and a new local one must be
+// outside cwd, where --all writes nothing.
+func destinationForAll(ctx context.Context, m *backup.Machine, cwd string) (*backup.Destination, error) {
 	names, err := m.Destinations()
 	if err != nil {
 		return nil, err
@@ -117,8 +138,9 @@ func destinationForAll(ctx context.Context, m *backup.Machine) (*backup.Destinat
 		case 1:
 			return connectDestination(ctx, m)
 		case 2:
-			// No folder: --all sets up a destination, not the current folder.
-			return createDestination(ctx, m, "", "")
+			return createDestinationChecked(ctx, m, "", func(address string) (string, error) {
+				return m.CheckNewAddressFromAll(address, cwd)
+			})
 		}
 		return nil, fmt.Errorf("invalid choice %d", choice)
 	case 1:
@@ -174,17 +196,16 @@ func listAllFolders(ctx context.Context, m *backup.Machine, d *backup.Destinatio
 // offerLink is Configure's "Connect to an existing folder's backups", for a
 // folder new to the destination: picked from the destination's folders,
 // grouped by computer, it gives cfg that folder's ID, so the history
-// continues here. Only folders with an ID can be continued; one-offs have none.
+// continues here. backup.Machine.Linkable says which can be: only folders
+// with an ID, and none this computer still backs up.
 func offerLink(ctx context.Context, m *backup.Machine, d *backup.Destination, where string, cfg *backup.Config) error {
 	o, err := d.Overview(ctx)
 	if err != nil {
 		return err
 	}
-	var linkable []backup.FoundFolder
-	for _, f := range o.Folders {
-		if f.Ref.FolderID != "" {
-			linkable = append(linkable, f)
-		}
+	linkable, err := m.Linkable(o)
+	if err != nil {
+		return err
 	}
 	if len(linkable) == 0 {
 		return nil
@@ -211,7 +232,8 @@ func offerLink(ctx context.Context, m *backup.Machine, d *backup.Destination, wh
 	}
 	f, ok := list.Chosen()
 	if !ok {
-		return errPromptCancelled
+		fmt.Println("  " + where + " starts a new history.")
+		return nil
 	}
 	cfg.ID = f.Ref.FolderID
 	fmt.Printf("  %s continues the backups of %s on %s.\n", where, f.Path, f.Host)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -47,13 +48,21 @@ func TestANewComputerListsEveryFolderGroupedByComputer(t *testing.T) {
 	}
 	notes, notesCfg := otherFolder(t, desktop, dd)
 	backUp(t, desktop, dd, notes, &notesCfg)
+	// The laptop, set up again after a reinstall, has a second key under the
+	// same hostname: still one computer.
+	if _, err := testMachine(t, "example-laptop").ConnectDestination(ctx, s.Kit, exampleMaster); err != nil {
+		t.Fatal(err)
+	}
 
 	o, err := dd.Overview(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Computers != 2 || o.FolderCount != 3 || o.Stored <= 0 {
-		t.Errorf("overview: %d computers, %d folders, %d stored; want 2, 3 and some", o.Computers, o.FolderCount, o.Stored)
+	if o.Computers != 2 || o.FolderCount != 3 {
+		t.Errorf("overview: %d computers, %d folders; want 2 and 3", o.Computers, o.FolderCount)
+	}
+	if stored, err := dd.StoredAll(ctx); err != nil || stored <= 0 {
+		t.Errorf("StoredAll() = %d, %v; want some", stored, err)
 	}
 	type entry struct{ host, path, id string }
 	want := []entry{
@@ -214,5 +223,52 @@ func TestDownloadUnderAllPicksWhereTheZipGoes(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s: %v", tc.name, err)
 		}
+	}
+}
+
+// "Connect to an existing folder's backups" never offers the ID of a folder
+// this computer still backs up: two live folders sharing an ID would share
+// retention and deletes. A stopped or deleted folder's ID is offered, and
+// one-offs, which have no ID, never are.
+func TestLinkableLeavesOutFoldersStillBackedUpHere(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	website, cfg := configuredExample(t, m, d)
+	backUp(t, m, d, website, &cfg)
+	notes, notesCfg := otherFolder(t, m, d)
+	backUp(t, m, d, notes, &notesCfg)
+	if err := m.StopBackingUp(notes); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(m.Home, "Old", "site")
+	if err := os.MkdirAll(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	goneCfg := NewConfig(d.Name)
+	if err := m.Configure(ctx, d, gone, goneCfg); err != nil {
+		t.Fatal(err)
+	}
+	backUp(t, m, d, gone, &goneCfg)
+	if err := os.RemoveAll(filepath.Join(m.Home, "Old")); err != nil {
+		t.Fatal(err)
+	}
+	oneOffFolder(t, m, d)
+
+	o, err := d.Overview(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkable, err := m.Linkable(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range linkable {
+		got = append(got, f.Path)
+	}
+	if want := "~/Documents/notes,~/Old/site"; strings.Join(got, ",") != want {
+		t.Errorf("linkable = %v, want %s", got, want)
 	}
 }

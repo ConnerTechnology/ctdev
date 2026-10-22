@@ -178,20 +178,39 @@ func (m *Machine) DownloadFromAll(ctx context.Context, d *Destination, cwd strin
 		return "", errors.New("the backup doesn't record its folder's path")
 	}
 	original := m.localPath(snap.Path)
-	start, err := filepath.Abs(cwd)
+	cwd, err := filepath.Abs(cwd)
 	if err != nil {
 		return "", err
 	}
 	if !filepath.IsAbs(original) {
 		original = filepath.Base(original) // only its name is any use here
 	} else if fi, err := os.Stat(filepath.Dir(original)); err == nil && fi.IsDir() {
-		start = filepath.Dir(original)
+		dir, err := outsideBackedUp(filepath.Dir(original))
+		if err != nil {
+			return "", err
+		}
+		// A parent this user can't write to, such as /home for a folder
+		// recorded as ~, is treated as one that isn't here.
+		if writable(dir) {
+			return m.downloadInto(ctx, d, filepath.Join(dir, zipName(original, snap)), snap)
+		}
 	}
-	dir, err := outsideBackedUp(start)
+	dir, err := outsideBackedUp(cwd)
 	if err != nil {
 		return "", err
 	}
 	return m.downloadInto(ctx, d, filepath.Join(dir, zipName(original, snap)), snap)
+}
+
+// writable reports whether a file can be created in dir.
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".ctdev-write-check-*")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
 }
 
 // localPath is a recorded display path (~/…) as a path on this computer.

@@ -72,7 +72,9 @@ Configuring a folder for the first time, when the destination already holds othe
 offers "Connect to an existing folder's backups". You pick a folder from the same list, grouped by
 computer, that `ctdev backup --all` shows, and this folder's `.ctdev-backup.json` takes that
 folder's ID, so its backups continue that history. Use it for a folder rebuilt on a new computer, or
-one whose backing up was stopped. Only folders with an ID can be continued, not one-off backups.
+one whose backing up was stopped. Only folders with an ID can be continued, not one-off backups,
+and the list leaves out any folder this computer still backs up, since two folders sharing an ID
+would share their keep rules and deletes. Going Back from the list starts a new history instead.
 
 In a subfolder, Configure reconfigures the backed-up folder above it; a folder inside a backed-up
 folder can't be set up as one of its own. Configuring a folder that contains a backed-up folder is
@@ -177,7 +179,8 @@ chance to delete the backups is never skipped without saying so.
 ## Every folder: `ctdev backup --all`
 
 `ctdev backup --all` is the whole destination rather than the folder you're in. It works from any
-directory and writes nothing into it. Its first line names the destination and what it holds:
+directory and writes nothing into it. Its first line names the destination and what it holds, with
+the space stored measured once when `--all` starts:
 
 ```text
 example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored
@@ -185,7 +188,7 @@ example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored
 
 The menu is List backups · Computers · Emergency Kit and password · Quit. Computers and Emergency
 Kit and password are dimmed for now. With several destinations on this computer, `--all` asks which
-one first.
+one first. "Computers" counts hostnames, so a computer set up again under the same name counts once.
 
 List backups shows every backed-up folder in the destination, grouped by computer, with this
 computer first. Each entry is the folder's path as it was on that computer, with its latest backup,
@@ -211,7 +214,8 @@ every computer.
 
 A download under `--all` goes beside where the folder would be on this computer, when that parent
 folder exists here: `~/Projects/website`'s zip goes in `~/Projects`. Otherwise it goes in the current
-directory, or, when that is inside a backed-up folder, beside that folder. It never lands inside a
+directory, or, when that is inside a backed-up folder, beside that folder. The same fallback applies
+when you can't write to that parent, as for a folder recorded as `~`. It never lands inside a
 backed-up folder.
 
 Piped or with `--batch`, `ctdev backup --all` prints each destination's first line and its folders.
@@ -223,6 +227,9 @@ destination" or "Create a new destination". To connect, paste the Emergency Kit 
 password. ctdev checks them by opening the repository before it saves anything; a wrong password or
 kit saves nothing. It then adds this computer's own key, labeled with its hostname, and saves the
 destination to `~/.config/ctdev/backup/destinations/<name>.env`.
+
+Creating a local destination here needs an absolute path or one starting with `~/`, outside the
+current directory: `--all` writes nothing there.
 
 ### Finding a folder's backups from another computer
 

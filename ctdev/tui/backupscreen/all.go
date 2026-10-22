@@ -10,11 +10,12 @@ import (
 )
 
 // NewAll builds the `ctdev backup --all` screen for destination name, whose
-// backend is backend: a header line with what the destination holds, then
+// backend is backend and whose backups take stored bytes: a header line with
+// what the destination holds, then
 // List backups · Computers · Emergency Kit and password · Quit. Computers and
 // Emergency Kit and password are dimmed until they're built (CTD-87).
-func NewAll(name, backend string, o backup.Overview) *Model {
-	m := &Model{status: AllHeader(name, backend, o), items: []Item{
+func NewAll(name, backend string, o backup.Overview, stored int64) *Model {
+	m := &Model{status: AllHeader(name, backend, o, stored), items: []Item{
 		{Action: ListBackups, Label: "List backups", Dimmed: len(o.Folders) == 0},
 		{Action: Computers, Label: "Computers", Dimmed: true},
 		{Action: EmergencyKit, Label: "Emergency Kit and password", Dimmed: true},
@@ -26,9 +27,9 @@ func NewAll(name, backend string, o backup.Overview) *Model {
 
 // AllHeader is the --all screen's first line:
 // "<destination> (<backend>) · N computers · M folders · X stored".
-func AllHeader(name, backend string, o backup.Overview) string {
+func AllHeader(name, backend string, o backup.Overview, stored int64) string {
 	return styles.Title.Render(fmt.Sprintf("%s (%s) · %s · %s · %s stored",
-		name, backend, count(o.Computers, "computer"), count(o.FolderCount, "folder"), Bytes(o.Stored))) + "\n"
+		name, backend, count(o.Computers, "computer"), count(o.FolderCount, "folder"), Bytes(stored))) + "\n"
 }
 
 // count is "1 folder" or "3 folders".

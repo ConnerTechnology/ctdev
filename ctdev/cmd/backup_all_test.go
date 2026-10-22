@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +36,38 @@ func TestBackupAllWithoutATerminalOrADestination(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".config", "ctdev")); !os.IsNotExist(err) {
 		t.Errorf("--all wrote under ~/.config/ctdev (%v)", err)
+	}
+}
+
+// Creating a destination under --all refuses a local path relative to the
+// current directory, or one inside it, since --all writes nothing there.
+func TestCreatingADestinationUnderAllKeepsOutOfTheCurrentFolder(t *testing.T) {
+	dir := backupFolderForTest(t)
+	saved := stdinScanner
+	t.Cleanup(func() { stdinScanner = saved })
+	stdinScanner = bufio.NewScanner(strings.NewReader(strings.Join([]string{
+		"2",               // Create a new destination
+		"example-backups", // its name
+		"4", "backups",    // local path, relative: refused
+		"4", filepath.Join(dir, "backups"), // inside the current folder: refused
+		// then the input ends, which cancels
+	}, "\n") + "\n"))
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var setupErr error
+	out := captureStdout(t, func() { _, setupErr = destinationForAll(context.Background(), m, dir) })
+	if !errors.Is(setupErr, errPromptCancelled) {
+		t.Errorf("want the setup cancelled when the input ends, got %v", setupErr)
+	}
+	for _, want := range []string{"give an absolute path or one starting with ~/", "inside the current directory"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output is missing %q:\n%s", want, out)
+		}
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("--all wrote into the current folder: %v", entries)
 	}
 }
 
