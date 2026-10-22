@@ -81,6 +81,26 @@ func TestConfigureIsRefusedInsideABackedUpFolder(t *testing.T) {
 	}
 }
 
+// A folder that was backed up before its parent was can still be
+// reconfigured: it has its own config, so it isn't a new folder inside one.
+func TestAnInnerBackedUpFolderCanBeReconfigured(t *testing.T) {
+	outer := filepath.Join(t.TempDir(), "Projects")
+	inner := filepath.Join(outer, "website")
+	writeConfig(t, inner, NewConfig("example-backups"))
+	writeConfig(t, outer, NewConfig("example-backups"))
+	if _, err := CheckConfigurable(inner); err != nil {
+		t.Errorf("reconfiguring the inner folder: %v", err)
+	}
+	// A new folder beside it, inside the outer one, is still refused.
+	if err := os.MkdirAll(filepath.Join(outer, "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var inside *InsideError
+	if _, err := CheckConfigurable(filepath.Join(outer, "notes")); !errors.As(err, &inside) {
+		t.Errorf("a new folder inside: want an InsideError, got %v", err)
+	}
+}
+
 func TestConfigureWarnsWhenTheFolderContainsBackedUpFolders(t *testing.T) {
 	outer := t.TempDir()
 	a := filepath.Join(outer, "website")

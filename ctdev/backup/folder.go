@@ -179,15 +179,18 @@ func (e *InsideError) Error() string {
 }
 
 // CheckConfigurable says whether dir can be configured as a backed-up folder.
-// It refuses, with an *InsideError, when a folder above dir is backed up, and
+// It refuses, with an *InsideError, a new folder inside a backed-up one, and
 // returns the backed-up folders below dir, which would then be in two folders'
-// backups, so the caller can warn.
+// backups, so the caller can warn. A folder with its own config file is
+// already a backed-up folder, so reconfiguring it is never refused, even when
+// a folder above it was backed up later.
 func CheckConfigurable(dir string) (contained []string, err error) {
 	dir, err = filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
-	if parent := filepath.Dir(dir); parent != dir {
+	_, statErr := os.Stat(filepath.Join(dir, ConfigFileName))
+	if parent := filepath.Dir(dir); parent != dir && statErr != nil {
 		root, err := nearestConfig(parent)
 		if err != nil {
 			return nil, err
