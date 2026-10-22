@@ -107,8 +107,10 @@ func TestBackupAllWithoutATerminalListsTheFolders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if !strings.HasPrefix(out, "example-backups (local path) · 1 computer · 1 folder · ") {
-		t.Errorf("header = %q", out)
+	header, _, _ := strings.Cut(out, "\n")
+	if !strings.HasPrefix(header, "example-backups (local path) · 1 computer · 1 folder · ") ||
+		!strings.HasSuffix(header, " stored") || strings.HasSuffix(header, " 0 B stored") {
+		t.Errorf("header = %q, want it to count the space stored", header)
 	}
 	for _, want := range []string{m.Hostname + " (this computer)", "~/Projects/website", "1 backup"} {
 		if !strings.Contains(out, want) {

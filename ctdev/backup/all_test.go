@@ -272,3 +272,27 @@ func TestLinkableLeavesOutFoldersStillBackedUpHere(t *testing.T) {
 		t.Errorf("linkable = %v, want %s", got, want)
 	}
 }
+
+// A listed path whose config now holds another folder's ID isn't that
+// listed folder any more, so the listed ID is offered again.
+func TestLinkableOffersAListedIDWhoseConfigNowHoldsAnother(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	website, cfg := configuredExample(t, m, d)
+	backUp(t, m, d, website, &cfg)
+	writeConfig(t, website, NewConfig(d.Name)) // a different UUID, as from a clone of another folder
+
+	o, err := d.Overview(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkable, err := m.Linkable(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(linkable) != 1 || linkable[0].Ref.FolderID != cfg.ID {
+		t.Errorf("linkable = %+v, want the listed folder's ID %s", linkable, cfg.ID)
+	}
+}

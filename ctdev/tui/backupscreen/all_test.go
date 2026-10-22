@@ -109,6 +109,19 @@ func TestFoldersPickAFolderOrGoBack(t *testing.T) {
 		t.Error("esc should go back without choosing")
 	}
 
+	// q and esc go Back; only Ctrl+C cancels what the list is part of.
+	for name, k := range map[string]tea.KeyPressMsg{
+		"q":      {Code: 'q', Text: "q"},
+		"esc":    key(tea.KeyEscape),
+		"ctrl+c": {Code: 'c', Mod: tea.ModCtrl},
+	} {
+		f = NewFolders("Folders", exampleOverview().Folders, "example-desktop")
+		send(f, k)
+		if _, ok := f.Chosen(); ok || !f.Done() || f.Cancelled() != (name == "ctrl+c") {
+			t.Errorf("%s: chosen %v, done %v, cancelled %v", name, ok, f.Done(), f.Cancelled())
+		}
+	}
+
 	f = NewFolders("Folders", exampleOverview().Folders, "example-desktop")
 	send(f, key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
 	if _, ok := f.Chosen(); ok || !f.Done() {

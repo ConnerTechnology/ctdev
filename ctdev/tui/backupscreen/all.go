@@ -50,6 +50,7 @@ type Folders struct {
 	cursor  int    // len(folders) is Back
 	chosen  int    // index into folders, or -1
 	done    bool
+	cancel  bool // Ctrl+C, as opposed to Back
 }
 
 // NewFolders builds the list under title. this is this computer's hostname,
@@ -69,6 +70,10 @@ func (f *Folders) Chosen() (backup.FoundFolder, bool) {
 // Done reports whether the screen is finished: a folder was picked, or Back.
 func (f *Folders) Done() bool { return f.done }
 
+// Cancelled reports whether the screen was left with Ctrl+C, which cancels
+// what the list is part of, rather than with Back, q or esc.
+func (f *Folders) Cancelled() bool { return f.cancel }
+
 func (f *Folders) Init() tea.Cmd { return nil }
 
 func (f *Folders) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -82,7 +87,7 @@ func (f *Folders) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "down", "j", "tab":
 		f.cursor = min(f.cursor+1, len(f.folders))
 	case "q", "esc", "ctrl+c":
-		f.done = true
+		f.done, f.cancel = true, k.String() == "ctrl+c"
 		return f, tea.Quit
 	case "enter", "space":
 		if f.cursor < len(f.folders) {

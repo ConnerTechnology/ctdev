@@ -29,6 +29,12 @@ func runBackupAll(ctx context.Context, m *backup.Machine, cwd string, out io.Wri
 	if isBatchMode() {
 		return allStatusOnly(ctx, m, out)
 	}
+	return allSession(ctx, m, cwd)
+}
+
+// allSession is the interactive --all session, from choosing the destination
+// to Quit.
+func allSession(ctx context.Context, m *backup.Machine, cwd string) error {
 	d, err := destinationForAll(ctx, m)
 	if errors.Is(err, errPromptCancelled) {
 		return cancelToClean(err)
@@ -232,7 +238,10 @@ func offerLink(ctx context.Context, m *backup.Machine, d *backup.Destination, wh
 		return err
 	}
 	f, ok := list.Chosen()
-	if !ok {
+	switch {
+	case list.Cancelled():
+		return errPromptCancelled
+	case !ok:
 		fmt.Println("  " + where + " starts a new history.")
 		return nil
 	}
