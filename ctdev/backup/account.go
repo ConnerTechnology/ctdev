@@ -21,6 +21,10 @@ import (
 // lock this computer out of the destination it's acting on.
 var ErrThisComputer = errors.New("that's this computer's own key: remove it from another computer that's set up")
 
+// ErrNotAComputer refuses removing the account key or the Recovery Code's
+// key as if it were a computer's.
+var ErrNotAComputer = errors.New("that's the account key or the Recovery Code's key, not a computer's")
+
 // Account is a destination unlocked with its master password.
 type Account struct {
 	d        *Destination
@@ -60,7 +64,7 @@ func (d *Destination) keyHint(ctx context.Context, user string) string {
 		return ""
 	}
 	for _, k := range keys {
-		if k.UserName == user && k.HostName == ctdevHost {
+		if labeled(k, user) {
 			return k.ID
 		}
 	}
@@ -89,59 +93,78 @@ func (d *Destination) openAs(ctx context.Context, password, hint, user string) (
 	if err != nil {
 		return "", err
 	}
-	if k.UserName != user || k.HostName != ctdevHost {
+	if !labeled(k, user) {
 		return "", ErrWrongPassword
 	}
 	return k.ID, nil
+}
+
+// labeled reports whether k is ctdev's own key labeled user@ctdev: the
+// account key or the Recovery Code's. Only the exact pair counts, so a
+// computer whose user or host happens to share one half isn't mistaken
+// for either.
+func labeled(k resticKey, user string) bool {
+	return k.UserName == user && k.HostName == ctdevHost
 }
 
 // replaceKeys swaps ctdev's key labeled user for one whose password is
 // newPassword, opening the repository with password (whose key is hint). The
 // order keeps a working key whatever fails: add the new key, check it opens
 // the repository, run keep with its ID (saving what goes with it), and only
-// then remove every other key labeled user. Up to the removal, a failure
-// takes the new key back out, so nothing has changed. A failed removal
-// leaves the new key and the old one both working, and returns the new
-// key's ID with the error; any ID returned means the new key is in place.
+// then remove the old ones. Up to the removal, a failure takes the new key
+// back out, so nothing has changed. A failed removal leaves the new key and
+// the old one both working, and returns the new key's ID with the error; any
+// ID returned means the new key is in place.
+//
+// The old ones are the keys with the label when the swap starts: the one
+// password opens and any copies an earlier failed swap left. A key another
+// computer adds meanwhile, in its own swap, isn't touched, so two changes at
+// once can't remove each other's new key.
 func (d *Destination) replaceKeys(ctx context.Context, password, hint, user, newPassword string, keep func(newID string) error) (string, error) {
-	newID, err := d.addKeyHinted(ctx, password, hint, user, ctdevHost, newPassword)
+	before, err := d.keysHinted(ctx, password, hint)
 	if err != nil {
 		return "", err
 	}
-	undo := func(err error) (string, error) {
-		rm := run{password: password, keyHint: hint, args: []string{"key", "remove", "--retry-lock", retryLock, newID}}
-		if _, rerr := d.restic(context.WithoutCancel(ctx), rm); rerr != nil {
-			return "", fmt.Errorf("%w; removing the new key %s also failed (%v), but the old one still works", err, short(newID), rerr)
+	var old []string
+	for _, k := range before {
+		if labeled(k, user) {
+			old = append(old, k.ID)
 		}
+	}
+	newID, err := d.addKeyHinted(ctx, password, hint, user, ctdevHost, newPassword)
+	if err != nil {
 		return "", err
 	}
 	if id, err := d.openAs(ctx, newPassword, newID, user); err != nil || id != newID {
 		if err == nil {
 			err = errors.New("the new key didn't open the repository")
 		}
-		return undo(fmt.Errorf("check the new key: %w", err))
+		return "", d.takeBack(ctx, password, hint, newID, fmt.Errorf("check the new key: %w", err))
 	}
 	if keep != nil {
 		if err := keep(newID); err != nil {
-			return undo(err)
+			return "", d.takeBack(ctx, password, hint, newID, err)
 		}
 	}
-	keys, err := d.keysHinted(ctx, newPassword, newID)
-	if err == nil {
-		for _, k := range keys {
-			if k.UserName != user || k.HostName != ctdevHost || k.ID == newID {
-				continue
-			}
-			rm := run{password: newPassword, keyHint: newID, args: []string{"key", "remove", "--retry-lock", retryLock, k.ID}}
-			if _, err = d.restic(ctx, rm); err != nil {
-				break
-			}
+	for _, id := range old {
+		rm := run{password: newPassword, keyHint: newID, args: []string{"key", "remove", "--retry-lock", retryLock, id}}
+		if _, err := d.restic(ctx, rm); err != nil {
+			return newID, fmt.Errorf("the new key works, but the old one couldn't be removed and still works too; try again to remove it: %w", err)
 		}
-	}
-	if err != nil {
-		return newID, fmt.Errorf("the new key works, but the old one couldn't be removed and still works too; try again to remove it: %w", err)
 	}
 	return newID, nil
+}
+
+// takeBack removes the key id, just added, after a later step failed with
+// err, even after Ctrl-C, so no key is left that nobody holds the password
+// to. It opens the repository with password (whose key is hint), since
+// restic won't remove the key a run opened with.
+func (d *Destination) takeBack(ctx context.Context, password, hint, id string, err error) error {
+	rm := run{password: password, keyHint: hint, args: []string{"key", "remove", "--retry-lock", retryLock, id}}
+	if _, rerr := d.restic(context.WithoutCancel(ctx), rm); rerr != nil {
+		return fmt.Errorf("%w; removing the new key %s from the destination also failed: %v", err, short(id), rerr)
+	}
+	return err
 }
 
 // Kit is the destination's Emergency Kit as this computer has it.
@@ -162,8 +185,8 @@ func (a *Account) RemoveComputer(ctx context.Context, c Computer) error {
 	switch {
 	case c.ID == "" || i < 0:
 		return fmt.Errorf("%s has no key on %s any more", c.Hostname, a.d.Name)
-	case keys[i].HostName == ctdevHost:
-		return fmt.Errorf("key %s isn't a computer's", short(c.ID))
+	case labeled(keys[i], accountUser) || labeled(keys[i], recoveryUser):
+		return ErrNotAComputer
 	}
 	rm := run{password: a.password, keyHint: a.keyID, args: []string{"key", "remove", "--retry-lock", retryLock, c.ID}}
 	if _, err := a.d.restic(ctx, rm); err != nil {
@@ -351,7 +374,7 @@ func (m *Machine) RecoverFromKit(ctx context.Context, kitText, code, master stri
 		}
 		return d.Recover(ctx, code, master, newCode)
 	}
-	if err := m.checkNewName(kit.Destination); err != nil {
+	if err := m.checkNewDestination(kit.Destination); err != nil {
 		return Recovery{}, err
 	}
 	address, err := m.CheckAddress(kit.Address, "")
@@ -371,11 +394,7 @@ func (m *Machine) RecoverFromKit(ctx context.Context, kitText, code, master stri
 			return err
 		}
 		if err := m.save(d); err != nil {
-			rm := run{password: account, keyHint: accountID, args: []string{"key", "remove", "--retry-lock", retryLock, d.computerKeyID}}
-			if _, rerr := d.restic(context.WithoutCancel(ctx), rm); rerr != nil {
-				return fmt.Errorf("%w; removing the new key %s from the destination also failed: %v", err, short(d.computerKeyID), rerr)
-			}
-			return err
+			return d.takeBack(ctx, account, accountID, d.computerKeyID, err)
 		}
 		return nil
 	})
@@ -410,6 +429,9 @@ func (d *Destination) recover(ctx context.Context, code, master string, newCode 
 		return Recovery{}, err
 	}
 	r := Recovery{Destination: d, Kit: d.kit().String()}
+	if err != nil && newCode {
+		return r, fmt.Errorf("%w; the new Recovery Code wasn't made, so the one you used still works", err)
+	}
 	if err != nil || !newCode {
 		return r, err
 	}

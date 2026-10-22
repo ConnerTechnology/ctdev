@@ -174,7 +174,7 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 	if m.Opts.DryRun {
 		return Setup{}, ErrDryRun
 	}
-	if err := m.checkNewName(nd.Name); err != nil {
+	if err := m.checkNewDestination(nd.Name); err != nil {
 		return Setup{}, err
 	}
 	if master == "" {
@@ -273,7 +273,7 @@ func (m *Machine) ConnectDestination(ctx context.Context, kitText, master string
 	if err != nil {
 		return nil, err
 	}
-	if err := m.checkNewName(kit.Destination); err != nil {
+	if err := m.checkNewDestination(kit.Destination); err != nil {
 		return nil, err
 	}
 	sk, err := parseSecretKey(kit.SecretKey)
@@ -297,12 +297,7 @@ func (m *Machine) ConnectDestination(ctx context.Context, kitText, master string
 	}
 	if err := m.save(d); err != nil {
 		// The key would open the repository with a password nobody kept.
-		// restic won't remove the key a run opened with, so use the account key.
-		rm := run{password: account, args: []string{"key", "remove", "--retry-lock", retryLock, d.computerKeyID}}
-		if _, rerr := d.restic(context.WithoutCancel(ctx), rm); rerr != nil {
-			return nil, fmt.Errorf("%w; removing the new key %s from the destination also failed: %v", err, short(d.computerKeyID), rerr)
-		}
-		return nil, err
+		return nil, d.takeBack(ctx, account, "", d.computerKeyID, err)
 	}
 	return d, nil
 }
@@ -312,7 +307,15 @@ func (d *Destination) kit() Kit {
 	return Kit{Destination: d.Name, Address: d.Address, Credentials: d.credentials, SecretKey: d.secretKey}
 }
 
-func (m *Machine) checkNewName(name string) error {
+// checkNewDestination is checked before this computer adds its key to a
+// destination it isn't set up on: by creating, connecting or recovering.
+func (m *Machine) checkNewDestination(name string) error {
+	// The key would be labeled with this hostname, and ctdev keeps the host
+	// ctdev for the account and Recovery Code keys.
+	if m.Hostname == ctdevHost {
+		return fmt.Errorf("this computer's hostname is %s, which ctdev keeps for its own keys on a destination: "+
+			"rename the computer, then try again", ctdevHost)
+	}
 	if !destinationName.MatchString(name) {
 		return fmt.Errorf("%q can't be a destination name: use lower-case letters, digits, dots, dashes and underscores", name)
 	}
@@ -488,7 +491,7 @@ func (d *Destination) Computers(ctx context.Context) ([]Computer, error) {
 	}
 	var cs []Computer
 	for _, k := range keys {
-		if k.HostName == ctdevHost && (k.UserName == accountUser || k.UserName == recoveryUser) {
+		if labeled(k, accountUser) || labeled(k, recoveryUser) {
 			continue
 		}
 		added, _ := time.ParseInLocation("2006-01-02 15:04:05", k.Created, time.Local)

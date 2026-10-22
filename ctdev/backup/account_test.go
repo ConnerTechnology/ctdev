@@ -403,3 +403,76 @@ func TestSetCredentialsSavesOnlyWhatOpensTheRepository(t *testing.T) {
 		t.Errorf("no credentials for a local destination: %v", err)
 	}
 }
+
+// ctdev labels its own keys ctdev-account@ctdev and ctdev-recovery@ctdev.
+// A computer named ctdev would label its key with that host, so creating,
+// connecting and recovering all refuse it, including as user ctdev-account,
+// whose key would carry the account key's exact label.
+func TestAComputerNamedCtdevIsRefused(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	_, s := createExample(t, testMachine(t, "example-laptop"))
+	for _, user := range []string{"example", "ctdev-account"} {
+		m := testMachine(t, "ctdev")
+		m.Username = user
+		refused := func(what string, err error) {
+			t.Helper()
+			if err == nil || !strings.Contains(err.Error(), "hostname is ctdev") {
+				t.Errorf("%s as %s@ctdev: want the hostname refused, got %v", what, user, err)
+			}
+		}
+		_, err := m.CreateDestination(ctx, NewDestination{Name: "example-new", Address: filepath.Join(t.TempDir(), "repo")}, exampleMaster)
+		refused("create", err)
+		_, err = m.ConnectDestination(ctx, s.Kit, exampleMaster)
+		refused("connect", err)
+		_, err = m.RecoverFromKit(ctx, s.Kit, s.RecoveryCode, "a new example password", false)
+		refused("recover", err)
+		if names, _ := m.Destinations(); len(names) != 0 {
+			t.Errorf("%s@ctdev saved %v", user, names)
+		}
+	}
+	// The kit still connects a computer with an ordinary name, so nothing
+	// above touched the destination.
+	if _, err := testMachine(t, "example-desktop").ConnectDestination(ctx, s.Kit, exampleMaster); err != nil {
+		t.Error(err)
+	}
+}
+
+// The account key and the Recovery Code's key aren't computers: removing
+// either as one is refused, and both keep working.
+func TestRemoveComputerRefusesTheAccountAndRecoveryKeys(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, s := createExample(t, m)
+	keys, err := d.keysHinted(ctx, d.computerKey, d.computerKeyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := unlock(t, d, exampleMaster)
+	for _, k := range keys {
+		if !labeled(k, accountUser) && !labeled(k, recoveryUser) {
+			continue
+		}
+		if err := a.RemoveComputer(ctx, Computer{ID: k.ID, Hostname: k.HostName}); !errors.Is(err, ErrNotAComputer) {
+			t.Errorf("removing %s@%s: %v, want ErrNotAComputer", k.UserName, k.HostName, err)
+		}
+	}
+	if _, err := d.keys(ctx, s.RecoveryCode); err != nil {
+		t.Errorf("the Recovery Code after the refused removal: %v", err)
+	}
+	unlock(t, d, exampleMaster)
+}
+
+// A Recovery Code opens the repository only through the Recovery Code's
+// key: this computer's own key, typed as one, is refused, even though
+// restic opens the repository with it.
+func TestAComputerKeyIsNotARecoveryCode(t *testing.T) {
+	requireRestic(t)
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	if _, err := d.Recover(context.Background(), d.computerKey, "a new example password", false); !errors.Is(err, ErrWrongPassword) {
+		t.Errorf("Recover with this computer's key: %v, want ErrWrongPassword", err)
+	}
+	unlock(t, d, exampleMaster)
+}
