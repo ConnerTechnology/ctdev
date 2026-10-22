@@ -23,8 +23,8 @@ Setting up a new computer means creating its Linear app and running `ctdev confi
 per workspace. Retiring a computer means deleting its app in Linear. A secret is rotated in Linear,
 and then `ctdev configure linear` takes the new one. ctdev has no rotate flow of its own.
 
-Each repo names its workspace in its own `.mcp.json`
-(`ctdev linear mcp-headers --workspace <name>`). Nothing goes in `~/.claude.json` or other global
-Claude Code config. A repo that isn't Conner Technology's keeps its `.mcp.json` out of git through
-`.git/info/exclude`, so the same computer can reach a second Linear workspace without touching that
-repo's history.
+Each repo names its workspace in its local-scope `linear` server
+(`ctdev linear mcp-headers --workspace <name>`), which `ctdev configure linear` adds with
+`claude mcp add-json --scope local`. Claude Code keeps it in `~/.claude.json` under that repo's
+path, so the same computer can reach a second Linear workspace from another repo without touching
+either repo's history. Before ADR-0011 the server went in each repo's `.mcp.json`.

@@ -179,11 +179,14 @@ func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error
 	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
-// applyNvidiaSigning runs the GPU signing setup via the gpu package.
+// applyNvidiaSigning runs the GPU signing setup via the gpu package. It only
+// runs once the user has said yes, or in --batch when signing is needed, so
+// RunSetup doesn't ask about Secure Boot a second time.
 func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{
-		Stdout: o.Stdout,
-		Stdin:  os.Stdin,
+		Stdout:              o.Stdout,
+		Stdin:               os.Stdin,
+		SecureBootConfirmed: true,
 	})
 }
 
