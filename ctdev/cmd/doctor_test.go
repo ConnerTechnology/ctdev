@@ -3,10 +3,15 @@ package cmd
 import (
 	"context"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 	"github.com/ConnerTechnology/ctdev/ctdev/diagnose"
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // --strict fails the run on failures only; an sshd that is off is reported as
@@ -40,6 +45,48 @@ func TestDoctorFactsCarryInstalledComponents(t *testing.T) {
 	}
 	if f.Hostname != "test-host" || !f.SSHUnitInstalled {
 		t.Errorf("gathered facts were lost: %+v", f)
+	}
+}
+
+// Doctor's Backups section comes from ~/.config/ctdev/backup, judged by the
+// backup package and handed to diagnose as facts.
+func TestDoctorFactsCarryBackupHealth(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	m, err := backup.ThisMachine(sysutil.Opts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, errText := doctorBackupFacts(m); len(got) != 0 || errText != "" {
+		t.Errorf("with nothing scheduled: %v, %q", got, errText)
+	}
+
+	if err := os.MkdirAll(m.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(home, "Projects", "website")
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(m.Dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("folders.json", `{"folders":[{"path":"`+folder+`","id":"00000000-0000-4000-8000-000000000000","schedule":"weekly","added":"2026-01-01T00:00:00Z"}]}`)
+	write("state.json", `{"folders":{"`+folder+`":{"last_attempt":"2026-01-02T00:00:00Z","last_success":"2026-01-01T00:00:00Z","error":"example failure"}}}`)
+
+	got, errText := doctorBackupFacts(m)
+	want := diagnose.BackupFolder{
+		Path: "~/Projects/website", Schedule: "weekly", State: diagnose.BackupFailed,
+		LastSuccess: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Error: "example failure",
+	}
+	if errText != "" || len(got) != 1 || got[0].Path != want.Path || got[0].Schedule != want.Schedule ||
+		got[0].State != want.State || !got[0].LastSuccess.Equal(want.LastSuccess) || got[0].Error != want.Error {
+		t.Errorf("facts = %+v, %q; want %+v", got, errText, want)
+	}
+
+	write("state.json", "not json")
+	if _, errText := doctorBackupFacts(m); errText == "" {
+		t.Error("unreadable state gave no error")
 	}
 }
 

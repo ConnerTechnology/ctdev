@@ -55,12 +55,17 @@ func init() {
 // so they never touch this computer's real user timers or launch agents.
 var installScheduler = (*backup.Machine).InstallScheduler
 
+// scheduledNotifier is run-scheduled's notifier; nil is the desktop's.
+// Tests set it so they never pop up a real notification.
+var scheduledNotifier backup.Notifier
+
 func runBackupScheduled(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	m, err := backup.ThisMachine(sysutil.Opts{Stdout: out, DryRun: flagDryRun})
 	if err != nil {
 		return err
 	}
+	m.Notifier = scheduledNotifier
 	results, err := m.RunScheduled(cmdContext(cmd))
 	for _, r := range results {
 		line := backup.DisplayPath(m.Home, r.Path) + ": " + string(r.Outcome)

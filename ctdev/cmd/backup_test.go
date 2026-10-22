@@ -341,6 +341,45 @@ func TestBackupWithoutATerminalFailsWhenOverdue(t *testing.T) {
 	}
 }
 
+// run-scheduled prints each listed folder's outcome and fails when one did.
+func TestRunScheduledReportsEachFolder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	notes := &recordingNotifier{}
+	scheduledNotifier = notes
+	t.Cleanup(func() { scheduledNotifier = nil })
+	var out bytes.Buffer
+	backupRunScheduledCmd.SetOut(&out)
+	t.Cleanup(func() { backupRunScheduledCmd.SetOut(nil) })
+	if err := backupRunScheduledCmd.RunE(backupRunScheduledCmd, nil); err != nil || out.Len() != 0 {
+		t.Errorf("with nothing scheduled: err %v, output %q", err, out.String())
+	}
+
+	dir := filepath.Join(home, ".config", "ctdev", "backup")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(home, "gone")
+	body := `{"folders":[{"path":"` + gone + `","id":"00000000-0000-4000-8000-000000000000","schedule":"daily"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "folders.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := backupRunScheduledCmd.RunE(backupRunScheduledCmd, nil)
+	if err == nil || !strings.HasPrefix(out.String(), "~/gone: missing: the folder isn't there any more") {
+		t.Errorf("err %v, output %q", err, out.String())
+	}
+	if len(notes.titles) != 1 || notes.titles[0] != "Backup failing" {
+		t.Errorf("notifications = %q, want one Backup failing", notes.titles)
+	}
+}
+
+type recordingNotifier struct{ titles []string }
+
+func (n *recordingNotifier) Notify(_ context.Context, title, _ string) error {
+	n.titles = append(n.titles, title)
+	return nil
+}
+
 // The removed commands each fail as unknown commands.
 func TestRemovedBackupCommandsAreUnknown(t *testing.T) {
 	for _, args := range [][]string{
