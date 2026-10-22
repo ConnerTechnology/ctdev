@@ -287,38 +287,43 @@ func (d *Destination) verifyComputerKey(ctx context.Context) error {
 // computer's flow or a new Secret Key elsewhere. It needs no master password,
 // since this computer's own key is what opens the repository, and it checks
 // that key opens it as the kit describes before saving anything.
-func (m *Machine) UpdateFromKit(ctx context.Context, kitText string) (*Destination, error) {
+//
+// newSecretKey reports that the kit's Secret Key replaced a different one
+// saved here. That's expected after Regenerate Secret Key or I lost this
+// computer elsewhere, but nothing about the repository vouches for a Secret
+// Key, so the person should be told.
+func (m *Machine) UpdateFromKit(ctx context.Context, kitText string) (d *Destination, newSecretKey bool, err error) {
 	if m.Opts.DryRun {
-		return nil, ErrDryRun
+		return nil, false, ErrDryRun
 	}
 	kit, err := ParseKit(kitText)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if !m.hasDestination(kit.Destination) {
-		return nil, fmt.Errorf("this computer isn't set up on %s: connect to it with the kit and master password instead", kit.Destination)
+		return nil, false, fmt.Errorf("this computer isn't set up on %s: connect to it with the kit and master password instead", kit.Destination)
 	}
 	cur, err := m.Destination(kit.Destination)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	sk, err := parseSecretKey(kit.SecretKey)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	address, err := m.CheckAddress(kit.Address, "")
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	next := *cur
 	next.Address, next.credentials, next.secretKey = address, kit.Credentials, sk.String()
 	if err := next.verifyComputerKey(ctx); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := m.save(&next); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return &next, nil
+	return &next, next.secretKey != cur.secretKey, nil
 }
 
 // hasDestination reports whether this computer has a destination saved

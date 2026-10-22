@@ -285,30 +285,37 @@ func TestPastingAnUpdatedKitOnASetUpComputer(t *testing.T) {
 	// doesn't open it, so nothing is saved.
 	other := testMachine(t, "example-other")
 	_, otherSetup := createExample(t, other)
-	if _, err := f.desktop.UpdateFromKit(ctx, otherSetup.Kit); err == nil {
+	if _, _, err := f.desktop.UpdateFromKit(ctx, otherSetup.Kit); err == nil {
 		t.Error("a kit the computer's key can't open was accepted")
 	}
 	if after, _ := os.ReadFile(f.desktop.destinationFile(f.dd.Name)); string(after) != string(before) {
 		t.Error("a rejected kit changed the saved destination")
 	}
 	// A kit for a destination this computer isn't set up on is for connecting.
-	if _, err := testMachine(t, "example-tablet").UpdateFromKit(ctx, kit); err == nil {
+	if _, _, err := testMachine(t, "example-tablet").UpdateFromKit(ctx, kit); err == nil {
 		t.Error("UpdateFromKit on a computer without the destination should fail")
 	}
 
-	d, err := f.desktop.UpdateFromKit(ctx, kit)
+	d, newKey, err := f.desktop.UpdateFromKit(ctx, kit)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !newKey {
+		t.Error("the kit replaced the desktop's Secret Key, and UpdateFromKit didn't say so")
+	}
 	if got := unlock(t, d, exampleMaster).Kit(); got != kit {
 		t.Errorf("after pasting, the desktop's kit is\n%s\nwant\n%s", got, kit)
+	}
+	// The same kit again changes no Secret Key.
+	if _, newKey, err := f.desktop.UpdateFromKit(ctx, kit); err != nil || newKey {
+		t.Errorf("pasting the same kit again: new Secret Key %v, %v", newKey, err)
 	}
 
 	// A removed computer's key opens nothing, so its paste is refused.
 	if err := unlock(t, f.ld, exampleMaster).RemoveComputer(ctx, computerNamed(t, f.ld, "example-server")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.server.UpdateFromKit(ctx, kit); !errors.Is(err, ErrWrongPassword) {
+	if _, _, err := f.server.UpdateFromKit(ctx, kit); !errors.Is(err, ErrWrongPassword) {
 		t.Errorf("a removed computer pasting the kit: %v, want ErrWrongPassword", err)
 	}
 }

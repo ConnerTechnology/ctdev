@@ -116,6 +116,7 @@ func NewKitMenu(name string) *Model {
 		{Action: ShowKit, Label: "Show Emergency Kit"},
 		{Action: ChangePassword, Label: "Change master password"},
 		{Action: RegenerateKey, Label: "Regenerate Secret Key"},
+		{Action: ReplaceCredentials, Label: "Replace backend credentials"},
 		{Action: UseRecoveryCode, Label: "Use a Recovery Code"},
 		{Action: PasteKit, Label: "Paste an updated Emergency Kit"},
 		{Action: GoBack, Label: "Back"},

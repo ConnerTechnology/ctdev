@@ -106,14 +106,14 @@ func TestComputerActions(t *testing.T) {
 
 func TestKitMenu(t *testing.T) {
 	labels, dimmed := items(NewKitMenu("example-backups"))
-	want := "Show Emergency Kit,Change master password,Regenerate Secret Key,Use a Recovery Code,Paste an updated Emergency Kit,Back"
+	want := "Show Emergency Kit,Change master password,Regenerate Secret Key,Replace backend credentials,Use a Recovery Code,Paste an updated Emergency Kit,Back"
 	if got := strings.Join(labels, ","); got != want {
 		t.Errorf("items = %s\nwant %s", got, want)
 	}
 	if len(dimmed) != 0 {
 		t.Errorf("dimmed = %v", dimmed)
 	}
-	for i, action := range []Action{ShowKit, ChangePassword, RegenerateKey, UseRecoveryCode, PasteKit, GoBack} {
+	for i, action := range []Action{ShowKit, ChangePassword, RegenerateKey, ReplaceCredentials, UseRecoveryCode, PasteKit, GoBack} {
 		m := NewKitMenu("example-backups")
 		for range i {
 			press(m, key(tea.KeyDown))

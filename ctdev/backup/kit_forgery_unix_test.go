@@ -60,7 +60,7 @@ func TestPastingRefusesAKitThatSetsResticsEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	kit, marker := forged(t, s.Kit, d.computerKey)
-	_, err = m.UpdateFromKit(context.Background(), kit)
+	_, _, err = m.UpdateFromKit(context.Background(), kit)
 	refusesTheLine(t, err)
 	neverRan(t, marker)
 	if after, _ := os.ReadFile(m.destinationFile(d.Name)); string(after) != string(before) {

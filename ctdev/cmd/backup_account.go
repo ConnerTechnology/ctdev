@@ -108,7 +108,7 @@ func removeComputer(ctx context.Context, d *backup.Destination, c backup.Compute
 // restic gives every key full power, so the lost computer could act on the
 // repository with its key until removed, and with the old Secret Key and
 // credentials on it, open it again from its kit until those are replaced.
-func lostComputer(ctx context.Context, d *backup.Destination, c backup.Computer) error {
+func lostComputer(ctx context.Context, d *backup.Destination, c backup.Computer) (err error) {
 	ok, err := confirm(backupscreen.ConfirmLostComputer(c.Hostname, d.Name))
 	if err != nil || !ok {
 		return err
@@ -122,6 +122,16 @@ func lostComputer(ctx context.Context, d *backup.Destination, c backup.Computer)
 	}
 	fmt.Println("  " + styles.Success.Render("✓ 1. Removed "+c.Hostname+"'s key."))
 
+	// From here each step has changed the destination, so a stop says what
+	// was done and where to finish: the flow can't be started again for a
+	// computer that's no longer listed.
+	step := 1
+	defer func() {
+		if err != nil {
+			lostComputerStopped(c.Hostname, step)
+		}
+	}()
+
 	// A kit with an error means the new Secret Key is in force and only the
 	// old account key's removal failed; the flow goes on.
 	if kit, err := a.RegenerateSecretKey(ctx); kit == "" {
@@ -129,13 +139,54 @@ func lostComputer(ctx context.Context, d *backup.Destination, c backup.Computer)
 	} else if err != nil {
 		fmt.Println("  " + styles.Warning.Render(err.Error()))
 	}
+	step = 2
 	fmt.Println("  " + styles.Success.Render("✓ 2. Made a new Secret Key and saved it on this computer."))
 
 	if err := replaceCredentials(ctx, a, d); err != nil {
 		return err
 	}
+	step = 3
 	fmt.Println("  " + styles.Success.Render("✓ 3. This computer opens "+d.Name+" with the new credentials."))
 
+	if err := showKit(ctx, "New Emergency Kit", a.Kit(), ""); err != nil {
+		return err
+	}
+	fmt.Println("\n  " + pasteOnOtherComputers)
+	return nil
+}
+
+// lostComputerStopped says what the lost-computer flow did before it
+// stopped after done steps, and which items under Emergency Kit and password
+// finish it.
+func lostComputerStopped(host string, done int) {
+	var did, next string
+	switch done {
+	case 1:
+		did = "removed " + host + "'s key. The Secret Key and the backend credentials are unchanged"
+		next = "Regenerate Secret Key, then Replace backend credentials"
+	case 2:
+		did = "removed " + host + "'s key and made a new Secret Key, saved on this computer. The backend credentials are unchanged"
+		next = "Replace backend credentials, which also shows the new kit"
+	default:
+		did = "removed " + host + "'s key, made a new Secret Key and saved the new backend credentials. The new kit wasn't shown"
+		next = "Show Emergency Kit"
+	}
+	fmt.Println("\n  " + styles.Warning.Render("I lost this computer stopped. So far it "+did+"."))
+	fmt.Println("  To finish, run ctdev backup --all, choose Emergency Kit and password, then " + next + ".")
+}
+
+// replaceBackendCredentials is Replace backend credentials under Emergency
+// Kit and password: step 3 of I lost this computer on its own, for finishing
+// that flow or rotating the credentials any time. It shows the new kit.
+func replaceBackendCredentials(ctx context.Context, d *backup.Destination) error {
+	a, err := unlockAccount(ctx, d)
+	if err != nil {
+		return err
+	}
+	if err := replaceCredentials(ctx, a, d); err != nil {
+		return err
+	}
+	fmt.Println("  " + styles.Success.Render("✓ This computer opens "+d.Name+" with the new credentials."))
 	if err := showKit(ctx, "New Emergency Kit", a.Kit(), ""); err != nil {
 		return err
 	}
@@ -320,6 +371,8 @@ func kitAndPassword(ctx context.Context, m *backup.Machine, d *backup.Destinatio
 			err = changeMasterPassword(ctx, d)
 		case backupscreen.RegenerateKey:
 			err = regenerateSecretKey(ctx, d)
+		case backupscreen.ReplaceCredentials:
+			err = replaceBackendCredentials(ctx, d)
 		case backupscreen.UseRecoveryCode:
 			_, err = recoveryReset(ctx, d.Name, d.Recover)
 		case backupscreen.PasteKit:
@@ -465,7 +518,7 @@ func pasteUpdatedKit(ctx context.Context, m *backup.Machine) (*backup.Destinatio
 
 func updateFromKit(ctx context.Context, m *backup.Machine, kit string) (*backup.Destination, error) {
 	fmt.Println("  Checking this computer's key against the destination with the kit…")
-	d, err := m.UpdateFromKit(ctx, kit)
+	d, newSecretKey, err := m.UpdateFromKit(ctx, kit)
 	if errors.Is(err, backup.ErrWrongPassword) {
 		return nil, errors.New("this computer's key doesn't open the destination the kit describes, so nothing was saved: " +
 			"its key may have been removed from another computer")
@@ -474,6 +527,13 @@ func updateFromKit(ctx context.Context, m *backup.Machine, kit string) (*backup.
 		return nil, err
 	}
 	fmt.Println("  " + styles.Success.Render("✓ Saved the kit's credentials and Secret Key for "+d.Name+" on this computer."))
+	if newSecretKey {
+		// This computer's key vouches for the address and credentials, but
+		// nothing vouches for a Secret Key without the master password.
+		fmt.Println("  " + styles.Warning.Render("The kit's Secret Key is different from the one this computer had."))
+		fmt.Println(styles.Dimmed.Render("  That's expected after Regenerate Secret Key or I lost this computer on another computer. If neither"))
+		fmt.Println(styles.Dimmed.Render("  happened, the kit didn't come from you: check it, and use Show Emergency Kit on a computer you trust."))
+	}
 	return d, nil
 }
 

@@ -37,6 +37,7 @@ const (
 	ShowKit
 	ChangePassword
 	RegenerateKey
+	ReplaceCredentials
 	UseRecoveryCode
 	PasteKit
 
