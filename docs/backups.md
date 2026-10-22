@@ -179,7 +179,7 @@ chance to delete the backups is never skipped without saying so.
 ## Every folder: `ctdev backup --all`
 
 `ctdev backup --all` is the whole destination rather than the folder you're in. It works from any
-directory and writes nothing into it. Its first line names the destination and what it holds, with
+directory and writes no folder config or other folder data into it. Its first line names the destination and what it holds, with
 the space stored measured once when `--all` starts:
 
 ```text
@@ -228,8 +228,9 @@ password. ctdev checks them by opening the repository before it saves anything; 
 kit saves nothing. It then adds this computer's own key, labeled with its hostname, and saves the
 destination to `~/.config/ctdev/backup/destinations/<name>.env`.
 
-Creating a local destination here needs an absolute path or one starting with `~/`, outside the
-current directory: `--all` writes nothing there.
+Creating a local destination here needs an absolute path or one starting with `~/`, since `--all`
+runs from any directory: `~/Backups` works, `Backups` doesn't. As in Configure, the path can't be
+inside a backed-up folder and must be a new or empty folder.
 
 ### Finding a folder's backups from another computer
 

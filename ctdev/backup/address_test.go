@@ -27,33 +27,39 @@ func TestLocalAddressesAreExpandedAndMadeAbsolute(t *testing.T) {
 	}
 }
 
-// Under --all, which writes nothing into the current directory, a new local
-// destination's path must say where it is: absolute or from ~/. It also
-// mustn't be inside the current directory.
+// Under --all, which runs from any directory, a new local destination's path
+// must say where it is: absolute or from ~/. Named in full, it may be under
+// the current directory, as ~/Backups is when --all runs from ~, but the
+// usual guards still hold: not inside a backed-up folder, and new or empty.
 func TestANewDestinationUnderAllNeedsAPathThatSaysWhereItIs(t *testing.T) {
 	m := testMachine(t, "example-laptop")
-	cwd := filepath.Join(m.Home, "Downloads")
-	if err := os.MkdirAll(cwd, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Chdir(cwd)
+	t.Chdir(m.Home)
 	for _, addr := range []string{"backups", "./backups", "../backups", "~backups"} {
-		_, err := m.CheckNewAddressFromAll(addr, cwd)
+		_, err := m.CheckNewAddressFromAll(addr)
 		if err == nil || !strings.Contains(err.Error(), "absolute path or one starting with ~/") {
 			t.Errorf("%q: want a refusal asking for an absolute or ~/ path, got %v", addr, err)
 		}
 	}
-	if _, err := m.CheckNewAddressFromAll(filepath.Join(cwd, "backups"), cwd); err == nil || !strings.Contains(err.Error(), "inside") {
-		t.Errorf("a path inside the current directory: want an inside error, got %v", err)
-	}
 	for in, want := range map[string]string{
-		"~/Backups":                 filepath.Join(m.Home, "Backups"),
-		"/media/example/usb":        "/media/example/usb",
-		"b2:example-bucket:website": "b2:example-bucket:website",
+		"~/Backups":                          filepath.Join(m.Home, "Backups"),
+		filepath.Join(m.Home, "usb-backups"): filepath.Join(m.Home, "usb-backups"),
+		"/media/example/usb":                 "/media/example/usb",
+		"b2:example-bucket:website":          "b2:example-bucket:website",
 	} {
-		if got, err := m.CheckNewAddressFromAll(in, cwd); err != nil || got != want {
+		if got, err := m.CheckNewAddressFromAll(in); err != nil || got != want {
 			t.Errorf("%q = %q, %v; want %q", in, got, err, want)
 		}
+	}
+
+	writeConfig(t, filepath.Join(m.Home, "Projects", "website"), NewConfig("example-backups"))
+	if _, err := m.CheckNewAddressFromAll("~/Projects/website/backups"); err == nil || !strings.Contains(err.Error(), "a backed-up folder") {
+		t.Errorf("inside a backed-up folder: want a refusal, got %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(m.Home, "notes.txt"), []byte("example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.CheckNewAddressFromAll("~"); err == nil || !strings.Contains(err.Error(), "isn't a restic repository") {
+		t.Errorf("a folder of files: want a refusal, got %v", err)
 	}
 }
 

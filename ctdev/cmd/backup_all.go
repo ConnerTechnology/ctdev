@@ -29,7 +29,7 @@ func runBackupAll(ctx context.Context, m *backup.Machine, cwd string, out io.Wri
 	if isBatchMode() {
 		return allStatusOnly(ctx, m, out)
 	}
-	d, err := destinationForAll(ctx, m, cwd)
+	d, err := destinationForAll(ctx, m)
 	if errors.Is(err, errPromptCancelled) {
 		return cancelToClean(err)
 	}
@@ -117,9 +117,10 @@ func storedAll(ctx context.Context, d *backup.Destination, o backup.Overview) (i
 
 // destinationForAll is the destination --all shows: this computer's only
 // one, a choice among several, or with none, one connected or created now.
-// Either way it's saved to ~/.config/ctdev only, and a new local one must be
-// outside cwd, where --all writes nothing.
-func destinationForAll(ctx context.Context, m *backup.Machine, cwd string) (*backup.Destination, error) {
+// Either way it's saved to ~/.config/ctdev, and nothing goes into the
+// current folder; a new local one is named in full (absolute or ~/), since
+// --all runs from any directory.
+func destinationForAll(ctx context.Context, m *backup.Machine) (*backup.Destination, error) {
 	names, err := m.Destinations()
 	if err != nil {
 		return nil, err
@@ -139,7 +140,7 @@ func destinationForAll(ctx context.Context, m *backup.Machine, cwd string) (*bac
 			return connectDestination(ctx, m)
 		case 2:
 			return createDestinationChecked(ctx, m, "", func(address string) (string, error) {
-				return m.CheckNewAddressFromAll(address, cwd)
+				return m.CheckNewAddressFromAll(address)
 			})
 		}
 		return nil, fmt.Errorf("invalid choice %d", choice)
