@@ -2,9 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [15.0.0] - 2026-10-19
 
 ### Added
+- **`ctdev install gws`** installs the Google Workspace CLI: from Homebrew on macOS, and
+  on Linux as the static build from the latest GitHub release, checked against its
+  published SHA-256 and installed to `/usr/local/bin`. `ctdev update` doesn't update the
+  Linux binary; run `ctdev install gws --force` to get the latest.
 - **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
   several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
   against its PGP signature with the AWS CLI Team key and installed to
@@ -45,6 +49,48 @@ All notable changes to this project will be documented in this file.
   under `~/.local/state/ctdev/configure-added/`, or the LDAC config file. A removal that
   would also take a package ctdev didn't install is refused, and the dependencies an
   install pulled in stay until `sudo apt autoremove`.
+- **`ctdev configure ssh` is the one place for remote access.** `configure linger`,
+  `locale`, `tunnel` and `ufw` are gone, and their settings joined `ssh` under plain
+  names: SSH server, key-only login, keep my programs running after I disconnect
+  (lingering), Mosh support (the `en_US.UTF-8` locale), open this machine from
+  vscode.dev (the VS Code tunnel), and only allow SSH and Mosh from my local network
+  (UFW). Each one can now be turned off, removing what ctdev added: the SSH server
+  units, the sshd drop-in, lingering, the `en_US.UTF-8` locale if ctdev generated it,
+  the tunnel service, and ctdev's UFW rules (UFW itself turns off only when no other
+  rules are left). Turning on vscode.dev also turns on lingering, which the tunnel
+  needs.
+- **Key-only login reads sshd's effective config** (`sshd -T`), so it shows "enabled"
+  only when password login is really off, and a re-run after adding your key finishes
+  the job. ctdev's drop-in is now `/etc/ssh/sshd_config.d/00-ctdev.conf`, which sorts
+  ahead of drop-ins like `50-cloud-init.conf` (sshd keeps the first value it reads);
+  the old `99-ctdev.conf` is removed. The firewall shows "enabled" only when UFW is on
+  and ctdev's SSH and Mosh rules are present. Mosh support shows only when
+  `mosh-server` is installed.
+- **The SSH server defaults to starting on demand** through `ssh.socket` instead of
+  `ssh.service` always running. The setting is a choice of on demand, always on, or
+  off, and installs `openssh-server` when it is missing.
+- **Mosh support no longer changes the system's default language.** It generates
+  `en_US.UTF-8` without running `update-locale`.
+- **`configure ssh --batch` now also applies the firewall**, so on a DNS or proxy
+  host run `ctdev configure ssh` interactively and leave the firewall off. The Pi-hole
+  recipe says so.
+
+- **`ctdev configure sleep` is gone; "Never suspend, even when asked" is in `ctdev
+  configure power`,** next to the idle-suspend timer, and it can now be turned off, which
+  unmasks the sleep targets. Use `ctdev configure power --batch` where you ran
+  `configure sleep --batch`.
+- **`configure power`'s timers are in minutes and can be set to never.** The display,
+  idle-suspend and screensaver timers take `never` (or `0`), and `--show` reads an
+  idle delay of 0 as "never" instead of "uint32 0". A hand-set timer that isn't whole
+  minutes shows exactly, in seconds ("90 s"). The screensaver timer is now written as the
+  `uint32` its schema expects.
+- **With suspend turned off, the idle-suspend timer and "Lock the screen on suspend" show
+  as not needed** and aren't applied unless you ask for them.
+- **`ctdev configure <category> --show` widens its name column to fit the longest
+  setting name,** so plain names no longer wrap.
+- **`configure power`'s settings have plain names, a one-line why, and new recommended
+  defaults:** balanced power profile, display off after 60 min, never suspend when idle,
+  never start the screensaver.
 
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:

@@ -203,9 +203,11 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 	// Remote access settings (best-effort — all reversible tweaks)
 	fmt.Fprintf(w, "Resetting remote access settings...\n")
 	_ = sysutil.SudoRun(ctx, o, "systemctl", append([]string{"unmask"}, sleepTargets...)...)
-	if _, err := os.Stat(sshdDropIn); err == nil {
-		_ = sysutil.SudoRun(ctx, o, "rm", "-f", sshdDropIn)
-		_ = sysutil.SudoRun(ctx, o, "systemctl", "reload", "ssh")
+	for _, dropIn := range []string{sshdDropIn, sshdLegacyDropIn} {
+		if _, err := os.Stat(dropIn); err == nil {
+			_ = sysutil.SudoRun(ctx, o, "rm", "-f", dropIn)
+			_ = sysutil.SudoRun(ctx, o, "systemctl", "reload", "ssh")
+		}
 	}
 	if _, err := os.Stat(wifiPowersaveConfPath); err == nil {
 		_ = sysutil.SudoRun(ctx, o, "rm", "-f", wifiPowersaveConfPath)
