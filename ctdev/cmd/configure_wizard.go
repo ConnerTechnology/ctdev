@@ -160,6 +160,9 @@ func showSetting(state *setup.SettingState, width int) {
 		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", setup.DisplayValue(s, s.Default)))
 	}
 	fmt.Printf("  %s %s%s\n", label, value, marker)
+	if s.Description != "" {
+		fmt.Printf("  %s\n", styles.Dimmed.Render(s.Description))
+	}
 }
 
 // promptSetting interactively prompts the user for a setting value.
@@ -183,12 +186,20 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 	// honest question instead of an enable/disable choice the apply layer
 	// can't deliver on.
 	if s.OneWay {
+		if s.NoOffSwitch != "" {
+			fmt.Printf("  %s\n", styles.Dimmed.Render("No off switch: "+s.NoOffSwitch))
+		}
 		if current == s.Default {
 			fmt.Printf("  %s\n\n", styles.Dimmed.Render("Already "+current+" — nothing to do."))
 			state.Enabled = false
 			return false, nil
 		}
-		yes, err := promptYesNoCtx(ctx, fmt.Sprintf("Apply now (→ %s)?", s.Default), false)
+		question := fmt.Sprintf("Apply now (→ %s)?", s.Default)
+		if state.NotNeeded != "" {
+			fmt.Printf("  %s\n", styles.Dimmed.Render("Not needed on this machine: "+state.NotNeeded+"."))
+			question = fmt.Sprintf("Apply anyway (→ %s)?", s.Default)
+		}
+		yes, err := promptYesNoCtx(ctx, question, false)
 		if err != nil {
 			return false, err
 		}

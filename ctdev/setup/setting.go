@@ -54,6 +54,9 @@ type Setting struct {
 	// path (it ignores the value). The wizard offers these as a single
 	// "apply?" question instead of a fake enable/disable choice.
 	OneWay bool
+	// NoOffSwitch, on a OneWay setting, says why it has no off switch. The
+	// wizard prints it.
+	NoOffSwitch string
 	// NotNeededFn reports why this machine doesn't need the setting, or ""
 	// when it does. A setting that isn't needed is shown as such and is left
 	// out of what --batch applies.
