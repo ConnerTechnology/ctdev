@@ -215,6 +215,19 @@ var Registry = []Setting{
 		},
 		HardwareFn: gateCinnamon,
 	},
+	{
+		Name:        "Ask for the password right after the screensaver",
+		Slug:        "power",
+		Category:    "Power",
+		Description: "Asks for your password the moment the screensaver ends, with no grace period, so a Mac you walk away from stays locked. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macPowerScreensaverPassword) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macPowerScreensaverPassword, v)
+		},
+		HardwareFn: gateMacOS,
+	},
 
 	// ── Keyboard ───────────────────────────────────────────────────────
 
@@ -222,7 +235,7 @@ var Registry = []Setting{
 		Name:        "Key repeat delay",
 		Slug:        "keyboard",
 		Category:    "Keyboard",
-		Description: "How long a key must be held before it starts repeating.",
+		Description: "How long you hold a key before it repeats: short enough to hold a key on purpose, long enough not to repeat by accident.",
 		Control:     ControlSlider,
 		Default:     "200",
 		Slider:      &SliderRange{Min: 100, Max: 1000, Step: 25, Unit: "ms"},
@@ -242,7 +255,7 @@ var Registry = []Setting{
 		Name:        "Key repeat rate",
 		Slug:        "keyboard",
 		Category:    "Keyboard",
-		Description: "How many characters per second are generated while a key is held down.",
+		Description: "How many characters per second a held key types, so moving the cursor or deleting with a held key is quick.",
 		Control:     ControlSlider,
 		Default:     "50",
 		Slider:      &SliderRange{Min: 10, Max: 100, Step: 5, Unit: "cps"},
@@ -262,8 +275,8 @@ var Registry = []Setting{
 		Name:     "Key repeat delay",
 		Slug:     "keyboard",
 		Category: "Keyboard",
-		Description: "How long a key must be held before it starts repeating. " +
-			"macOS stores this in 15 ms steps; takes effect after logging out and back in.",
+		Description: "How long you hold a key before it repeats: short enough to hold a key on purpose, long enough not to repeat by accident. " +
+			"macOS moves in 15 ms steps; takes effect after logging out and back in.",
 		Control:    ControlSlider,
 		Default:    macKeyRepeatDelayDefaultMs,
 		Slider:     &SliderRange{Min: 120, Max: 1800, Step: keyRepeatUnitMs, Unit: "ms"},
@@ -275,39 +288,58 @@ var Registry = []Setting{
 		HardwareFn: gateMacOS,
 	},
 	{
-		Name:     "Key repeat interval",
+		Name:     "Key repeat rate",
 		Slug:     "keyboard",
 		Category: "Keyboard",
-		Description: "Time between repeated characters while a key is held: 15 ms ≈ 67/s, 30 ms ≈ 33/s. " +
-			"macOS stores this in 15 ms steps; takes effect after logging out and back in.",
-		Control:    ControlSlider,
-		Default:    macKeyRepeatIntervalDefaultMs,
-		Slider:     &SliderRange{Min: 15, Max: 120, Step: keyRepeatUnitMs, Unit: "ms"},
-		DetectFunc: func(ctx context.Context) string { return detectMacKeyRepeat(ctx, "KeyRepeat") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyMacKeyRepeat(ctx, o, "KeyRepeat", v)
-		},
+		// "Faster than System Settings allows" rests on community reports that
+		// the slider's fastest setting is KeyRepeat 2; Apple doesn't document it.
+		Description: "How many characters per second a held key types, so moving the cursor or deleting with a held key is quick. " +
+			"ctdev offers the eight fastest 15 ms steps (15–120 ms); 67 cps is faster than System Settings allows. " +
+			"Takes effect after logging out and back in.",
+		Control:    ControlPicker,
+		Default:    macKeyRepeatRateDefaultCps,
+		Choices:    macKeyRepeatRateChoices(),
+		DetectFunc: detectMacKeyRepeatRate,
+		ApplyFunc:  applyMacKeyRepeatRate,
 		ApplyGroup: macKeyRepeatGroup,
+		HardwareFn: gateMacOS,
+	},
+	{
+		Name:        "Type exactly what I type",
+		Slug:        "keyboard",
+		Category:    "Keyboard",
+		Description: "Stops macOS swapping in curly quotes and long dashes, fixing spelling, capitalizing and adding periods as you type, which breaks code and commands. Off puts back the macOS defaults.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macKeyboardTypeAsTyped) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macKeyboardTypeAsTyped, v)
+		},
+		HardwareFn: gateMacOS,
+	},
+	{
+		Name:        "Holding a key repeats it",
+		Slug:        "keyboard",
+		Category:    "Keyboard",
+		Description: "Holding a key repeats it instead of opening the accent popup, so a held arrow or Delete key keeps going. Off brings back the accent popup.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macKeyboardHoldToRepeat) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macKeyboardHoldToRepeat, v)
+		},
 		HardwareFn: gateMacOS,
 	},
 	{
 		Name:        "NumLock on boot",
 		Slug:        "keyboard",
 		Category:    "Keyboard",
-		Description: "Ensures NumLock is turned on at login. Installs numlockx if needed.",
+		Description: "Turns NumLock on at login, so the number pad types numbers straight away. Installs numlockx; off removes it.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(ctx context.Context) string {
-			if detectPackageInstalled(ctx, "numlockx") {
-				return "installed"
-			}
-			return "not installed"
-		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyPackages(ctx, o, []string{"numlockx"})
-		},
-		HardwareFn: gateDesktop,
+		DetectFunc:  detectNumlockx,
+		ApplyFunc:   applyNumlockx,
+		HardwareFn:  gateDesktop,
 	},
 	{
 		Name:        "Mouse acceleration",
@@ -432,6 +464,19 @@ var Registry = []Setting{
 		},
 		HardwareFn: gateCinnamon,
 	},
+	{
+		Name:        "Click when changing volume",
+		Slug:        "audio",
+		Category:    "Audio",
+		Description: "Plays a click as you change the volume, so you hear how loud it is before anything else plays. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macAudioVolumeClick) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macAudioVolumeClick, v)
+		},
+		HardwareFn: gateMacOS,
+	},
 
 	// ── Bluetooth ──────────────────────────────────────────────────────
 
@@ -553,6 +598,20 @@ var Registry = []Setting{
 			return applyMacDefaults(ctx, o, macDesktopDSStore, v)
 		},
 		ApplyGroup: macFinderGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "Expanded save and print dialogs",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Opens Save and Print dialogs with all their options showing, so you can pick a folder or print settings without an extra click. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDialogs) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopDialogs, v)
+		},
 		HardwareFn: gateMacOS,
 	},
 
@@ -733,25 +792,5 @@ var Registry = []Setting{
 			return applyPiholeHostResolver(ctx, o)
 		},
 		HardwareFn: gatePiholeHostResolver,
-	},
-
-	// ── macOS ────────────────────────────────────────────────────────────
-
-	{
-		Name:     "macOS defaults",
-		Slug:     "macos",
-		Category: "macOS",
-		Description: "Applies opinionated macOS defaults: volume-change feedback sound, " +
-			"smart quotes/dashes/autocorrect/auto-capitalize off, key repeat instead of the press-and-hold accent popup, " +
-			"expanded save/print dialogs, and password required immediately after screensaver. " +
-			"Key repeat speed is in the keyboard category; Dock, Finder and animations are in desktop.",
-		Control:    ControlToggle,
-		OneWay:     true,
-		Default:    "applied",
-		DetectFunc: detectMacOSDefaults,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return ApplyMacOSDefaults(ctx, o)
-		},
-		HardwareFn: gateMacOS,
 	},
 }

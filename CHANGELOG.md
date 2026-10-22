@@ -16,6 +16,20 @@ All notable changes to this project will be documented in this file.
   auto-hiding Dock, faster animations, Finder list view with path and status bars, and
   no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
   macOS goes back to its own default.
+- **`ctdev configure keyboard` holds the macOS typing settings, and shows the repeat rate
+  in characters per second on every machine.** On macOS ctdev offers the eight fastest
+  15 ms steps (15–120 ms, 67 cps down to 8 cps), converted to and from `KeyRepeat` behind
+  the scenes; a Mac set slower shows its own rate. The recommended rate is 67 cps, the
+  step nearest the Linux default of 50 cps and faster than System Settings allows; the
+  delay stays 195 ms. "Type exactly what I type" (no smart quotes, dashes, autocorrect,
+  auto-capitalize or double-space period) and "Holding a key repeats it" (no accent popup)
+  move here from `configure macos`, and each has an off switch that deletes the keys ctdev
+  wrote. "NumLock on boot" can be turned off, which removes numlockx.
+- **The last macOS defaults moved by topic, each with an off switch** that deletes its
+  keys: "Click when changing volume" is in `ctdev configure audio`, "Expanded save and
+  print dialogs" in `configure desktop`, and "Ask for the password right after the
+  screensaver" in `configure power`. Each shows only on macOS and is on by default, as
+  before.
 - **`ctdev configure mouse` names its settings by what they do, and each says why.**
   "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
   only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
@@ -33,6 +47,9 @@ All notable changes to this project will be documented in this file.
 - **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
   `configure storage` and the Logitech KVM fix to `configure mouse`.
   `ctdev configure system` now reports an unknown category.
+- **`ctdev configure macos` is gone.** Its settings are in `desktop`, `keyboard`, `audio`
+  and `power`, by topic; `ctdev configure macos` now reports an unknown category. Where
+  you ran `configure macos --batch`, run those four categories instead.
 
 ## [16.0.1] - 2026-10-22
 
