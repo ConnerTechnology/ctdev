@@ -28,6 +28,20 @@ const (
 	Quit
 	Computers    // under --all
 	EmergencyKit // under --all
+
+	// A computer's actions, under Computers.
+	RemoveComputer
+	LostComputer
+
+	// Under Emergency Kit and password.
+	ShowKit
+	ChangePassword
+	RegenerateKey
+	UseRecoveryCode
+	PasteKit
+
+	// GoBack leaves a submenu.
+	GoBack
 )
 
 // Item is one menu entry.
@@ -43,6 +57,7 @@ type Model struct {
 	items  []Item
 	cursor int
 	chosen Action
+	sub    bool // a submenu: q and esc choose GoBack rather than Quit
 }
 
 // New builds the screen for a folder's status. home turns paths into ~/….
@@ -123,6 +138,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = m.next(m.cursor, 1)
 	case "q", "esc", "ctrl+c":
 		m.chosen = Quit
+		if m.sub {
+			m.chosen = GoBack
+		}
 		return m, tea.Quit
 	case "enter", "space":
 		it := m.items[m.cursor]
@@ -154,7 +172,11 @@ func (m *Model) View() tea.View {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\n  " + styles.Help.Render("↑/↓ move · enter choose · q quit") + "\n")
+	help := "↑/↓ move · enter choose · q quit"
+	if m.sub {
+		help = "↑/↓ move · enter choose · esc back"
+	}
+	b.WriteString("\n  " + styles.Help.Render(help) + "\n")
 	return tea.NewView(b.String())
 }
 
