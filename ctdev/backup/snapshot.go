@@ -60,7 +60,12 @@ type Snapshot struct {
 	Files    int   // files in the backup
 	Size     int64 // bytes in the backup
 	Added    int64 // new data the backup added to the destination
-	Warning  string
+
+	FilesNew     int           // files the backup found new since the one before
+	FilesChanged int           // files changed since the one before
+	Duration     time.Duration // how long the backup took
+
+	Warning string
 }
 
 // Backup backs up the whole folder at root to d, as the user, from inside
@@ -132,9 +137,12 @@ func short(id string) string {
 	return id
 }
 
-// Snapshots lists a folder's backups, oldest first.
+// Snapshots lists a folder's backups, oldest first. A Ref with no folder ID
+// matches only backups with no folder ID: the one-offs of an unconfigured
+// folder. A backup that carries an ID belongs to that folder wherever it has
+// since moved, even though it has this path and host too (CTD-120).
 func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error) {
-	args := []string{"snapshots", "--json"}
+	args := []string{"snapshots", "--json", "--retry-lock", retryLock}
 	if ref.FolderID != "" {
 		args = append(args, "--tag", tagFolder+ref.FolderID)
 	} else {
@@ -151,9 +159,13 @@ func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error
 		Hostname string    `json:"hostname"`
 		Tags     []string  `json:"tags"`
 		Summary  *struct {
-			Files int   `json:"total_files_processed"`
-			Bytes int64 `json:"total_bytes_processed"`
-			Added int64 `json:"data_added"`
+			Start   time.Time `json:"backup_start"`
+			End     time.Time `json:"backup_end"`
+			New     int       `json:"files_new"`
+			Changed int       `json:"files_changed"`
+			Files   int       `json:"total_files_processed"`
+			Bytes   int64     `json:"total_bytes_processed"`
+			Added   int64     `json:"data_added"`
 		} `json:"summary"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
@@ -170,8 +182,13 @@ func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error
 				s.Path = untagValue(strings.TrimPrefix(t, tagPath))
 			}
 		}
-		if r.Summary != nil {
-			s.Files, s.Size, s.Added = r.Summary.Files, r.Summary.Bytes, r.Summary.Added
+		if sum := r.Summary; sum != nil {
+			s.Files, s.Size, s.Added = sum.Files, sum.Bytes, sum.Added
+			s.FilesNew, s.FilesChanged = sum.New, sum.Changed
+			s.Duration = sum.End.Sub(sum.Start)
+		}
+		if ref.FolderID == "" && s.FolderID != "" {
+			continue
 		}
 		snaps = append(snaps, s)
 	}
@@ -179,14 +196,16 @@ func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error
 	return snaps, nil
 }
 
-// Stored is the space a folder's backups take in the destination, after
-// deduplication and compression.
-func (d *Destination) Stored(ctx context.Context, ref Ref) (int64, error) {
-	args := []string{"stats", "--json", "--mode", "raw-data"}
-	if ref.FolderID != "" {
-		args = append(args, "--tag", tagFolder+ref.FolderID)
-	} else {
-		args = append(args, "--tag", tagPath+tagValue(ref.Path), "--host", ref.Host)
+// Stored is the space the given backups, a folder's as Snapshots found them,
+// take in the destination after deduplication and compression. It goes by
+// their IDs: a tag filter can't leave out the backups Snapshots drops.
+func (d *Destination) Stored(ctx context.Context, snaps []Snapshot) (int64, error) {
+	if len(snaps) == 0 {
+		return 0, nil // with no IDs, restic stats would measure every backup
+	}
+	args := []string{"stats", "--json", "--retry-lock", retryLock, "--mode", "raw-data"}
+	for _, s := range snaps {
+		args = append(args, s.ID)
 	}
 	out, err := d.restic(ctx, d.asComputer("", args...))
 	if err != nil {
@@ -248,15 +267,14 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	if cfg.Destination != d.Name {
 		return fmt.Errorf("the config names destination %s, not %s", cfg.Destination, d.Name)
 	}
+	// An ID-less Ref lists only one-offs, so no other folder's backup joins.
 	oneOffs, err := d.Snapshots(ctx, m.Ref(root, nil))
 	if err != nil {
 		return err
 	}
 	var ids []string
 	for _, s := range oneOffs {
-		if s.FolderID == "" {
-			ids = append(ids, s.ID)
-		}
+		ids = append(ids, s.ID)
 	}
 	tag := d.asComputer("", append([]string{"tag", "--retry-lock", retryLock, "--add", tagFolder + cfg.ID}, ids...)...)
 	if m.Opts.DryRun {

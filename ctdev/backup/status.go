@@ -146,7 +146,7 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 			if last := snaps[len(snaps)-1]; last.Time.After(s.Latest) {
 				s.Latest, s.LatestHost = last.Time, last.Host
 			}
-			stored, err := d.Stored(ctx, ref)
+			stored, err := d.Stored(ctx, snaps)
 			s.ReadErr = errors.Join(s.ReadErr, err)
 			s.Stored += stored
 		}

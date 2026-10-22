@@ -5,8 +5,8 @@ Backup is about the folder you're in. A folder is set up once, then backed up wh
 
 Per-folder backup is arriving in steps under
 [CTD-87](https://linear.app/conner-technology/issue/CTD-87). This page describes what ships today:
-the status screen, Configure, and Back up now. Scheduled runs, List backups, Stop backing up,
-Delete all backups and `ctdev backup --all` come next; until then they show as "coming soon".
+the status screen, Configure, Back up now, List backups, Stop backing up and Delete all backups.
+Scheduled runs and `ctdev backup --all` come next.
 
 ## Running `ctdev backup`
 
@@ -109,6 +109,63 @@ In a folder that isn't configured, Back up now (once) backs it up to this comput
 setting one up first if there isn't one. It writes no config file and sets no schedule. Such a
 one-off backup has no folder ID and is found by its path and hostname; if you configure the folder
 later, Configure adds the new ID to those backups so they join its history.
+
+### Retention
+
+After each successful backup of a configured folder, ctdev forgets the folder's backups that its
+keep rules no longer cover, counting the folder's backups from every computer together. Other
+folders' backups in the same destination are never touched. One-off backups of a folder that isn't
+configured have no keep rules and stay until you delete them. Forgetting a backup doesn't free its
+space right away: that happens at the destination's weekly maintenance.
+
+## List backups
+
+List backups shows the folder's backups, newest first, under a header with how many there are and
+the space they take in the destination after deduplication:
+
+```text
+Backups of ~/Projects/website · 14 backups · 1.6 GB stored
+
+  > Oct 21, 9:12 PM     1.2 GB     12.0 MB new   4,812 files  latest
+    Oct 20, 9:10 PM     1.2 GB      3.1 MB new   4,809 files
+    ...
+    Back
+```
+
+Choosing a backup shows its size, file count, new data, the files changed and added since the
+backup before it, how long it took, the computer that made it and its short ID. Then:
+
+- **Download as zip.** restic writes the backup as a zip into a temporary file, which is renamed
+  into place once complete, and ctdev prints the path. The zip holds the folder's contents at their
+  paths inside the folder. It's named after the folder and the backup's time in UTC, with no colons
+  so the name is safe everywhere, for example `website-20261022T141500Z.zip`. It goes beside the folder, in
+  `~/Projects`, and never inside a backed-up folder: when the folder sits inside another backed-up
+  folder, the zip goes beside the outer one. The zip is readable only by you (mode 0600), since it
+  holds the folder's contents. ctdev doesn't restore; open the zip and copy back what you need.
+- **Delete this backup** asks `[y/N]`, then forgets that one backup.
+- **Back** returns to the list.
+
+## Delete all backups
+
+Delete all backups asks `[y/N]`, then has you type the folder's name, and forgets every backup of
+the folder: by its ID once configured, or, for a folder that isn't, its one-offs, the backups with
+no folder ID that this computer made of its path. A backup that carries a folder ID always belongs
+to that folder, so a new folder made where a backed-up one used to be never claims the old one's
+backups. After any delete, ctdev says "Space is freed at the next weekly maintenance."
+
+## Stop backing up
+
+Stop backing up asks `[y/N]`, deletes the folder's `.ctdev-backup.json` and takes it off this
+computer's list. It then asks whether to also delete all the folder's backups, from every computer;
+saying yes has you type the folder's name, as Delete all backups does, and forgets every backup with
+the folder's ID before its config file goes.
+
+Otherwise ctdev says "Its N backups are kept under this folder's ID." `ctdev backup` then shows
+the folder as not backed up, and since the folder no longer has that ID, List backups there shows
+only its one-offs.
+
+Stop backing up refuses when the destination can't be read or isn't set up on this computer, so the
+chance to delete the backups is never skipped without saying so.
 
 ## Where things are kept
 

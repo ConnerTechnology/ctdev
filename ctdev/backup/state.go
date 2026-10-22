@@ -64,6 +64,25 @@ func (m *Machine) addFolder(root, id string) error {
 	return writeJSON(m.foldersFile(), f)
 }
 
+// removeFolder takes the folder at root off this computer's schedule list.
+func (m *Machine) removeFolder(root string) error {
+	var f foldersFile
+	if err := readJSON(m.foldersFile(), &f); err != nil {
+		return err
+	}
+	kept := f.Folders[:0]
+	for _, e := range f.Folders {
+		if e.Path != root {
+			kept = append(kept, e)
+		}
+	}
+	if len(kept) == len(f.Folders) {
+		return nil
+	}
+	f.Folders = kept
+	return writeJSON(m.foldersFile(), f)
+}
+
 // scheduled reports whether this computer's list holds the folder at root
 // with this ID.
 func (m *Machine) scheduled(root, id string) (bool, error) {
