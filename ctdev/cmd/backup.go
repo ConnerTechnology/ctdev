@@ -31,7 +31,10 @@ var backupCmd = &cobra.Command{
 		"ctdev looks up from the current directory for the nearest .ctdev-backup.json, the way " +
 		"git finds its repository. Without a terminal, or with --batch, it prints the status " +
 		"only, and exits non-zero when the folder isn't backed up, or its last backup failed " +
-		"or is overdue.",
+		"or is overdue.\n\n" +
+		"With --all, from any directory: every backed-up folder in the destination, from every " +
+		"computer, grouped by computer, to list and download. On a computer with no destination, " +
+		"it first connects to one with its Emergency Kit and master password, or creates one.",
 	Args: cobra.NoArgs,
 	RunE: runBackup,
 }
@@ -102,6 +105,9 @@ func runBackup(cmd *cobra.Command, _ []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
+	}
+	if flagBackupAll {
+		return runBackupAll(ctx, m, cwd, cmd.OutOrStdout())
 	}
 	if isBatchMode() {
 		return backupStatusOnly(ctx, m, cwd, cmd.OutOrStdout())
@@ -283,8 +289,19 @@ func listBackups(ctx context.Context, m *backup.Machine, s backup.Status) error 
 	if err != nil {
 		return err
 	}
-	ref := m.Ref(s.Target, s.Config)
-	where := backup.DisplayPath(m.Home, s.Target)
+	download := func(d *backup.Destination, snap backup.Snapshot) (string, error) {
+		return m.Download(ctx, d, s.Target, snap)
+	}
+	return browseBackups(ctx, m, dests, m.Ref(s.Target, s.Config), backup.DisplayPath(m.Home, s.Target), download)
+}
+
+// downloadFunc downloads a backup from d as a zip and returns its path.
+type downloadFunc func(d *backup.Destination, snap backup.Snapshot) (string, error)
+
+// browseBackups lists ref's backups in dests under where (~/...), then a
+// backup's details with Download as zip and Delete this backup, until Back.
+// It's List backups both in a folder and under --all.
+func browseBackups(ctx context.Context, m *backup.Machine, dests []*backup.Destination, ref backup.Ref, where string, download downloadFunc) error {
 	for {
 		var snaps []backup.Snapshot
 		var stored int64
@@ -325,15 +342,14 @@ func listBackups(ctx context.Context, m *backup.Machine, s backup.Status) error 
 				latest = false
 			}
 		}
-		if err := backupDetail(ctx, m, owner[snap.ID], s.Target, snap, latest); err != nil {
+		if err := backupDetail(ctx, m, owner[snap.ID], where, snap, latest, download); err != nil {
 			return err
 		}
 	}
 }
 
 // backupDetail shows one backup and runs its menu until Back or a delete.
-func backupDetail(ctx context.Context, m *backup.Machine, d *backup.Destination, root string, snap backup.Snapshot, latest bool) error {
-	where := backup.DisplayPath(m.Home, root)
+func backupDetail(ctx context.Context, m *backup.Machine, d *backup.Destination, where string, snap backup.Snapshot, latest bool, download downloadFunc) error {
 	for {
 		fmt.Println()
 		detail := backupscreen.NewDetail(where, snap, latest)
@@ -343,7 +359,7 @@ func backupDetail(ctx context.Context, m *backup.Machine, d *backup.Destination,
 		switch detail.Chosen() {
 		case backupscreen.Download:
 			fmt.Printf("  Downloading the backup from %s…\n", snap.Time.Local().Format("Jan 2, 3:04 PM"))
-			path, err := m.Download(ctx, d, root, snap)
+			path, err := download(d, snap)
 			if err != nil {
 				fmt.Println("  " + styles.Error.Render("Download failed: "+err.Error()))
 				continue
@@ -498,13 +514,13 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 	}
 	fmt.Println("  " + styles.Success.Render("✓ Stopped backing up "+where+"."))
 	if len(listed) > 0 {
-		// Name only what exists today: ways back to these backups come with
-		// CTD-123.
-		kept := fmt.Sprintf("Its %d backups are kept under this folder's ID.", len(listed))
+		// Where the kept backups are found, and how the history resumes.
+		kept, them := fmt.Sprintf("Its %d backups are kept under this folder's ID.", len(listed)), "them"
 		if len(listed) == 1 {
-			kept = "Its backup is kept under this folder's ID."
+			kept, them = "Its backup is kept under this folder's ID.", "it"
 		}
 		fmt.Println("  " + kept)
+		fmt.Println("  ctdev backup --all lists " + them + ", and Configure → \"Connect to an existing folder's backups\" resumes the history.")
 	}
 	return nil
 }
@@ -581,6 +597,11 @@ func configureFolder(ctx context.Context, m *backup.Machine, s backup.Status) er
 		return err
 	}
 	cfg.Destination = d.Name
+	if s.Config == nil {
+		if err := offerLink(ctx, m, d, where, &cfg); err != nil {
+			return err
+		}
+	}
 	if cfg.Schedule, err = promptSchedule(ctx, cfg.Schedule); err != nil {
 		return err
 	}
@@ -653,6 +674,14 @@ func chooseDestination(ctx context.Context, m *backup.Machine, preferred, folder
 }
 
 func createDestination(ctx context.Context, m *backup.Machine, name, folder string) (*backup.Destination, error) {
+	return createDestinationChecked(ctx, m, name, func(address string) (string, error) {
+		return m.CheckNewAddress(address, folder)
+	})
+}
+
+// createDestinationChecked creates a destination whose address passes check,
+// asking again until one does.
+func createDestinationChecked(ctx context.Context, m *backup.Machine, name string, check func(string) (string, error)) (*backup.Destination, error) {
 	if m.Opts.DryRun {
 		return nil, backup.ErrDryRun
 	}
@@ -669,7 +698,7 @@ func createDestination(ctx context.Context, m *backup.Machine, name, folder stri
 		}
 		// Check before asking for anything else: a local path inside the
 		// folder would back the repository up into itself.
-		if address, err = m.CheckNewAddress(address, folder); err == nil {
+		if address, err = check(address); err == nil {
 			break
 		}
 		fmt.Println("  " + styles.Warning.Render(err.Error()+": choose another place."))
