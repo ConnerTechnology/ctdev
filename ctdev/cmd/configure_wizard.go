@@ -25,7 +25,6 @@ var slugDescriptions = map[string]string{
 	"bluetooth": "Bluetooth",
 	"desktop":   "Desktop",
 	"network":   "Network & WiFi",
-	"system":    "System",
 	"storage":   "Storage",
 	"ssh":       "SSH & Remote Access",
 	"pihole":    "Pi-hole DNS",

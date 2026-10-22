@@ -16,6 +16,23 @@ All notable changes to this project will be documented in this file.
   auto-hiding Dock, faster animations, Finder list view with path and status bars, and
   no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
   macOS goes back to its own default.
+- **`ctdev configure mouse` names its settings by what they do, and each says why.**
+  "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
+  only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
+  Logitech mouse working after a KVM switch"; it also shows while it's installed, so it
+  can be turned off after the receiver is unplugged. Both can now be turned off: off
+  removes the xbindkeys config and autostart entry and puts back any file of yours they
+  replaced (an edited config is left alone, and the xbindkeys and xdotool packages stay),
+  or the Logitech udev rule and Solaar user service. A half-installed setting shows as
+  "partly installed", so either choice repairs or removes it. `ctdev reset` removes both
+  the same way. The recommended mouse speed is now 0.46, and the slider moves in steps
+  of 0.01. The current speed shows rounded to that step, so a desktop-set 0.46218… reads
+  as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
+
+### Removed
+- **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
+  `configure storage` and the Logitech KVM fix to `configure mouse`.
+  `ctdev configure system` now reports an unknown category.
 
 ## [16.0.1] - 2026-10-22
 
