@@ -1,0 +1,174 @@
+package backup
+
+import (
+	"context"
+	"errors"
+	"io/fs"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// Interval is how long after the last successful backup the next is due.
+func (s Schedule) Interval() time.Duration {
+	switch s {
+	case Hourly:
+		return time.Hour
+	case Weekly:
+		return 7 * 24 * time.Hour
+	default:
+		return 24 * time.Hour
+	}
+}
+
+// Status is everything `ctdev backup` reports about the folder it runs in.
+type Status struct {
+	Folder
+
+	// Target is the folder actions apply to: the backed-up folder, or the
+	// current directory when nothing at or above it is set up.
+	Target string
+
+	// Destination names the folder's destination, or for a folder that isn't
+	// configured, the destinations this computer has. Backend is its kind.
+	Destination        string
+	Backend            string
+	DestinationMissing bool // configured for a destination this computer isn't set up on
+
+	Size  int64 // bytes in the folder now
+	Files int   // files in the folder now
+
+	Last      *Run      // this computer's last attempt, if it made one
+	Scheduled bool      // on this computer's schedule list
+	NextDue   time.Time // when Scheduled
+
+	Backups int       // the folder's backups in the destination
+	Oldest  time.Time // the oldest of them
+	Latest  time.Time // the newest of them
+	Stored  int64     // space they take in the destination
+
+	ReadErr error // the destination couldn't be read
+}
+
+// HasBackups reports whether the folder has at least one backup.
+func (s Status) HasBackups() bool { return s.Backups > 0 }
+
+// Failed reports whether this computer's last backup of the folder failed.
+func (s Status) Failed() bool { return s.Last != nil && s.Last.Failed() }
+
+// Status reports on the backed-up folder at or above cwd. Problems reading
+// the folder or the destination land in ReadErr, so a status can always be shown.
+func (m *Machine) Status(ctx context.Context, cwd string) Status {
+	var s Status
+	f, err := Find(cwd)
+	s.Folder = f
+	if err != nil {
+		s.ReadErr = err
+		return s
+	}
+	s.Target = f.Root
+	if s.Target == "" {
+		s.Target = f.Cwd
+	}
+	s.Size, s.Files, err = folderSize(s.Target)
+	s.ReadErr = errors.Join(s.ReadErr, err)
+
+	if run, ok, err := m.lastRun(s.Target); err != nil {
+		s.ReadErr = errors.Join(s.ReadErr, err)
+	} else if ok {
+		s.Last = &run
+	}
+
+	var dests []*Destination
+	if f.Config != nil {
+		s.Destination = f.Config.Destination
+		if s.Scheduled, err = m.scheduled(f.Root, f.Config.ID); err != nil {
+			s.ReadErr = errors.Join(s.ReadErr, err)
+		}
+		if names, _ := m.Destinations(); !contains(names, s.Destination) {
+			s.DestinationMissing = true
+		} else if d, err := m.Destination(s.Destination); err != nil {
+			s.ReadErr = errors.Join(s.ReadErr, err)
+		} else {
+			dests = append(dests, d)
+		}
+	} else {
+		names, err := m.Destinations()
+		s.ReadErr = errors.Join(s.ReadErr, err)
+		s.Destination = strings.Join(names, ", ")
+		for _, name := range names {
+			d, err := m.Destination(name)
+			if err != nil {
+				s.ReadErr = errors.Join(s.ReadErr, err)
+				continue
+			}
+			dests = append(dests, d)
+		}
+	}
+	var backends []string
+	for _, d := range dests {
+		backends = append(backends, d.Backend())
+	}
+	s.Backend = strings.Join(backends, ", ")
+
+	ref := m.Ref(s.Target, f.Config)
+	for _, d := range dests {
+		snaps, err := d.Snapshots(ctx, ref)
+		if err != nil {
+			s.ReadErr = errors.Join(s.ReadErr, err)
+			continue
+		}
+		s.Backups += len(snaps)
+		if len(snaps) > 0 {
+			if first := snaps[0].Time; s.Oldest.IsZero() || first.Before(s.Oldest) {
+				s.Oldest = first
+			}
+			if last := snaps[len(snaps)-1].Time; last.After(s.Latest) {
+				s.Latest = last
+			}
+			stored, err := d.Stored(ctx, ref)
+			s.ReadErr = errors.Join(s.ReadErr, err)
+			s.Stored += stored
+		}
+	}
+
+	if s.Scheduled {
+		// No time of day: the next backup is due an interval after the last
+		// success, and right away when there hasn't been one.
+		s.NextDue = time.Now()
+		if s.Last != nil && !s.Last.LastSuccess.IsZero() {
+			s.NextDue = s.Last.LastSuccess.Add(f.Config.Schedule.Interval())
+		}
+	}
+	return s
+}
+
+// folderSize counts the regular files under dir and their bytes, the way the
+// backup will see them. Unreadable directories are skipped, as restic would.
+func folderSize(dir string) (size int64, files int, err error) {
+	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() && p != dir {
+				return fs.SkipDir
+			}
+			return err
+		}
+		if d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				size += info.Size()
+				files++
+			}
+		}
+		return nil
+	})
+	return size, files, err
+}
+
+func contains(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
