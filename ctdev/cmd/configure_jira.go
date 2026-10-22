@@ -123,7 +123,7 @@ func jiraWizard(ctx context.Context) error {
 		return err
 	}
 	fmt.Println()
-	fmt.Println(styles.Success.Render("  Restart Claude Code in this folder. The first time, run /mcp and sign in to Atlassian."))
+	fmt.Println(styles.Success.Render("  Restart Claude Code in this folder. The first time, and after the server changes, run /mcp and sign in to Atlassian."))
 	fmt.Println(styles.Dimmed.Render("  Scripts get the API token's header with: ctdev jira auth-header --site " + site))
 	return nil
 }

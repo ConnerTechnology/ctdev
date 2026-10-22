@@ -122,7 +122,8 @@ func TestConfigureJiraSetsUpLocallyAndWritesNothingInTheRepo(t *testing.T) {
 		t.Error(err)
 	}
 	calls := f.Calls()
-	if len(calls) != 1 || calls[0] != `mcp add-json atlassian {"type":"http","url":"`+jira.MCPURL+`"} --scope local` {
+	// The literal URL: without ?tools=all the plugin's allow list can't name the Jira tools.
+	if len(calls) != 1 || calls[0] != `mcp add-json atlassian {"type":"http","url":"https://mcp.atlassian.com/v2/mcp?tools=all"} --scope local` {
 		t.Errorf("calls %q", calls)
 	}
 	if !strings.Contains(out, "ctdev jira auth-header --site example") {
