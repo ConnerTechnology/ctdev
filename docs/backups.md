@@ -6,7 +6,8 @@ Backup is about the folder you're in. A folder is set up once, then backed up wh
 Per-folder backup is arriving in steps under
 [CTD-87](https://linear.app/conner-technology/issue/CTD-87). This page describes what ships today:
 the status screen, Configure, Back up now, List backups, Stop backing up, Delete all backups,
-scheduled backups with their health, and `ctdev backup --all`.
+scheduled backups with their health, and `ctdev backup --all` with its computers, Emergency Kit
+and password actions.
 
 ## Running `ctdev backup`
 
@@ -259,9 +260,8 @@ starts:
 example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored
 ```
 
-The menu is List backups · Computers · Emergency Kit and password · Quit. Computers and Emergency
-Kit and password are dimmed for now. With several destinations on this computer, `--all` asks which
-one first. "Computers" counts hostnames, so a computer set up again under the same name counts once.
+The menu is List backups · Computers · Emergency Kit and password · Quit. With several destinations
+on this computer, `--all` asks which one first. "Computers" counts hostnames, so a computer set up again under the same name counts once.
 
 List backups shows every backed-up folder in the destination, grouped by computer, with this
 computer first. Each entry is the folder's path as it was on that computer, with its latest backup,
@@ -317,6 +317,74 @@ To keep backing the folder up on this computer, run `ctdev backup` in it, choose
 pick the folder under "Connect to an existing folder's backups". A git clone of a folder whose
 `.ctdev-backup.json` is committed already has the folder's ID, so Configure continues its history
 without that step.
+
+### Computers
+
+Computers lists each computer with a key on the destination, by hostname and the date its key was
+added, with this computer marked. The account key and the Recovery Code's key aren't computers and
+aren't listed. Pick one for Remove this computer · I lost this computer · Back.
+
+Every action here and under Emergency Kit and password asks for the master password first, and
+checks it by opening the destination with the account key. A wrong one changes nothing. The two
+exceptions are Use a Recovery Code and Paste an updated Emergency Kit.
+
+- **Remove this computer** removes its key, so it can no longer open the destination. This
+  computer's own key can't be removed from here: do it from another computer that's set up.
+- **I lost this computer** is one guided flow:
+  1. It removes the lost computer's key.
+  2. It makes a new Secret Key and saves it on this computer.
+  3. It asks for new backend credentials, with numbered steps for making them at Backblaze B2 or
+     AWS, checks this computer opens the destination with them, and then gives the steps for
+     revoking the old ones. For an S3-compatible provider other than AWS, the steps are general,
+     and that provider's documentation has the exact clicks. For SFTP it gives the steps for taking
+     the lost computer's SSH key off the server and then checks the connection. A local path or USB
+     drive has nothing to revoke.
+  4. It shows the new Emergency Kit.
+  5. You paste the new kit once on each other computer (below).
+
+### Emergency Kit and password
+
+- **Show Emergency Kit** shows the kit this computer has.
+- **Change master password** asks for the new one twice. The Secret Key and the kit stay the same,
+  and every computer's key keeps working.
+- **Regenerate Secret Key** makes a new Secret Key and account key, saves the Secret Key here, and
+  shows the new kit. The old kit stops working. The other computers' keys keep backing up, but
+  paste the new kit on each before using its account actions there.
+- **Use a Recovery Code** takes the Recovery Code and a new master password, typed twice, and makes
+  a new Secret Key. It shows the new kit. The used code keeps working unless you also choose to
+  make a new Recovery Code, which replaces it and is shown once. Connecting a new computer offers
+  it too, after a wrong master password.
+- **Paste an updated Emergency Kit** saves a new kit's credentials and Secret Key on this computer.
+  It asks for no master password, since this computer's own key is what opens the destination:
+  ctdev checks that key opens it as the kit describes before saving anything. If this computer
+  can't read the destination any more, because its credentials were revoked, `--all` offers the
+  paste straight away. Choosing "Connect to an existing destination" with a kit for a destination
+  this computer already has does the same.
+
+Changing keys never leaves the destination without a working account key. The new key is added and
+checked first, and the old one is removed last. If that removal fails, ctdev says so, and both keys
+still work until you try again.
+
+## When something goes wrong
+
+restic gives every key full power over the repository: reading, deleting and removing other keys.
+The master password guards ctdev's account actions, but restic doesn't enforce it. A lost or stolen
+computer can act on the destination with its key until that key is removed, and reach the storage
+with its backend credentials until they're revoked. It also keeps whatever it already read.
+
+- **A new computer**: install restic (`ctdev install restic`), run `ctdev backup --all`, and connect
+  with the Emergency Kit and the master password.
+- **A lost or stolen computer**: on any other computer that's set up, run `ctdev backup --all`,
+  choose Computers, the lost computer, then I lost this computer. Then paste the new kit on each
+  other computer.
+- **A lost Emergency Kit**: on a computer that's set up, choose Emergency Kit and password, then
+  Show Emergency Kit, and save it again.
+- **A forgotten master password**: choose Use a Recovery Code, on a set-up computer under Emergency
+  Kit and password, or on a new one after a wrong master password while connecting. Without the
+  Recovery Code, computers that are set up keep backing up, but no new computer can connect and no
+  account action works. The fix is then a new destination.
+- **Losing everything**: with no computer still set up, and the kit or the master password gone with
+  no Recovery Code, the backups can't be decrypted by anyone, ctdev included.
 
 ## Where things are kept
 

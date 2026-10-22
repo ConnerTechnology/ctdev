@@ -20,7 +20,8 @@ var flagBackupAll bool
 
 func init() {
 	backupCmd.Flags().BoolVar(&flagBackupAll, "all", false,
-		"every backed-up folder in the destination, from every computer, to list and download")
+		"the whole destination: every backed-up folder from every computer to list and download, "+
+			"the computers with access, and the Emergency Kit and master password")
 }
 
 // runBackupAll is the --all screen: pick this computer's destination (or set

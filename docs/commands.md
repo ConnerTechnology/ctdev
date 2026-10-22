@@ -50,7 +50,9 @@ ctdev backup                    # The folder you're in: its backup status, then 
                                 #   (details, Download as zip, Delete this backup), Configure, Stop backing up, Delete all backups
 ctdev backup --batch            # Status only (also when piped); exits non-zero if not backed up, or the last backup failed or is overdue
 ctdev backup --all              # From any directory: every backed-up folder in the destination, by computer, to list and
-                                #   download; connects this computer to a destination first if it has none
+                                #   download; Computers (remove one, I lost this computer); Emergency Kit and password
+                                #   (show the kit, change the master password, new Secret Key, Recovery Code, paste an
+                                #   updated kit); connects this computer to a destination first if it has none
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)
 ctdev doctor                    # Diagnose any machine: network, hardware, OS, security
 ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint

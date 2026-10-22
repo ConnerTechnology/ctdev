@@ -33,7 +33,8 @@ var backupCmd = &cobra.Command{
 		"only, and exits non-zero when the folder isn't backed up, or its last backup failed " +
 		"or is overdue.\n\n" +
 		"With --all, from any directory: every backed-up folder in the destination, from every " +
-		"computer, grouped by computer, to list and download. On a computer with no destination, " +
+		"computer, grouped by computer, to list and download; the computers with access, to remove " +
+		"one or recover from a lost one; and the Emergency Kit and master password. On a computer with no destination, " +
 		"it first connects to one with its Emergency Kit and master password, or creates one.",
 	Args: cobra.NoArgs,
 	RunE: runBackup,
