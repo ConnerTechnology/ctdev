@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -147,7 +148,8 @@ func DownloadDir(root string) (string, error) {
 // Download writes a backup of the folder at root as a zip beside the folder
 // (see DownloadDir) and returns its path. The zip holds the folder's contents
 // at their relative paths. restic writes it into a temporary file that is
-// linked into place once complete, so a zip under the final name is whole,
+// linked (or, without hard links, copied) into place once complete, so a zip
+// under the final name is whole,
 // and a file that took the name meanwhile is never overwritten.
 func (m *Machine) Download(ctx context.Context, d *Destination, root string, snap Snapshot) (string, error) {
 	dir, err := DownloadDir(root)
@@ -180,11 +182,48 @@ func (m *Machine) Download(ctx context.Context, d *Destination, root string, sna
 		return "", err
 	}
 	// A hard link, unlike a rename, fails when the name is taken.
-	if err := os.Link(tmp.Name(), path); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			return "", exists()
+	err = linkFile(tmp.Name(), path)
+	if errors.Is(err, fs.ErrExist) {
+		return "", exists()
+	}
+	if err != nil {
+		// No hard links here, as on exFAT and some SMB shares: copy instead,
+		// into a file created only if the name is free.
+		if err := copyNew(tmp.Name(), path); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				return "", exists()
+			}
+			return "", err
 		}
-		return "", err
 	}
 	return path, nil
+}
+
+// linkFile is os.Link; tests replace it to stand in for a filesystem without
+// hard links.
+var linkFile = os.Link
+
+// copyNew copies src to dst, which it creates and must not exist. On an
+// error it removes dst, which it made, so no half-written zip is left.
+func copyNew(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, in)
+	if err == nil {
+		err = out.Sync()
+	}
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(dst)
+	}
+	return err
 }
