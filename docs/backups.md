@@ -126,23 +126,31 @@ later, Configure adds the new ID to those backups so they join its history.
 Each computer has one hourly runner, installed by Configure and running as you:
 
 - **Linux:** a systemd user timer, `~/.config/systemd/user/ctdev-backup.timer`, with its service
-  `ctdev-backup.service`. `Persistent=true` runs a missed hour once the computer is back on.
+  `ctdev-backup.service`. It first runs at the top of the next hour. `Persistent=true` runs a
+  missed hour once the computer is back on.
 - **macOS:** a launchd agent, `~/Library/LaunchAgents/io.connertechnology.ctdev.backup.plist`,
-  logging to `~/Library/Logs/ctdev-backup.log`.
+  logging to `~/Library/Logs/ctdev-backup.log`. It runs once right after Configure loads it, then
+  at the top of every hour; an hour missed while the Mac slept runs when it wakes.
 
 Both run `ctdev backup run-scheduled` by ctdev's absolute path, since the runner has no shell PATH.
-Configuring again rewrites them, which picks up a ctdev that has moved. Every hour, the runner backs
+Configuring again rewrites them, which picks up a ctdev that has moved. On macOS an agent that's
+loaded and unchanged is left alone, and a changed one isn't reloaded while a scheduled backup is
+running: Configure says so, and the new one takes effect at your next login. If systemd won't enable
+the timer, Configure removes the units it wrote and the status shows "not scheduled on this
+computer". Only one scheduled run happens at a time; one that starts while another is running exits
+without doing anything. Every hour, the runner backs
 up each folder on this computer's list whose schedule is due: an hour, a day or a week after its
 last successful backup. A computer that was asleep catches up on its next run. Each folder's result
 is recorded in `state.json`.
 
 A listed folder that has been moved or deleted, or whose `.ctdev-backup.json` is gone or now holds
 another folder's ID, is skipped and recorded as missing. Run `ctdev backup` in its new place and
-choose Configure.
+choose Configure: that replaces the old place on the list, so it stops showing as missing.
 
 **On Linux, scheduled backups run only while you're logged in.** A systemd user timer stops at
 logout unless lingering is on, and ctdev never turns lingering on. A computer you stay logged in to,
-or log back in to, catches up.
+or log back in to, catches up. If you've turned lingering on yourself, the status leaves out "runs
+only while you're logged in".
 
 On Linux, `systemctl --user list-timers ctdev-backup.timer` shows when the runner last ran and runs
 next, and `journalctl --user -u ctdev-backup.service` shows what it did.

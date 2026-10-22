@@ -177,7 +177,9 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 		entry.Schedule = f.Config.Schedule
 		s.Overdue = judge(entry, Run{LastSuccess: last.LastSuccess}, now) == HealthOverdue
 		s.SchedulerInstalled = m.SchedulerInstalled()
-		s.LoggedInOnly = m.goos() == "linux"
+		// Lingering keeps a user timer running after logout. ctdev never turns
+		// it on, but someone may have, and then the note would be wrong.
+		s.LoggedInOnly = m.goos() == "linux" && !m.lingering()
 	}
 	return s
 }

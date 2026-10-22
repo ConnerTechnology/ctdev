@@ -14,7 +14,7 @@ import (
 func TestStatusOfAScheduledFolder(t *testing.T) {
 	for _, goos := range []string{"linux", "darwin"} {
 		m := testMachine(t, "example-laptop")
-		m.GOOS, m.Exe = goos, exampleExe
+		m.GOOS, m.Exe, m.lingerDir = goos, exampleExe, t.TempDir()
 		at(m, noon.Add(-10*24*time.Hour))
 		root := exampleFolder(t, m)
 		listed(t, m, root, NewConfig("example-backups"))
@@ -32,13 +32,9 @@ func TestStatusOfAScheduledFolder(t *testing.T) {
 			t.Errorf("%s: LoggedInOnly = %v", goos, s.LoggedInOnly)
 		}
 
-		for _, f := range m.schedulerFiles() {
-			if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(f.path, []byte(f.content), 0o644); err != nil {
-				t.Fatal(err)
-			}
+		writeSchedulerFiles(t, m)
+		if goos == "linux" {
+			enableTimer(t, m)
 		}
 		if err := m.recordRun(root, noon.Add(-time.Hour), nil); err != nil {
 			t.Fatal(err)
@@ -50,5 +46,23 @@ func TestStatusOfAScheduledFolder(t *testing.T) {
 		if want := noon.Add(23 * time.Hour); !s.NextDue.Equal(want) {
 			t.Errorf("%s: next due %v, want %v", goos, s.NextDue, want)
 		}
+	}
+}
+
+// With lingering on, a user timer keeps running after logout, so the
+// logged-in-only note would be wrong. ctdev only reads it.
+func TestStatusWithLingerHasNoLoggedInNote(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	m.GOOS, m.lingerDir = "linux", t.TempDir()
+	root := exampleFolder(t, m)
+	listed(t, m, root, NewConfig("example-backups"))
+	if !m.Status(context.Background(), root).LoggedInOnly {
+		t.Fatal("no linger: want the logged-in-only note")
+	}
+	if err := os.WriteFile(filepath.Join(m.lingerDir, m.Username), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if m.Status(context.Background(), root).LoggedInOnly {
+		t.Error("lingering is on: the logged-in-only note is wrong")
 	}
 }

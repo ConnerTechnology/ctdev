@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -302,8 +301,8 @@ func configureFolder(ctx context.Context, m *backup.Machine, s backup.Status) er
 		// the status says "not scheduled on this computer" until it's fixed.
 		fmt.Println("  " + styles.Warning.Render("Couldn't schedule backups on this computer: "+schedErr.Error()))
 		fmt.Println("  " + styles.Dimmed.Render("Use Back up now, and choose Configure again to retry."))
-	} else if runtime.GOOS == "linux" {
-		fmt.Println("  " + styles.Dimmed.Render("Scheduled backups run hourly while you're logged in."))
+	} else {
+		fmt.Println("  " + styles.Dimmed.Render("Scheduled backups run hourly; ctdev backup shows when the next one is due."))
 	}
 	return nil
 }
