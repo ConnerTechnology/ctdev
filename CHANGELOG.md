@@ -4,7 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
+  "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
+  suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
+  in the wizard, the settings browser and `--show`. Driver signing shows as not needed
+  when Secure Boot is off, including on a legacy BIOS machine, which has none, and the
+  suspend services when suspend is masked. When `mokutil` can't tell, signing counts as
+  needed, in `--show` too. A setting that isn't needed isn't applied by `--batch` (even with
+  `--force`), the wizard asks "Apply anyway?" once, defaulting to no, and `configure
+  gpu` skips the signing flow. Both stay on-only, and the wizard says why
+  there's no off switch.
+
+## [15.0.0] - 2026-10-19
+
 ### Added
+- **`ctdev install gws`** installs the Google Workspace CLI: from Homebrew on macOS, and
+  on Linux as the static build from the latest GitHub release, checked against its
+  published SHA-256 and installed to `/usr/local/bin`. `ctdev update` doesn't update the
+  Linux binary; run `ctdev install gws --force` to get the latest.
 - **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
   several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
   against its PGP signature with the AWS CLI Team key and installed to
@@ -87,16 +105,6 @@ All notable changes to this project will be documented in this file.
 - **`configure power`'s settings have plain names, a one-line why, and new recommended
   defaults:** balanced power profile, display off after 60 min, never suspend when idle,
   never start the screensaver.
-- **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
-  "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
-  suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
-  in the wizard, the settings browser and `--show`. Driver signing shows as not needed
-  when Secure Boot is off, including on a legacy BIOS machine, which has none, and the
-  suspend services when suspend is masked. When `mokutil` can't tell, signing counts as
-  needed, in `--show` too. A setting that isn't needed isn't applied by `--batch` (even with
-  `--force`), the wizard asks "Apply anyway?" once, defaulting to no, and `configure
-  gpu` skips the signing flow. Both stay on-only, and the wizard says why
-  there's no off switch.
 
 ### Removed
 - **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
