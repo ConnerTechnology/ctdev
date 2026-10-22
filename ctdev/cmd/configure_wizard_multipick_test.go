@@ -87,7 +87,7 @@ func TestPromptMultiPick_NoChoices(t *testing.T) {
 
 func TestShowSetting_NoRecommendationNoMarker(t *testing.T) {
 	st := &setup.SettingState{Setting: multiPickSetting(), CurrentValue: "AAAA-1111"}
-	out := captureStdout(t, func() { showSetting(st) })
+	out := captureStdout(t, func() { showSetting(st, wizardLabelWidth) })
 	if strings.Contains(out, "recommended") {
 		t.Errorf("a setting with no recommendation shows one: %q", out)
 	}

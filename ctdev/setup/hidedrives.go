@@ -29,7 +29,7 @@ const hideDrivesNone = PicksNone
 const hideDrivesLegacy = "legacy rule"
 
 // hideDrivesUnknown is the value detect reports when the rule can't be read.
-const hideDrivesUnknown = "unknown"
+const hideDrivesUnknown = ValueUnknown
 
 // lsblkRead lists block devices as JSON. Read-only; tests substitute a fake.
 var lsblkRead = func(ctx context.Context) ([]byte, error) {

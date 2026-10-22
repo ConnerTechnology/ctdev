@@ -58,6 +58,32 @@ func NextValue(s *Setting, cur string) string {
 	return cur
 }
 
+// SliderNever is the value a slider with SliderRange.Never shows and stores
+// for "never", one step below its Min.
+const SliderNever = "never"
+
+// SliderRangeLabel renders a slider's valid range, e.g. "5–120min", or
+// "never, 5–120min" when the slider offers never.
+func SliderRangeLabel(r *SliderRange) string {
+	label := FormatSliderVal(r.Min, r.Step) + "–" + FormatSliderVal(r.Max, r.Step) + r.Unit
+	if r.Never {
+		return SliderNever + ", " + label
+	}
+	return label
+}
+
+// DisplayValue renders a setting's value for people: a slider's number gets
+// its unit ("60 min"); anything else, including SliderNever, is shown as is.
+func DisplayValue(s *Setting, v string) string {
+	if s.Control != ControlSlider || s.Slider == nil || s.Slider.Unit == "" {
+		return v
+	}
+	if _, err := strconv.ParseFloat(v, 64); err != nil {
+		return v
+	}
+	return v + " " + s.Slider.Unit
+}
+
 // AdjustSlider steps a slider setting by dir (±1) steps, clamped to its range
 // and snapped to its step size. Non-sliders and unparseable values return cur.
 func AdjustSlider(s *Setting, cur string, dir int) string {
@@ -65,17 +91,27 @@ func AdjustSlider(s *Setting, cur string, dir int) string {
 	if s.Control != ControlSlider || r == nil {
 		return cur
 	}
-	val, err := strconv.ParseFloat(cur, 64)
-	if err != nil {
+	start := cur
+	if _, err := strconv.ParseFloat(start, 64); err != nil && !(r.Never && start == SliderNever) {
 		// An undetectable current value starts from the recommended one.
-		val, err = strconv.ParseFloat(s.Default, 64)
-		if err != nil {
-			return cur
+		start = s.Default
+	}
+	if r.Never && start == SliderNever {
+		if dir > 0 {
+			return FormatSliderVal(r.Min, r.Step)
 		}
+		return SliderNever
+	}
+	val, err := strconv.ParseFloat(start, 64)
+	if err != nil {
+		return cur
 	}
 	val += float64(dir) * r.Step
 	val = math.Round(val/r.Step) * r.Step
 	if val < r.Min {
+		if r.Never {
+			return SliderNever
+		}
 		val = r.Min
 	}
 	if val > r.Max {

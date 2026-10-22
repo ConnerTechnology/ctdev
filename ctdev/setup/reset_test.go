@@ -20,7 +20,7 @@ func TestResetLinuxDefaultsDryRun(t *testing.T) {
 		t.Error("expected DRY-RUN in output")
 	}
 	// Should mention the major categories being reset
-	for _, keyword := range []string{"Power", "Screensaver", "Keyboard", "GRUB"} {
+	for _, keyword := range []string{"Power", "Screensaver", "Keyboard", "boot settings"} {
 		if !strings.Contains(output, keyword) {
 			t.Errorf("expected %q in dry-run output", keyword)
 		}
