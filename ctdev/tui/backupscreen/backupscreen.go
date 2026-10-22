@@ -2,6 +2,7 @@
 // which backed-up folder you're in, the folder's status, and an arrow-key
 // menu whose unavailable items are dimmed and can't be chosen. Status renders
 // the same header and lines on their own, for output without a terminal.
+// NewAll and Folders are the `ctdev backup --all` screens.
 package backupscreen
 
 import (
@@ -25,6 +26,8 @@ const (
 	StopBackingUp
 	DeleteAll
 	Quit
+	Computers    // under --all
+	EmergencyKit // under --all
 )
 
 // Item is one menu entry.

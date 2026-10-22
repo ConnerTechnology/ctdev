@@ -1,0 +1,80 @@
+package cmd
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/backup"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+)
+
+func runBackupAllBatch(t *testing.T) (string, error) {
+	t.Helper()
+	flagBackupAll = true
+	t.Cleanup(func() { flagBackupAll = false })
+	return runBackupBatch(t)
+}
+
+// Without a terminal and with no destination, --all says how to connect one
+// and writes nothing, here or under ~/.config.
+func TestBackupAllWithoutATerminalOrADestination(t *testing.T) {
+	dir := backupFolderForTest(t)
+	_, err := runBackupAllBatch(t)
+	if err == nil || !strings.Contains(err.Error(), "no backup destination") {
+		t.Errorf("want a failure saying there's no destination, got %v", err)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("--all wrote into the current folder: %v", entries)
+	}
+	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".config", "ctdev")); !os.IsNotExist(err) {
+		t.Errorf("--all wrote under ~/.config/ctdev (%v)", err)
+	}
+}
+
+// Without a terminal, --all prints each destination's header and its
+// folders, grouped by computer.
+func TestBackupAllWithoutATerminalListsTheFolders(t *testing.T) {
+	if _, err := exec.LookPath("restic"); err != nil {
+		if os.Getenv("CI") != "" {
+			t.Fatal("restic is not on PATH; CI must install it before the Go tests")
+		}
+		t.Skip("restic is not installed; install it (ctdev install restic) to run this test")
+	}
+	dir := backupFolderForTest(t)
+	t.Setenv("RESTIC_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+	ctx := context.Background()
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setup, err := m.CreateDestination(ctx, backup.NewDestination{Name: "example-backups", Address: filepath.Join(t.TempDir(), "repo")}, "correct horse example staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := backup.NewConfig("example-backups")
+	if err := m.Configure(ctx, setup.Destination, dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Backup(ctx, setup.Destination, dir, &cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runBackupAllBatch(t)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.HasPrefix(out, "example-backups (local path) · 1 computer · 1 folder · ") {
+		t.Errorf("header = %q", out)
+	}
+	for _, want := range []string{m.Hostname + " (this computer)", "~/Projects/website", "1 backup"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output is missing %q:\n%s", want, out)
+		}
+	}
+}
