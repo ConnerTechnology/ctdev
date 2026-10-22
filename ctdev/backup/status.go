@@ -102,7 +102,10 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 		if s.Scheduled, err = m.scheduled(f.Root, f.Config.ID); err != nil {
 			s.ReadErr = errors.Join(s.ReadErr, err)
 		}
-		if names, _ := m.Destinations(); !contains(names, s.Destination) {
+		if names, err := m.Destinations(); err != nil {
+			// Couldn't list them: that's a read error, not a missing destination.
+			s.ReadErr = errors.Join(s.ReadErr, err)
+		} else if !contains(names, s.Destination) {
 			s.DestinationMissing = true
 		} else if d, err := m.Destination(s.Destination); err != nil {
 			s.ReadErr = errors.Join(s.ReadErr, err)

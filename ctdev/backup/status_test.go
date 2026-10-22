@@ -83,6 +83,25 @@ func TestStatusWithADestinationNotSetUpHere(t *testing.T) {
 	}
 }
 
+// When this computer's destinations can't be listed, that's a read error,
+// not a destination that isn't set up here.
+func TestStatusWhenDestinationsCantBeListed(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	root := exampleFolder(t, m)
+	writeConfig(t, root, NewConfig("example-backups"))
+	if err := os.MkdirAll(m.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A file where the destinations folder should be can't be listed.
+	if err := os.WriteFile(filepath.Join(m.Dir, "destinations"), []byte("example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := m.Status(context.Background(), root)
+	if s.ReadErr == nil || s.DestinationMissing {
+		t.Errorf("read err %v, missing %v; want a read error", s.ReadErr, s.DestinationMissing)
+	}
+}
+
 func TestStatusOfAnUnconfiguredFolderCountsItsOneOffs(t *testing.T) {
 	requireRestic(t)
 	ctx := context.Background()
