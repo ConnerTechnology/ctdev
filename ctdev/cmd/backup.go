@@ -364,12 +364,23 @@ func deleteAllBackups(ctx context.Context, m *backup.Machine, s backup.Status) e
 // stopBackingUp is Stop backing up: after [y/N], the folder's config file is
 // deleted and it comes off this computer's schedule. It optionally deletes
 // the folder's backups too (CTD-87), from every computer, by the folder ID
-// while it's still known; otherwise they're kept.
+// while it's still known; otherwise they're kept. It refuses when it can't
+// see the backups, so the chance to delete them is never silently skipped.
 func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) error {
 	if s.Config == nil {
 		return errors.New("this folder isn't configured, so there's nothing to stop")
 	}
 	where := backup.DisplayPath(m.Home, s.Root)
+	switch {
+	case s.DestinationMissing:
+		return fmt.Errorf("destination %s isn't set up on this computer, so its backups of %s can't be offered for deletion: choose Configure to connect to it first", s.Config.Destination, where)
+	case s.ReadErr != nil:
+		return fmt.Errorf("can't read the backups of %s, so Stop backing up can't offer to delete them: %w", where, s.ReadErr)
+	}
+	d, err := m.Destination(s.Config.Destination)
+	if err != nil {
+		return err
+	}
 	fmt.Println()
 	confirm := backupscreen.NewConfirm("Stop backing up " + where + "?")
 	if err := runScreen(confirm); err != nil {
@@ -380,10 +391,15 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 		return nil
 	}
 
+	// List now, by the folder's ID, and delete exactly what was counted.
+	listed, err := d.Snapshots(ctx, m.Ref(s.Root, s.Config))
+	if err != nil {
+		return err
+	}
 	deleteToo := false
-	if s.HasBackups() && !s.DestinationMissing {
-		count := fmt.Sprintf("all %d backups", s.Backups)
-		if s.Backups == 1 {
+	if len(listed) > 0 {
+		count := fmt.Sprintf("all %d backups", len(listed))
+		if len(listed) == 1 {
 			count = "the only backup"
 		}
 		also := backupscreen.NewConfirm(fmt.Sprintf("Also delete %s of this folder, from every computer?", count))
@@ -404,16 +420,11 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 	}
 
 	if deleteToo {
-		d, err := m.Destination(s.Config.Destination)
-		if err != nil {
-			return err
-		}
-		n, err := m.StopAndDelete(ctx, d, s.Root, *s.Config)
-		if err != nil {
+		if err := m.StopAndDelete(ctx, d, s.Root, listed); err != nil {
 			return err
 		}
 		if !m.Opts.DryRun {
-			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted %d of its backups.", where, n)) + " " + spaceFreed)
+			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted its backups.", where)) + " " + spaceFreed)
 		}
 		return nil
 	}
@@ -425,15 +436,14 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 		return nil
 	}
 	fmt.Println("  " + styles.Success.Render("✓ Stopped backing up "+where+"."))
-	if s.HasBackups() {
-		// The backups keep the folder's ID, which the folder no longer has,
-		// so they no longer list here (CTD-120).
-		kept := fmt.Sprintf("Its %d backups are kept. ctdev backup --all lists them.", s.Backups)
-		if s.Backups == 1 {
-			kept = "Its backup is kept. ctdev backup --all lists it."
+	if len(listed) > 0 {
+		// Name only what exists today: ways back to these backups come with
+		// CTD-123.
+		kept := fmt.Sprintf("Its %d backups are kept under this folder's ID.", len(listed))
+		if len(listed) == 1 {
+			kept = "Its backup is kept under this folder's ID."
 		}
 		fmt.Println("  " + kept)
-		fmt.Println("  To back this folder up again with its history, choose Configure, then 'Connect to an existing folder's backups'.")
 	}
 	return nil
 }

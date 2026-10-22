@@ -32,15 +32,18 @@ func (m *Machine) StopBackingUp(root string) error {
 	return m.removeFolder(root)
 }
 
-// StopAndDelete is StopBackingUp that also forgets every backup with the
-// folder's ID, from every computer. The backups go first, while the ID is
-// still in the config file to find them by. It returns how many it forgot.
-func (m *Machine) StopAndDelete(ctx context.Context, d *Destination, root string, cfg Config) (int, error) {
-	n, err := d.DeleteAll(ctx, Ref{FolderID: cfg.ID})
-	if err != nil {
-		return n, err
+// StopAndDelete is StopBackingUp that also forgets the folder's backups:
+// exactly snaps, the folder's backups from every computer as listed by its ID
+// for the confirmation. They go first, while the config file still holds the
+// ID; if forgetting fails, the folder stays configured and scheduled.
+func (m *Machine) StopAndDelete(ctx context.Context, d *Destination, root string, snaps []Snapshot) error {
+	if err := d.DeleteBackups(ctx, snaps); err != nil {
+		return err
 	}
-	return n, m.StopBackingUp(root)
+	if err := m.StopBackingUp(root); err != nil {
+		return fmt.Errorf("the folder's %d backups were deleted, but stopping backing it up failed: %w", len(snaps), err)
+	}
+	return nil
 }
 
 // Delete forgets one backup. It doesn't prune: the space is freed at the
@@ -49,9 +52,9 @@ func (d *Destination) Delete(ctx context.Context, snap Snapshot) error {
 	return d.forget(ctx, snap.ID)
 }
 
-// DeleteAll forgets every backup of a folder, as Snapshots finds them, and
+// deleteAll forgets every backup of a folder, as Snapshots finds them, and
 // says how many it forgot. Like Delete, it doesn't prune.
-func (d *Destination) DeleteAll(ctx context.Context, ref Ref) (int, error) {
+func (d *Destination) deleteAll(ctx context.Context, ref Ref) (int, error) {
 	snaps, err := d.Snapshots(ctx, ref)
 	if err != nil {
 		return 0, err
@@ -119,15 +122,15 @@ func (d *Destination) forget(ctx context.Context, ids ...string) error {
 // form, which has no colons, so the name is safe on macOS, Windows and SMB.
 const zipTime = "20060102T150405Z"
 
-// ZipName is the name a backup of the folder at root downloads as.
-func ZipName(root string, snap Snapshot) string {
+// zipName is the name a backup of the folder at root downloads as.
+func zipName(root string, snap Snapshot) string {
 	return filepath.Base(root) + "-" + snap.Time.UTC().Format(zipTime) + ".zip"
 }
 
-// DownloadDir is where a zip of the folder at root goes: beside the folder,
+// downloadDir is where a zip of the folder at root goes: beside the folder,
 // or when that is inside a backed-up folder, beside the outermost one, so a
 // download is never itself backed up (CTD-87).
-func DownloadDir(root string) (string, error) {
+func downloadDir(root string) (string, error) {
 	dir := filepath.Dir(root)
 	for {
 		enclosing, err := nearestConfig(dir)
@@ -146,17 +149,17 @@ func DownloadDir(root string) (string, error) {
 }
 
 // Download writes a backup of the folder at root as a zip beside the folder
-// (see DownloadDir) and returns its path. The zip holds the folder's contents
+// (see downloadDir) and returns its path. The zip holds the folder's contents
 // at their relative paths. restic writes it into a temporary file that is
 // linked (or, without hard links, copied) into place once complete, so a zip
 // under the final name is whole,
 // and a file that took the name meanwhile is never overwritten.
 func (m *Machine) Download(ctx context.Context, d *Destination, root string, snap Snapshot) (string, error) {
-	dir, err := DownloadDir(root)
+	dir, err := downloadDir(root)
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, ZipName(root, snap))
+	path := filepath.Join(dir, zipName(root, snap))
 	exists := func() error {
 		return fmt.Errorf("%s already exists: move it away to download this backup again", path)
 	}

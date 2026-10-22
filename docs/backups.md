@@ -140,8 +140,8 @@ backup before it, how long it took, the computer that made it and its short ID. 
   paths inside the folder. It's named after the folder and the backup's time in UTC, with no colons
   so the name is safe everywhere, for example `website-20261022T141500Z.zip`. It goes beside the folder, in
   `~/Projects`, and never inside a backed-up folder: when the folder sits inside another backed-up
-  folder, the zip goes beside the outer one. ctdev doesn't restore; open the zip and copy back what
-  you need.
+  folder, the zip goes beside the outer one. The zip is readable only by you (mode 0600), since it
+  holds the folder's contents. ctdev doesn't restore; open the zip and copy back what you need.
 - **Delete this backup** asks `[y/N]`, then forgets that one backup.
 - **Back** returns to the list.
 
@@ -160,10 +160,12 @@ computer's list. It then asks whether to also delete all the folder's backups, f
 saying yes has you type the folder's name, as Delete all backups does, and forgets every backup with
 the folder's ID before its config file goes.
 
-Otherwise the backups are kept, still tagged with the folder's ID. `ctdev backup` then shows the
-folder as not backed up, and since the folder no longer has that ID, List backups there shows only
-its one-offs. `ctdev backup --all` lists the kept backups. To back the folder up again with its
-history, choose Configure, then "Connect to an existing folder's backups".
+Otherwise ctdev says "Its N backups are kept under this folder's ID." `ctdev backup` then shows
+the folder as not backed up, and since the folder no longer has that ID, List backups there shows
+only its one-offs.
+
+Stop backing up refuses when the destination can't be read or isn't set up on this computer, so the
+chance to delete the backups is never skipped without saying so.
 
 ## Where things are kept
 

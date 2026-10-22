@@ -135,7 +135,7 @@ func TestDeleteAllRemovesOnlyThatFoldersBackups(t *testing.T) {
 	backUp(t, m, d, root, &cfg)
 	backUp(t, m, d, other, &otherCfg)
 
-	n, err := d.DeleteAll(ctx, m.Ref(root, &cfg))
+	n, err := d.deleteAll(ctx, m.Ref(root, &cfg))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,9 +161,9 @@ func TestDeleteAllOfAnUnconfiguredFolderRemovesItsOneOffs(t *testing.T) {
 	backUp(t, m, d, root, nil)
 	backUp(t, m, d, other, &otherCfg)
 
-	n, err := d.DeleteAll(ctx, m.Ref(root, nil))
+	n, err := d.deleteAll(ctx, m.Ref(root, nil))
 	if err != nil || n != 1 {
-		t.Fatalf("DeleteAll() = %d, %v; want 1 one-off deleted", n, err)
+		t.Fatalf("deleteAll() = %d, %v; want 1 one-off deleted", n, err)
 	}
 	if n := countBackups(t, m, d, root, nil); n != 0 {
 		t.Errorf("the folder still has %d one-offs", n)
@@ -287,12 +287,12 @@ func TestStopAndDeleteRemovesTheBackupsFromEveryComputer(t *testing.T) {
 	other, otherCfg := otherFolder(t, m, d)
 	backUp(t, m, d, other, &otherCfg)
 
-	n, err := m.StopAndDelete(ctx, d, root, cfg)
-	if err != nil {
-		t.Fatal(err)
+	listed, err := d.Snapshots(ctx, m.Ref(root, &cfg))
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("listed %d (%v), want both computers' backups", len(listed), err)
 	}
-	if n != 2 {
-		t.Errorf("deleted %d backups, want both computers'", n)
+	if err := m.StopAndDelete(ctx, d, root, listed); err != nil {
+		t.Fatal(err)
 	}
 	if left := countBackups(t, m, d, root, &cfg); left != 0 {
 		t.Errorf("%d backups with the folder's ID are left", left)
@@ -360,9 +360,9 @@ func TestANewFolderAtAMovedFoldersOldPathLeavesItsBackupsAlone(t *testing.T) {
 	if err != nil || len(snaps) != 1 || snaps[0].ID != oneOff.ID {
 		t.Fatalf("the new folder lists %v (%v), want only its one-off", snaps, err)
 	}
-	n, err := d.DeleteAll(ctx, newRef)
+	n, err := d.deleteAll(ctx, newRef)
 	if err != nil || n != 1 {
-		t.Fatalf("DeleteAll() = %d, %v; want only the one-off", n, err)
+		t.Fatalf("deleteAll() = %d, %v; want only the one-off", n, err)
 	}
 	if n := countBackups(t, m, d, moved, &cfg); n != 2 {
 		t.Errorf("the moved folder has %d backups, want its 2 untouched", n)

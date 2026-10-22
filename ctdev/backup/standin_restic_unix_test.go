@@ -115,6 +115,64 @@ func TestDownloadWithoutHardLinksNeverOverwritesEither(t *testing.T) {
 // The weekly data check holds the repository's exclusive lock, so reading a
 // folder's backups waits for it rather than failing (CTD-87). A stand-in
 // restic logs each call's arguments.
+// standinLogging is a stand-in restic that logs each call's arguments to the
+// returned file, answers version, and fails forget.
+func standinLogging(t *testing.T, m *Machine) (d *Destination, log string) {
+	t.Helper()
+	dir := t.TempDir()
+	log = filepath.Join(dir, "restic.log")
+	m.Restic = filepath.Join(dir, "restic")
+	script := `#!/bin/sh
+echo "$*" >> "` + log + `"
+case "$1" in
+version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
+forget) echo "Fatal: example failure" >&2; exit 1 ;;
+esac
+`
+	if err := os.WriteFile(m.Restic, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return &Destination{Name: "example-backups", Address: filepath.Join(dir, "repo"), m: m}, log
+}
+
+// With no backups to measure, restic stats isn't run: given no IDs, it
+// would measure every backup in the destination.
+func TestStoredOfNoBackupsRunsNoRestic(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	d, log := standinLogging(t, m)
+	n, err := d.Stored(context.Background(), nil)
+	if err != nil || n != 0 {
+		t.Fatalf("Stored(nil) = %d, %v; want 0", n, err)
+	}
+	if data, _ := os.ReadFile(log); len(data) != 0 {
+		t.Errorf("restic ran: %s", data)
+	}
+}
+
+// If forgetting the backups fails, Stop doesn't happen: the folder keeps its
+// config file and its place on this computer's list.
+func TestStopAndDeleteWhoseForgetFailsChangesNothing(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	d, _ := standinLogging(t, m)
+	root := exampleFolder(t, m)
+	cfg := NewConfig(d.Name)
+	writeConfig(t, root, cfg)
+	if err := m.addFolder(root, cfg.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	err := m.StopAndDelete(context.Background(), d, root, []Snapshot{{ID: "0123456789abcdef"}})
+	if err == nil {
+		t.Fatal("want the forget's failure")
+	}
+	if _, err := os.Stat(filepath.Join(root, ConfigFileName)); err != nil {
+		t.Errorf("the config file is gone: %v", err)
+	}
+	if on, err := m.scheduled(root, cfg.ID); err != nil || !on {
+		t.Errorf("the folder left this computer's list: %v, %v", on, err)
+	}
+}
+
 func TestReadingBackupsWaitsForTheLock(t *testing.T) {
 	m := testMachine(t, "example-laptop")
 	dir := t.TempDir()
