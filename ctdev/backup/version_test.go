@@ -1,6 +1,9 @@
 package backup
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestResticVersionCheck(t *testing.T) {
 	for out, ok := range map[string]bool{
@@ -14,5 +17,8 @@ func TestResticVersionCheck(t *testing.T) {
 		if err := resticVersionOK(out); (err == nil) != ok {
 			t.Errorf("%q: err = %v, want ok %v", out, err, ok)
 		}
+	}
+	if err := resticVersionOK("restic 0.16.4 compiled with go1.22.2 on linux/amd64"); !strings.Contains(err.Error(), "run ctdev install restic") {
+		t.Errorf("a too-old restic should point at ctdev install restic: %v", err)
 	}
 }

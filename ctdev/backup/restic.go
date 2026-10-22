@@ -79,7 +79,7 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 
 // minRestic is the oldest restic whose JSON output ctdev reads: 0.17 added
 // the summary to `snapshots --json` and the backup's start and end times.
-// Ubuntu 22.04 and 24.04 ship older ones in apt.
+// Ubuntu 22.04 and 24.04 ship older ones in apt; ctdev install restic installs 0.19.1.
 var minRestic = [3]int{0, 17, 0}
 
 // resticChecked caches the version check per resolved binary for the process.
@@ -125,7 +125,7 @@ func resticVersionOK(out string) error {
 	for i := range v {
 		if v[i] != minRestic[i] {
 			if v[i] < minRestic[i] {
-				return fmt.Errorf("restic %d.%d.%d is too old: ctdev needs %d.%d or newer (get it from github.com/restic/restic/releases)",
+				return fmt.Errorf("restic %d.%d.%d is too old: ctdev needs %d.%d or newer: run ctdev install restic",
 					v[0], v[1], v[2], minRestic[0], minRestic[1])
 			}
 			break
