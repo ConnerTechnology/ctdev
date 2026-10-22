@@ -165,6 +165,32 @@ func TestDeleteAllAsksThenHasYouTypeTheFolderName(t *testing.T) {
 	}
 }
 
+// Stop backing up's "also delete" has already asked [y/N], so it goes
+// straight to typing the name.
+func TestTypeNameAsksOnlyForTheName(t *testing.T) {
+	c := NewTypeName("website")
+	view := plain(c.View().Content)
+	if strings.Contains(view, "[y/N]") || !strings.Contains(view, "Type website to confirm:") {
+		t.Errorf("view = %q", view)
+	}
+	send(c, typeText("y")...)
+	send(c, key(tea.KeyEnter))
+	if c.Done() {
+		t.Fatal("y isn't the folder's name")
+	}
+	send(c, typeText("website")...)
+	send(c, key(tea.KeyEnter))
+	if !c.Done() || !c.Confirmed() {
+		t.Errorf("done %v, confirmed %v after typing the name", c.Done(), c.Confirmed())
+	}
+
+	c = NewTypeName("website")
+	send(c, key(tea.KeyEscape))
+	if !c.Done() || c.Confirmed() {
+		t.Errorf("esc: done %v, confirmed %v; want cancelled", c.Done(), c.Confirmed())
+	}
+}
+
 func TestDeleteAllCanBeTypedWithCorrectionsOrCancelled(t *testing.T) {
 	c := NewDeleteAll("~/Projects/website", "website", 2)
 	send(c, typeText("y")...)

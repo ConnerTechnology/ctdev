@@ -270,6 +270,12 @@ func NewDeleteAll(folder, name string, count int) *ConfirmDeleteAll {
 	return &ConfirmDeleteAll{question: fmt.Sprintf("Delete %s of %s?", what, folder), name: name}
 }
 
+// NewTypeName only has you type the folder's name, for a delete whose
+// [y/N] was already asked.
+func NewTypeName(name string) *ConfirmDeleteAll {
+	return &ConfirmDeleteAll{name: name, typing: true}
+}
+
 // Done reports whether the confirmation is finished, either way.
 func (c *ConfirmDeleteAll) Done() bool { return c.done }
 
@@ -326,7 +332,9 @@ func (c *ConfirmDeleteAll) View() tea.View {
 	if c.typing {
 		answer = "y"
 	}
-	b.WriteString("  " + c.question + " " + styles.Dimmed.Render("[y/N]") + " " + answer + "\n")
+	if c.question != "" {
+		b.WriteString("  " + c.question + " " + styles.Dimmed.Render("[y/N]") + " " + answer + "\n")
+	}
 	if c.typing {
 		b.WriteString("  Type " + styles.Value.Render(c.name) + " to confirm: " + c.typed + "\n")
 		if c.flash != "" && !c.done {

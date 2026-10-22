@@ -30,6 +30,18 @@ func (m *Machine) StopBackingUp(root string) error {
 	return nil
 }
 
+// StopAndDelete is StopBackingUp that also forgets every backup with the
+// folder's ID, from every computer. The backups go first, while the ID is
+// still in the config file: once it's gone, the folder's backups can only be
+// found by path and this computer's name. It returns how many it forgot.
+func (m *Machine) StopAndDelete(ctx context.Context, d *Destination, root string, cfg Config) (int, error) {
+	n, err := d.DeleteAll(ctx, Ref{FolderID: cfg.ID})
+	if err != nil {
+		return n, err
+	}
+	return n, m.StopBackingUp(root)
+}
+
 // Delete forgets one backup. It doesn't prune: the space is freed at the
 // destination's next weekly maintenance, which holds the exclusive lock.
 func (d *Destination) Delete(ctx context.Context, snap Snapshot) error {

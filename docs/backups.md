@@ -154,8 +154,14 @@ of its path. After any delete, ctdev says "Space is freed at the next weekly mai
 ## Stop backing up
 
 Stop backing up asks `[y/N]`, deletes the folder's `.ctdev-backup.json` and takes it off this
-computer's list. The folder's backups are kept: `ctdev backup` then shows it as not backed up, with
-its backups under List backups, and Delete all backups removes them.
+computer's list. It then asks whether to also delete all the folder's backups, from every computer;
+saying yes has you type the folder's name, as Delete all backups does, and forgets every backup with
+the folder's ID before its config file goes.
+
+Otherwise the backups are kept. `ctdev backup` then shows the folder as not backed up. With no
+config file there's no folder ID to find its backups by, so List backups and Delete all backups
+there see only the backups this computer made of the folder's path; other computers' stay in the
+destination.
 
 ## Where things are kept
 

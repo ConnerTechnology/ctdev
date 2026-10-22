@@ -260,6 +260,66 @@ func TestStopBackingUpKeepsTheBackups(t *testing.T) {
 	}
 }
 
+// sharedFolder gives the folder's ID backups from two computers: this one
+// and an example desktop where a clone of the folder is backed up.
+func sharedFolder(t *testing.T, m *Machine, d *Destination) (string, Config) {
+	t.Helper()
+	root, cfg := configuredExample(t, m, d)
+	backUp(t, m, d, root, &cfg)
+	desktop := testMachine(t, "example-desktop")
+	clone := exampleFolder(t, desktop)
+	writeConfig(t, clone, cfg)
+	backUp(t, desktop, d, clone, &cfg)
+	if n := countBackups(t, m, d, root, &cfg); n != 2 {
+		t.Fatalf("the folder has %d backups, want one from each computer", n)
+	}
+	return root, cfg
+}
+
+func TestStopAndDeleteRemovesTheBackupsFromEveryComputer(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	root, cfg := sharedFolder(t, m, d)
+	other, otherCfg := otherFolder(t, m, d)
+	backUp(t, m, d, other, &otherCfg)
+
+	n, err := m.StopAndDelete(ctx, d, root, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("deleted %d backups, want both computers'", n)
+	}
+	if left := countBackups(t, m, d, root, &cfg); left != 0 {
+		t.Errorf("%d backups with the folder's ID are left", left)
+	}
+	if _, err := os.Stat(filepath.Join(root, ConfigFileName)); !os.IsNotExist(err) {
+		t.Errorf("the config file is still there (%v)", err)
+	}
+	if on, err := m.scheduled(root, cfg.ID); err != nil || on {
+		t.Errorf("still on this computer's list: %v, %v", on, err)
+	}
+	if n := countBackups(t, m, d, other, &otherCfg); n != 1 {
+		t.Errorf("the other folder has %d backups, want its 1 untouched", n)
+	}
+}
+
+func TestStopWithoutDeletingKeepsEveryComputersBackups(t *testing.T) {
+	requireRestic(t)
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	root, cfg := sharedFolder(t, m, d)
+
+	if err := m.StopBackingUp(root); err != nil {
+		t.Fatal(err)
+	}
+	if n := countBackups(t, m, d, root, &cfg); n != 2 {
+		t.Errorf("%d backups with the folder's ID are left, want both computers'", n)
+	}
+}
+
 // zipNames lists the entries in the zip at path.
 func zipNames(t *testing.T, path string) []string {
 	t.Helper()

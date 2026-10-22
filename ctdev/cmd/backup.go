@@ -66,7 +66,7 @@ func runBackup(cmd *cobra.Command, _ []string) error {
 		case backupscreen.ListBackups:
 			err = listBackups(ctx, m, s)
 		case backupscreen.StopBackingUp:
-			err = stopBackingUp(m, s)
+			err = stopBackingUp(ctx, m, s)
 		case backupscreen.DeleteAll:
 			err = deleteAllBackups(ctx, m, s)
 		default:
@@ -351,8 +351,10 @@ func deleteAllBackups(ctx context.Context, m *backup.Machine, s backup.Status) e
 }
 
 // stopBackingUp is Stop backing up: after [y/N], the folder's config file is
-// deleted and it comes off this computer's schedule. Its backups are kept.
-func stopBackingUp(m *backup.Machine, s backup.Status) error {
+// deleted and it comes off this computer's schedule. It optionally deletes
+// the folder's backups too (CTD-87), from every computer, by the folder ID
+// while it's still known; otherwise they're kept.
+func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) error {
 	if s.Config == nil {
 		return errors.New("this folder isn't configured, so there's nothing to stop")
 	}
@@ -366,12 +368,61 @@ func stopBackingUp(m *backup.Machine, s backup.Status) error {
 		fmt.Println("  Nothing was changed.")
 		return nil
 	}
+
+	deleteToo := false
+	if s.HasBackups() && !s.DestinationMissing {
+		count := fmt.Sprintf("all %d backups", s.Backups)
+		if s.Backups == 1 {
+			count = "the only backup"
+		}
+		also := backupscreen.NewConfirm(fmt.Sprintf("Also delete %s of this folder, from every computer?", count))
+		if err := runScreen(also); err != nil {
+			return err
+		}
+		if also.Confirmed() {
+			name := backupscreen.NewTypeName(filepath.Base(s.Root))
+			if err := runScreen(name); err != nil {
+				return err
+			}
+			if !name.Confirmed() {
+				fmt.Println("  Nothing was changed.")
+				return nil
+			}
+			deleteToo = true
+		}
+	}
+
+	if deleteToo {
+		d, err := m.Destination(s.Config.Destination)
+		if err != nil {
+			return err
+		}
+		n, err := m.StopAndDelete(ctx, d, s.Root, *s.Config)
+		if err != nil {
+			return err
+		}
+		if !m.Opts.DryRun {
+			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted %d of its backups.", where, n)) + " " + spaceFreed)
+		}
+		return nil
+	}
+
 	if err := m.StopBackingUp(s.Root); err != nil {
 		return err
 	}
-	if !m.Opts.DryRun {
-		fmt.Println("  " + styles.Success.Render("✓ Stopped backing up "+where+"."))
-		fmt.Println("  Its backups are kept; choose Delete all backups to remove them.")
+	if m.Opts.DryRun {
+		return nil
+	}
+	fmt.Println("  " + styles.Success.Render("✓ Stopped backing up "+where+"."))
+	if s.HasBackups() {
+		// Without its config the folder has no ID, so from here its backups
+		// are found by path and this computer's name only (CTD-120).
+		kept := fmt.Sprintf("Its %d backups are", s.Backups)
+		if s.Backups == 1 {
+			kept = "Its backup is"
+		}
+		fmt.Printf("  %s kept in %s. From now on, List backups and Delete all backups\n", kept, s.Config.Destination)
+		fmt.Println("  here see only the ones this computer made of " + where + ".")
 	}
 	return nil
 }
