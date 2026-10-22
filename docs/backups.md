@@ -175,7 +175,8 @@ the folder as not backed up, and since the folder no longer has that ID, List ba
 only its one-offs.
 
 Stop backing up refuses when the destination can't be read or isn't set up on this computer, so the
-chance to delete the backups is never skipped without saying so.
+chance to delete the backups is never skipped without saying so. When it takes the last folder off
+this computer's list, it also removes the hourly runner ([Scheduled backups](#scheduled-backups)).
 
 ## Scheduled backups
 
@@ -196,8 +197,12 @@ Configure again after it finishes. If systemd won't enable the timer, Configure 
 units were there before: a scheduler that worked keeps working, and on a computer that had none the
 status shows "not scheduled on this computer". Only one scheduled run happens at a time; one that
 starts while another is running exits without doing anything. Configure and Back up now never wait
-for a scheduled backup to finish. Every hour, the runner backs up each folder on this computer's list whose schedule is due: an hour, a day or a week after its
-last successful backup. A computer that was asleep catches up on its next run. Each folder's result
+for a scheduled backup to finish.
+
+Every hour, the runner backs up each folder on this computer's list whose schedule is due: an hour,
+a day or a week after its last successful backup. A computer that was asleep catches up on its next
+run. After each backup it applies the folder's keep rules ([Retention](#retention)); if that fails,
+the backup still counts, but the failure is the run's error and shows in red. Each folder's result
 is recorded in `state.json`.
 
 A listed folder that has been moved or deleted, or whose `.ctdev-backup.json` is gone or now holds

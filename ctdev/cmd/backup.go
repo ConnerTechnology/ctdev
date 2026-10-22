@@ -55,6 +55,19 @@ func init() {
 // so they never touch this computer's real user timers or launch agents.
 var installScheduler = (*backup.Machine).InstallScheduler
 
+// removeSchedulerIfIdle is Stop backing up's scheduler removal, replaced by
+// tests for the same reason.
+var removeSchedulerIfIdle = (*backup.Machine).RemoveSchedulerIfIdle
+
+// unscheduleIfIdle removes this computer's hourly runner once Stop backing
+// up has taken the last folder off its list. The folder is already stopped,
+// so a failure here only warns.
+func unscheduleIfIdle(ctx context.Context, m *backup.Machine) {
+	if _, err := removeSchedulerIfIdle(m, ctx); err != nil {
+		fmt.Println("  " + styles.Warning.Render("Couldn't remove the hourly backup runner: "+err.Error()))
+	}
+}
+
 // scheduledNotifier is run-scheduled's notifier; nil is the desktop's.
 // Tests set it so they never pop up a real notification.
 var scheduledNotifier backup.Notifier
@@ -228,8 +241,8 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 // weekly maintenance's prune does (CTD-87).
 const spaceFreed = "Space is freed at the next weekly maintenance."
 
-// runScreen runs a Bubble Tea screen to completion.
-func runScreen(screen tea.Model) error {
+// runScreen runs a Bubble Tea screen to completion; tests answer it instead.
+var runScreen = func(screen tea.Model) error {
 	_, err := tea.NewProgram(screen).Run()
 	return err
 }
@@ -469,6 +482,7 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 		if err := m.StopAndDelete(ctx, d, s.Root, listed); err != nil {
 			return err
 		}
+		unscheduleIfIdle(ctx, m)
 		if !m.Opts.DryRun {
 			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted its backups.", where)) + " " + spaceFreed)
 		}
@@ -478,6 +492,7 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 	if err := m.StopBackingUp(s.Root); err != nil {
 		return err
 	}
+	unscheduleIfIdle(ctx, m)
 	if m.Opts.DryRun {
 		return nil
 	}

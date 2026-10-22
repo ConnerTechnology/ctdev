@@ -103,7 +103,7 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 			res.Outcome, res.Err = Failed, err
 			return res
 		}
-		res.Outcome = BackedUp
+		res.Outcome, res.Err = BackedUp, d.ApplyRetention(ctx, cfg)
 		return res
 	}
 	if last.Missing {
@@ -137,9 +137,17 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 		return res
 	}
 	res.Outcome = BackedUp
-	// CTD-120: apply the folder's retention (cfg.Keep) here, after each
-	// successful backup and to this folder's backups only, once that ticket
-	// adds the package function for it.
+	// The folder's keep rules apply after each successful backup, to its own
+	// backups only (CTD-87). A failure doesn't undo the backup, which stays
+	// the last success, but it is the run's error, so the folder shows as
+	// failed until a run thins its backups.
+	if err := d.ApplyRetention(ctx, cfg); err != nil {
+		res.Err = fmt.Errorf("backed up, but applying the keep rules failed: %w", err)
+		msg := res.Err.Error()
+		if rerr := m.updateRun(e.Path, func(r *Run) { r.Error = msg }); rerr != nil {
+			res.Err = errors.Join(res.Err, rerr)
+		}
+	}
 	return res
 }
 
