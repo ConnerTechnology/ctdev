@@ -244,7 +244,7 @@ func Status(s backup.Status, home string) string {
 	if s.Last != nil && s.Last.Deferred != "" {
 		// A locked destination isn't a failure (coordinator, CTD-122
 		// review): the next hour tries again, so it's only noted.
-		fmt.Fprintf(&b, "  %s %s\n", label.Render(""), styles.Dimmed.Render("waiting: destination busy (weekly maintenance)"))
+		fmt.Fprintf(&b, "  %s %s\n", label.Render(""), styles.Dimmed.Render("waiting: destination busy"))
 	}
 
 	if s.Config != nil {
@@ -291,10 +291,14 @@ func Status(s backup.Status, home string) string {
 	if s.DataCheckRead {
 		// The destination's weekly maintenance, whichever computer ran it.
 		switch c := s.DataCheck; {
+		case c != nil && c.Failed():
+			row("Data check", c.Finished.Local().Format("Jan 2")+" · "+c.Reason(), true)
+		case s.DataCheckOverdue && c == nil:
+			warn("Data check", "overdue (never run)")
+		case s.DataCheckOverdue:
+			warn("Data check", "overdue (last "+c.Finished.Local().Format("Jan 2")+")")
 		case c == nil:
 			row("Data check", "not run yet", false)
-		case c.Failed():
-			row("Data check", c.Finished.Local().Format("Jan 2")+" · "+c.Reason(), true)
 		default:
 			row("Data check", c.Finished.Local().Format("Jan 2")+" · OK", false)
 		}

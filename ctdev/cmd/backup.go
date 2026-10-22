@@ -100,8 +100,8 @@ func runBackupScheduled(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(out, line)
 	}
 	for _, r := range maint {
-		if r.Skipped > 0 {
-			fmt.Fprintf(out, "%s: skipped %d maintenance markers that couldn't be read\n", r.Destination, r.Skipped)
+		if r.RemovedUnreadable > 0 {
+			fmt.Fprintf(out, "%s: removed %d maintenance markers that couldn't be read\n", r.Destination, r.RemovedUnreadable)
 		}
 		// Only a run worth a line in the journal: one this computer made,
 		// or one that couldn't be checked for.
@@ -266,7 +266,10 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 	if snap.Warning != "" {
 		fmt.Println("  " + styles.Warning.Render("Note: "+snap.Warning+"."))
 	}
-	if retainErr != nil {
+	switch {
+	case errors.Is(retainErr, backup.ErrDestinationBusy):
+		fmt.Println("  " + styles.Dimmed.Render("The destination got busy, so the keep rules apply at the next scheduled run."))
+	case retainErr != nil:
 		fmt.Println("  " + styles.Warning.Render("Applying the keep rules failed, so older backups weren't thinned: "+retainErr.Error()))
 	}
 	return nil
@@ -274,7 +277,7 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 
 // errDestinationBusy is Back up now's answer when the destination stayed
 // locked for its minute's wait.
-var errDestinationBusy = errors.New("The destination is busy (another computer's weekly maintenance or backup). Try again in a few minutes.")
+var errDestinationBusy = errors.New("The destination is busy (weekly maintenance or a delete holds its lock). Try again in a few minutes.")
 
 // spaceFreed is said after every delete: forget doesn't free space, the
 // weekly maintenance's prune does (CTD-87), so it says when that's due, as

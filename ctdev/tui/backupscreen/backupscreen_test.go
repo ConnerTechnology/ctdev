@@ -299,9 +299,9 @@ func TestStatusOfAFailedBackup(t *testing.T) {
 // text under Last backup, not shown as a failure.
 func TestStatusOfADeferredBackup(t *testing.T) {
 	s := configured()
-	s.Last.Deferred = "the destination is busy: another computer holds its lock"
+	s.Last.Deferred = "the destination is busy: something else holds its lock"
 	got := Status(s, home)
-	const note = "waiting: destination busy (weekly maintenance)"
+	const note = "waiting: destination busy"
 	if !strings.Contains(plain(got), "Last backup    Oct 21, 9:12 PM · succeeded\n                 "+note+"\n") {
 		t.Errorf("status:\n%s", plain(got))
 	}
@@ -334,6 +334,27 @@ func TestStatusDataCheckLine(t *testing.T) {
 	}
 	if !strings.Contains(got, styles.Error.Render(want)) {
 		t.Errorf("a failed data check isn't in red:\n%q", got)
+	}
+}
+
+// A data check more than two weeks old, or none in two weeks, shows as
+// overdue in yellow; a failure still shows in red.
+func TestStatusOfAnOverdueDataCheck(t *testing.T) {
+	s := configured()
+	s.DataCheckRead, s.DataCheckOverdue = true, true
+	got := Status(s, home)
+	if !strings.Contains(got, styles.Warning.Render("overdue (never run)")) {
+		t.Errorf("status:\n%q", got)
+	}
+	at := time.Date(2026, 10, 2, 3, 0, 0, 0, time.Local)
+	s.DataCheck = &backup.DataCheck{Started: at, Finished: at, Slice: 3, OK: true}
+	got = Status(s, home)
+	if !strings.Contains(plain(got), "  Data check     overdue (last Oct 2)\n") || !strings.Contains(got, styles.Warning.Render("overdue (last Oct 2)")) {
+		t.Errorf("status:\n%q", got)
+	}
+	s.DataCheck.OK, s.DataCheck.Step, s.DataCheck.Error = false, backup.StepCheck, "damaged pack 0123abcd"
+	if got := Status(s, home); !strings.Contains(got, styles.Error.Render("Oct 2 · failed at check: damaged pack 0123abcd")) {
+		t.Errorf("a failure that's also old isn't red:\n%q", got)
 	}
 }
 

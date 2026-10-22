@@ -298,16 +298,12 @@ func doctorDataCheckFacts(m *backup.Machine) ([]diagnose.BackupDataCheck, string
 	}
 	out := make([]diagnose.BackupDataCheck, 0, len(checks))
 	for _, c := range checks {
-		out = append(out, diagnose.BackupDataCheck{
-			Destination: c.Destination,
-			Finished:    c.Check.Finished,
-			Host:        c.Check.Host,
-			Slice:       c.Check.Slice,
-			Slices:      backup.Slices,
-			OK:          c.Check.OK,
-			Step:        c.Check.Step,
-			Error:       c.Check.Error,
-		})
+		f := diagnose.BackupDataCheck{Destination: c.Destination, Slices: backup.Slices, Overdue: c.Overdue}
+		if c.Check != nil {
+			f.Finished, f.Host, f.Slice = c.Check.Finished, c.Check.Host, c.Check.Slice
+			f.OK, f.Step, f.Error = c.Check.OK, c.Check.Step, c.Check.Error
+		}
+		out = append(out, f)
 	}
 	return out, ""
 }

@@ -81,7 +81,10 @@ func (m *Machine) Health() ([]FolderHealth, error) {
 // computer's hourly runner last read it from the destination.
 type DestinationCheck struct {
 	Destination string
-	Check       DataCheck
+	Check       *DataCheck // nil when none has run
+	// Overdue means the last check is more than two weeks old, or none has
+	// run in that time.
+	Overdue bool
 }
 
 // DataChecks is the last maintenance result of each destination a folder on
@@ -98,19 +101,47 @@ func (m *Machine) DataChecks() ([]DestinationCheck, error) {
 	if err != nil {
 		return nil, err
 	}
-	used := map[string]bool{}
-	for _, e := range folders {
-		if e.Destination != "" {
-			used[e.Destination] = true
-		}
-	}
+	oldest := oldestAdded(folders)
+	now := m.now()
 	var out []DestinationCheck
-	for _, name := range sortedKeys(used) {
-		if s, ok := states[name]; ok {
-			out = append(out, DestinationCheck{Destination: name, Check: s.DataCheck})
+	for _, name := range sortedKeys(oldest) {
+		c := DestinationCheck{Destination: name, Check: states[name].DataCheck}
+		c.Overdue = dataCheckOverdue(c.Check, oldest[name], now)
+		if c.Check != nil || c.Overdue {
+			out = append(out, c)
 		}
 	}
 	return out, nil
+}
+
+// dataCheckStale is how old a destination's last data check can get before
+// it's overdue: two weekly maintenances missed.
+const dataCheckStale = 14 * 24 * time.Hour
+
+// dataCheckOverdue reports whether a destination's data check is overdue at
+// now: its last one, last, finished more than two weeks ago, or none has
+// run though its oldest scheduled folder here was added more than two weeks
+// ago.
+func dataCheckOverdue(last *DataCheck, oldest, now time.Time) bool {
+	if last != nil {
+		return now.Sub(last.Finished) > dataCheckStale
+	}
+	return !oldest.IsZero() && now.Sub(oldest) > dataCheckStale
+}
+
+// oldestAdded is when the first folder on the list that uses each
+// destination was added, by destination name.
+func oldestAdded(folders []folderEntry) map[string]time.Time {
+	oldest := map[string]time.Time{}
+	for _, e := range folders {
+		if e.Destination == "" {
+			continue
+		}
+		if t, ok := oldest[e.Destination]; !ok || (!e.Added.IsZero() && (t.IsZero() || e.Added.Before(t))) {
+			oldest[e.Destination] = e.Added
+		}
+	}
+	return oldest
 }
 
 // sortedKeys is a map's keys in order.

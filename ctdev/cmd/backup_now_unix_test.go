@@ -108,7 +108,7 @@ func TestBackUpNowSaysWhenTheDestinationIsBusy(t *testing.T) {
 	if !errors.Is(err, errDestinationBusy) {
 		t.Fatalf("err = %v, want the busy message", err)
 	}
-	if want := "The destination is busy (another computer's weekly maintenance or backup). Try again in a few minutes."; err.Error() != want {
+	if want := "The destination is busy (weekly maintenance or a delete holds its lock). Try again in a few minutes."; err.Error() != want {
 		t.Errorf("message = %q, want %q", err, want)
 	}
 	if s := m.Status(ctx, dir); s.Last == nil || s.Last.Failed() || s.Last.Deferred == "" {

@@ -70,11 +70,14 @@ type BackupDataCheck struct {
 	OK          bool
 	Step        string // the step that failed
 	Error       string // why
+	// Overdue means the last check (none, when Finished is zero) is more
+	// than two weeks old.
+	Overdue bool
 }
 
 func dataCheckResult(c BackupDataCheck) Result {
 	day := c.Finished.Local().Format("Jan 2")
-	if !c.OK {
+	if !c.Finished.IsZero() && !c.OK {
 		var advice string
 		switch c.Step {
 		case "check":
@@ -85,6 +88,14 @@ func dataCheckResult(c BackupDataCheck) Result {
 			advice = "Freeing deleted backups' space in " + c.Destination + " failed, so the destination keeps it for now. The weekly maintenance tries again a week after this one."
 		}
 		return failf(advice, "%s · failed at %s: %s", day, c.Step, c.Error)
+	}
+	if c.Overdue {
+		last := "never run"
+		if !c.Finished.IsZero() {
+			last = "last " + day
+		}
+		return warnf("The weekly maintenance hasn't finished on "+c.Destination+" in two weeks. Run 'ctdev backup' in a folder that backs up there: it shows whether backups wait on a busy destination or the runner isn't scheduled.",
+			"overdue (%s)", last)
 	}
 	return okf("%s · OK · read slice %d of %d · by %s", day, c.Slice, c.Slices, c.Host)
 }

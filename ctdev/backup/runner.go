@@ -171,6 +171,12 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 	}
 	if !Due(cfg.Schedule, last, m.now()) {
 		res.Outcome = NotDue
+		if last.RetentionDeferred {
+			// Keep rules a locked destination put off apply now.
+			if d, err := m.Destination(cfg.Destination); err == nil {
+				res.RetentionErr = retentionFailure(m.Retain(ctx, d, e.Path, cfg))
+			}
+		}
 		return res
 	}
 	d, err := m.Destination(cfg.Destination)
@@ -198,8 +204,18 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 	// The folder's keep rules apply after each successful backup, to its own
 	// backups only (CTD-87). A failure doesn't undo the backup, which stays
 	// the last success: it's recorded apart, as Back up now records it.
-	res.RetentionErr = m.Retain(ctx, d, e.Path, cfg)
+	res.RetentionErr = retentionFailure(m.Retain(ctx, d, e.Path, cfg))
 	return res
+}
+
+// retentionFailure is err from Retain as a scheduled run reports it: a
+// locked destination put the keep rules off to the next run, which isn't a
+// failure.
+func retentionFailure(err error) error {
+	if errors.Is(err, ErrDestinationBusy) {
+		return nil
+	}
+	return err
 }
 
 // findListed reads the config of a listed folder, or says why it's missing.
@@ -256,7 +272,7 @@ func (m *Machine) notifyChanges(ctx context.Context, folders []folderEntry) erro
 	}
 	for _, name := range sortedKeys(dests) {
 		s := dests[name]
-		failing := s.DataCheck.Failed()
+		failing := s.DataCheck != nil && s.DataCheck.Failed()
 		if failing == s.Alerted {
 			continue
 		}

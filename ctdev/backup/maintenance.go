@@ -88,18 +88,19 @@ type marker struct {
 
 // markers lists the destination's maintenance markers, oldest first. A
 // marker whose record can't be read, such as one a newer ctdev wrote, is
-// left out and counted in skipped, rather than stopping every run for good.
-func (d *Destination) markers(ctx context.Context) (ms []marker, skipped int, err error) {
+// left out and its ID returned in unreadable, rather than stopping every
+// run for good; a finished run removes it.
+func (d *Destination) markers(ctx context.Context) (ms []marker, unreadable []string, err error) {
 	out, err := d.restic(ctx, d.asComputer("", "snapshots", "--json", "--retry-lock", retryLock, "--tag", tagMarker))
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 	var raw []struct {
 		ID   string   `json:"id"`
 		Tags []string `json:"tags"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
-		return nil, 0, fmt.Errorf("read restic's snapshot list: %w", err)
+		return nil, nil, fmt.Errorf("read restic's snapshot list: %w", err)
 	}
 	for _, r := range raw {
 		read := false
@@ -119,13 +120,13 @@ func (d *Destination) markers(ctx context.Context) (ms []marker, skipped int, er
 			break
 		}
 		if !read {
-			skipped++
+			unreadable = append(unreadable, r.ID)
 		}
 	}
 	slices.SortFunc(ms, func(a, b marker) int {
 		return cmp.Or(a.Started.Compare(b.Started), cmp.Compare(a.ID, b.ID))
 	})
-	return ms, skipped, nil
+	return ms, unreadable, nil
 }
 
 // lastResult is the newest finished run among ms, or nil.
@@ -140,15 +141,16 @@ func lastResult(ms []marker) *marker {
 }
 
 // activeClaims are the runs among ms that started after the last result
-// and haven't finished or been abandoned, earliest first. A claim by host is
-// left out: this computer runs one maintenance at a time, under its run
-// lock, so an older claim of its own was left by a run that stopped, such
-// as one whose claim couldn't be removed.
-func activeClaims(ms []marker, now time.Time, host string) []marker {
+// and haven't finished or been abandoned, earliest first. This computer's
+// own claims, by snapshot ID, are left out: it runs one maintenance at a
+// time, under its run lock, so an older claim of its own was left by a run
+// that stopped, such as one whose claim couldn't be removed. Going by ID
+// rather than hostname keeps two computers with the same name apart.
+func activeClaims(ms []marker, now time.Time, own []string) []marker {
 	last := lastResult(ms)
 	var claims []marker
 	for _, mk := range ms {
-		if !mk.Finished.IsZero() || now.Sub(mk.Started) >= claimTTL || mk.Host == host {
+		if !mk.Finished.IsZero() || now.Sub(mk.Started) >= claimTTL || slices.Contains(own, mk.ID) {
 			continue
 		}
 		if last != nil && !mk.Started.After(last.Started) {
@@ -162,11 +164,11 @@ func activeClaims(ms []marker, now time.Time, host string) []marker {
 // maintenanceDue reports whether maintenance should start at now: the last
 // run started 7 or more days ago, or there's none, and no other computer is
 // running one.
-func maintenanceDue(ms []marker, now time.Time, host string) bool {
+func maintenanceDue(ms []marker, now time.Time, own []string) bool {
 	if last := lastResult(ms); last != nil && now.Sub(last.Started) < maintenanceInterval {
 		return false
 	}
-	return len(activeClaims(ms, now, host)) == 0
+	return len(activeClaims(ms, now, own)) == 0
 }
 
 // nextSlice is the slice after the last result's, wrapping after Slices.
@@ -244,10 +246,10 @@ type Maintenance struct {
 	// destination for prune or check, so it recorded nothing and retries
 	// next hour.
 	Busy bool
-	// Skipped counts markers in the destination that couldn't be read and
-	// were left out.
-	Skipped int
-	Err     error // the run failed, or the marker couldn't be read or written
+	// RemovedUnreadable counts markers that couldn't be read, which this
+	// run's cleanup removed.
+	RemovedUnreadable int
+	Err               error // the run failed, or the marker couldn't be read or written
 }
 
 // maintainIfDue runs d's weekly maintenance when it's due and this computer
@@ -256,35 +258,44 @@ type Maintenance struct {
 func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []listedFolder) (res Maintenance) {
 	res.Destination = d.Name
 	defer func() {
-		// A marker read or write that found the destination locked is the
-		// same as a busy prune or check: nothing to report, retry next hour.
-		if errors.Is(res.Err, ErrDestinationBusy) {
+		// Before the run starts, a marker read or write, or the claim's
+		// removal, that found the destination locked is the same as a busy
+		// prune or check: nothing to report, retry next hour. Once it has
+		// run, the result stands, and a locked destination while recording
+		// it is an error like any other.
+		if !res.Ran && errors.Is(res.Err, ErrDestinationBusy) {
 			res.Busy, res.Err = true, nil
 		}
 	}()
-	ms, skipped, err := d.markers(ctx)
-	res.Skipped = skipped
+	ms, _, err := d.markers(ctx)
 	if err != nil {
 		res.Err = err
 		return res
 	}
 	res.Check = resultOf(ms)
-	if !maintenanceDue(ms, m.now(), m.Hostname) {
-		return res
-	}
-	// After a lost race this computer waits a random 0 to 2 hours more, so
-	// two computers that keep finding it due at the same hour drift apart.
 	states, err := m.destinationStates()
 	if err != nil {
 		res.Err = err
 		return res
 	}
+	own := states[d.Name].Claims
+	if !maintenanceDue(ms, m.now(), own) {
+		return res
+	}
+	// After a lost race this computer waits a random 0 to 2 hours more, so
+	// two computers that keep finding it due at the same hour drift apart.
 	if m.now().Before(states[d.Name].RetryAfter) {
 		return res
 	}
 	claim := DataCheck{Host: m.Hostname, Started: m.now(), Slice: nextSlice(ms)}
 	claimID, err := d.writeMarker(ctx, claim)
 	if err != nil {
+		res.Err = err
+		return res
+	}
+	// This computer's claims are known by ID, not hostname, until removed.
+	own = append(own, claimID)
+	if err := m.setOwnClaims(d.Name, own); err != nil {
 		res.Err = err
 		return res
 	}
@@ -296,16 +307,15 @@ func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []l
 	// than this one, every claimant backs off and retries later
 	// (coordinator, CTD-122 review), so no two run at once, and the 7-day
 	// window leaves days of hourly runs to catch up in.
-	if ms, _, err = d.markers(ctx); err != nil {
+	ms, unreadable, err := d.markers(ctx)
+	if err != nil {
 		res.Err = err
 		return res
 	}
-	contended := len(activeClaims(ms, m.now(), m.Hostname)) > 0
+	contended := len(activeClaims(ms, m.now(), own)) > 0
 	if last := lastResult(ms); (last != nil && m.now().Sub(last.Started) < maintenanceInterval) || contended {
 		res.Check = resultOf(ms)
-		if err := d.forget(ctx, claimID); err != nil {
-			res.Err = fmt.Errorf("remove this computer's claim on the maintenance: %w", err)
-		}
+		res.Err = m.dropClaim(ctx, d, claimID, own)
 		if contended {
 			wait := m.jitter()
 			if err := m.updateDestination(d.Name, func(s *DestinationState) { s.RetryAfter = m.now().Add(wait) }); err != nil {
@@ -322,19 +332,23 @@ func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []l
 		// isn't a failed data check (coordinator, CTD-122 review): nothing
 		// is recorded or notified, and the next hour tries again.
 		res.Busy = true
-		if err := d.forget(ctx, claimID); err != nil {
-			res.Err = fmt.Errorf("remove this computer's claim on the maintenance: %w", err)
-		}
+		res.Err = m.dropClaim(ctx, d, claimID, own)
 		return res
 	}
 	res.Ran, res.Check = true, &result
+	var errs []error
+	if result.Failed() {
+		errs = append(errs, errors.New("data check "+result.Reason()))
+	}
 	if _, err := d.writeMarker(ctx, result); err != nil {
-		res.Err = err
+		res.Err = errors.Join(append(errs, err)...)
 		return res
 	}
-	// The result replaces the markers before it, this run's claim included.
-	// A later claim is another computer's, which removes its own.
-	var old []string
+	// The result replaces the markers before it, this run's claim included,
+	// and any marker that can't be read: they carry ctdev's maintenance tag,
+	// so they're ctdev's to remove. A later claim is another computer's,
+	// which removes its own.
+	old := slices.Clone(unreadable)
 	for _, mk := range ms {
 		if !mk.Started.After(claim.Started) {
 			old = append(old, mk.ID)
@@ -342,13 +356,31 @@ func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []l
 	}
 	if len(old) > 0 {
 		if err := d.forget(ctx, old...); err != nil {
-			res.Err = fmt.Errorf("remove the old maintenance markers: %w", err)
+			errs = append(errs, fmt.Errorf("remove the old maintenance markers: %w", err))
+		} else {
+			res.RemovedUnreadable = len(unreadable)
+			// Every claim of this computer's started no later than this one.
+			errs = append(errs, m.setOwnClaims(d.Name, nil))
 		}
 	}
-	if result.Failed() && res.Err == nil {
-		res.Err = errors.New("data check " + result.Reason())
-	}
+	res.Err = errors.Join(errs...)
 	return res
+}
+
+// dropClaim removes this computer's claim id, and forgets it as its own
+// once it's gone; one that can't be removed stays its own, so it never
+// counts as another computer's.
+func (m *Machine) dropClaim(ctx context.Context, d *Destination, id string, own []string) error {
+	if err := d.forget(ctx, id); err != nil {
+		return fmt.Errorf("remove this computer's claim on the maintenance: %w", err)
+	}
+	return m.setOwnClaims(d.Name, slices.DeleteFunc(own, func(c string) bool { return c == id }))
+}
+
+// setOwnClaims records which markers in the destination are this
+// computer's claims.
+func (m *Machine) setOwnClaims(name string, ids []string) error {
+	return m.updateDestination(name, func(s *DestinationState) { s.Claims = ids })
 }
 
 // resultOf is a copy of the newest finished run among ms, or nil.

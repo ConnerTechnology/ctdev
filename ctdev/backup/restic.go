@@ -23,7 +23,7 @@ var ErrWrongPassword = errors.New("wrong master password or Secret Key")
 // ErrDestinationBusy means restic couldn't lock the destination within its
 // --retry-lock wait: another computer holds the lock, usually for the
 // weekly maintenance's prune or check.
-var ErrDestinationBusy = errors.New("the destination is busy: another computer holds its lock")
+var ErrDestinationBusy = errors.New("the destination is busy: something else holds its lock")
 
 // ErrNoRestic means the restic binary isn't installed.
 var ErrNoRestic = errors.New("restic isn't installed: run ctdev install restic")

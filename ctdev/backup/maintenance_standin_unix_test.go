@@ -21,7 +21,10 @@ func maintenanceStandin(t *testing.T, m *Machine, fail map[string]string) (*Dest
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "restic.log")
-	markerList := filepath.Join(dir, "markers.json")
+	markers := filepath.Join(dir, "markers")
+	if err := os.Mkdir(markers, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	code := func(cmd string) string {
 		if c, ok := fail[cmd]; ok {
 			return `echo "Fatal: example failure" >&2; exit ` + c
@@ -31,21 +34,26 @@ func maintenanceStandin(t *testing.T, m *Machine, fail map[string]string) (*Dest
 	m.Restic = filepath.Join(dir, "restic")
 	script := `#!/bin/sh
 echo "$*" >> "` + log + `"
+markers="` + markers + `"
 case "$1" in
 version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
 backup)
   for a in "$@"; do case "$a" in ctdev-maintenance-data:*) tag="$a" ;; esac; done
-  echo '[{"id":"c1a1c1a1c1a1c1a1","tags":["ctdev-maintenance","'"$tag"'"]}]' > "` + markerList + `"
-  echo '{"message_type":"summary","snapshot_id":"c1a1c1a1c1a1c1a1"}' ;;
+  id="c1a1c1a1c1a1c1a$(ls "$markers" | wc -l | tr -d ' ')"
+  echo '{"id":"'"$id"'","tags":["ctdev-maintenance","'"$tag"'"]}' > "$markers/$id"
+  echo '{"message_type":"summary","snapshot_id":"'"$id"'"}' ;;
 snapshots)
   case "$*" in
-  *ctdev-maintenance*) if [ -e "` + markerList + `" ]; then cat "` + markerList + `"; else echo '[]'; fi ;;
+  *ctdev-maintenance*)
+    printf '['; sep=""
+    for f in "$markers"/*; do [ -e "$f" ] || continue; printf '%s' "$sep"; cat "$f"; sep=","; done
+    echo ']' ;;
   *) echo '[]' ;;
   esac ;;
 forget)
   case "$*" in
   *ctdev-folder:*) ` + code("forget-folder") + ` ;;
-  *) rm -f "` + markerList + `" ;;
+  *) ` + code("forget-marker") + `; for a in "$@"; do rm -f "$markers/$a"; done ;;
   esac ;;
 prune) ` + code("prune") + ` ;;
 check) ` + code("check") + ` ;;
@@ -79,8 +87,8 @@ func TestABusyDestinationLeavesTheMaintenanceForLater(t *testing.T) {
 			if n := strings.Count(string(data), "backup --stdin"); n != 1 {
 				t.Errorf("wrote %d markers, want only the claim:\n%s", n, data)
 			}
-			if checks, _ := m.destinationStates(); len(checks) != 0 {
-				t.Errorf("state.json keeps %+v, want nothing", checks)
+			if states, _ := m.destinationStates(); states[d.Name].DataCheck != nil || len(states[d.Name].Claims) != 0 {
+				t.Errorf("state.json keeps %+v, want no data check and no claim", states[d.Name])
 			}
 		})
 	}
@@ -234,22 +242,151 @@ func TestNextMaintenance(t *testing.T) {
 	}
 }
 
-// A marker that can't be read is skipped and counted, not a failure.
-func TestAnUnreadableMarkerIsSkipped(t *testing.T) {
+// A marker that can't be read is skipped, not a failure, and a finished
+// run's cleanup removes it and counts it once.
+func TestAnUnreadableMarkerIsSkippedThenRemoved(t *testing.T) {
 	m := testMachine(t, "example-laptop")
 	at(m, noon)
 	d, _ := maintenanceStandin(t, m, nil)
-	if _, err := d.writeMarker(context.Background(), DataCheck{Host: "example-desktop", Started: noon, Finished: noon, Slice: 1, OK: true}); err != nil {
+	bad := filepath.Join(filepath.Dir(m.Restic), "markers", "badbadbadbadbad0")
+	if err := os.WriteFile(bad, []byte(`{"id":"badbadbadbadbad0","tags":["ctdev-maintenance","ctdev-maintenance-data:not*base64"]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Replace the record with one that isn't base64 JSON.
-	list := filepath.Join(filepath.Dir(m.Restic), "markers.json")
-	if err := os.WriteFile(list, []byte(`[{"id":"c1a1c1a1c1a1c1a1","tags":["ctdev-maintenance","ctdev-maintenance-data:not*base64"]}]`), 0o644); err != nil {
+	ctx := context.Background()
+	ms, unreadable, err := d.markers(ctx)
+	if err != nil || len(ms) != 0 || len(unreadable) != 1 || unreadable[0] != "badbadbadbadbad0" {
+		t.Fatalf("markers = %+v, unreadable %v, err %v; want one unreadable", ms, unreadable, err)
+	}
+	res := m.maintainIfDue(ctx, d, nil)
+	if !res.Ran || res.Err != nil || res.RemovedUnreadable != 1 {
+		t.Errorf("result = %+v, want a run that removed the unreadable marker", res)
+	}
+	if _, unreadable, _ := d.markers(ctx); len(unreadable) != 0 {
+		t.Errorf("unreadable markers left: %v", unreadable)
+	}
+}
+
+// A data check more than two weeks old, or none two weeks after the first
+// folder here went on the destination, is overdue, in doctor's facts and
+// in the status.
+func TestADataCheckTwoWeeksOldIsOverdue(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	m.Notifier = &fakeNotifier{}
+	at(m, noon)
+	d, _ := maintenanceStandin(t, m, nil)
+	d.computerKey = "example-computer-key"
+	if err := m.save(d); err != nil {
 		t.Fatal(err)
 	}
-	ms, skipped, err := d.markers(context.Background())
-	if err != nil || len(ms) != 0 || skipped != 1 {
-		t.Errorf("markers = %+v, skipped %d, err %v; want one skipped", ms, skipped, err)
+	root := exampleFolder(t, m)
+	if err := m.Configure(context.Background(), d, root, NewConfig(d.Name)); err != nil {
+		t.Fatal(err)
+	}
+	overdue := func(when time.Time) (doctor, status bool, checks []DestinationCheck) {
+		t.Helper()
+		at(m, when)
+		checks, err := m.DataChecks()
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := m.Status(context.Background(), root)
+		if s.ReadErr != nil || !s.DataCheckRead {
+			t.Fatalf("status: read %v, err %v", s.DataCheckRead, s.ReadErr)
+		}
+		return len(checks) == 1 && checks[0].Overdue, s.DataCheckOverdue, checks
+	}
+	if doc, st, checks := overdue(noon.Add(dataCheckStale)); doc || st || len(checks) != 0 {
+		t.Errorf("two weeks after it was added, none run: doctor %v %+v, status %v; want not yet overdue, no row", doc, checks, st)
+	}
+	if doc, st, checks := overdue(noon.Add(dataCheckStale + time.Hour)); !doc || !st || checks[0].Check != nil {
+		t.Errorf("past two weeks, none run: doctor %v, status %v; want overdue, never run", doc, st)
+	}
+
+	ran := noon.Add(20 * 24 * time.Hour)
+	if _, err := d.writeMarker(context.Background(), DataCheck{Host: "example-desktop", Started: ran, Finished: ran, Slice: 1, OK: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.recordDataCheck(d.Name, DataCheck{Host: "example-desktop", Started: ran, Finished: ran, Slice: 1, OK: true}); err != nil {
+		t.Fatal(err)
+	}
+	if doc, st, _ := overdue(ran.Add(dataCheckStale)); doc || st {
+		t.Errorf("two weeks after a check: doctor %v, status %v; want not overdue", doc, st)
+	}
+	if doc, st, _ := overdue(ran.Add(dataCheckStale + time.Hour)); !doc || !st {
+		t.Errorf("past two weeks after a check: doctor %v, status %v; want overdue", doc, st)
+	}
+}
+
+// A claim by another computer with the same hostname is still another
+// computer's: this one knows its own claims by ID.
+func TestAClaimUnderTheSameHostnameIsAnotherComputers(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	at(m, noon)
+	d, _ := maintenanceStandin(t, m, nil)
+	if _, err := d.writeMarker(context.Background(), DataCheck{Host: m.Hostname, Started: noon.Add(-time.Hour), Slice: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if res := m.maintainIfDue(context.Background(), d, nil); res.Ran || res.Err != nil {
+		t.Errorf("result = %+v, want it left to the other computer", res)
+	}
+}
+
+// folders.json records each folder's destination, so doctor knows which
+// data checks to show: Configure writes it, and a scheduled run fills it in
+// for an entry written without it, as v17.0.0 and CTD-121 wrote them.
+func TestTheScheduleListRecordsEachFoldersDestination(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	m.Notifier = &fakeNotifier{}
+	at(m, noon)
+	d, _ := maintenanceStandin(t, m, nil)
+	root := exampleFolder(t, m)
+	if err := m.Configure(context.Background(), d, root, NewConfig(d.Name)); err != nil {
+		t.Fatal(err)
+	}
+	destinationOf := func(root string) string {
+		t.Helper()
+		folders, err := m.scheduledFolders()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range folders {
+			if e.Path == root {
+				return e.Destination
+			}
+		}
+		t.Fatalf("%s isn't listed", root)
+		return ""
+	}
+	if got := destinationOf(root); got != d.Name {
+		t.Errorf("after Configure: destination %q, want %q", got, d.Name)
+	}
+
+	old := filepath.Join(m.Home, "Documents", "notes")
+	listed(t, m, old, NewConfig("example-other")) // as the old ctdev listed it
+	if got := destinationOf(old); got != "" {
+		t.Fatalf("an old entry already has destination %q", got)
+	}
+	_, _, _ = m.RunScheduled(context.Background())
+	if got := destinationOf(old); got != "example-other" {
+		t.Errorf("after a scheduled run: destination %q, want example-other", got)
+	}
+}
+
+// Once the maintenance has run, its result stands: a failed check is
+// reported as failed even when removing the old markers then finds the
+// destination locked, not as waiting for the next hour.
+func TestAFinishedRunIsntReportedAsBusy(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	at(m, noon)
+	d, _ := maintenanceStandin(t, m, map[string]string{"check": "1", "forget-marker": "11"})
+
+	res := m.maintainIfDue(context.Background(), d, nil)
+	if !res.Ran || res.Busy || res.Check == nil || res.Check.Step != StepCheck {
+		t.Fatalf("result = %+v, want the check's failure", res)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "data check failed at check") ||
+		!errors.Is(res.Err, ErrDestinationBusy) {
+		t.Errorf("err = %v, want the failed check and the locked cleanup", res.Err)
 	}
 }
 
@@ -262,8 +399,8 @@ func TestALongReasonIsCutOnARuneBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	ms, skipped, err := d.markers(context.Background())
-	if err != nil || skipped != 0 || len(ms) != 1 {
-		t.Fatalf("markers = %+v, skipped %d, err %v", ms, skipped, err)
+	if err != nil || len(skipped) != 0 || len(ms) != 1 {
+		t.Fatalf("markers = %+v, skipped %v, err %v", ms, skipped, err)
 	}
 	if want := strings.Repeat("a", maxMarkerError-1) + "…"; ms[0].Error != want {
 		t.Errorf("reason = %q, want it cut before the é", ms[0].Error)

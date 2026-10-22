@@ -135,11 +135,19 @@ func (m *Machine) Retain(ctx context.Context, d *Destination, root string, cfg C
 	if m.Opts.DryRun {
 		return err
 	}
-	msg := ""
-	if err != nil {
-		msg = err.Error()
+	change := func(r *Run) {
+		r.RetentionDeferred, r.RetentionError = false, ""
+		if err != nil {
+			r.RetentionError = err.Error()
+		}
 	}
-	if rerr := m.updateRun(root, func(r *Run) { r.RetentionError = msg }); rerr != nil {
+	if errors.Is(err, ErrDestinationBusy) {
+		// A lock timeout isn't a failure (coordinator, CTD-122 review): the
+		// keep rules wait for the next scheduled run, and any earlier
+		// failure stands until they apply.
+		change = func(r *Run) { r.RetentionDeferred = true }
+	}
+	if rerr := m.updateRun(root, change); rerr != nil {
 		return errors.Join(err, rerr)
 	}
 	return err

@@ -93,6 +93,26 @@ func TestBackupsSectionShowsEachDestinationsDataCheck(t *testing.T) {
 	}
 }
 
+// A data check more than two weeks old, or none in that time, is a
+// warning; a failure that's also old stays a failure.
+func TestAnOverdueDataCheckIsAWarning(t *testing.T) {
+	at := time.Date(2026, 10, 2, 3, 0, 0, 0, time.Local)
+	for _, c := range []struct {
+		check    BackupDataCheck
+		severity Severity
+		detail   string
+	}{
+		{BackupDataCheck{Destination: "example-backups", Slices: 20, Overdue: true}, Warn, "overdue (never run)"},
+		{BackupDataCheck{Destination: "example-backups", Finished: at, Slice: 3, Slices: 20, OK: true, Overdue: true}, Warn, "overdue (last Oct 2)"},
+		{BackupDataCheck{Destination: "example-backups", Finished: at, Slice: 3, Slices: 20, Step: "check", Error: "damaged pack 0123abcd", Overdue: true}, Fail, "Oct 2 · failed at check: damaged pack 0123abcd"},
+	} {
+		r := dataCheckResult(c.check)
+		if r.Severity != c.severity || r.Detail != c.detail || r.Advice == "" {
+			t.Errorf("%+v: %v %q (advice %q), want %v %q", c.check, r.Severity, r.Detail, r.Advice, c.severity, c.detail)
+		}
+	}
+}
+
 // A failed data check's advice fits the step that failed: only a failed
 // check talks about damaged packs.
 func TestDataCheckAdviceFitsTheStep(t *testing.T) {

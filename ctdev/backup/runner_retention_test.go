@@ -76,7 +76,7 @@ case "$1" in
 version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
 backup) echo '{"message_type":"summary","snapshot_id":"0123456789abcdef","total_files_processed":1,"total_bytes_processed":1,"data_added":1,"backup_end":"2026-10-22T12:00:00Z"}' ;;
 snapshots) case "$*" in *ctdev-maintenance*) echo '` + markerList(t, recentCheck) + `' ;; *) echo '[]' ;; esac ;;
-forget) if [ -e "` + failForget + `" ]; then echo "Fatal: example failure" >&2; exit 1; fi ;;
+forget) if [ -e "` + failForget + `" ]; then echo "Fatal: example failure" >&2; code=$(cat "` + failForget + `"); exit ${code:-1}; fi ;;
 esac
 `
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
@@ -132,6 +132,36 @@ func TestARetentionFailureIsRecordedApartFromTheBackup(t *testing.T) {
 	}
 	if r, _, _ := m.lastRun(root); r.RetentionError != "" {
 		t.Errorf("state = %+v, want the keep-rules failure cleared", r)
+	}
+}
+
+// Keep rules that find the destination locked are deferred, not a yellow
+// retention error, and the next scheduled run applies them though the
+// folder isn't due.
+func TestKeepRulesOnALockedDestinationWaitForTheNextRun(t *testing.T) {
+	m, root, _ := failingMachine(t)
+	failForget := retentionStandin(t, m)
+	if err := os.WriteFile(failForget, []byte("11"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, _, err := m.RunScheduled(context.Background())
+	if err != nil || len(results) != 1 || results[0].Outcome != BackedUp || results[0].RetentionErr != nil {
+		t.Fatalf("results = %+v, err %v; want backed up, no retention failure", results, err)
+	}
+	if r, _, _ := m.lastRun(root); r.RetentionError != "" || !r.RetentionDeferred {
+		t.Errorf("state = %+v, want the keep rules deferred, no error", r)
+	}
+
+	if err := os.Remove(failForget); err != nil {
+		t.Fatal(err)
+	}
+	at(m, noon.Add(time.Hour)) // a daily folder isn't due
+	results, _, err = m.RunScheduled(context.Background())
+	if err != nil || results[0].Outcome != NotDue {
+		t.Fatalf("results = %+v, err %v; want not due", results, err)
+	}
+	if r, _, _ := m.lastRun(root); r.RetentionDeferred {
+		t.Errorf("state = %+v, want the deferred keep rules applied", r)
 	}
 }
 

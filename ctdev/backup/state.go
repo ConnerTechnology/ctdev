@@ -202,6 +202,9 @@ type Run struct {
 	// successful backup failed. The backup still succeeded, so it isn't
 	// Error; it's cleared the next time the keep rules apply.
 	RetentionError string `json:"retention_error,omitempty"`
+	// RetentionDeferred means the keep rules found the destination locked,
+	// so the next scheduled run applies them, due or not.
+	RetentionDeferred bool `json:"retention_deferred,omitempty"`
 	// Deferred is why the last try didn't run at all: the destination was
 	// locked, usually by another computer's weekly maintenance. It isn't a
 	// failure: Error, LastAttempt and the notification are left alone, and
@@ -230,18 +233,21 @@ type stateFile struct {
 // DestinationState is what this computer last saw of a destination's weekly
 // maintenance.
 type DestinationState struct {
-	DataCheck DataCheck `json:"data_check"`
+	DataCheck *DataCheck `json:"data_check,omitempty"` // nil until the runner has read one
 	// Alerted means a "data check failed" notification went out and no
 	// "passing again" one has since.
 	Alerted bool `json:"alerted,omitempty"`
 	// RetryAfter is when this computer may next claim the maintenance,
 	// after it lost a race for it.
 	RetryAfter time.Time `json:"retry_after,omitzero"`
+	// Claims are the IDs of this computer's claim markers in the
+	// destination that haven't been removed yet.
+	Claims []string `json:"claims,omitempty"`
 }
 
 // recordDataCheck keeps c as the destination's last maintenance result.
 func (m *Machine) recordDataCheck(name string, c DataCheck) error {
-	return m.updateDestination(name, func(s *DestinationState) { s.DataCheck = c })
+	return m.updateDestination(name, func(s *DestinationState) { s.DataCheck = &c })
 }
 
 func (m *Machine) updateDestination(name string, change func(*DestinationState)) error {
