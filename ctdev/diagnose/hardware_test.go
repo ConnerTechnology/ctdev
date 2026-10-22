@@ -222,10 +222,10 @@ func TestZpoolVerdict(t *testing.T) {
 
 func TestParseFailedUnits(t *testing.T) {
 	const out = `● nginx.service loaded failed failed A high performance web server
-  restic-backup.service loaded failed failed restic backup`
+  nightly-sync.service loaded failed failed nightly sync`
 
 	got := parseFailedUnits(out)
-	if len(got) != 2 || got[0] != "nginx.service" || got[1] != "restic-backup.service" {
+	if len(got) != 2 || got[0] != "nginx.service" || got[1] != "nightly-sync.service" {
 		t.Errorf("parseFailedUnits = %v", got)
 	}
 	if got := parseFailedUnits(""); len(got) != 0 {

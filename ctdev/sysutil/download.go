@@ -1,6 +1,7 @@
 package sysutil
 
 import (
+	"compress/bzip2"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -179,19 +180,31 @@ func InstallBinary(ctx context.Context, o Opts, src, dest string) error {
 // GitHubBinarySpec describes how to download and install a binary from a GitHub release.
 type GitHubBinarySpec struct {
 	Repo        string                                    // e.g. "helm/helm"
+	Version     string                                    // optional pin, e.g. "0.19.1"; empty means the latest release
 	ArchiveURL  func(version, goos, goarch string) string // returns download URL
 	ChecksumURL func(version, goos, goarch string) string // optional, returns checksum URL
 	BinaryPath  func(goos, goarch string) string          // path within extracted archive
 	InstallDest string                                    // e.g. "/usr/local/bin/helm"
-	ArchFormat  string                                    // "tar.gz", "zip", or "" for raw binary
+	ArchFormat  string                                    // "tar.gz", "zip", "bz2" (one compressed binary), or "" for raw binary
+	// UserInstall installs into a directory the user owns (e.g. ~/.local/bin),
+	// creating it if needed, without sudo.
+	UserInstall bool
 }
 
-// DownloadGitHubBinary fetches the latest release, downloads, verifies, extracts, and installs.
-// Returns the version string and any error.
+// DownloadGitHubBinary downloads a release (the pinned Version, or the latest),
+// verifies, extracts, and installs it. Returns the version string and any error.
 func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (string, error) {
-	ver, err := GitHubLatestVersion(ctx, spec.Repo)
-	if err != nil {
-		return "", err
+	ver := spec.Version
+	if ver == "" {
+		latest, err := GitHubLatestVersion(ctx, spec.Repo)
+		if err != nil {
+			return "", err
+		}
+		ver = latest
+	}
+	install := InstallBinary
+	if spec.UserInstall {
+		install = installUserBinary
 	}
 
 	goos := runtime.GOOS
@@ -236,11 +249,44 @@ func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (s
 		if err := Run(ctx, o, "unzip", "-o", archivePath, "-d", tmpDir); err != nil {
 			return ver, fmt.Errorf("extract %s: %w", spec.Repo, err)
 		}
+	case "bz2":
+		binaryPath := filepath.Join(tmpDir, strings.TrimSuffix(archiveName, ".bz2"))
+		if err := decompressBzip2(archivePath, binaryPath); err != nil {
+			return ver, fmt.Errorf("extract %s: %w", spec.Repo, err)
+		}
+		return ver, install(ctx, o, binaryPath, spec.InstallDest)
 	case "":
 		// Raw binary, no extraction needed
-		return ver, InstallBinary(ctx, o, archivePath, spec.InstallDest)
+		return ver, install(ctx, o, archivePath, spec.InstallDest)
 	}
 
 	binaryPath := filepath.Join(tmpDir, spec.BinaryPath(goos, goarch))
-	return ver, InstallBinary(ctx, o, binaryPath, spec.InstallDest)
+	return ver, install(ctx, o, binaryPath, spec.InstallDest)
+}
+
+// installUserBinary copies a binary into a directory the user owns, creating
+// the directory if needed. No sudo: the destination is under $HOME.
+func installUserBinary(ctx context.Context, o Opts, src, dest string) error {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return err
+	}
+	return Run(ctx, o, "install", "-m", "0755", src, dest)
+}
+
+// decompressBzip2 writes the bzip2-decompressed contents of src to dest.
+func decompressBzip2(src, dest string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, bzip2.NewReader(in)); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }

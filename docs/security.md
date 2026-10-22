@@ -48,16 +48,12 @@ ctdev follows them, as the uninstaller does for `XDG_CACHE_HOME`.
 ## Secrets
 
 **No secret is ever stored in this repository.** Every secret ctdev handles —
-a Cloudflare API token, a restic repository password and its backend
-credentials, a Pi-hole password, a Beszel key, a Linear app secret, a Jira API
-token — is entered at its `configure` step and written only to the device that
+a Cloudflare API token, a Pi-hole password, a Beszel key, a Linear app secret,
+a Jira API token — is entered at its `configure` step and written only to the device that
 needs it, with a file mode that restricts it to its owner.
 
 The consequence is deliberate: lose a device and you re-enter its secrets from
-your password manager rather than recovering them from somewhere central. A
-restic restore brings back the rendered `.env` files a node had, which is why
-the restic repository password itself belongs in your password manager —
-restic cannot restore its own credentials.
+your password manager rather than recovering them from somewhere central.
 
 Secrets are not passed as command-line flags where a wizard can prompt for them
 instead, because flags land in shell history and in `ps` output.

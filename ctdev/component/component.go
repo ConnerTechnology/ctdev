@@ -44,9 +44,8 @@ const (
 	// config files under $HOME.
 	RootWhenMissing RootNeed = iota
 	// RootAlways marks components that do privileged work on every run,
-	// installed or not: restic redeploys its /etc units, caddy brings its stack
-	// up through sudo, nomachine re-applies its ufw rule, smartmontools
-	// re-enables smartd.
+	// installed or not: caddy brings its stack up through sudo, nomachine
+	// re-applies its ufw rule, smartmontools re-enables smartd.
 	RootAlways
 	// RootNever marks components that install and uninstall entirely inside
 	// $HOME — via Homebrew, an upstream user-scope installer, or the docker

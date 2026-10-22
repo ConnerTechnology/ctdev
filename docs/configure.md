@@ -69,12 +69,11 @@ component's own install check, so an AWS CLI v1 counts as missing. When
 `aws configure sso` to create one. `ctdev install git` and `ctdev install aws` run
 these wizards afterward.
 
-**Component wizards** — `pihole`, `caddy`, `restic`. These belong to a component
-and mostly run for you when you install it; running `configure` directly
-reconfigures without reinstalling. `restic` asks for secrets and refuses
-`--batch`. `caddy --batch` skips its prompts and takes the domain, email and
-token from `--domain`, `--acme-email`, `CF_API_TOKEN` or the existing
-`~/caddy/.env`. `pihole --batch` applies the category's defaults, which also set
+**Component wizards** — `pihole`, `caddy`. These belong to a component and
+mostly run for you when you install it; running `configure` directly
+reconfigures without reinstalling. `caddy --batch` skips its prompts and takes
+the domain, email and token from `--domain`, `--acme-email`, `CF_API_TOKEN` or
+the existing `~/caddy/.env`. `pihole --batch` applies the category's defaults, which also set
 the upstream to Cloudflare, so run it interactively.
 
 **Claude Code** — `claude-code` isn't a wizard: `ctdev configure claude-code` diffs

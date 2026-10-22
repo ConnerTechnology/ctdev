@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -28,12 +29,8 @@ func childCommand(t *testing.T, parent *cobra.Command, name string) *cobra.Comma
 }
 
 func TestCommandTreeShape(t *testing.T) {
-	// backup/restore replace the old top-level pihole command.
-	if !hasSubcommand(rootCmd, "backup") || !hasSubcommand(rootCmd, "restore") {
-		t.Error("expected top-level backup and restore commands")
-	}
 	// There is no top-level pihole command; the Pi-hole component is reached
-	// through install/configure, and its state through restic.
+	// through install/configure.
 	if hasSubcommand(rootCmd, "pihole") {
 		t.Error("ctdev pihole should be removed")
 	}
@@ -42,26 +39,22 @@ func TestCommandTreeShape(t *testing.T) {
 		t.Error("ctdev gpu should be removed (folded into configure gpu)")
 	}
 
-	// backup fronts restic snapshots only (no per-service export anymore).
+	// The whole-machine restic backup is gone: backup is a bare placeholder
+	// for per-folder backup, and restore and the restic wizard no longer exist.
 	backup := childCommand(t, rootCmd, "backup")
-	if !hasSubcommand(backup, "now") || !hasSubcommand(backup, "snapshots") {
-		t.Error("backup should front restic via now/snapshots")
+	if len(backup.Commands()) != 0 {
+		t.Errorf("backup should have no subcommands, got %d", len(backup.Commands()))
 	}
-
-	// restore wraps the restic restore helper.
-	restore := childCommand(t, rootCmd, "restore")
-	for _, sub := range []string{"ls", "files", "in-place", "check"} {
-		if !hasSubcommand(restore, sub) {
-			t.Errorf("restore should have a %q subcommand", sub)
-		}
+	if hasSubcommand(rootCmd, "restore") {
+		t.Error("ctdev restore should be removed")
 	}
 
 	configure := childCommand(t, rootCmd, "configure")
 	if !hasSubcommand(configure, "gpu") {
 		t.Error("configure should have a gpu subcommand")
 	}
-	if !hasSubcommand(configure, "restic") {
-		t.Error("configure should have a restic subcommand")
+	if hasSubcommand(configure, "restic") {
+		t.Error("configure should no longer have a restic subcommand")
 	}
 	// And exactly one gpu subcommand (no duplicate from the slugOrder auto-loop).
 	count := 0
@@ -75,34 +68,41 @@ func TestCommandTreeShape(t *testing.T) {
 	}
 }
 
-func TestBackupRejectsServiceArg(t *testing.T) {
-	// The old `ctdev backup pihole` form is gone; a stray arg must error, not
-	// silently run a snapshot.
-	if err := backupCmd.RunE(backupCmd, []string{"pihole"}); err == nil {
-		t.Error("expected error when a service name is passed to backup")
+func TestBackupSaysPerFolderBackupIsComing(t *testing.T) {
+	var out bytes.Buffer
+	backupCmd.SetOut(&out)
+	t.Cleanup(func() { backupCmd.SetOut(nil) })
+	if err := backupCmd.RunE(backupCmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.TrimSpace(out.String())
+	if strings.Contains(got, "\n") || !strings.Contains(got, "CTD-87") {
+		t.Errorf("want one line pointing at CTD-87, got %q", got)
 	}
 }
 
-func TestBackupPathsContent(t *testing.T) {
-	out := backupPathsContent([]string{"/home/x", "/etc"})
-	if !strings.Contains(out, "/home/x\n") || !strings.Contains(out, "/etc\n") {
-		t.Errorf("paths missing from rendered file:\n%s", out)
-	}
-	if !strings.HasPrefix(out, "#") {
-		t.Error("expected a leading comment header")
-	}
-}
-
-func TestGeneratePassword(t *testing.T) {
-	a, err := generatePassword(32)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := generatePassword(32)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a == "" || a == b {
-		t.Errorf("expected two distinct non-empty passwords, got %q and %q", a, b)
+// The removed commands each fail as unknown commands.
+func TestRemovedBackupCommandsAreUnknown(t *testing.T) {
+	for _, args := range [][]string{
+		{"backup", "now"},
+		{"restore"},
+		{"configure", "restic"},
+	} {
+		var out bytes.Buffer
+		rootCmd.SetArgs(args)
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&out)
+		err := rootCmd.Execute()
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		name := strings.Join(args, " ")
+		if err == nil {
+			t.Errorf("ctdev %s: want an error, got none", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "unknown") {
+			t.Errorf("ctdev %s: want an unknown-command error, got %v", name, err)
+		}
 	}
 }
