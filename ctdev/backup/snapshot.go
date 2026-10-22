@@ -267,15 +267,14 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	if cfg.Destination != d.Name {
 		return fmt.Errorf("the config names destination %s, not %s", cfg.Destination, d.Name)
 	}
+	// An ID-less Ref lists only one-offs, so no other folder's backup joins.
 	oneOffs, err := d.Snapshots(ctx, m.Ref(root, nil))
 	if err != nil {
 		return err
 	}
 	var ids []string
 	for _, s := range oneOffs {
-		if s.FolderID == "" {
-			ids = append(ids, s.ID)
-		}
+		ids = append(ids, s.ID)
 	}
 	tag := d.asComputer("", append([]string{"tag", "--retry-lock", retryLock, "--add", tagFolder + cfg.ID}, ids...)...)
 	if m.Opts.DryRun {

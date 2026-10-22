@@ -129,8 +129,8 @@ func TestConfirmIsNoUnlessYes(t *testing.T) {
 			t.Errorf("%s: view = %q", name, plain(c.View().Content))
 		}
 		send(c, tc.keys...)
-		if !c.Done() || c.Confirmed() != tc.want {
-			t.Errorf("%s: done %v, confirmed %v; want confirmed %v", name, c.Done(), c.Confirmed(), tc.want)
+		if !c.finished() || c.Confirmed() != tc.want {
+			t.Errorf("%s: done %v, confirmed %v; want confirmed %v", name, c.finished(), c.Confirmed(), tc.want)
 		}
 	}
 }
@@ -141,7 +141,7 @@ func TestDeleteAllAsksThenHasYouTypeTheFolderName(t *testing.T) {
 		t.Errorf("view = %q", view)
 	}
 	send(c, typeText("y")...)
-	if c.Done() {
+	if c.finished() {
 		t.Fatal("y alone must not delete")
 	}
 	if view := plain(c.View().Content); !strings.Contains(view, "Type website to confirm:") {
@@ -151,7 +151,7 @@ func TestDeleteAllAsksThenHasYouTypeTheFolderName(t *testing.T) {
 	// A wrong name doesn't confirm; it says so and lets you try again.
 	send(c, typeText("webs")...)
 	send(c, key(tea.KeyEnter))
-	if c.Done() {
+	if c.finished() {
 		t.Fatal("a wrong name must not confirm")
 	}
 	if view := plain(c.View().Content); !strings.Contains(view, "That isn't website") {
@@ -160,8 +160,8 @@ func TestDeleteAllAsksThenHasYouTypeTheFolderName(t *testing.T) {
 
 	send(c, typeText("website")...)
 	send(c, key(tea.KeyEnter))
-	if !c.Done() || !c.Confirmed() {
-		t.Errorf("done %v, confirmed %v after typing the name", c.Done(), c.Confirmed())
+	if !c.finished() || !c.Confirmed() {
+		t.Errorf("done %v, confirmed %v after typing the name", c.finished(), c.Confirmed())
 	}
 }
 
@@ -175,19 +175,19 @@ func TestTypeNameAsksOnlyForTheName(t *testing.T) {
 	}
 	send(c, typeText("y")...)
 	send(c, key(tea.KeyEnter))
-	if c.Done() {
+	if c.finished() {
 		t.Fatal("y isn't the folder's name")
 	}
 	send(c, typeText("website")...)
 	send(c, key(tea.KeyEnter))
-	if !c.Done() || !c.Confirmed() {
-		t.Errorf("done %v, confirmed %v after typing the name", c.Done(), c.Confirmed())
+	if !c.finished() || !c.Confirmed() {
+		t.Errorf("done %v, confirmed %v after typing the name", c.finished(), c.Confirmed())
 	}
 
 	c = NewTypeName("website")
 	send(c, key(tea.KeyEscape))
-	if !c.Done() || c.Confirmed() {
-		t.Errorf("esc: done %v, confirmed %v; want cancelled", c.Done(), c.Confirmed())
+	if !c.finished() || c.Confirmed() {
+		t.Errorf("esc: done %v, confirmed %v; want cancelled", c.finished(), c.Confirmed())
 	}
 }
 
@@ -210,8 +210,8 @@ func TestDeleteAllCanBeTypedWithCorrectionsOrCancelled(t *testing.T) {
 	} {
 		c := NewDeleteAll("~/Projects/website", "website", 2)
 		send(c, keys...)
-		if !c.Done() || c.Confirmed() {
-			t.Errorf("%s: done %v, confirmed %v; want cancelled", name, c.Done(), c.Confirmed())
+		if !c.finished() || c.Confirmed() {
+			t.Errorf("%s: done %v, confirmed %v; want cancelled", name, c.finished(), c.Confirmed())
 		}
 	}
 }

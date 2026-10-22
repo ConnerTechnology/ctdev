@@ -203,8 +203,8 @@ type Confirm struct {
 // NewConfirm asks question, which ends with its question mark.
 func NewConfirm(question string) *Confirm { return &Confirm{question: question} }
 
-// Done reports whether the question was answered.
-func (c *Confirm) Done() bool { return c.done }
+// finished reports whether the question was answered.
+func (c *Confirm) finished() bool { return c.done }
 
 // Confirmed reports whether the answer was yes.
 func (c *Confirm) Confirmed() bool { return c.yes }
@@ -276,8 +276,8 @@ func NewTypeName(name string) *ConfirmDeleteAll {
 	return &ConfirmDeleteAll{name: name, typing: true}
 }
 
-// Done reports whether the confirmation is finished, either way.
-func (c *ConfirmDeleteAll) Done() bool { return c.done }
+// finished reports whether the confirmation is finished, either way.
+func (c *ConfirmDeleteAll) finished() bool { return c.done }
 
 // Confirmed reports whether you said yes and typed the folder's name.
 func (c *ConfirmDeleteAll) Confirmed() bool { return c.yes }
