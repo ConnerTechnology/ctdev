@@ -1,10 +1,18 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/backup"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
 )
 
@@ -68,16 +76,147 @@ func TestCommandTreeShape(t *testing.T) {
 	}
 }
 
-func TestBackupSaysPerFolderBackupIsComing(t *testing.T) {
+// backupFolderForTest makes ~/Projects/website under a temp HOME and runs the
+// test from inside it.
+func backupFolderForTest(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, "Projects", "website")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<p>example</p>\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	return dir
+}
+
+func runBackupBatch(t *testing.T) (string, error) {
+	t.Helper()
+	flagBatch = true
+	t.Cleanup(func() { flagBatch = false })
 	var out bytes.Buffer
 	backupCmd.SetOut(&out)
 	t.Cleanup(func() { backupCmd.SetOut(nil) })
-	if err := backupCmd.RunE(backupCmd, nil); err != nil {
+	err := backupCmd.RunE(backupCmd, nil)
+	return ansi.Strip(out.String()), err
+}
+
+// Without a terminal, ctdev backup prints the status and fails in a folder
+// that isn't backed up, so it works as a check.
+func TestBackupWithoutATerminalFailsWhenNotBackedUp(t *testing.T) {
+	backupFolderForTest(t)
+	out, err := runBackupBatch(t)
+	if err == nil {
+		t.Error("want a non-zero exit in a folder that isn't backed up")
+	}
+	if !strings.HasPrefix(out, "Not backed up: ~/Projects/website\n") || !strings.Contains(out, "Last backup") {
+		t.Errorf("status = %q", out)
+	}
+}
+
+func TestBackupWithoutATerminalPassesWhenConfigured(t *testing.T) {
+	dir := backupFolderForTest(t)
+	if err := backup.WriteConfig(dir, backup.NewConfig("example-backups")); err != nil {
 		t.Fatal(err)
 	}
-	got := strings.TrimSpace(out.String())
-	if strings.Contains(got, "\n") || !strings.Contains(got, "CTD-87") {
-		t.Errorf("want one line pointing at CTD-87, got %q", got)
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(filepath.Join(dir, "docs"))
+	out, err := runBackupBatch(t)
+	if err != nil {
+		t.Errorf("configured, never failed: want success, got %v", err)
+	}
+	if !strings.HasPrefix(out, "Backed up folder: ~/Projects/website  (you're in ~/Projects/website/docs)\n") ||
+		!strings.Contains(out, "not scheduled on this computer") {
+		t.Errorf("status = %q", out)
+	}
+}
+
+// Configure in a folder on a computer with no destination walks through
+// creating one, then writes the folder's config file with no secret in it.
+func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
+	if _, err := exec.LookPath("restic"); err != nil {
+		if os.Getenv("CI") != "" {
+			t.Fatal("restic is not on PATH; CI must install it before the Go tests")
+		}
+		t.Skip("restic is not installed; install it (ctdev install restic) to run this test")
+	}
+	dir := backupFolderForTest(t)
+	t.Setenv("RESTIC_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+	repo := filepath.Join(t.TempDir(), "example-backups")
+	const master = "correct horse example staple"
+
+	saved := stdinScanner
+	t.Cleanup(func() { stdinScanner = saved })
+	stdinScanner = bufio.NewScanner(strings.NewReader(strings.Join([]string{
+		"",                // destination: 1) Create a new destination
+		"example-backups", // its name
+		"4",               // local path
+		repo,
+		master, master,
+		"",                 // Enter once the kit and Recovery Code are saved
+		"1",                // Hourly
+		"", "", "", "", "", // default retention
+	}, "\n") + "\n"))
+
+	ctx := context.Background()
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfgErr error
+	out := captureStdout(t, func() { cfgErr = configureFolder(ctx, m, m.Status(ctx, dir)) })
+	if cfgErr != nil {
+		t.Fatalf("configureFolder: %v\n%s", cfgErr, out)
+	}
+	for _, want := range []string{"Emergency Kit", "Secret Key:", "Recovery Code", "can't be decrypted"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("setup output is missing %q", want)
+		}
+	}
+
+	cfg, err := backup.ReadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Destination != "example-backups" || cfg.Schedule != backup.Hourly || cfg.Keep != backup.DefaultKeep {
+		t.Errorf("config = %+v", cfg)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, backup.ConfigFileName))
+	if strings.Contains(string(data), "CT1-") || strings.Contains(string(data), master) || strings.Contains(string(data), repo) {
+		t.Errorf("the folder's config file holds a secret or the address:\n%s", data)
+	}
+	if s := m.Status(ctx, dir); !s.Scheduled || s.DestinationMissing {
+		t.Errorf("after Configure: scheduled %v, destination missing %v", s.Scheduled, s.DestinationMissing)
+	}
+}
+
+// From a subfolder of a backed-up folder, Configure is refused.
+func TestConfigureIsRefusedInASubfolder(t *testing.T) {
+	dir := backupFolderForTest(t)
+	if err := backup.WriteConfig(dir, backup.NewConfig("example-backups")); err != nil {
+		t.Fatal(err)
+	}
+	docs := filepath.Join(dir, "docs")
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfgErr error
+	out := captureStdout(t, func() { cfgErr = configureFolder(ctx, m, m.Status(ctx, docs)) })
+	if cfgErr != nil || !strings.Contains(out, "Already backed up as part of ~/Projects/website") {
+		t.Errorf("err %v, output %q", cfgErr, out)
+	}
+	if _, err := os.Stat(filepath.Join(docs, backup.ConfigFileName)); !os.IsNotExist(err) {
+		t.Error("no config file may be written in the subfolder")
 	}
 }
 

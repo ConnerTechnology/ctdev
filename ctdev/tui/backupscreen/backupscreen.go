@@ -194,7 +194,7 @@ func Status(s backup.Status, home string) string {
 	default:
 		row("Destination", fmt.Sprintf("%s (%s)", s.Destination, s.Backend), false)
 	}
-	row("Size now", fmt.Sprintf("%s · %s files", Bytes(s.Size), thousands(s.Files)), false)
+	row("Size now", Bytes(s.Size)+" · "+Files(s.Files), false)
 
 	switch {
 	case s.Last != nil && s.Last.Failed():
@@ -250,6 +250,14 @@ func Bytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "kMGTPE"[exp])
+}
+
+// Files is a file count with a thousands separator: "1 file", "4,812 files".
+func Files(n int) string {
+	if n == 1 {
+		return "1 file"
+	}
+	return thousands(n) + " files"
 }
 
 func thousands(n int) string {
