@@ -9,6 +9,12 @@ All notable changes to this project will be documented in this file.
   runs the engineering skills on Jira Cloud as well as Linear, through one tracker layer, and
   files requests as `request`-labeled issues. Run `ctdev repo setup` again in a repo to move it
   to 1.1.0, then `/connertechnology:setup` to add the new allow-list entries.
+- **`ctdev configure jira` adds Atlassian's server as `https://mcp.atlassian.com/v2/mcp?tools=all`.**
+  Without `?tools=all`, Atlassian's v2 server lists only a few tools and reaches the rest
+  through generic ones, so the engineering plugin's allow list couldn't name the Jira tools
+  its skills use. On a repo set up with v17.0.0 or earlier, rerun `ctdev configure jira`,
+  answer yes to replacing the `atlassian` server, then run `/mcp` in Claude Code and sign in
+  to Atlassian again.
 
 ## [17.0.0] - 2026-10-22
 
@@ -24,12 +30,6 @@ All notable changes to this project will be documented in this file.
   encryption model is ADR-0016. See `docs/backups.md`.
 
 ### Changed
-- **`ctdev configure jira` adds Atlassian's server as `https://mcp.atlassian.com/v2/mcp?tools=all`.**
-  Without `?tools=all`, Atlassian's v2 server lists only a few tools and reaches the rest
-  through generic ones, so the engineering plugin's allow list couldn't name the Jira tools
-  its skills use. On a repo set up with v16.0.1 or earlier, rerun `ctdev configure jira`,
-  answer yes to replacing the `atlassian` server, then run `/mcp` in Claude Code and sign in
-  to Atlassian again.
 - **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
   machine's partitions and you check which to hide from the file manager. It writes
   `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem UUID for exactly those,
