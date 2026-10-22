@@ -295,6 +295,84 @@ func TestStatusOfAFailedBackup(t *testing.T) {
 	}
 }
 
+// A backup deferred because the destination was locked is noted in dim
+// text under Last backup, not shown as a failure.
+func TestStatusOfADeferredBackup(t *testing.T) {
+	s := configured()
+	s.Last.Deferred = "the destination is busy: something else holds its lock"
+	got := Status(s, home)
+	const note = "waiting: destination busy"
+	if !strings.Contains(plain(got), "Last backup    Oct 21, 9:12 PM · succeeded\n                 "+note+"\n") {
+		t.Errorf("status:\n%s", plain(got))
+	}
+	if !strings.Contains(got, styles.Dimmed.Render(note)) || strings.Contains(got, styles.Error.Render(note)) {
+		t.Errorf("the note isn't dim:\n%q", got)
+	}
+}
+
+// The destination's weekly data check has its own line once it's been read:
+// not run yet, OK, or failed in red with the reason.
+func TestStatusDataCheckLine(t *testing.T) {
+	s := configured()
+	if got := plain(Status(s, home)); strings.Contains(got, "Data check") {
+		t.Errorf("a data check that wasn't read shows:\n%s", got)
+	}
+	s.DataCheckRead = true
+	if got := plain(Status(s, home)); !strings.Contains(got, "  Data check     not run yet\n") {
+		t.Errorf("status:\n%s", got)
+	}
+	at := time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local)
+	s.DataCheck = &backup.DataCheck{Host: "example-desktop", Started: at, Finished: at, Slice: 3, OK: true}
+	if got := plain(Status(s, home)); !strings.Contains(got, "  Data check     Oct 20 · OK\n") {
+		t.Errorf("status:\n%s", got)
+	}
+	s.DataCheck = &backup.DataCheck{Host: "example-desktop", Started: at, Finished: at, Slice: 3, Step: backup.StepCheck, Error: "damaged pack 0123abcd"}
+	got := Status(s, home)
+	want := "Oct 20 · failed at check: damaged pack 0123abcd"
+	if !strings.Contains(plain(got), "  Data check     "+want+"\n") {
+		t.Errorf("status:\n%s", plain(got))
+	}
+	if !strings.Contains(got, styles.Error.Render(want)) {
+		t.Errorf("a failed data check isn't in red:\n%q", got)
+	}
+}
+
+// A data check more than two weeks old, or none in two weeks, shows as
+// overdue in yellow; a failure still shows in red.
+func TestStatusOfAnOverdueDataCheck(t *testing.T) {
+	s := configured()
+	s.DataCheckRead, s.DataCheckOverdue = true, true
+	got := Status(s, home)
+	if !strings.Contains(got, styles.Warning.Render("overdue (never run)")) {
+		t.Errorf("status:\n%q", got)
+	}
+	at := time.Date(2026, 10, 2, 3, 0, 0, 0, time.Local)
+	s.DataCheck = &backup.DataCheck{Started: at, Finished: at, Slice: 3, OK: true}
+	got = Status(s, home)
+	if !strings.Contains(plain(got), "  Data check     overdue (last Oct 2)\n") || !strings.Contains(got, styles.Warning.Render("overdue (last Oct 2)")) {
+		t.Errorf("status:\n%q", got)
+	}
+	s.DataCheck.OK, s.DataCheck.Step, s.DataCheck.Error = false, backup.StepCheck, "damaged pack 0123abcd"
+	if got := Status(s, home); !strings.Contains(got, styles.Error.Render("Oct 2 · failed at check: damaged pack 0123abcd")) {
+		t.Errorf("a failure that's also old isn't red:\n%q", got)
+	}
+}
+
+// A keep-rules failure shows in yellow on the Keeping line; the backup it
+// followed still shows as succeeded.
+func TestStatusOfARetentionFailure(t *testing.T) {
+	s := configured()
+	s.Last.RetentionError = "example failure"
+	got := Status(s, home)
+	want := "24 hourly, 7 daily, 4 weekly, 12 monthly, 3 yearly · retention failed: example failure"
+	if !strings.Contains(got, styles.Warning.Render(want)) {
+		t.Errorf("the retention failure isn't in yellow on the Keeping line:\n%q", got)
+	}
+	if !strings.Contains(plain(got), "Oct 21, 9:12 PM · succeeded") {
+		t.Errorf("status:\n%s", plain(got))
+	}
+}
+
 // Last backup is the folder's newest from any computer, named when it isn't
 // this one.
 func TestLastBackupComesFromTheDestination(t *testing.T) {

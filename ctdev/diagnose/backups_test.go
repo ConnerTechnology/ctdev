@@ -32,6 +32,7 @@ func TestBackupsSectionShowsEachScheduledFolder(t *testing.T) {
 		{Path: "~/Documents/taxes", Schedule: "daily", State: BackupFailed, LastSuccess: last, Error: "example failure"},
 		{Path: "~/Photos", Schedule: "weekly", State: BackupOverdue, LastSuccess: last},
 		{Path: "~/Old", Schedule: "daily", State: BackupMissing, Error: "the folder isn't there any more"},
+		{Path: "~/Music", Schedule: "daily", State: BackupOK, LastSuccess: last, RetentionError: "example failure"},
 	}}
 	rows := backupRows(t, f)
 	for name, want := range map[string]struct {
@@ -43,6 +44,7 @@ func TestBackupsSectionShowsEachScheduledFolder(t *testing.T) {
 		"~/Documents/taxes":  {Fail, "failed: example failure"},
 		"~/Photos":           {Fail, "overdue: weekly, no backup since Oct 21, 9:12 PM"},
 		"~/Old":              {Fail, "missing: the folder isn't there any more"},
+		"~/Music":            {Warn, "daily · last backup Oct 21, 9:12 PM · retention failed: example failure"},
 	} {
 		got, ok := rows[name]
 		if !ok {
@@ -52,12 +54,81 @@ func TestBackupsSectionShowsEachScheduledFolder(t *testing.T) {
 		if got.Severity != want.severity || got.Detail != want.detail {
 			t.Errorf("%s: %v %q, want %v %q", name, got.Severity, got.Detail, want.severity, want.detail)
 		}
-		if got.Severity == Fail && !strings.Contains(got.Advice, "ctdev backup") {
+		if got.Severity != OK && !strings.Contains(got.Advice, "ctdev backup") {
 			t.Errorf("%s: advice %q doesn't say what to run", name, got.Advice)
 		}
 	}
-	if len(rows) != 5 {
-		t.Errorf("%d backup rows, want 5", len(rows))
+	if len(rows) != 6 {
+		t.Errorf("%d backup rows, want 6", len(rows))
+	}
+}
+
+// Each destination's weekly data check is a row: OK with its date and
+// slice, or failed with the step and reason.
+func TestBackupsSectionShowsEachDestinationsDataCheck(t *testing.T) {
+	at := time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local)
+	f := Facts{Platform: platform.Info{OS: platform.Linux}, BackupDataChecks: []BackupDataCheck{
+		{Destination: "example-backups", Finished: at, Host: "example-desktop", Slice: 3, Slices: 20, OK: true},
+		{Destination: "example-usb", Finished: at, Host: "example-laptop", Slice: 7, Slices: 20, Step: "check", Error: "damaged pack 0123abcd"},
+	}}
+	rows := backupRows(t, f)
+	for name, want := range map[string]struct {
+		severity Severity
+		detail   string
+	}{
+		"Data check: example-backups": {OK, "Oct 20 · OK · read slice 3 of 20 · by example-desktop"},
+		"Data check: example-usb":     {Fail, "Oct 20 · failed at check: damaged pack 0123abcd"},
+	} {
+		got, ok := rows[name]
+		if !ok {
+			t.Errorf("no row for %s in %v", name, rows)
+			continue
+		}
+		if got.Severity != want.severity || got.Detail != want.detail {
+			t.Errorf("%s: %v %q, want %v %q", name, got.Severity, got.Detail, want.severity, want.detail)
+		}
+		if got.Severity == Fail && got.Advice == "" {
+			t.Errorf("%s: no advice", name)
+		}
+	}
+}
+
+// A data check more than two weeks old, or none in that time, is a
+// warning; a failure that's also old stays a failure.
+func TestAnOverdueDataCheckIsAWarning(t *testing.T) {
+	at := time.Date(2026, 10, 2, 3, 0, 0, 0, time.Local)
+	for _, c := range []struct {
+		check    BackupDataCheck
+		severity Severity
+		detail   string
+	}{
+		{BackupDataCheck{Destination: "example-backups", Slices: 20, Overdue: true}, Warn, "overdue (never run)"},
+		{BackupDataCheck{Destination: "example-backups", Finished: at, Slice: 3, Slices: 20, OK: true, Overdue: true}, Warn, "overdue (last Oct 2)"},
+		{BackupDataCheck{Destination: "example-backups", Finished: at, Slice: 3, Slices: 20, Step: "check", Error: "damaged pack 0123abcd", Overdue: true}, Fail, "Oct 2 · failed at check: damaged pack 0123abcd"},
+	} {
+		r := dataCheckResult(c.check)
+		if r.Severity != c.severity || r.Detail != c.detail || r.Advice == "" {
+			t.Errorf("%+v: %v %q (advice %q), want %v %q", c.check, r.Severity, r.Detail, r.Advice, c.severity, c.detail)
+		}
+	}
+}
+
+// A failed data check's advice fits the step that failed: only a failed
+// check talks about damaged packs.
+func TestDataCheckAdviceFitsTheStep(t *testing.T) {
+	at := time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local)
+	for step, want := range map[string]string{
+		"check":         "damaged packs",
+		"test download": "didn't read back",
+		"prune":         "space",
+	} {
+		r := dataCheckResult(BackupDataCheck{Destination: "example-backups", Finished: at, Slice: 3, Slices: 20, Step: step, Error: "example failure"})
+		if r.Severity != Fail || !strings.Contains(r.Advice, want) {
+			t.Errorf("%s: %v %q, want advice about %q", step, r.Severity, r.Advice, want)
+		}
+		if step != "check" && strings.Contains(r.Advice, "damaged") {
+			t.Errorf("%s: advice %q talks about damage", step, r.Advice)
+		}
 	}
 }
 

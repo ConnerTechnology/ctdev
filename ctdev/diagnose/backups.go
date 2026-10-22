@@ -27,6 +27,9 @@ type BackupFolder struct {
 	State       BackupState
 	LastSuccess time.Time // zero when it has never backed up
 	Error       string    // why it failed, or why it's missing
+	// RetentionError is why its keep rules didn't apply after its last
+	// successful backup. The backup still counts as succeeded.
+	RetentionError string
 }
 
 // backupChecks is a row per scheduled folder. Every one is local: the facts
@@ -40,14 +43,61 @@ func backupChecks(f Facts) []Check {
 			},
 		}}
 	}
-	checks := make([]Check, 0, len(f.Backups))
+	checks := make([]Check, 0, len(f.Backups)+len(f.BackupDataChecks))
 	for _, b := range f.Backups {
 		checks = append(checks, Check{
 			ID: "backup." + b.Path, Name: b.Path, Group: GroupBackups,
 			Run: func(context.Context, Facts) Result { return backupResult(b) },
 		})
 	}
+	for _, c := range f.BackupDataChecks {
+		checks = append(checks, Check{
+			ID: "backup.datacheck." + c.Destination, Name: "Data check: " + c.Destination, Group: GroupBackups,
+			Run: func(context.Context, Facts) Result { return dataCheckResult(c) },
+		})
+	}
 	return checks
+}
+
+// BackupDataCheck is a backup destination's last weekly data check, which
+// whichever computer found it due ran and recorded in the destination.
+type BackupDataCheck struct {
+	Destination string
+	Finished    time.Time
+	Host        string // the computer that ran it
+	Slice       int    // the part of the stored data it read
+	Slices      int    // out of how many
+	OK          bool
+	Step        string // the step that failed
+	Error       string // why
+	// Overdue means the last check (none, when Finished is zero) is more
+	// than two weeks old.
+	Overdue bool
+}
+
+func dataCheckResult(c BackupDataCheck) Result {
+	day := c.Finished.Local().Format("Jan 2")
+	if !c.Finished.IsZero() && !c.OK {
+		var advice string
+		switch c.Step {
+		case "check":
+			advice = "Some stored data in " + c.Destination + " is damaged, so backups that use it may not restore. restic's troubleshooting guide covers repairing damaged packs; the weekly maintenance checks again a week after this one."
+		case "test download":
+			advice = "A file from a backup in " + c.Destination + " didn't read back whole, so that backup may not restore. Download it from 'ctdev backup' → List backups to see; the weekly maintenance tries again a week after this one."
+		default:
+			advice = "Freeing deleted backups' space in " + c.Destination + " failed, so the destination keeps it for now. The weekly maintenance tries again a week after this one."
+		}
+		return failf(advice, "%s · failed at %s: %s", day, c.Step, c.Error)
+	}
+	if c.Overdue {
+		last := "never run"
+		if !c.Finished.IsZero() {
+			last = "last " + day
+		}
+		return warnf("The weekly maintenance hasn't finished on "+c.Destination+" in two weeks. Run 'ctdev backup' in a folder that backs up there: it shows whether backups wait on a busy destination or the runner isn't scheduled.",
+			"overdue (%s)", last)
+	}
+	return okf("%s · OK · read slice %d of %d · by %s", day, c.Slice, c.Slices, c.Host)
 }
 
 func backupResult(b BackupFolder) Result {
@@ -66,10 +116,15 @@ func backupResult(b BackupFolder) Result {
 		return failf("Move the folder back, or run 'ctdev backup' in its new place and choose Configure.",
 			"missing: %s", b.Error)
 	}
-	if b.LastSuccess.IsZero() {
-		return okf("%s · no backup yet", b.Schedule)
+	detail := b.Schedule + " · no backup yet"
+	if !b.LastSuccess.IsZero() {
+		detail = b.Schedule + " · last backup " + backupTime(b.LastSuccess)
 	}
-	return okf("%s · last backup %s", b.Schedule, backupTime(b.LastSuccess))
+	if b.RetentionError != "" {
+		return warnf("Older backups weren't thinned. Run 'ctdev backup' in that folder and choose Back up now to apply the keep rules again.",
+			"%s · retention failed: %s", detail, b.RetentionError)
+	}
+	return okf("%s", detail)
 }
 
 func backupTime(t time.Time) string { return t.Local().Format("Jan 2, 3:04 PM") }

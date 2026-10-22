@@ -225,6 +225,9 @@ type Facts struct {
 	// BackupsErr says why that state couldn't be read.
 	Backups    []BackupFolder
 	BackupsErr string
+	// BackupDataChecks is each destination's last weekly data check, as
+	// this machine's hourly backup runner last read it, filled the same way.
+	BackupDataChecks []BackupDataCheck
 }
 
 // Finding is a verdict the correlation engine reached by combining several

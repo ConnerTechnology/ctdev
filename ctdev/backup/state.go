@@ -12,14 +12,16 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/secretfile"
 )
 
-// folderEntry is one folder this computer backs up on a schedule. Schedule
-// and Added are copied here so ctdev doctor can judge the folder's health from
-// this file and state.json alone, without opening the folder.
+// folderEntry is one folder this computer backs up on a schedule. Schedule,
+// Destination and Added are copied here so ctdev doctor can judge the
+// folder's health, and show its destination's data check, from this file and
+// state.json alone, without opening the folder.
 type folderEntry struct {
-	Path     string    `json:"path"`
-	ID       string    `json:"id"`
-	Schedule Schedule  `json:"schedule,omitempty"`
-	Added    time.Time `json:"added,omitzero"`
+	Path        string    `json:"path"`
+	ID          string    `json:"id"`
+	Schedule    Schedule  `json:"schedule,omitempty"`
+	Destination string    `json:"destination,omitempty"`
+	Added       time.Time `json:"added,omitzero"`
 }
 
 type foldersFile struct {
@@ -113,9 +115,10 @@ func exists(p string) bool {
 	return !errors.Is(err, os.ErrNotExist)
 }
 
-// setSchedule records a folder's schedule on the list when its config file
-// has changed it, such as after a git pull, so doctor judges it by the new one.
-func (m *Machine) setSchedule(root string, schedule Schedule) error {
+// setListed records a folder's schedule and destination on the list when
+// its config file has changed them, such as after a git pull, so doctor
+// judges it by the new ones.
+func (m *Machine) setListed(root string, cfg Config) error {
 	unlock, err := m.stateLock()
 	if err != nil {
 		return err
@@ -127,8 +130,8 @@ func (m *Machine) setSchedule(root string, schedule Schedule) error {
 	}
 	changed := false
 	for i, e := range f.Folders {
-		if e.Path == root && e.Schedule != schedule {
-			f.Folders[i].Schedule, changed = schedule, true
+		if e.Path == root && (e.Schedule != cfg.Schedule || e.Destination != cfg.Destination) {
+			f.Folders[i].Schedule, f.Folders[i].Destination, changed = cfg.Schedule, cfg.Destination, true
 		}
 	}
 	if !changed {
@@ -195,6 +198,19 @@ type Run struct {
 	LastAttempt time.Time `json:"last_attempt"`
 	LastSuccess time.Time `json:"last_success,omitzero"`
 	Error       string    `json:"error,omitempty"`
+	// RetentionError is why applying the folder's keep rules after its last
+	// successful backup failed. The backup still succeeded, so it isn't
+	// Error; it's cleared the next time the keep rules apply.
+	RetentionError string `json:"retention_error,omitempty"`
+	// RetentionDeferred means the keep rules found the destination locked,
+	// so the next scheduled run applies them, due or not.
+	RetentionDeferred bool `json:"retention_deferred,omitempty"`
+	// Deferred is why the last try didn't run at all: the destination was
+	// locked, usually by another computer's weekly maintenance. It isn't a
+	// failure: Error, LastAttempt and the notification are left alone, and
+	// the next hour tries again. Only the overdue rule can turn it red.
+	Deferred   string    `json:"deferred,omitempty"`
+	DeferredAt time.Time `json:"deferred_at,omitzero"`
 	// Missing means a scheduled run found the folder gone, or its config
 	// file gone or holding another folder's ID, and skipped it.
 	Missing bool `json:"missing,omitempty"`
@@ -208,6 +224,56 @@ func (r Run) Failed() bool { return r.Error != "" }
 
 type stateFile struct {
 	Folders map[string]Run `json:"folders"`
+	// Destinations is this computer's copy of each destination's last
+	// maintenance result, by destination name, so ctdev doctor can show it
+	// without a network call.
+	Destinations map[string]DestinationState `json:"destinations,omitempty"`
+}
+
+// DestinationState is what this computer last saw of a destination's weekly
+// maintenance.
+type DestinationState struct {
+	DataCheck *DataCheck `json:"data_check,omitempty"` // nil until the runner has read one
+	// Alerted means a "data check failed" notification went out and no
+	// "passing again" one has since.
+	Alerted bool `json:"alerted,omitempty"`
+	// RetryAfter is when this computer may next claim the maintenance,
+	// after it lost a race for it.
+	RetryAfter time.Time `json:"retry_after,omitzero"`
+	// Claims are the IDs of this computer's claim markers in the
+	// destination that haven't been removed yet.
+	Claims []string `json:"claims,omitempty"`
+}
+
+// recordDataCheck keeps c as the destination's last maintenance result.
+func (m *Machine) recordDataCheck(name string, c DataCheck) error {
+	return m.updateDestination(name, func(s *DestinationState) { s.DataCheck = &c })
+}
+
+func (m *Machine) updateDestination(name string, change func(*DestinationState)) error {
+	unlock, err := m.stateLock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	var s stateFile
+	if err := readJSON(m.stateFile(), &s); err != nil {
+		return err
+	}
+	if s.Destinations == nil {
+		s.Destinations = map[string]DestinationState{}
+	}
+	d := s.Destinations[name]
+	change(&d)
+	s.Destinations[name] = d
+	return writeJSON(m.stateFile(), s)
+}
+
+// destinationStates is every destination's record in state.json.
+func (m *Machine) destinationStates() (map[string]DestinationState, error) {
+	var s stateFile
+	err := readJSON(m.stateFile(), &s)
+	return s.Destinations, err
 }
 
 // updateRun changes the folder's record in state.json.
@@ -234,6 +300,7 @@ func (m *Machine) updateRun(root string, change func(*Run)) error {
 func (m *Machine) recordRun(root string, at time.Time, runErr error) error {
 	return m.updateRun(root, func(r *Run) {
 		r.LastAttempt, r.Error, r.Missing = at, "", false
+		r.Deferred, r.DeferredAt = "", time.Time{}
 		if runErr != nil {
 			r.Error = runErr.Error()
 		} else {

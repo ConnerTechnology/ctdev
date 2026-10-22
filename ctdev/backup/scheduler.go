@@ -352,7 +352,16 @@ func (m *Machine) RemoveScheduler(ctx context.Context) error {
 
 // RemoveSchedulerIfIdle removes the hourly runner once no folder is left on
 // this computer's list. Stop backing up calls it after taking a folder off.
+// It holds the state lock from reading the list until the runner is gone:
+// Configure adds its folder under that lock before installing the runner, so
+// a folder added meanwhile is either seen here or added after the removal,
+// and never left with no runner.
 func (m *Machine) RemoveSchedulerIfIdle(ctx context.Context) (removed bool, err error) {
+	unlock, err := m.stateLock()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
 	folders, err := m.scheduledFolders()
 	if err != nil || len(folders) > 0 {
 		return false, err

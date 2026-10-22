@@ -161,7 +161,7 @@ func TestStopAndDeleteWhoseForgetFailsChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := m.StopAndDelete(context.Background(), d, root, []Snapshot{{ID: "0123456789abcdef"}})
+	_, err := m.StopAndDelete(context.Background(), d, root, []Snapshot{{ID: "0123456789abcdef"}})
 	if err == nil {
 		t.Fatal("want the forget's failure")
 	}
@@ -170,6 +170,68 @@ func TestStopAndDeleteWhoseForgetFailsChangesNothing(t *testing.T) {
 	}
 	if on, err := m.scheduled(root, cfg.ID); err != nil || !on {
 		t.Errorf("the folder left this computer's list: %v, %v", on, err)
+	}
+}
+
+// Every restic command the weekly maintenance runs waits for a lock another
+// computer holds, as backups wait for the maintenance's prune and check.
+func TestEveryMaintenanceCommandWaitsForTheLock(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	dir := t.TempDir()
+	log := filepath.Join(dir, "restic.log")
+	m.Restic = filepath.Join(dir, "restic")
+	script := `#!/bin/sh
+echo "$*" >> "` + log + `"
+case "$1" in
+version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
+snapshots) echo '[{"id":"0123456789abcdef","time":"2026-10-22T12:00:00Z","hostname":"example-laptop","tags":["ctdev-path:~/Projects/website"]}]' ;;
+backup) echo '{"message_type":"summary","snapshot_id":"fedcba9876543210"}' ;;
+ls) echo '{"message_type":"node","type":"file","path":"/index.html","size":8}' ;;
+dump) printf 'example\n' ;;
+esac
+`
+	if err := os.WriteFile(m.Restic, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	d := &Destination{Name: "example-backups", Address: filepath.Join(dir, "repo"), m: m}
+	root := exampleFolder(t, m)
+	cfg := NewConfig(d.Name)
+	ctx := context.Background()
+	if _, err := d.writeMarker(ctx, DataCheck{Host: m.Hostname, Started: noon, Slice: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.markers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Its forget retries the keep rules a backup's run failed to apply.
+	if err := m.updateRun(root, func(r *Run) { r.RetentionError = "example failure" }); err != nil {
+		t.Fatal(err)
+	}
+	if c, busy := m.maintain(ctx, d, []listedFolder{{Root: root, Config: cfg}}, DataCheck{Started: noon, Slice: 1}); !c.OK || busy {
+		t.Fatalf("maintenance with the stand-in: %+v", c)
+	}
+	if r, _, _ := m.lastRun(root); r.RetentionError != "" {
+		t.Errorf("the maintenance's forget didn't clear the keep-rules failure: %+v", r)
+	}
+	if err := d.forget(ctx, "fedcba9876543210"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		cmd, _, _ := strings.Cut(line, " ")
+		ran[cmd] = true
+		if cmd != "version" && !strings.Contains(line, "--retry-lock 30m") {
+			t.Errorf("restic %s doesn't wait for the lock", line)
+		}
+	}
+	for _, cmd := range []string{"backup", "snapshots", "forget", "prune", "check", "ls", "dump"} {
+		if !ran[cmd] {
+			t.Errorf("restic %s didn't run", cmd)
+		}
 	}
 }
 
@@ -184,6 +246,7 @@ case "$1" in
 version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
 snapshots) echo "[]" ;;
 stats) echo '{"total_size": 0}' ;;
+key) echo "[]" ;;
 esac
 `
 	if err := os.WriteFile(m.Restic, []byte(script), 0o755); err != nil {
@@ -195,6 +258,15 @@ esac
 		t.Fatal(err)
 	}
 	if _, err := d.Stored(context.Background(), []Snapshot{{ID: "0123456789abcdef"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.files(context.Background(), "0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Computers(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.keys(context.Background(), "example password"); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(log)

@@ -1,6 +1,9 @@
 package backup
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // Due reports whether a folder on schedule s is due a backup at now: when it
 // has never succeeded, or its last success is at least one interval ago.
@@ -72,6 +75,83 @@ func (m *Machine) Health() ([]FolderHealth, error) {
 		out = append(out, FolderHealth{Path: e.Path, Schedule: e.schedule(), State: judge(e, r, now), Run: r})
 	}
 	return out, nil
+}
+
+// DestinationCheck is a destination's last weekly maintenance, as this
+// computer's hourly runner last read it from the destination.
+type DestinationCheck struct {
+	Destination string
+	Check       *DataCheck // nil when none has run
+	// Overdue means the last check is more than two weeks old, or none has
+	// run in that time.
+	Overdue bool
+}
+
+// DataChecks is the last maintenance result of each destination a folder on
+// this computer's schedule list uses, as its hourly runner last saw it. Like
+// Health, it reads only folders.json and state.json, so ctdev doctor can
+// call it; with nothing scheduled there are none. A destination the runner
+// hasn't checked yet has none.
+func (m *Machine) DataChecks() ([]DestinationCheck, error) {
+	folders, err := m.scheduledFolders()
+	if err != nil {
+		return nil, err
+	}
+	states, err := m.destinationStates()
+	if err != nil {
+		return nil, err
+	}
+	oldest := oldestAdded(folders)
+	now := m.now()
+	var out []DestinationCheck
+	for _, name := range sortedKeys(oldest) {
+		c := DestinationCheck{Destination: name, Check: states[name].DataCheck}
+		c.Overdue = dataCheckOverdue(c.Check, oldest[name], now)
+		if c.Check != nil || c.Overdue {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+// dataCheckStale is how old a destination's last data check can get before
+// it's overdue: two weekly maintenances missed.
+const dataCheckStale = 14 * 24 * time.Hour
+
+// dataCheckOverdue reports whether a destination's data check is overdue at
+// now: its last one, last, finished more than two weeks ago, or none has
+// run though its oldest scheduled folder here was added more than two weeks
+// ago.
+func dataCheckOverdue(last *DataCheck, oldest, now time.Time) bool {
+	if last != nil {
+		return now.Sub(last.Finished) > dataCheckStale
+	}
+	return !oldest.IsZero() && now.Sub(oldest) > dataCheckStale
+}
+
+// oldestAdded is when the first folder on the list that uses each
+// destination was added, by destination name.
+func oldestAdded(folders []folderEntry) map[string]time.Time {
+	oldest := map[string]time.Time{}
+	for _, e := range folders {
+		if e.Destination == "" {
+			continue
+		}
+		if t, ok := oldest[e.Destination]; !ok || (!e.Added.IsZero() && (t.IsZero() || e.Added.Before(t))) {
+			oldest[e.Destination] = e.Added
+		}
+	}
+	return oldest
+}
+
+// sortedKeys is a map's keys in order.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // schedule is the entry's schedule: daily for an entry written before the
