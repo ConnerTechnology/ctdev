@@ -1,10 +1,12 @@
 package settings
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/ConnerTechnology/ctdev/ctdev/setup"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func testStates() []setup.SettingState {
@@ -110,5 +112,36 @@ func TestApplyAndQuitFlags(t *testing.T) {
 	press(m2, "q")
 	if m2.Applied() {
 		t.Error("q should not mark applied")
+	}
+}
+
+func TestTimerShowsUnitAndNever(t *testing.T) {
+	timer := setup.Setting{Name: "Timer E", Category: "Cat3", Control: setup.ControlSlider, Default: setup.SliderNever,
+		Slider: &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true}}
+	m := New([]setup.SettingState{{Setting: &timer, CurrentValue: "60", DesiredValue: "60"}})
+
+	footer := ansi.Strip(m.footerView())
+	if !strings.Contains(footer, "Current: 60 min · Recommended: never") {
+		t.Errorf("footer = %q, want current in minutes and recommended never", footer)
+	}
+	press(m, "right") // 60 → 65, queued
+	row := ansi.Strip(m.renderRow(m.cursor))
+	if !strings.Contains(row, "60 min →") || !strings.Contains(row, "65 min") {
+		t.Errorf("row = %q, want 60 min → 65 min", row)
+	}
+}
+
+func TestNotNeededShownInsteadOfRecommended(t *testing.T) {
+	states := testStates()
+	states[3].NotNeeded = "no reason here"
+	m := New(states)
+	m.cursor = m.lastSetting() // OneWay D ("not installed")
+	row := m.renderRow(m.cursor)
+	if !strings.Contains(row, "not needed") || strings.Contains(row, "≠ REC") {
+		t.Errorf("row should say not needed, not ≠ REC; got %q", row)
+	}
+	footer := m.footerView()
+	if !strings.Contains(footer, "Not needed: no reason here") || strings.Contains(footer, "Recommended") {
+		t.Errorf("footer should give the reason instead of a recommendation; got %q", footer)
 	}
 }

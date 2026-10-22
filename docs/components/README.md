@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-57 components, counted in `ctdev/component/registry.go` on 2026-10-18. A
+59 components, counted in `ctdev/component/registry.go` on 2026-10-19. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -35,6 +35,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | Component | What it is | Platforms |
 | --- | --- | --- |
 | `acli` | Atlassian CLI (Jira, Confluence) | Linux, macOS |
+| `aws` | AWS CLI v2 | Linux, macOS |
 | `bat` | cat with syntax highlighting | Linux, macOS |
 | `btop` | Resource monitor | Linux, macOS |
 | `bun` | JavaScript runtime and package manager | Linux, macOS |
@@ -49,6 +50,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `fzf` | Fuzzy finder for the shell | Linux, macOS |
 | `gh` | GitHub CLI | Linux, macOS |
 | `git-spice` | Git Spice stacked branches tool | Linux, macOS |
+| `gws` | Google Workspace CLI (Drive, Gmail, Calendar, and more) | Linux, macOS |
 | `helm` | Kubernetes package manager | Linux, macOS |
 | `jq` | JSON processor | Linux, macOS |
 | `kubectl` | Kubernetes CLI | Linux, macOS |

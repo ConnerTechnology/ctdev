@@ -43,3 +43,76 @@ func TestAdjustSlider(t *testing.T) {
 		t.Errorf("0.65+0.05 = %q, want 0.7", got)
 	}
 }
+
+func TestAdjustSliderNever(t *testing.T) {
+	s := &Setting{Control: ControlSlider, Default: "never", Slider: &SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true}}
+	if got := AdjustSlider(s, "5", -1); got != SliderNever {
+		t.Errorf("min-step = %q, want never", got)
+	}
+	if got := AdjustSlider(s, SliderNever, -1); got != SliderNever {
+		t.Errorf("never-step = %q, want never", got)
+	}
+	if got := AdjustSlider(s, SliderNever, 1); got != "5" {
+		t.Errorf("never+step = %q, want 5", got)
+	}
+	if got := AdjustSlider(s, "120", 1); got != "120" {
+		t.Errorf("clamp at max: got %q, want 120", got)
+	}
+	if got := AdjustSlider(s, "", 1); got != "5" {
+		t.Errorf("unset starts from default (never)+step: got %q, want 5", got)
+	}
+}
+
+func TestSliderRangeLabel(t *testing.T) {
+	plain := &SliderRange{Min: 0, Max: 30, Step: 1, Unit: "s"}
+	if got := SliderRangeLabel(plain); got != "0–30s" {
+		t.Errorf("plain label = %q", got)
+	}
+	never := &SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true}
+	if got := SliderRangeLabel(never); got != "never, 5–120min" {
+		t.Errorf("never label = %q", got)
+	}
+}
+
+func TestDisplayValue(t *testing.T) {
+	timer := &Setting{Control: ControlSlider, Slider: &SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true}}
+	tests := []struct {
+		s    *Setting
+		v    string
+		want string
+	}{
+		{timer, "60", "60 min"},
+		{timer, SliderNever, SliderNever},
+		{timer, "", ""},
+		{&Setting{Control: ControlSlider, Slider: &SliderRange{Step: 0.01}}, "0.46", "0.46"},
+		{&Setting{Control: ControlToggle}, "true", "true"},
+	}
+	for _, tt := range tests {
+		if got := DisplayValue(tt.s, tt.v); got != tt.want {
+			t.Errorf("DisplayValue(%q) = %q, want %q", tt.v, got, tt.want)
+		}
+	}
+}
+
+func TestFormatSliderVal(t *testing.T) {
+	tests := []struct {
+		val  float64
+		step float64
+		want string
+	}{
+		{3.0, 1.0, "3"},
+		{10.0, 5.0, "10"},
+		{0.0, 1.0, "0"},
+		{1.5, 0.5, "1.5"},
+		{0.65, 0.05, "0.65"},
+		{0.0, 0.1, "0"},
+		{100.0, 25.0, "100"},
+		{0.999, 0.001, "0.999"},
+	}
+	for _, tt := range tests {
+		got := FormatSliderVal(tt.val, tt.step)
+		if got != tt.want {
+			t.Errorf("FormatSliderVal(%v, %v) = %q, want %q", tt.val, tt.step, got, tt.want)
+		}
+	}
+}

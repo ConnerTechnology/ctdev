@@ -9,6 +9,7 @@ var Registry = []Component{
 	{Name: "1password", Description: "1Password password manager", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, DetectApps: []string{"/Applications/1Password.app"}, BrewNeedsRoot: true, GoInstall: onePasswordInstall, GoUninstall: onePasswordUninstall, Tags: []string{"password", "security"}},
 	{Name: "acli", Description: "Atlassian CLI (Jira, Confluence)", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: acliInstall, GoUninstall: acliUninstall, Tags: []string{"atlassian", "jira"}},
 	{Name: "age", Description: "age file encryption tool", Category: CategorySecurity, SupportedOS: []OS{OSAny}, GoInstall: ageInstall, GoUninstall: ageUninstall, Tags: []string{"encryption", "crypto"}},
+	{Name: "aws", Description: "AWS CLI v2", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Detect: awsV2Installed, GoInstall: awsInstall, GoUninstall: awsUninstall, Tags: []string{"amazon", "cloud"}},
 	{Name: "beszel", Description: "Beszel server/container monitoring (Docker)", Category: CategoryInfra, SupportedOS: []OS{OSLinux}, Dependencies: []string{"docker"}, DetectPath: "$HOME/beszel/docker-compose.yml", Root: RootNever, GoInstall: beszelInstall, GoUninstall: beszelUninstall, Tags: []string{"docker", "monitoring", "homelab"}},
 	{Name: "betterbird", Description: "Betterbird email client (Thunderbird fork)", Category: CategoryDesktop, SupportedOS: []OS{OSLinux}, DetectPath: "/opt/betterbird/betterbird", GoInstall: betterbirdInstall, GoUninstall: betterbirdUninstall, Tags: []string{"email", "thunderbird"}},
 	{Name: "btop", Description: "Resource monitor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("btop"), GoUninstall: SimplePackageUninstaller("btop"), Tags: []string{"monitor", "htop"}},
@@ -38,6 +39,7 @@ var Registry = []Component{
 	// pinning detection to the tarball location made a distro-packaged Go read
 	// as missing. Falling through to a PATH lookup keeps the two in agreement.
 	{Name: "go", Description: "Go toolchain (official tarball)", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, GoInstall: goInstall, GoUninstall: goUninstall, Tags: []string{"golang", "runtime"}},
+	{Name: "gws", Description: "Google Workspace CLI (Drive, Gmail, Calendar, and more)", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: gwsInstall, GoUninstall: gwsUninstall, Tags: []string{"google", "workspace"}},
 	{Name: "helm", Description: "Kubernetes package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Dependencies: []string{"kubectl"}, GoInstall: helmInstall, GoUninstall: helmUninstall, Tags: []string{"kubernetes", "k8s"}},
 	{Name: "jq", Description: "JSON processor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("jq"), GoUninstall: SimplePackageUninstaller("jq"), Tags: []string{"json", "parser"}},
 	{Name: "kubectl", Description: "Kubernetes CLI", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: kubectlInstall, GoUninstall: kubectlUninstall, Tags: []string{"kubernetes", "k8s"}},
