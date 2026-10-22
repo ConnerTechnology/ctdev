@@ -134,7 +134,7 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 	if master == "" {
 		return Setup{}, errors.New("the master password can't be empty")
 	}
-	address, err := m.CheckAddress(nd.Address, "")
+	address, err := m.CheckNewAddress(nd.Address, "")
 	if err != nil {
 		return Setup{}, err
 	}

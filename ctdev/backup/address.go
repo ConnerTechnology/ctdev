@@ -1,7 +1,10 @@
 package backup
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -53,6 +56,37 @@ func (m *Machine) CheckAddress(address, folder string) (string, error) {
 		return "", fmt.Errorf("%s is inside %s, a backed-up folder, which would back the repository up into itself", DisplayPath(m.Home, p), DisplayPath(m.Home, root))
 	}
 	return p, nil
+}
+
+// CheckNewAddress is CheckAddress for a destination about to be created. A
+// local path must be new, an empty folder, or a restic repository already
+// (which creating then declines, pointing at connecting instead): restic
+// would otherwise mix its files into a folder of someone's documents.
+func (m *Machine) CheckNewAddress(address, folder string) (string, error) {
+	p, err := m.CheckAddress(address, folder)
+	if err != nil || !isLocal(p) {
+		return p, err
+	}
+	fi, err := os.Stat(p)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return p, nil
+	case err != nil:
+		return "", err
+	case !fi.IsDir():
+		return "", fmt.Errorf("%s is a file, not a folder", DisplayPath(m.Home, p))
+	}
+	entries, err := os.ReadDir(p)
+	if err != nil {
+		return "", err
+	}
+	if len(entries) == 0 {
+		return p, nil
+	}
+	if _, err := os.Stat(filepath.Join(p, "config")); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("%s already holds files and isn't a restic repository: choose a new or empty folder", DisplayPath(m.Home, p))
 }
 
 // within reports whether p is dir or below it.

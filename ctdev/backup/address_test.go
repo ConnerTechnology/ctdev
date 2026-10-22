@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,6 +50,41 @@ func TestALocalRepositoryCantBeInsideABackedUpFolder(t *testing.T) {
 	_, err := m.CreateDestination(context.Background(), NewDestination{Name: "example-backups", Address: "~/Projects/website/backups"}, exampleMaster)
 	if err == nil || !strings.Contains(err.Error(), "inside") {
 		t.Errorf("CreateDestination: want an inside error, got %v", err)
+	}
+}
+
+// A new destination goes in a new or empty folder. One holding a restic
+// repository passes, so creating there can point at connecting instead.
+func TestANewDestinationNeedsAnEmptyFolder(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	full := filepath.Join(m.Home, "Documents")
+	repo := filepath.Join(m.Home, "old-backups")
+	for dir, file := range map[string]string{full: "notes.txt", repo: "config"} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte("example\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.CheckNewAddress("~/Documents", ""); err == nil || !strings.Contains(err.Error(), "isn't a restic repository") {
+		t.Errorf("a folder of files: want a refusal, got %v", err)
+	}
+	_, err := m.CreateDestination(context.Background(), NewDestination{Name: "example-backups", Address: full}, exampleMaster)
+	if err == nil || !strings.Contains(err.Error(), "isn't a restic repository") {
+		t.Errorf("CreateDestination in a folder of files: want a refusal, got %v", err)
+	}
+	if entries, _ := os.ReadDir(full); len(entries) != 1 {
+		t.Errorf("%s was changed: %d entries", full, len(entries))
+	}
+	if _, err := m.CheckNewAddress("~/old-backups", ""); err != nil {
+		t.Errorf("a restic repository: %v", err)
+	}
+	if _, err := m.CheckNewAddress("~/Documents/notes.txt", ""); err == nil {
+		t.Error("a file: want a refusal")
+	}
+	if _, err := m.CheckNewAddress("~/new-backups", ""); err != nil {
+		t.Errorf("a new folder: %v", err)
 	}
 }
 

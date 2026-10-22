@@ -313,7 +313,7 @@ func createDestination(ctx context.Context, m *backup.Machine, name, folder stri
 		}
 		// Check before asking for anything else: a local path inside the
 		// folder would back the repository up into itself.
-		if address, err = m.CheckAddress(address, folder); err == nil {
+		if address, err = m.CheckNewAddress(address, folder); err == nil {
 			break
 		}
 		fmt.Println("  " + styles.Warning.Render(err.Error()+": choose another place."))
