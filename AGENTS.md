@@ -25,7 +25,7 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | --- | --- |
 | This file | Orientation, and the conventions that bind everywhere |
 | `docs/agents/where-things-go.md` | Where each kind of fact goes, and how to trace a line back to its Linear issue |
-| `.claude/rules/` | What no single file can say about one component or directory: conventions across files, traps, outside facts. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, doctor, the install scripts, the Go conventions inside the module |
+| `.claude/rules/` | What no single file can say about one component or directory: conventions across files, traps, outside facts. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Beszel, the homelab node, doctor, the install scripts, the Go conventions inside the module |
 | `docs/README.md` | The human-facing docs: one page per capability, in README order |
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
 | `docs/architecture.md` | The directory map of the Go module |
