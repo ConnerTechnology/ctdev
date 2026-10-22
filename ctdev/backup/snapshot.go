@@ -245,12 +245,13 @@ func (d *Destination) files(ctx context.Context, id string) ([]string, error) {
 // file, adds the folder to this computer's list, and gives the folder's
 // earlier one-off backups its new ID so they join its history.
 func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cfg Config) error {
+	// Before Abs, which would turn "" into the current directory.
+	if root == "" {
+		return errors.New("no folder to configure")
+	}
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return err
-	}
-	if root == "" {
-		return errors.New("no folder to configure")
 	}
 	if err := d.notInside(root); err != nil {
 		return err

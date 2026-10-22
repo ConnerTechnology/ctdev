@@ -83,10 +83,24 @@ func (m *Machine) CheckNewAddress(address, folder string) (string, error) {
 	if len(entries) == 0 {
 		return p, nil
 	}
-	if _, err := os.Stat(filepath.Join(p, "config")); err == nil {
+	if looksLikeRepository(p) {
 		return p, nil
 	}
 	return "", fmt.Errorf("%s already holds files and isn't a restic repository: choose a new or empty folder", DisplayPath(m.Home, p))
+}
+
+// looksLikeRepository reports whether dir has restic's layout: a config file
+// beside keys/ and data/. A lone file named config is just a file.
+func looksLikeRepository(dir string) bool {
+	if fi, err := os.Stat(filepath.Join(dir, "config")); err != nil || !fi.Mode().IsRegular() {
+		return false
+	}
+	for _, d := range []string{"keys", "data"} {
+		if fi, err := os.Stat(filepath.Join(dir, d)); err != nil || !fi.IsDir() {
+			return false
+		}
+	}
+	return true
 }
 
 // within reports whether p is dir or below it.
