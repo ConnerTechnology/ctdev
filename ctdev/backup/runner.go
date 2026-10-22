@@ -33,7 +33,21 @@ type ScheduledRun struct {
 // file is gone or holds another folder's ID, is skipped and recorded as
 // missing. The error joins every folder's failure, so the run itself shows as
 // failed in the journal or log.
+//
+// It holds this computer's backup lock for the whole run. When another run
+// holds it, this one returns nothing and no error: that run covers the hour.
+// A dry run writes nothing at all, the lock file included.
 func (m *Machine) RunScheduled(ctx context.Context) ([]ScheduledRun, error) {
+	if !m.Opts.DryRun {
+		unlock, err := m.lock(false)
+		if errors.Is(err, errLocked) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
+	}
 	folders, err := m.scheduledFolders()
 	if err != nil {
 		return nil, err
@@ -54,18 +68,42 @@ func (m *Machine) RunScheduled(ctx context.Context) ([]ScheduledRun, error) {
 		}
 		results = append(results, r)
 	}
-	errs = append(errs, m.notifyChanges(ctx, folders))
+	if !m.Opts.DryRun {
+		errs = append(errs, m.notifyChanges(ctx, folders))
+	}
 	return results, errors.Join(errs...)
 }
 
 func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) ScheduledRun {
 	res := ScheduledRun{Path: e.Path}
 	cfg, why := m.findListed(e)
+	dry := m.Opts.DryRun
 	if why != "" {
 		res.Outcome, res.Err = Missing, errors.New(why)
+		if dry {
+			return res
+		}
 		if err := m.recordMissing(e.Path, m.now(), why); err != nil {
 			res.Err = errors.Join(res.Err, err)
 		}
+		return res
+	}
+	if dry {
+		// Say what would happen, writing nothing: Backup dry-runs too.
+		if !Due(cfg.Schedule, last, m.now()) {
+			res.Outcome = NotDue
+			return res
+		}
+		d, err := m.Destination(cfg.Destination)
+		if err != nil {
+			res.Outcome, res.Err = Failed, err
+			return res
+		}
+		if _, err := m.Backup(ctx, d, e.Path, &cfg); err != nil {
+			res.Outcome, res.Err = Failed, err
+			return res
+		}
+		res.Outcome = BackedUp
 		return res
 	}
 	if last.Missing {

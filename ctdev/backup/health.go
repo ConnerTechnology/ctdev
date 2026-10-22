@@ -47,7 +47,7 @@ func judge(e folderEntry, r Run, now time.Time) HealthState {
 		return HealthMissing
 	case r.Failed():
 		return HealthFailed
-	case overdue(e.interval(), since, now):
+	case overdue(e.schedule().Interval(), since, now):
 		return HealthOverdue
 	}
 	return HealthOK
@@ -69,18 +69,19 @@ func (m *Machine) Health() ([]FolderHealth, error) {
 	out := make([]FolderHealth, 0, len(folders))
 	for _, e := range folders {
 		r := runs[e.Path]
-		s := e.Schedule
-		if s == "" {
-			s = Daily
-		}
-		out = append(out, FolderHealth{Path: e.Path, Schedule: s, State: judge(e, r, now), Run: r})
+		out = append(out, FolderHealth{Path: e.Path, Schedule: e.schedule(), State: judge(e, r, now), Run: r})
 	}
 	return out, nil
 }
 
-// interval is the entry's schedule's; Interval treats an empty one, from an
-// entry written before the schedule was recorded, as daily.
-func (e folderEntry) interval() time.Duration { return e.Schedule.Interval() }
+// schedule is the entry's schedule: daily for an entry written before the
+// schedule was recorded, the same default Interval gives.
+func (e folderEntry) schedule() Schedule {
+	if e.Schedule == "" {
+		return Daily
+	}
+	return e.Schedule
+}
 
 // now is the machine's clock: Now when a test set it, else the real time.
 func (m *Machine) now() time.Time {

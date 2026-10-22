@@ -64,7 +64,7 @@ func TestHealthJudgesEachScheduledFolder(t *testing.T) {
 		"/example/failed-and-old": Hourly,
 	}
 	for path, s := range folders {
-		if err := m.addFolder(path, "00000000-0000-4000-8000-000000000000", s); err != nil {
+		if err := m.addFolder(path, newUUID(), s); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -86,7 +86,7 @@ func TestHealthJudgesEachScheduledFolder(t *testing.T) {
 	}
 	// never-new was added a day ago; never-old 30 days ago, weekly.
 	at(m, noon.Add(-24*time.Hour))
-	if err := m.addFolder("/example/never-new", "00000000-0000-4000-8000-000000000001", Daily); err != nil {
+	if err := m.addFolder("/example/never-new", newUUID(), Daily); err != nil {
 		t.Fatal(err)
 	}
 	at(m, noon)

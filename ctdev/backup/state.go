@@ -53,28 +53,69 @@ func writeJSON(path string, v any) error {
 // addFolder puts the folder on this computer's schedule list, replacing any
 // entry for the same path. Reconfiguring keeps when the folder was first
 // added, so a folder that has never backed up can't be made to look new.
+//
+// A folder that was moved keeps its ID in its config file, so an entry with
+// the same ID at a path that no longer exists is the folder's old place: it's
+// dropped, with its state, rather than reported missing for ever. An entry
+// with the same ID at a path that still exists (a copy of the folder) stays.
 func (m *Machine) addFolder(root, id string, schedule Schedule) error {
+	unlock, err := m.lock(true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var f foldersFile
 	if err := readJSON(m.foldersFile(), &f); err != nil {
 		return err
 	}
 	entry := folderEntry{Path: root, ID: id, Schedule: schedule, Added: m.now()}
 	kept := f.Folders[:0]
+	var moved []string
 	for _, e := range f.Folders {
-		if e.Path != root {
+		switch {
+		case e.Path == root:
+			if e.ID == id && !e.Added.IsZero() {
+				entry.Added = e.Added
+			}
+		case e.ID == id && !exists(e.Path):
+			// The new place starts fresh: due now, and not overdue
+			// until twice its interval has passed without a success.
+			moved = append(moved, e.Path)
+		default:
 			kept = append(kept, e)
-		} else if e.ID == id && !e.Added.IsZero() {
-			entry.Added = e.Added
 		}
 	}
 	f.Folders = append(kept, entry)
 	sort.Slice(f.Folders, func(i, j int) bool { return f.Folders[i].Path < f.Folders[j].Path })
-	return writeJSON(m.foldersFile(), f)
+	if err := writeJSON(m.foldersFile(), f); err != nil {
+		return err
+	}
+	if len(moved) == 0 {
+		return nil
+	}
+	var s stateFile
+	if err := readJSON(m.stateFile(), &s); err != nil {
+		return err
+	}
+	for _, p := range moved {
+		delete(s.Folders, p)
+	}
+	return writeJSON(m.stateFile(), s)
+}
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 // setSchedule records a folder's schedule on the list when its config file
 // has changed it, such as after a git pull, so doctor judges it by the new one.
 func (m *Machine) setSchedule(root string, schedule Schedule) error {
+	unlock, err := m.lock(true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var f foldersFile
 	if err := readJSON(m.foldersFile(), &f); err != nil {
 		return err
@@ -134,6 +175,11 @@ type stateFile struct {
 
 // updateRun changes the folder's record in state.json.
 func (m *Machine) updateRun(root string, change func(*Run)) error {
+	unlock, err := m.lock(true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var s stateFile
 	if err := readJSON(m.stateFile(), &s); err != nil {
 		return err

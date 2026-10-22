@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/secretfile"
@@ -38,6 +39,16 @@ type Machine struct {
 	GOOS string
 	// Notifier sends desktop notifications; nil means the desktop's own.
 	Notifier Notifier
+
+	// run runs the scheduler's systemctl and launchctl commands; nil means
+	// sysutil.Run. Tests set it so they never touch real timers or agents.
+	run func(ctx context.Context, o sysutil.Opts, name string, args ...string) error
+	// lingerDir is systemd's /var/lib/systemd/linger; tests point it elsewhere.
+	lingerDir string
+
+	lockMu    sync.Mutex
+	lockDepth int
+	lockHeld  *os.File
 }
 
 // ThisMachine is the machine ctdev is running on, as the current user.
