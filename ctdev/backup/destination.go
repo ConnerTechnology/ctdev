@@ -52,9 +52,18 @@ func ThisMachine(o sysutil.Opts) (*Machine, error) {
 	}, nil
 }
 
+// resticBin is the restic to run: ~/.local/bin/restic, where
+// `ctdev install restic` puts it on Linux, when it's there, else restic on
+// PATH. A scheduled run doesn't get the user's shell PATH.
 func (m *Machine) resticBin() string {
 	if m.Restic != "" {
 		return m.Restic
+	}
+	if m.Home != "" {
+		local := filepath.Join(m.Home, ".local", "bin", "restic")
+		if fi, err := os.Stat(local); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
+			return local
+		}
 	}
 	return "restic"
 }
