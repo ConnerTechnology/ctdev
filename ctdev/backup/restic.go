@@ -37,7 +37,8 @@ type run struct {
 
 // restic runs restic as the user (never through sudo) and returns its
 // stdout. Secrets travel in the environment and on a pipe, so they never show
-// in argv, where any user on the machine could read them in ps.
+// in argv, where any user on the machine could read them in ps. That is also
+// why this runs exec directly: sysutil.Run passes no environment or pipe.
 func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 	bin := d.m.resticBin()
 	if err := checkRestic(ctx, bin); err != nil {

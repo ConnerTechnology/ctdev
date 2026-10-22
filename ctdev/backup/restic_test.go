@@ -298,6 +298,20 @@ func TestBackupDryRunPrintsTheResticCommandWithoutSecrets(t *testing.T) {
 	}
 }
 
+func TestCreatingOverAnExistingRepositoryPointsAtConnect(t *testing.T) {
+	requireRestic(t)
+	first := testMachine(t, "example-laptop")
+	d, _ := createExample(t, first)
+	second := testMachine(t, "example-desktop")
+	_, err := second.CreateDestination(context.Background(), NewDestination{Name: "example-backups", Address: d.Address}, exampleMaster)
+	if err == nil || !strings.Contains(err.Error(), "connect to it with its Emergency Kit") {
+		t.Errorf("want a pointer to connecting instead, got %v", err)
+	}
+	if names, _ := second.Destinations(); len(names) != 0 {
+		t.Errorf("saved %v, want nothing", names)
+	}
+}
+
 func secretKeyFrom(t *testing.T, kit string) string {
 	t.Helper()
 	k, err := ParseKit(kit)

@@ -137,6 +137,9 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 	// throwaway key, add the three labeled keys, then remove the throwaway.
 	initial := randomPassword()
 	if _, err := d.restic(ctx, run{password: initial, args: []string{"init", "--json"}}); err != nil {
+		if strings.Contains(err.Error(), "already") {
+			return Setup{}, fmt.Errorf("%s already holds a restic repository: connect to it with its Emergency Kit, or choose another address", nd.Address)
+		}
 		return Setup{}, fmt.Errorf("create the repository at %s: %w", nd.Address, err)
 	}
 	accountID, err := d.addKey(ctx, initial, accountUser, ctdevHost, account)
