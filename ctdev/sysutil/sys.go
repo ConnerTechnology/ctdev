@@ -32,7 +32,7 @@ func ServiceStart(ctx context.Context, o Opts, name string) error {
 
 // SudoWriteFile writes content to a root-owned path via a temp file and sudo cp.
 // The result is root-only (0600): cp carries the temp file's mode across. That
-// suits drop-ins only root reads and secrets like restic.env — for a file
+// suits drop-ins only root reads and secrets — for a file
 // every process must read, use SudoWriteFileMode.
 func SudoWriteFile(ctx context.Context, o Opts, content, path string) error {
 	if o.DryRun {

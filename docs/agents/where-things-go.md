@@ -20,7 +20,7 @@ nothing, the row says so.
 | Skill (`.claude/skills/`) | A procedure, or reference needed only sometimes. | [1], [6] |
 | `AGENTS.md` | Orientation and the conventions that bind everywhere. Loaded every session, so held to a byte ceiling. | [1], [7] |
 | `CONTEXT.md` | The vocabulary: one term, its meaning, and the words to avoid. Nothing about implementation. | `/domain-modeling` |
-| `docs/` | The human-facing manual, one page per capability, plus `RECOVERY.md` and `TROUBLESHOOTING.md` at the root. | [7] (link to docs, don't inline them) |
+| `docs/` | The human-facing manual, one page per capability, plus `TROUBLESHOOTING.md` at the root. | [7] (link to docs, don't inline them) |
 | `CHANGELOG.md` | What shipped in each version, for the people who run it. | Anthropic says nothing |
 
 A fact that changes often, or that a session can find by reading one file or running one command,

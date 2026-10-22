@@ -94,7 +94,7 @@ func init() {
 }
 
 func runConfigureAll(cmd *cobra.Command, args []string) error {
-	// An unknown category (e.g. `ctdev configure restic`) is not a subcommand, so
+	// An unknown category (e.g. `ctdev configure nosuch`) is not a subcommand, so
 	// cobra falls through to this parent RunE. Reject it instead of silently
 	// walking every category — only a bare `ctdev configure` runs the full sweep.
 	if len(args) > 0 {
