@@ -342,6 +342,10 @@ exceptions are Use a Recovery Code and Paste an updated Emergency Kit.
   4. It shows the new Emergency Kit.
   5. You paste the new kit once on each other computer (below).
 
+  If it stops partway, after a failure or Ctrl-C, it says what it has done and which items under
+  Emergency Kit and password finish it: the lost computer is no longer listed, so the flow can't
+  be started again for it.
+
 ### Emergency Kit and password
 
 - **Show Emergency Kit** shows the kit this computer has.
@@ -350,6 +354,10 @@ exceptions are Use a Recovery Code and Paste an updated Emergency Kit.
 - **Regenerate Secret Key** makes a new Secret Key and account key, saves the Secret Key here, and
   shows the new kit. The old kit stops working. The other computers' keys keep backing up, but
   paste the new kit on each before using its account actions there.
+- **Replace backend credentials** is step 3 of I lost this computer on its own: the provider's
+  steps for new credentials, checked by opening the destination with them, then the steps for
+  revoking the old ones, and the new kit. Use it to finish that flow, or to rotate the credentials
+  any time.
 - **Use a Recovery Code** takes the Recovery Code and a new master password, typed twice, and makes
   a new Secret Key. It shows the new kit. The used code keeps working unless you also choose to
   make a new Recovery Code, which replaces it and is shown once. Connecting a new computer offers
@@ -359,7 +367,12 @@ exceptions are Use a Recovery Code and Paste an updated Emergency Kit.
   ctdev checks that key opens it as the kit describes before saving anything. If this computer
   can't read the destination any more, because its credentials were revoked, `--all` offers the
   paste straight away. Choosing "Connect to an existing destination" with a kit for a destination
-  this computer already has does the same.
+  this computer already has does the same. When the kit's Secret Key differs from the one saved
+  here, ctdev says so: that's expected after Regenerate Secret Key or I lost this computer on another
+  computer, and a sign the kit isn't yours otherwise.
+
+A kit holds only the destination's name, address, backend credentials and Secret Key. ctdev refuses
+a kit with any other line, such as a variable restic would act on.
 
 Changing keys never leaves the destination without a working account key. The new key is added and
 checked first, and the old one is removed last. If that removal fails, ctdev says so, and both keys
@@ -371,6 +384,9 @@ restic gives every key full power over the repository: reading, deleting and rem
 The master password guards ctdev's account actions, but restic doesn't enforce it. A lost or stolen
 computer can act on the destination with its key until that key is removed, and reach the storage
 with its backend credentials until they're revoked. It also keeps whatever it already read.
+Removing its key doesn't change the repository's master key, which every restic key unlocks, so a
+computer that had it can still decrypt whatever it can reach: revoking the storage credentials is
+the real barrier, and a local path or an SFTP login shared by every computer has none to revoke.
 
 - **A new computer**: install restic (`ctdev install restic`), run `ctdev backup --all`, and connect
   with the Emergency Kit and the master password.
