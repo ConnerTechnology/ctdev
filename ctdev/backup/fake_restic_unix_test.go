@@ -5,6 +5,7 @@ package backup
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -39,8 +40,10 @@ esac
 
 func TestResticFromLocalBinIsPreferred(t *testing.T) {
 	m := testMachine(t, "example-laptop")
-	if got := m.resticBin(); got != "restic" {
-		t.Errorf("with no ~/.local/bin/restic: %q, want restic on PATH", got)
+	// With no ~/.local/bin/restic it falls through: to Homebrew's on a Mac
+	// that has one, else restic on PATH.
+	if got := m.resticBin(); strings.HasPrefix(got, m.Home) {
+		t.Errorf("with no ~/.local/bin/restic: %q", got)
 	}
 	fakeRestic(t, m)
 	if got, want := m.resticBin(), filepath.Join(m.Home, ".local", "bin", "restic"); got != want {

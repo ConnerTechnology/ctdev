@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -52,20 +53,33 @@ func ThisMachine(o sysutil.Opts) (*Machine, error) {
 	}, nil
 }
 
-// resticBin is the restic to run: ~/.local/bin/restic, where
-// `ctdev install restic` puts it on Linux, when it's there, else restic on
-// PATH. A scheduled run doesn't get the user's shell PATH.
+// resticBin is the restic to run: the first of resticCandidates that is
+// there, else restic on PATH. A scheduled run (systemd, launchd) doesn't get
+// the user's shell PATH, so the usual places are tried by name first.
 func (m *Machine) resticBin() string {
 	if m.Restic != "" {
 		return m.Restic
 	}
-	if m.Home != "" {
-		local := filepath.Join(m.Home, ".local", "bin", "restic")
-		if fi, err := os.Stat(local); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
-			return local
+	for _, p := range resticCandidates(runtime.GOOS, m.Home) {
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
+			return p
 		}
 	}
 	return "restic"
+}
+
+// resticCandidates are where restic is looked for before PATH:
+// ~/.local/bin, where `ctdev install restic` puts it on Linux, and on macOS
+// Homebrew's prefixes for Apple silicon and Intel.
+func resticCandidates(goos, home string) []string {
+	var c []string
+	if home != "" {
+		c = append(c, filepath.Join(home, ".local", "bin", "restic"))
+	}
+	if goos == "darwin" {
+		c = append(c, "/opt/homebrew/bin/restic", "/usr/local/bin/restic")
+	}
+	return c
 }
 
 func (m *Machine) out() io.Writer {
