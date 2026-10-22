@@ -192,17 +192,27 @@ func detectMacDefaults(ctx context.Context, table []macDefault) string {
 	return "enabled"
 }
 
-// applyMacDefaults writes table for "enabled" or deletes its keys for
-// anything else. A delete of a key that isn't set fails harmlessly, so its
-// error is ignored. The app that reads the keys restarts once per apply, in
-// its ApplyGroup's post-apply hook (macRestartGroups).
+// applyMacDefaults writes table for "enabled" and deletes its keys for
+// "disabled", skipping a key that isn't set (`defaults delete` fails on one).
+// It tries every key and returns every failure; any other value is an error.
+// The app that reads the keys restarts once per apply, in its ApplyGroup's
+// post-apply hook (macRestartGroups).
 func applyMacDefaults(ctx context.Context, o sysutil.Opts, table []macDefault, value string) error {
+	if value != "enabled" && value != "disabled" {
+		return fmt.Errorf("unknown value %q: want enabled or disabled", value)
+	}
 	var errs []error
 	for _, d := range table {
 		if value == "enabled" {
 			defaultsWrite(ctx, o, &errs, d.Domain, d.Key, d.Type.flag(), d.Value)
-		} else {
-			_ = macExec(ctx, o, "defaults", "delete", d.Domain, d.Key)
+			continue
+		}
+		if _, ok := defaultsRead(ctx, d.Domain, d.Key); !ok {
+			continue
+		}
+		if err := macExec(ctx, o, "defaults", "delete", d.Domain, d.Key); err != nil {
+			fmt.Fprintf(o.Stdout, "warning: defaults delete %s %s failed: %v\n", d.Domain, d.Key, err)
+			errs = append(errs, fmt.Errorf("defaults delete %s %s: %w", d.Domain, d.Key, err))
 		}
 	}
 	return errors.Join(errs...)

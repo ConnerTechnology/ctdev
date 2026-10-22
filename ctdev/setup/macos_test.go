@@ -16,9 +16,10 @@ import (
 // holds "domain key" → the text `defaults read` prints; a missing entry exits
 // non-zero the way macOS does for an unknown key.
 type fakeDefaults struct {
-	values    map[string]string
-	failWrite map[string]bool // "domain key" whose write fails
-	calls     [][]string
+	values     map[string]string
+	failWrite  map[string]bool // "domain key" whose write fails
+	failDelete map[string]bool // "domain key" whose delete fails
+	calls      [][]string
 }
 
 // exec stands in for macExec. Dry-run goes to the real sysutil.Run, which
@@ -56,6 +57,9 @@ func (f *fakeDefaults) run(_ context.Context, name string, args ...string) ([]by
 		}
 		return nil, nil
 	case "delete":
+		if f.failDelete[id] {
+			return nil, errors.New("exit status 1")
+		}
 		if _, ok := f.values[id]; !ok {
 			return nil, errors.New("exit status 1")
 		}
@@ -577,5 +581,55 @@ func TestRegistryMacOnOffSettings(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestApplyMacDefaultsOffReportsFailures: off skips keys that aren't set,
+// tries every key, and returns the deletes that still fail, so a failed off
+// switch doesn't look like it worked. Values other than enabled/disabled are
+// rejected without touching anything.
+func TestApplyMacDefaultsOffReportsFailures(t *testing.T) {
+	ctx := context.Background()
+	table := []macDefault{
+		{"NSGlobalDomain", "A", defBool, "false"},
+		{"NSGlobalDomain", "B", defBool, "false"},
+		{"NSGlobalDomain", "C", defBool, "false"},
+	}
+	f := &fakeDefaults{
+		values:     map[string]string{"NSGlobalDomain A": "0", "NSGlobalDomain C": "0"},
+		failDelete: map[string]bool{"NSGlobalDomain A": true},
+	}
+	useFake(t, f)
+	var buf bytes.Buffer
+	err := applyMacDefaults(ctx, sysutil.Opts{Stdout: &buf}, table, "disabled")
+	if err == nil || !strings.Contains(err.Error(), "defaults delete NSGlobalDomain A") {
+		t.Errorf("off with a failing delete: err = %v, want it reported", err)
+	}
+	var deletes []string
+	for _, c := range f.calls {
+		if c[0] == "defaults" && c[1] == "delete" {
+			deletes = append(deletes, c[3])
+		}
+	}
+	if !reflect.DeepEqual(deletes, []string{"A", "C"}) {
+		t.Errorf("deleted %v, want A and C (B is unset)", deletes)
+	}
+	if _, ok := f.values["NSGlobalDomain C"]; ok {
+		t.Error("a failed delete should not stop the next key")
+	}
+
+	f = &fakeDefaults{}
+	useFake(t, f)
+	if err := applyMacDefaults(ctx, sysutil.Opts{Stdout: &buf}, table, "disabled"); err != nil {
+		t.Errorf("off with nothing set: %v", err)
+	}
+	for _, v := range []string{"maybe", "", "not installed"} {
+		if err := applyMacDefaults(ctx, sysutil.Opts{Stdout: &buf}, table, v); err == nil {
+			t.Errorf("value %q: expected an error", v)
+		}
+	}
+	if len(f.calls) != len(table) {
+		// Only the reads from the "nothing set" off; unknown values touch nothing.
+		t.Errorf("calls = %v", f.calls)
 	}
 }
