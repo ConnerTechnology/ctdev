@@ -17,28 +17,32 @@ var Registry = []Setting{
 	// ── GPU & Boot ──────────────────────────────────────────────────────
 
 	{
-		Name:        "NVIDIA driver signing",
+		Name:        "NVIDIA driver works with Secure Boot",
 		Slug:        "gpu",
 		Category:    "GPU",
-		Description: "Signs the NVIDIA kernel module with a Machine Owner Key so Secure Boot accepts it. Without this, the driver won't load on Secure-Boot-enabled systems.",
+		Description: "Secure Boot only loads signed drivers, so this signs the NVIDIA driver with this machine's own key.",
 		Control:     ControlToggle,
 		OneWay:      true,
+		NoOffSwitch: "Undoing it would only stop the driver loading under Secure Boot again.",
 		Default:     "signed",
 		DetectFunc:  detectModuleSigned,
+		NotNeededFn: NvidiaSigningNotNeeded,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyNvidiaSigning(ctx, o)
 		},
 		HardwareFn: detectNvidiaLoaded,
 	},
 	{
-		Name:        "NVIDIA suspend services",
+		Name:        "NVIDIA GPU wakes from sleep cleanly",
 		Slug:        "gpu",
 		Category:    "GPU",
-		Description: "Enables systemd services that properly suspend and resume the NVIDIA GPU. Prevents black screens or freezes after waking from sleep.",
+		Description: "Lets the NVIDIA driver suspend and resume with the machine, so you don't wake to a black screen or a frozen desktop.",
 		Control:     ControlToggle,
 		OneWay:      true,
+		NoOffSwitch: "Undoing it would only bring the black screens and freezes after sleep back.",
 		Default:     "enabled",
 		DetectFunc:  detectNvidiaSuspendServices,
+		NotNeededFn: suspendNotNeeded,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyNvidiaSuspendServices(ctx, o)
 		},
@@ -609,7 +613,9 @@ var Registry = []Setting{
 		Category:    "Pi-hole DNS",
 		Description: "Upstream resolvers Pi-hole forwards cache misses to.",
 		Control:     ControlPicker,
-		Default:     "cloudflare",
+		// `configure pihole --batch` applies every default, so batch-applying the
+		// category moves a node on Unbound back to Cloudflare.
+		Default: "cloudflare",
 		Choices: []PickerChoice{
 			{Value: "cloudflare", Description: "Cloudflare (1.1.1.1, 1.0.0.1)"},
 			{Value: "cloudflare-family", Description: "Cloudflare for Families (1.1.1.3 — blocks malware + adult content network-wide)"},
