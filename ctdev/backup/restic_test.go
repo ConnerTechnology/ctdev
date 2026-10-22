@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -148,6 +149,20 @@ func TestCreateDestinationBackUpAndFindByFolderID(t *testing.T) {
 	}
 	if len(computers) != 1 || computers[0].Hostname != "example-laptop" || !computers[0].ThisComputer {
 		t.Errorf("Computers() = %+v, want just example-laptop, marked as this computer", computers)
+	}
+
+	// Exactly three keys, and the Recovery Code's opens the repository.
+	keys, err := d.keys(ctx, s.RecoveryCode)
+	if err != nil {
+		t.Fatalf("the Recovery Code doesn't open the repository: %v", err)
+	}
+	var labels []string
+	for _, k := range keys {
+		labels = append(labels, k.UserName+"@"+k.HostName)
+	}
+	sort.Strings(labels)
+	if want := "ctdev-account@ctdev,ctdev-recovery@ctdev,example@example-laptop"; strings.Join(labels, ",") != want {
+		t.Errorf("keys = %v, want %s", labels, want)
 	}
 
 	root := exampleFolder(t, m)
