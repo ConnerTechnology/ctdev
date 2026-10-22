@@ -56,6 +56,8 @@ file the next session reads:
   reviews every diff in a fresh context against the plan, merges, and releases. The human doesn't merge.
 - A bug that reaches a release is fixed with a note on how development missed it and what now
   catches it (`docs/agents/issue-tracker.md`).
+- Wait on CI in the same turn (`gh pr checks <n> --watch`), then merge. A turn that ends on "once
+  CI passes" stalls, because nothing wakes the session.
 - Ask the human when unsure or when the decision is the human's to make.
 - Before a change, say what it does to the work after it on the board, and shape it so that work
   keeps it.
