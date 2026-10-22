@@ -97,25 +97,8 @@ func (d macDefault) matches(out string) bool {
 // macOSDefaults is the table behind the `macos` category: ApplyMacOSDefaults
 // writes every entry and detectMacOSDefaults reads every entry back.
 var macOSDefaults = []macDefault{
-	{"Dock", "com.apple.dock", "autohide", defBool, "true"},
-	{"Dock", "com.apple.dock", "launchanim", defBool, "false"},
-	{"Dock", "com.apple.dock", "show-recents", defBool, "false"},
-	{"Dock", "com.apple.dock", "autohide-delay", defFloat, "0"},
-	{"Dock", "com.apple.dock", "autohide-time-modifier", defFloat, "0.15"},
-	{"Dock", "com.apple.dock", "mineffect", defString, "scale"},
-	{"Dock", "com.apple.dock", "expose-animation-duration", defFloat, "0.1"},
-
-	{"Windows", "NSGlobalDomain", "NSAutomaticWindowAnimationsEnabled", defBool, "false"},
-
+	// Dock, Finder and animations are `desktop` settings (macDesktop*).
 	{"Sound", "NSGlobalDomain", "com.apple.sound.beep.feedback", defBool, "true"},
-
-	{"Finder", "com.apple.finder", "ShowPathbar", defBool, "true"},
-	{"Finder", "com.apple.finder", "ShowStatusBar", defBool, "true"},
-	{"Finder", "com.apple.desktopservices", "DSDontWriteNetworkStores", defBool, "true"},
-	{"Finder", "com.apple.desktopservices", "DSDontWriteUSBStores", defBool, "true"},
-	{"Finder", "com.apple.finder", "FXDefaultSearchScope", defString, "SCcf"},
-	{"Finder", "com.apple.finder", "FXPreferredViewStyle", defString, "Nlsv"},
-	{"Finder", "com.apple.finder", "QuitMenuItem", defBool, "true"},
 
 	// Typing (key repeat, text substitutions, press-and-hold) lives in the
 	// `keyboard` category (keyboard.go).
@@ -194,16 +177,14 @@ func detectMacOSDefaults(ctx context.Context) string {
 	return "applied"
 }
 
-// ApplyMacOSDefaults writes every entry in macOSDefaults (Dock, animations,
-// Finder, dialogs, screensaver security), then restarts Dock and
-// Finder. Exposed as the `macos` configure category.
+// ApplyMacOSDefaults writes every entry in macOSDefaults (sound, dialogs,
+// screensaver security). Exposed as the `macos` configure category.
 func ApplyMacOSDefaults(ctx context.Context, o sysutil.Opts) error {
 	w := o.Stdout
 	if o.DryRun {
 		for _, line := range macOSDefaultsPlan() {
 			fmt.Fprintln(w, line)
 		}
-		fmt.Fprintln(w, "[dry-run] Would restart Dock and Finder")
 		return nil
 	}
 
@@ -217,18 +198,87 @@ func ApplyMacOSDefaults(ctx context.Context, o sysutil.Opts) error {
 		defaultsWrite(ctx, o, &errs, d.Domain, d.Key, d.Type.flag(), d.Value)
 	}
 
-	fmt.Fprintln(w, "Applying changes...")
-	// Best-effort restarts; killall's "No matching processes" is noise.
-	quiet := sysutil.Opts{Stdout: io.Discard}
-	_ = macExec(ctx, quiet, "killall", "Dock")
-	_ = macExec(ctx, quiet, "killall", "Finder")
-
 	if len(errs) > 0 {
 		fmt.Fprintf(w, "macOS defaults applied with %d warning(s)\n", len(errs))
 		return errors.Join(errs...)
 	}
 	fmt.Fprintln(w, "macOS defaults configured")
 	return nil
+}
+
+// The macOS `desktop` settings. Each table is one on/off setting: on writes
+// every entry, off deletes every key so macOS falls back to its own default.
+var (
+	macDesktopDock = []macDefault{
+		{"Dock", "com.apple.dock", "autohide", defBool, "true"},
+		{"Dock", "com.apple.dock", "autohide-delay", defFloat, "0"},
+		{"Dock", "com.apple.dock", "autohide-time-modifier", defFloat, "0.15"},
+		{"Dock", "com.apple.dock", "show-recents", defBool, "false"},
+	}
+	macDesktopAnimations = []macDefault{
+		{"Animations", "com.apple.dock", "launchanim", defBool, "false"},
+		{"Animations", "com.apple.dock", "mineffect", defString, "scale"},
+		{"Animations", "com.apple.dock", "expose-animation-duration", defFloat, "0.1"},
+		{"Animations", "NSGlobalDomain", "NSAutomaticWindowAnimationsEnabled", defBool, "false"},
+	}
+	macDesktopFinder = []macDefault{
+		{"Finder", "com.apple.finder", "ShowPathbar", defBool, "true"},
+		{"Finder", "com.apple.finder", "ShowStatusBar", defBool, "true"},
+		{"Finder", "com.apple.finder", "FXDefaultSearchScope", defString, "SCcf"},
+		{"Finder", "com.apple.finder", "FXPreferredViewStyle", defString, "Nlsv"},
+		{"Finder", "com.apple.finder", "QuitMenuItem", defBool, "true"},
+	}
+	macDesktopDSStore = []macDefault{
+		{"Finder", "com.apple.desktopservices", "DSDontWriteNetworkStores", defBool, "true"},
+		{"Finder", "com.apple.desktopservices", "DSDontWriteUSBStores", defBool, "true"},
+	}
+)
+
+// detectMacDefaults reports "enabled" when every entry in table reads back at
+// its value, else "disabled".
+func detectMacDefaults(ctx context.Context, table []macDefault) string {
+	for _, d := range table {
+		out, ok := defaultsRead(ctx, d.Domain, d.Key)
+		if !ok || !d.matches(out) {
+			return "disabled"
+		}
+	}
+	return "enabled"
+}
+
+// applyMacDefaults writes table for "enabled" or deletes its keys for
+// anything else. A delete of a key that isn't set fails harmlessly, so its
+// error is ignored. The app that reads the keys restarts once per apply, in
+// its ApplyGroup's post-apply hook (macRestartGroups).
+func applyMacDefaults(ctx context.Context, o sysutil.Opts, table []macDefault, value string) error {
+	var errs []error
+	for _, d := range table {
+		if value == "enabled" {
+			defaultsWrite(ctx, o, &errs, d.Domain, d.Key, d.Type.flag(), d.Value)
+		} else {
+			_ = macExec(ctx, o, "defaults", "delete", d.Domain, d.Key)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ApplyGroups of the macOS desktop settings, keyed by the app each restarts.
+const (
+	macDockGroup   = "macos-dock"
+	macFinderGroup = "macos-finder"
+)
+
+// macRestartGroups maps each group to the app its post-apply hook restarts.
+var macRestartGroups = map[string]string{macDockGroup: "Dock", macFinderGroup: "Finder"}
+
+// macRestartHook returns a post-apply hook that restarts app (best effort;
+// killall's "No matching processes" is noise).
+func macRestartHook(app string) PostApplyHook {
+	return func(ctx context.Context, o sysutil.Opts) error {
+		fmt.Fprintf(o.Stdout, "  Restarting %s...\n", app)
+		_ = macExec(ctx, sysutil.Opts{Stdout: io.Discard, DryRun: o.DryRun}, "killall", app)
+		return nil
+	}
 }
 
 // keyRepeatMsToUnits converts a slider value in ms to macOS's 15 ms units,

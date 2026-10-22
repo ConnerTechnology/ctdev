@@ -25,7 +25,7 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | --- | --- |
 | This file | Orientation, and the conventions that bind everywhere |
 | `docs/agents/where-things-go.md` | Where each kind of fact goes, and how to trace a line back to its Linear issue |
-| `.claude/rules/` | What no single file can say about one component or directory: conventions across files, traps, outside facts. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, doctor, the install scripts, the Go conventions inside the module |
+| `.claude/rules/` | What no single file can say about one component or directory: conventions across files, traps, outside facts. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Beszel, the homelab node, doctor, the install scripts, the Go conventions inside the module |
 | `docs/README.md` | The human-facing docs: one page per capability, in README order |
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
 | `docs/architecture.md` | The directory map of the Go module |
@@ -51,24 +51,28 @@ file the next session reads:
 
 ## How we work
 
-- Thomas delegates to the lead session. The lead interviews Thomas (`/grilling`), writes the spec
-  and tickets together (`/to-spec`, `/to-tickets`), and reviews every diff in a fresh context against
-  the plan, judging the diff and the evidence rather than the implementing agent's report.
-- Ask Thomas when unsure or when the decision is Thomas's to make.
+- A human says what they want; the lead session takes it the rest of the way on its own. It
+  interviews the human (`/grilling`), writes the spec and tickets (`/to-spec`, `/to-tickets`), builds,
+  reviews every diff in a fresh context against the plan, merges, and releases. The human doesn't merge.
+- A bug that reaches a release is fixed with a note on how development missed it and what now
+  catches it (`docs/agents/issue-tracker.md`).
+- Wait on CI in the same turn (`gh pr checks <n> --watch`), then merge. A turn that ends on "once
+  CI passes" stalls, because nothing wakes the session.
+- Ask the human when unsure or when the decision is the human's to make.
 - Before a change, say what it does to the work after it on the board, and shape it so that work
   keeps it.
-- Work that needs Thomas comes one item at a time: "what next" names a single item and what it
+- Work that needs the human comes one item at a time: "what next" names a single item and what it
   unblocks. Work agents can do alone runs in parallel.
 - Governing files (`AGENTS.md`, `.claude/settings.json`, `.mcp.json`, `.claude/skills/`,
-  `.claude/rules/`) change by showing Thomas the diff first and landing it after approval.
+  `.claude/rules/`) change by showing the human the diff first and landing it after approval.
 
-## Talking to Thomas
+## Talking to the human
 
 - Concise and direct, in American English.
 - One question or decision per message, with a proposed default. This holds inside `/grilling` too,
   where the skill would ask a numbered round. Reviews and audits go one item at a time. A list of
   already-scoped work can be approved in one go.
-- Anything Thomas does personally comes as numbered steps, one action each (where to go, what to
+- Anything the human does personally comes as numbered steps, one action each (where to go, what to
   click, what to enter), checked against the vendor's current UI. When a step changes, restate the
   sequence from step 1.
 

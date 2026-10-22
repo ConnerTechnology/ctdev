@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-09-24
+---
+
 # AGENTS.md, imported by CLAUDE.md
 
 A repo's instructions live in `AGENTS.md`, and `CLAUDE.md` is the single line `@AGENTS.md`. Codex,

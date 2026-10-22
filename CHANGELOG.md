@@ -5,16 +5,66 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
+  machine's partitions and you check which to hide from the file manager. It writes
+  `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem UUID for exactly those,
+  and checking nothing removes the rule. The old rule, hard-coded to one computer's
+  partitions, is gone; on a machine that has it, the wizard shows "legacy rule" until
+  you pick. `--batch` leaves Hide drives as it is.
+- **`configure desktop` covers macOS too.** The Dock, Finder and animation defaults move
+  from `configure macos` into `desktop` as four settings you can turn on or off: an
+  auto-hiding Dock, faster animations, Finder list view with path and status bars, and
+  no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
+  macOS goes back to its own default.
 - **`ctdev configure keyboard` holds the macOS typing settings, and shows the repeat rate
   in characters per second on every machine.** On macOS ctdev offers the eight fastest
   15 ms steps (15–120 ms, 67 cps down to 8 cps), converted to and from `KeyRepeat` behind
   the scenes; a Mac set slower shows its own rate. The recommended rate is 67 cps, the
   step nearest the Linux default of 50 cps and faster than System Settings allows; the
-  delay stays 195 ms. "Type exactly what I type" (no smart
-  quotes, dashes, autocorrect, auto-capitalize or double-space period) and "Holding a key
-  repeats it" (no accent popup) move here from `configure macos`, and each has an off
-  switch that deletes the keys ctdev wrote. "NumLock on boot" can be turned off, which
-  removes numlockx.
+  delay stays 195 ms. "Type exactly what I type" (no smart quotes, dashes, autocorrect,
+  auto-capitalize or double-space period) and "Holding a key repeats it" (no accent popup)
+  move here from `configure macos`, and each has an off switch that deletes the keys ctdev
+  wrote. "NumLock on boot" can be turned off, which removes numlockx.
+
+## [16.0.1] - 2026-10-22
+
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.0.2`** (was `v1.0.0`), which
+  narrows the plugin's merge rule to `gh pr merge * --merge`. Run `ctdev repo setup` again in
+  a repo to move it to 1.0.2: it re-points the marketplace and updates the plugin at local
+  scope.
+
+## [16.0.0] - 2026-10-22
+
+### Added
+- **`ctdev repo setup`** sets up the git repo you're in for Claude Code, whether the repo is
+  yours or someone else's, without committing anything to it. It installs git, gh and
+  Claude Code when they're missing, and signs gh in to GitHub if it isn't. It installs the
+  `connertechnology` plugin at local scope from the private `ConnerTechnology/engineering`
+  marketplace, pinned to `v1.0.0` and cloned over gh's login. Then it starts Claude Code on
+  `/connertechnology:setup`. `.claude/settings.local.json` is added to `.git/info/exclude`
+  unless something already ignores it. Running it again changes nothing.
+- **`ctdev configure jira`** adds Atlassian's Rovo MCP server (`atlassian`) to the repo at
+  local scope, where it signs in as you with OAuth. It also saves your Atlassian API token
+  for scripts in `~/.config/ctdev/jira/<site>.env` (owner-only), after checking it with
+  the site. Scripts read it with `ctdev jira auth-header --site <site>`.
+
+### Changed
+- **`ctdev configure linear` writes nothing in the repo.** The `linear` server is added at
+  local scope (`claude mcp add-json --scope local`, kept in `~/.claude.json`) instead of in
+  `.mcp.json`, and the "whose repo is this?" question is gone. A repo set up the old way
+  keeps working: the wizard offers its `.mcp.json` workspace and says the entry can be
+  removed.
+- **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
+  "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
+  suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
+  in the wizard, the settings browser and `--show`. Driver signing shows as not needed
+  when Secure Boot is off, including on a legacy BIOS machine, which has none, and the
+  suspend services when suspend is masked. When `mokutil` can't tell, signing counts as
+  needed, in `--show` too. A setting that isn't needed isn't applied by `--batch` (even with
+  `--force`), the wizard asks "Apply anyway?" once, defaulting to no, and `configure
+  gpu` skips the signing flow. Both stay on-only, and the wizard says why
+  there's no off switch.
 
 ## [15.0.0] - 2026-10-19
 

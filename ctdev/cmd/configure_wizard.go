@@ -156,10 +156,13 @@ func showSetting(state *setup.SettingState, width int) {
 	marker := ""
 	if state.NotNeeded != "" {
 		marker = styles.Dimmed.Render(fmt.Sprintf(" (not needed: %s)", state.NotNeeded))
-	} else if state.CurrentValue != s.Default {
+	} else if s.Default != "" && state.CurrentValue != s.Default {
 		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", setup.DisplayValue(s, s.Default)))
 	}
 	fmt.Printf("  %s %s%s\n", label, value, marker)
+	if s.Description != "" {
+		fmt.Printf("  %s\n", styles.Dimmed.Render(s.Description))
+	}
 }
 
 // promptSetting interactively prompts the user for a setting value.
@@ -183,12 +186,20 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 	// honest question instead of an enable/disable choice the apply layer
 	// can't deliver on.
 	if s.OneWay {
+		if s.NoOffSwitch != "" {
+			fmt.Printf("  %s\n", styles.Dimmed.Render("No off switch: "+s.NoOffSwitch))
+		}
 		if current == s.Default {
 			fmt.Printf("  %s\n\n", styles.Dimmed.Render("Already "+current+" — nothing to do."))
 			state.Enabled = false
 			return false, nil
 		}
-		yes, err := promptYesNoCtx(ctx, fmt.Sprintf("Apply now (→ %s)?", s.Default), false)
+		question := fmt.Sprintf("Apply now (→ %s)?", s.Default)
+		if state.NotNeeded != "" {
+			fmt.Printf("  %s\n", styles.Dimmed.Render("Not needed on this machine: "+state.NotNeeded+"."))
+			question = fmt.Sprintf("Apply anyway (→ %s)?", s.Default)
+		}
+		yes, err := promptYesNoCtx(ctx, question, false)
 		if err != nil {
 			return false, err
 		}
@@ -227,6 +238,8 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 		newValue, err = promptPicker(ctx, state)
 	case setup.ControlSlider:
 		newValue, err = promptSlider(ctx, state)
+	case setup.ControlMultiPick:
+		newValue, err = promptMultiPick(ctx, state)
 	}
 	if err != nil {
 		return false, err
@@ -339,6 +352,56 @@ func promptPicker(ctx context.Context, state *setup.SettingState) (string, error
 		return state.CurrentValue, nil
 	}
 	return s.Choices[n-1].Value, nil
+}
+
+// promptMultiPick lists this machine's choices with the checked ones marked
+// and reads the numbers to check. The answer replaces the whole selection;
+// Enter keeps it, and 0 or "none" checks nothing.
+func promptMultiPick(ctx context.Context, state *setup.SettingState) (string, error) {
+	s := state.Setting
+	var choices []setup.PickerChoice
+	if s.ChoicesFunc != nil {
+		choices = s.ChoicesFunc(ctx)
+	}
+	if len(choices) == 0 {
+		fmt.Println(styles.Dimmed.Render("  Nothing to choose from on this machine."))
+		return state.CurrentValue, nil
+	}
+
+	checked := make(map[string]bool)
+	for _, v := range setup.SplitPicks(state.CurrentValue) {
+		checked[v] = true
+	}
+	for i, c := range choices {
+		box := "[ ]"
+		if checked[c.Value] {
+			box = "[x]"
+		}
+		fmt.Printf("    %s %d) %s %s\n", box, i+1, c.Value, styles.Dimmed.Render("— "+c.Description))
+	}
+	fmt.Printf("  %s ", styles.Dimmed.Render("Numbers to check, e.g. 1 3 (0 for none) [keep]:"))
+
+	input, ok := readLineCtx(ctx)
+	if !ok {
+		return "", errPromptCancelled
+	}
+	if input == "" {
+		return state.CurrentValue, nil
+	}
+	if input == "0" || strings.EqualFold(input, "none") {
+		return setup.PicksNone, nil
+	}
+
+	var picks []string
+	for _, f := range strings.FieldsFunc(input, func(r rune) bool { return r == ' ' || r == ',' }) {
+		n, err := strconv.Atoi(f)
+		if err != nil || n < 1 || n > len(choices) {
+			fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
+			return state.CurrentValue, nil
+		}
+		picks = append(picks, choices[n-1].Value)
+	}
+	return setup.JoinPicks(picks), nil
 }
 
 // promptSlider prompts for a numeric slider setting.

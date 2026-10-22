@@ -179,11 +179,14 @@ func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error
 	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
-// applyNvidiaSigning runs the GPU signing setup via the gpu package.
+// applyNvidiaSigning runs the GPU signing setup via the gpu package. It only
+// runs once the user has said yes, or in --batch when signing is needed, so
+// RunSetup doesn't ask about Secure Boot a second time.
 func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{
-		Stdout: o.Stdout,
-		Stdin:  os.Stdin,
+		Stdout:              o.Stdout,
+		Stdin:               os.Stdin,
+		SecureBootConfirmed: true,
 	})
 }
 
@@ -285,18 +288,6 @@ func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {
 	}
 
 	return nil
-}
-
-// applyHideDrives installs a udev rule to hide Windows/secondary partitions from the file manager.
-func applyHideDrives(ctx context.Context, o sysutil.Opts) error {
-	content, err := Configs.ReadFile("configs/udev/99-hide-drives.rules")
-	if err != nil {
-		return fmt.Errorf("read embedded hide-drives rule: %w", err)
-	}
-	if err := sysutil.SudoWriteFile(ctx, o, string(content), "/etc/udev/rules.d/99-hide-drives.rules"); err != nil {
-		return fmt.Errorf("copy udev rule: %w", err)
-	}
-	return sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 }
 
 // applySSDTrim turns the fstrim.timer systemd unit (weekly SSD TRIM) on for

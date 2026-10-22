@@ -31,7 +31,7 @@ func runConfigureGPU(cmd *cobra.Command, args []string) error {
 
 	// --show: read-only hardware + signing status, then the category's settings.
 	if flagConfigShow {
-		if err := showGPUStatus(); err != nil {
+		if err := showGPUStatus(ctx); err != nil {
 			return err
 		}
 		fmt.Println()
@@ -57,6 +57,9 @@ func runConfigureGPU(cmd *cobra.Command, args []string) error {
 		}
 	} else if err := runCategoryWizard(ctx, "gpu", false); err != nil {
 		return err
+	}
+	if !gpuSigningNeeded(ctx, isBatchMode()) {
+		return nil
 	}
 	return runGPUSigning(ctx, false)
 }

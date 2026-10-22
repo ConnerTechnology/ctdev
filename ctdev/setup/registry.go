@@ -10,6 +10,9 @@ func init() {
 	PostApplyHooks["grub"] = applyUpdateGrub
 	PostApplyHooks["pihole-ftl"] = applyPiholeRestart
 	PostApplyHooks[macKeyRepeatGroup] = macKeyRepeatNote
+	for group, app := range macRestartGroups {
+		PostApplyHooks[group] = macRestartHook(app)
+	}
 }
 
 // Registry is the single source of truth for all setup settings.
@@ -17,28 +20,32 @@ var Registry = []Setting{
 	// ── GPU & Boot ──────────────────────────────────────────────────────
 
 	{
-		Name:        "NVIDIA driver signing",
+		Name:        "NVIDIA driver works with Secure Boot",
 		Slug:        "gpu",
 		Category:    "GPU",
-		Description: "Signs the NVIDIA kernel module with a Machine Owner Key so Secure Boot accepts it. Without this, the driver won't load on Secure-Boot-enabled systems.",
+		Description: "Secure Boot only loads signed drivers, so this signs the NVIDIA driver with this machine's own key.",
 		Control:     ControlToggle,
 		OneWay:      true,
+		NoOffSwitch: "Undoing it would only stop the driver loading under Secure Boot again.",
 		Default:     "signed",
 		DetectFunc:  detectModuleSigned,
+		NotNeededFn: NvidiaSigningNotNeeded,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyNvidiaSigning(ctx, o)
 		},
 		HardwareFn: detectNvidiaLoaded,
 	},
 	{
-		Name:        "NVIDIA suspend services",
+		Name:        "NVIDIA GPU wakes from sleep cleanly",
 		Slug:        "gpu",
 		Category:    "GPU",
-		Description: "Enables systemd services that properly suspend and resume the NVIDIA GPU. Prevents black screens or freezes after waking from sleep.",
+		Description: "Lets the NVIDIA driver suspend and resume with the machine, so you don't wake to a black screen or a frozen desktop.",
 		Control:     ControlToggle,
 		OneWay:      true,
+		NoOffSwitch: "Undoing it would only bring the black screens and freezes after sleep back.",
 		Default:     "enabled",
 		DetectFunc:  detectNvidiaSuspendServices,
+		NotNeededFn: suspendNotNeeded,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyNvidiaSuspendServices(ctx, o)
 		},
@@ -492,15 +499,73 @@ var Registry = []Setting{
 		Name:        "Hide drives",
 		Slug:        "desktop",
 		Category:    "Desktop",
-		Description: "Hides Windows/secondary NVMe partitions from the file manager so they don't clutter the sidebar.",
+		Description: "Hides the partitions you check (a Windows install, a recovery partition) from the file manager, so they can't be opened or ejected by mistake.",
+		Control:     ControlMultiPick,
+		// No Default: which partitions to hide is a per-machine choice.
+		ChoicesFunc: hideDrivesChoices,
+		DetectFunc:  detectHideDrives,
+		ApplyFunc:   applyHideDrives,
+		HardwareFn:  gateCinnamon,
+	},
+
+	{
+		Name:        "Auto-hiding Dock",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Hides the Dock until you point at it, with no delay and no recent-apps section, so windows get the whole screen. Restarts the Dock.",
 		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/udev/rules.d/99-hide-drives.rules") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyHideDrives(ctx, o)
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDock) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopDock, v)
 		},
-		HardwareFn: gateCinnamon,
+		ApplyGroup: macDockGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "Faster animations",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Drops the app-launch bounce and window open/close animations and speeds up minimize and Mission Control, so the Mac feels quicker. Restarts the Dock.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopAnimations) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopAnimations, v)
+		},
+		ApplyGroup: macDockGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "Finder list view with path and status bars",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Opens folders as lists, shows where you are and how much is there, searches the current folder, and adds Quit to the Finder menu. Restarts Finder.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopFinder) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopFinder, v)
+		},
+		ApplyGroup: macFinderGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "No .DS_Store files on network and USB drives",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Stops Finder leaving its hidden folder-settings files on shared and removable drives, where other computers see them as clutter. Restarts Finder.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDSStore) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopDSStore, v)
+		},
+		ApplyGroup: macFinderGroup,
+		HardwareFn: gateMacOS,
 	},
 
 	// ── System ─────────────────────────────────────────────────────────
@@ -640,7 +705,9 @@ var Registry = []Setting{
 		Category:    "Pi-hole DNS",
 		Description: "Upstream resolvers Pi-hole forwards cache misses to.",
 		Control:     ControlPicker,
-		Default:     "cloudflare",
+		// `configure pihole --batch` applies every default, so batch-applying the
+		// category moves a node on Unbound back to Cloudflare.
+		Default: "cloudflare",
 		Choices: []PickerChoice{
 			{Value: "cloudflare", Description: "Cloudflare (1.1.1.1, 1.0.0.1)"},
 			{Value: "cloudflare-family", Description: "Cloudflare for Families (1.1.1.3 — blocks malware + adult content network-wide)"},
@@ -705,11 +772,9 @@ var Registry = []Setting{
 		Name:     "macOS defaults",
 		Slug:     "macos",
 		Category: "macOS",
-		Description: "Applies opinionated macOS defaults: Dock auto-hide with no delay and a fast slide (no launch animation or recents), " +
-			"scale minimize, fast Mission Control, no window open/close animations, " +
-			"Finder path/status bars with list view and current-folder search, no .DS_Store on network/USB drives, " +
-			"expanded save/print dialogs, and password required immediately after screensaver. Restarts Dock and Finder. " +
-			"Typing settings are in the keyboard category.",
+		Description: "Applies opinionated macOS defaults: volume-change feedback sound, " +
+			"expanded save/print dialogs, and password required immediately after screensaver. " +
+			"Typing is in the keyboard category; Dock, Finder and animations are in desktop.",
 		Control:    ControlToggle,
 		OneWay:     true,
 		Default:    "applied",
