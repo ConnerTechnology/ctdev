@@ -325,6 +325,34 @@ func TestBackupDryRunPrintsTheResticCommandWithoutSecrets(t *testing.T) {
 	}
 }
 
+// When saving fails after the computer key was added, the key is removed, so
+// no key is left that nobody holds the password to.
+func TestConnectRemovesItsKeyWhenSavingFails(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	first := testMachine(t, "example-laptop")
+	d, s := createExample(t, first)
+
+	second := testMachine(t, "example-desktop")
+	// A file where the config dir should be makes the save fail.
+	if err := os.MkdirAll(filepath.Dir(second.Dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second.Dir, []byte("example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.ConnectDestination(ctx, s.Kit, exampleMaster); err == nil {
+		t.Fatal("want the save to fail")
+	}
+	computers, err := d.Computers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(computers) != 1 || computers[0].Hostname != "example-laptop" {
+		t.Errorf("computers = %+v, want only example-laptop", computers)
+	}
+}
+
 func TestCreatingOverAnExistingRepositoryPointsAtConnect(t *testing.T) {
 	requireRestic(t)
 	first := testMachine(t, "example-laptop")

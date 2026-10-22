@@ -251,6 +251,12 @@ func (m *Machine) ConnectDestination(ctx context.Context, kitText, master string
 		return nil, err
 	}
 	if err := m.save(d); err != nil {
+		// The key would open the repository with a password nobody kept.
+		// restic won't remove the key a run opened with, so use the account key.
+		rm := run{password: account, args: []string{"key", "remove", "--retry-lock", retryLock, d.computerKeyID}}
+		if _, rerr := d.restic(context.WithoutCancel(ctx), rm); rerr != nil {
+			return nil, fmt.Errorf("%w; removing the new key %s from the destination also failed: %v", err, short(d.computerKeyID), rerr)
+		}
 		return nil, err
 	}
 	return d, nil
