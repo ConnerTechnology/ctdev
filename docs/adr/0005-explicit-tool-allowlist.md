@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-09-24
+---
+
 # Explicit tool allowlist
 
 A repo loads only the skills, agents, and MCP servers that `.claude/settings.json` names, not
