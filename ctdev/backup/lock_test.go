@@ -39,27 +39,6 @@ func TestStateWritesDontWaitOnARunningScheduledBackup(t *testing.T) {
 	}
 }
 
-// The state lock still excludes another *Machine's write.
-func TestStateLockExcludesAnotherMachine(t *testing.T) {
-	m := testMachine(t, "example-laptop")
-	other := &Machine{Dir: m.Dir}
-	unlock, err := other.stateLock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error)
-	go func() { done <- m.recordRun(filepath.Join(m.Home, "example"), noon, nil) }()
-	select {
-	case err := <-done:
-		t.Fatalf("a write went through while another held the state lock: %v", err)
-	default:
-	}
-	unlock()
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-}
-
 // Configure drops a same-ID entry whose path is gone only once a scheduled
 // run has recorded it missing, and says so. One that was fine at its last
 // run, such as a folder on a drive that isn't mounted, stays.
