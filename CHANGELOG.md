@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
+  machine's partitions and you check which to hide from the file manager. It writes
+  `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem UUID for exactly those,
+  and checking nothing removes the rule. The old rule, hard-coded to one computer's
+  partitions, is gone; on a machine that has it, the wizard shows "legacy rule" until
+  you pick. `--batch` leaves Hide drives as it is.
+- **`configure desktop` covers macOS too.** The Dock, Finder and animation defaults move
+  from `configure macos` into `desktop` as four settings you can turn on or off: an
+  auto-hiding Dock, faster animations, Finder list view with path and status bars, and
+  no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
+  macOS goes back to its own default.
+
 ## [16.0.1] - 2026-10-22
 
 ### Changed

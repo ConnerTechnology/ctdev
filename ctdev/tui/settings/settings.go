@@ -400,6 +400,10 @@ func (m *Model) footerView() string {
 		} else if s.Default != "" {
 			detail += fmt.Sprintf(" · Recommended: %s", setup.DisplayValue(s, s.Default))
 		}
+		if s.Control == setup.ControlMultiPick {
+			// The browser can't check items; the category wizard lists them.
+			detail += fmt.Sprintf(" · Change with: ctdev configure %s", s.Slug)
+		}
 		if r := s.Slider; r != nil {
 			detail += fmt.Sprintf(" · Range: %s (←/→ step %s)",
 				setup.SliderRangeLabel(r), setup.FormatSliderVal(r.Step, r.Step))

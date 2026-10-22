@@ -290,18 +290,6 @@ func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {
 	return nil
 }
 
-// applyHideDrives installs a udev rule to hide Windows/secondary partitions from the file manager.
-func applyHideDrives(ctx context.Context, o sysutil.Opts) error {
-	content, err := Configs.ReadFile("configs/udev/99-hide-drives.rules")
-	if err != nil {
-		return fmt.Errorf("read embedded hide-drives rule: %w", err)
-	}
-	if err := sysutil.SudoWriteFile(ctx, o, string(content), "/etc/udev/rules.d/99-hide-drives.rules"); err != nil {
-		return fmt.Errorf("copy udev rule: %w", err)
-	}
-	return sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
-}
-
 // applySSDTrim turns the fstrim.timer systemd unit (weekly SSD TRIM) on for
 // "active" and off for anything else.
 func applySSDTrim(ctx context.Context, o sysutil.Opts, value string) error {
