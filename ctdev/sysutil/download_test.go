@@ -170,7 +170,10 @@ func TestVerifyChecksumFileMissing(t *testing.T) {
 // only after its checksum matches.
 func TestDownloadGitHubBinary_PinnedBz2UserInstall(t *testing.T) {
 	// bzip2 of "fake restic binary\n"; the stdlib has no bzip2 writer.
-	archive, _ := hex.DecodeString("425a6839314159265359d8ec154c000004d180001040003b291c202000228d0f49b53c8400007d12451fd3484c17eb177245385090d8ec154c")
+	archive, err := hex.DecodeString("425a6839314159265359d8ec154c000004d180001040003b291c202000228d0f49b53c8400007d12451fd3484c17eb177245385090d8ec154c")
+	if err != nil {
+		t.Fatal(err)
+	}
 	sum := sha256.Sum256(archive)
 	for _, tc := range []struct {
 		name    string
