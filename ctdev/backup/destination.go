@@ -151,6 +151,10 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 		existed, wasEmpty = err == nil, err == nil && len(entries) == 0
 	}
 
+	// Find restic first, so a missing one isn't mistaken for a failed init.
+	if _, err := checkRestic(ctx, m.resticBin()); err != nil {
+		return Setup{}, err
+	}
 	// restic init labels its first key with whoever ran it. Init with a
 	// throwaway key, add the three labeled keys, then remove the throwaway.
 	initial := randomPassword()

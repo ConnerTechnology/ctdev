@@ -120,7 +120,9 @@ func TestBackupWithoutATerminalFailsWhenNotBackedUp(t *testing.T) {
 	}
 }
 
-func TestBackupWithoutATerminalPassesWhenConfigured(t *testing.T) {
+// A check that passes when backups can't run is useless: a destination this
+// computer isn't set up on fails it.
+func TestBackupWithoutATerminalFailsWhenTheDestinationIsMissing(t *testing.T) {
 	dir := backupFolderForTest(t)
 	if err := backup.WriteConfig(dir, backup.NewConfig("example-backups")); err != nil {
 		t.Fatal(err)
@@ -130,11 +132,37 @@ func TestBackupWithoutATerminalPassesWhenConfigured(t *testing.T) {
 	}
 	t.Chdir(filepath.Join(dir, "docs"))
 	out, err := runBackupBatch(t)
-	if err != nil {
-		t.Errorf("configured, never failed: want success, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "example-backups isn't set up on this computer") {
+		t.Errorf("want a failure naming the missing destination, got %v", err)
 	}
 	if !strings.HasPrefix(out, "Backed up folder: ~/Projects/website  (you're in ~/Projects/website/docs)\n") ||
 		!strings.Contains(out, "not scheduled on this computer") {
+		t.Errorf("status = %q", out)
+	}
+}
+
+// A destination that can't be read, here because restic isn't installed,
+// fails the check too.
+func TestBackupWithoutATerminalFailsWhenTheDestinationCantBeRead(t *testing.T) {
+	dir := backupFolderForTest(t)
+	t.Setenv("PATH", t.TempDir()) // no restic anywhere
+	cfg := backup.NewConfig("example-backups")
+	if err := backup.WriteConfig(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	env := filepath.Join(os.Getenv("HOME"), ".config", "ctdev", "backup", "destinations", "example-backups.env")
+	if err := os.MkdirAll(filepath.Dir(env), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "RESTIC_REPOSITORY=" + filepath.Join(t.TempDir(), "repo") + "\nCTDEV_COMPUTER_KEY=example\n"
+	if err := os.WriteFile(env, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runBackupBatch(t)
+	if err == nil || !strings.Contains(err.Error(), "can't read") {
+		t.Errorf("want a failure saying the destination can't be read, got %v", err)
+	}
+	if !strings.Contains(out, "Problem") {
 		t.Errorf("status = %q", out)
 	}
 }
@@ -197,6 +225,11 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 	}
 	if s := m.Status(ctx, dir); !s.Scheduled || s.DestinationMissing {
 		t.Errorf("after Configure: scheduled %v, destination missing %v", s.Scheduled, s.DestinationMissing)
+	}
+
+	// Configured, readable and never failed: the non-terminal check passes.
+	if out, err := runBackupBatch(t); err != nil {
+		t.Errorf("status check after Configure: %v\n%s", err, out)
 	}
 
 	// From a subfolder, Configure reconfigures the backed-up folder above it,

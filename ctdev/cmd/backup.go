@@ -80,7 +80,8 @@ func runBackup(cmd *cobra.Command, _ []string) error {
 }
 
 // backupStatusOnly prints the status for a pipe or --batch, and fails when
-// the folder isn't backed up or its last backup failed, so it works as a check.
+// the folder isn't backed up, its destination can't be reached or read, or
+// its last backup failed, so it works as a check.
 func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io.Writer) error {
 	s := m.Status(ctx, cwd)
 	text := backupscreen.Status(s, m.Home)
@@ -93,6 +94,10 @@ func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io
 	switch {
 	case s.Config == nil:
 		return fmt.Errorf("%s isn't backed up: run ctdev backup in a terminal and choose Configure", backup.DisplayPath(m.Home, s.Target))
+	case s.DestinationMissing:
+		return fmt.Errorf("destination %s isn't set up on this computer: run ctdev backup in a terminal and choose Configure", s.Destination)
+	case s.ReadErr != nil:
+		return fmt.Errorf("can't read the backups of %s: %w", backup.DisplayPath(m.Home, s.Target), s.ReadErr)
 	case s.Failed():
 		return fmt.Errorf("the last backup of %s failed", backup.DisplayPath(m.Home, s.Target))
 	}

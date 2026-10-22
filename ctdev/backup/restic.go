@@ -40,8 +40,8 @@ type run struct {
 // in argv, where any user on the machine could read them in ps. That is also
 // why this runs exec directly: sysutil.Run passes no environment or pipe.
 func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
-	bin := d.m.resticBin()
-	if err := checkRestic(ctx, bin); err != nil {
+	bin, err := checkRestic(ctx, d.m.resticBin())
+	if err != nil {
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, bin, r.args...)
@@ -61,7 +61,7 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 			pw.Close()
 		}()
 	}
-	err := cmd.Run()
+	err = cmd.Run()
 	if err == nil {
 		return stdout.Bytes(), nil
 	}
@@ -82,34 +82,32 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 // Ubuntu 22.04 and 24.04 ship older ones in apt.
 var minRestic = [3]int{0, 17, 0}
 
-// resticChecked caches checkRestic per binary path for the process.
+// resticChecked caches the version check per resolved binary for the process.
 var resticChecked sync.Map
 
-// checkRestic makes sure the binary exists and is new enough.
-func checkRestic(ctx context.Context, bin string) error {
-	if err, ok := resticChecked.Load(bin); ok {
-		if err == nil {
-			return nil
+// checkRestic finds the binary and makes sure it's new enough, returning its
+// path. The lookup isn't cached, so installing restic mid-run is noticed.
+func checkRestic(ctx context.Context, bin string) (string, error) {
+	path, err := exec.LookPath(bin)
+	if err != nil {
+		return "", ErrNoRestic
+	}
+	if cached, ok := resticChecked.Load(path); ok {
+		if cached == nil {
+			return path, nil
 		}
-		return err.(error)
+		return "", cached.(error)
 	}
-	var err error
-	path, lerr := exec.LookPath(bin)
-	if lerr != nil {
-		err = ErrNoRestic
-	} else if out, verr := exec.CommandContext(ctx, path, "version").Output(); verr != nil {
-		err = fmt.Errorf("run restic version: %w", verr)
-	} else {
-		err = resticVersionOK(string(out))
+	out, err := exec.CommandContext(ctx, path, "version").Output()
+	if err != nil {
+		return "", fmt.Errorf("run restic version: %w", err)
 	}
-	if ctx.Err() == nil {
-		if err == nil {
-			resticChecked.Store(bin, nil)
-		} else {
-			resticChecked.Store(bin, err)
-		}
+	if err := resticVersionOK(string(out)); err != nil {
+		resticChecked.Store(path, err)
+		return "", err
 	}
-	return err
+	resticChecked.Store(path, nil)
+	return path, nil
 }
 
 var resticVersion = regexp.MustCompile(`^restic (\d+)\.(\d+)\.(\d+)`)
