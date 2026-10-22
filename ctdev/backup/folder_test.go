@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -115,6 +116,38 @@ func TestConfigFileHoldsOnlyTheFourFields(t *testing.T) {
 	sort.Strings(keys)
 	if want := []string{"destination", "id", "keep", "schedule"}; !reflect.DeepEqual(keys, want) {
 		t.Errorf("keys = %v, want %v", keys, want)
+	}
+}
+
+func TestReadConfigRejectsABadFile(t *testing.T) {
+	good := `"destination": "example-backups", "schedule": "daily", "keep": {"hourly": 24, "daily": 7, "weekly": 4, "monthly": 12, "yearly": 3}`
+	for name, body := range map[string]string{
+		"no id":            `{` + good + `}`,
+		"id not a UUID":    `{"id": "website", ` + good + `}`,
+		"id with a comma":  `{"id": "0b6c2a4e-1f3d-4c5b-9a8e-7d6f5e4c3b2a,x", ` + good + `}`,
+		"unknown schedule": `{"id": "0b6c2a4e-1f3d-4c5b-9a8e-7d6f5e4c3b2a", "destination": "example-backups", "schedule": "monthly", "keep": {}}`,
+		"negative keep":    `{"id": "0b6c2a4e-1f3d-4c5b-9a8e-7d6f5e4c3b2a", "destination": "example-backups", "schedule": "daily", "keep": {"daily": -1}}`,
+		"no destination":   `{"id": "0b6c2a4e-1f3d-4c5b-9a8e-7d6f5e4c3b2a", "schedule": "daily", "keep": {}}`,
+		"not JSON":         `id = website`,
+	} {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ConfigFileName)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := ReadConfig(dir)
+		if err == nil || !strings.Contains(err.Error(), path) {
+			t.Errorf("%s: want an error naming %s, got %v", name, path, err)
+		}
+	}
+
+	dir := t.TempDir()
+	ok := `{"id": "0b6c2a4e-1f3d-4c5b-9a8e-7d6f5e4c3b2a", ` + good + `}`
+	if err := os.WriteFile(filepath.Join(dir, ConfigFileName), []byte(ok), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadConfig(dir); err != nil {
+		t.Errorf("a good file: %v", err)
 	}
 }
 

@@ -13,6 +13,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/secretfile"
@@ -111,19 +113,49 @@ func nearestConfig(dir string) (string, error) {
 // ReadConfig reads the config file at the root of a backed-up folder.
 func ReadConfig(root string) (Config, error) {
 	var cfg Config
-	data, err := os.ReadFile(filepath.Join(root, ConfigFileName))
+	path := filepath.Join(root, ConfigFileName)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, err
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return cfg, fmt.Errorf("%s: %w", filepath.Join(root, ConfigFileName), err)
+		return cfg, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := cfg.validate(); err != nil {
+		return cfg, fmt.Errorf("%s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+var uuidShape = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// validate checks a config read from disk. The file may be hand-edited or
+// come from a clone, and its ID ends up in a restic tag, where a comma would
+// split it in two.
+func (c Config) validate() error {
+	switch {
+	case !uuidShape.MatchString(c.ID):
+		return fmt.Errorf("id %q isn't a UUID", c.ID)
+	case !destinationName.MatchString(c.Destination):
+		return fmt.Errorf("destination %q isn't a destination name", c.Destination)
+	case !slices.Contains(Schedules, c.Schedule):
+		return fmt.Errorf("schedule %q isn't hourly, daily or weekly", c.Schedule)
+	}
+	k := c.Keep
+	for _, n := range []int{k.Hourly, k.Daily, k.Weekly, k.Monthly, k.Yearly} {
+		if n < 0 {
+			return errors.New("keep counts can't be negative")
+		}
+	}
+	return nil
 }
 
 // WriteConfig writes the folder's config file. It is world-readable on
 // purpose: it holds no secret and is meant to be committed.
 func WriteConfig(root string, cfg Config) error {
+	if err := cfg.validate(); err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
