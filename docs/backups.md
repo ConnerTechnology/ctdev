@@ -187,7 +187,9 @@ Delete all backups asks `[y/N]`, then has you type the folder's name, and forget
 the folder: by its ID once configured, or, for a folder that isn't, its one-offs, the backups with
 no folder ID that this computer made of its path. A backup that carries a folder ID always belongs
 to that folder, so a new folder made where a backed-up one used to be never claims the old one's
-backups. After any delete, ctdev says "Space is freed at the next weekly maintenance."
+backups. After any delete, ctdev says when the space is freed: at the destination's next
+[weekly maintenance](#weekly-maintenance-and-the-data-check), with its date, such as "Space is
+freed at the next weekly maintenance, due Oct 27."
 
 ## Stop backing up
 
@@ -234,6 +236,13 @@ run. After each backup it applies the folder's keep rules ([Retention](#retentio
 result is recorded in `state.json`. Then it checks each destination its folders use for the
 [weekly maintenance](#weekly-maintenance-and-the-data-check).
 
+A backup that finds the destination locked for longer than restic's 30-minute wait, usually by
+another computer's weekly maintenance, is deferred rather than failed: it doesn't notify, the
+status notes "waiting: destination busy (weekly maintenance)" in dim text, and the next hour tries
+again. Only the overdue rule turns it red. Back up now waits a minute for the lock instead, then
+says "The destination is busy (another computer's weekly maintenance or backup). Try again in a few
+minutes."
+
 A listed folder that has been moved or deleted, or whose `.ctdev-backup.json` is gone or now holds
 another folder's ID, is skipped and recorded as missing. Run `ctdev backup` in its new place and
 choose Configure: once a scheduled run has recorded the old place as missing, Configure removes it
@@ -261,20 +270,26 @@ check notifies the same way, once when it fails and once when a later one passes
 `ctdev doctor` has a Backups section with a row for each folder on this computer's list: OK, failed
 (with the error), overdue or missing, with "retention failed: …" as a warning when the keep rules
 didn't apply. Each destination gets a "Data check" row too: the date it last ran, and OK or what
-failed. It reads only `folders.json` and `state.json`, so it makes no network calls, doesn't run
-restic and needs no root; the data check is as of the hourly runner's last look at the
-destination. A computer with nothing scheduled has no Backups section.
+failed, for each destination a folder on this computer's list uses. It reads only `folders.json`
+and `state.json`, so it makes no network calls, doesn't run restic and needs no root; the data
+check is as of the hourly runner's last look at the destination. A computer with nothing scheduled
+has no Backups section.
 
 ## Weekly maintenance and the data check
 
 Once a week, each destination gets maintenance. Nothing schedules it separately: every hour, each
 computer's runner reads a small marker stored in the destination, and the first to find the last
-maintenance 7 or more days old runs it. It writes a claim to the marker first, so two computers
-that find it due at once don't both run it, and a claim left by a computer that stopped partway is
-ignored after a day. The steps, in order, stopping at the first that fails:
+maintenance 7 or more days old runs it. It writes a claim to the marker first, then looks again:
+if another computer has claimed it too, both back off and try again an hour or up to three later,
+so they drift apart, and the week leaves plenty of hours to catch up in. A claim left by a computer
+that stopped partway is ignored after a day; a maintenance still running after a day lets another
+computer start one, which then waits on the destination's lock.
+
+The steps, in order:
 
 1. **Forget**: each of this computer's folders on the destination has its keep rules applied
-   again, as a safety net for a backup whose keep rules failed.
+   again, as a safety net for a backup whose keep rules failed. A failure here is that folder's
+   own "retention failed" warning, not the data check's, and the maintenance goes on.
 2. **Prune**: frees the space of every backup that's been forgotten or deleted.
 3. **Check**: `restic check --read-data-subset=k/20` reads one twentieth of the stored data and
    verifies it. `k` goes 1, 2, … 20 and starts again, so every part of every backup is read once
@@ -282,12 +297,15 @@ ignored after a day. The steps, in order, stopping at the first that fails:
 4. **Test download**: from each folder's latest backup, one file picked at random is read back
    whole and must match the size the backup recorded: a small test restore.
 
-The result (when, OK or the step that failed and why, and `k`) goes into the marker, so every
+The data check's result is prune's, check's and the test download's, stopping at the first that
+fails. It (when, OK or the step that failed and why, and `k`) goes into the marker, so every
 computer shows the same "Data check" line. For an SFTP or local destination it's the only check of
 the stored data, since those backends don't checksum it themselves.
 
 Prune and check lock the destination. Every restic command ctdev runs waits up to 30 minutes for a
-lock instead of failing, so a backup that starts meanwhile waits for them.
+lock instead of failing, so a backup that starts meanwhile waits for them. If prune or check itself
+can't get the lock in that time, the maintenance isn't a failed data check: it removes its claim,
+records nothing, and the next hour tries again.
 
 The marker is a restic snapshot of one small file, tagged `ctdev-maintenance`, so it's encrypted
 like the backups and any computer's key can read and write it. It isn't a folder's backup: it never
@@ -369,8 +387,8 @@ without that step.
 | --- | --- |
 | `.ctdev-backup.json` in the folder | `id`, `destination`, `schedule`, `keep`; no secrets |
 | `~/.config/ctdev/backup/destinations/<name>.env` (0600) | The destination's address, backend credentials, Secret Key and this computer's key |
-| `~/.config/ctdev/backup/folders.json` | The folders this computer backs up on a schedule, with each one's schedule and when it was added |
-| `~/.config/ctdev/backup/state.json` | Each folder's last attempt, last success, error, keep-rules failure and whether it's missing on this computer; each destination's last data check as the runner last saw it; and whether a "failing" notification is out |
+| `~/.config/ctdev/backup/folders.json` | The folders this computer backs up on a schedule, with each one's schedule, destination and when it was added |
+| `~/.config/ctdev/backup/state.json` | Each folder's last attempt, last success, error, keep-rules failure and whether it's missing on this computer; each destination's last data check as the runner last saw it; a deferred backup; and whether a "failing" notification is out |
 
 restic gives every key full power over the repository, so whoever has a computer's
 `destinations/<name>.env` can read and delete that destination's backups. Keep the file private.
