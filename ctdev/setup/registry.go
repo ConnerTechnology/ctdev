@@ -342,10 +342,10 @@ var Registry = []Setting{
 		HardwareFn:  gateDesktop,
 	},
 	{
-		Name:        "Mouse accel profile",
+		Name:        "Mouse acceleration",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Controls pointer acceleration. 'flat' gives raw 1:1 input, 'adaptive' accelerates based on speed.",
+		Description: "Flat makes the pointer move the same distance for the same hand movement, so aim stays predictable.",
 		Control:     ControlPicker,
 		Default:     "flat",
 		Choices: []PickerChoice{
@@ -364,10 +364,10 @@ var Registry = []Setting{
 		Name:        "Mouse speed",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Overall pointer speed multiplier.",
+		Description: "How far the pointer moves for a given hand movement.",
 		Control:     ControlSlider,
-		Default:     "0.65",
-		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: 0.05, Unit: ""},
+		Default:     "0.46",
+		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: mouseSpeedStep, Unit: ""},
 		DetectFunc:  detectMouseSpeed,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/gnome/desktop/peripherals/mouse/speed", v)
@@ -378,7 +378,7 @@ var Registry = []Setting{
 		Name:        "Natural scroll",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Reverses scroll direction so content moves with your fingers, like a touchscreen.",
+		Description: "Content moves the way the wheel turns, like a touchscreen.",
 		Control:     ControlToggle,
 		Default:     "true",
 		DetectFunc:  detectNaturalScroll,
@@ -388,23 +388,26 @@ var Registry = []Setting{
 		HardwareFn: gateDconfDesktop,
 	},
 	{
-		Name:        "Mouse bindings (xbindkeys)",
+		Name:        "Middle-click opens the window overview",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Installs xbindkeys and xdotool for custom mouse button mappings.",
+		Description: "Shows every open window at once, so switching windows is one click.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(ctx context.Context) string {
-			if detectPackageInstalled(ctx, "xbindkeys") && detectPackageInstalled(ctx, "xdotool") {
-				return "installed"
-			}
-			return "not installed"
-		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyXbindkeys(ctx, o)
-		},
-		HardwareFn: gateDesktop,
+		DetectFunc:  detectXbindkeys,
+		ApplyFunc:   setXbindkeys,
+		HardwareFn:  gateCinnamon,
+	},
+	{
+		Name:        "Keep the Logitech mouse working after a KVM switch",
+		Slug:        "mouse",
+		Category:    "Mouse",
+		Description: "Middle-click and Solaar settings keep working after the KVM switches back.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  detectLogitechKVMFix,
+		ApplyFunc:   setLogitechKVMFix,
+		HardwareFn:  gateLogitechKVMFix,
 	},
 
 	// ── Audio ──────────────────────────────────────────────────────────
@@ -610,25 +613,6 @@ var Registry = []Setting{
 			return applyMacDefaults(ctx, o, macDesktopDialogs, v)
 		},
 		HardwareFn: gateMacOS,
-	},
-
-	// ── System ─────────────────────────────────────────────────────────
-
-	{
-		Name:        "Logitech KVM mouse fix",
-		Slug:        "system",
-		Category:    "System",
-		Description: "Installs a udev rule and systemd user service that restarts Solaar when the Logi Bolt receiver reconnects after a KVM switch. Fixes middle-click not working.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc: func(_ context.Context) string {
-			return detectFileExists("/etc/udev/rules.d/99-logitech-kvm-fix.rules")
-		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyLogitechKVMFix(ctx, o)
-		},
-		HardwareFn: detectLogitechBolt,
 	},
 
 	// ── Network ────────────────────────────────────────────────────────
