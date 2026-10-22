@@ -50,6 +50,11 @@ type Machine struct {
 	// pickFn picks the maintenance's test-download file among paths; nil
 	// means at random.
 	pickFn func(paths []string) int
+	// jitterFn is the extra wait after losing a maintenance race; nil means
+	// at random. afterClaim runs right after this computer writes its claim;
+	// tests set it to stand in for another computer claiming meanwhile.
+	jitterFn   func() time.Duration
+	afterClaim func()
 
 	lockMu    sync.Mutex
 	lockDepth int

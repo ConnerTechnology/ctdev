@@ -225,6 +225,9 @@ type DestinationState struct {
 	// Alerted means a "data check failed" notification went out and no
 	// "passing again" one has since.
 	Alerted bool `json:"alerted,omitempty"`
+	// RetryAfter is when this computer may next claim the maintenance,
+	// after it lost a race for it.
+	RetryAfter time.Time `json:"retry_after,omitzero"`
 }
 
 // recordDataCheck keeps c as the destination's last maintenance result.

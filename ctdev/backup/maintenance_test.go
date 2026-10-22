@@ -74,7 +74,7 @@ func TestMaintenanceRunsWeeklyAndRotatesTheSlice(t *testing.T) {
 	if n := countBackups(t, m, d, root, nil); n != 0 {
 		t.Errorf("the folder has %d one-offs, want none", n)
 	}
-	ms, err := d.markers(ctx)
+	ms, _, err := d.markers(ctx)
 	if err != nil || len(ms) != 1 {
 		t.Errorf("markers = %+v, %v; want only the latest result", ms, err)
 	}
@@ -149,6 +149,52 @@ func TestTwoComputersShareTheWeeklyMaintenance(t *testing.T) {
 	got = runAt(t, laptop, noon.Add(maintenanceInterval+time.Hour))
 	if got.Ran || got.Check.Host != "example-desktop" || got.Check.Slice != 2 {
 		t.Errorf("laptop after that: %+v %+v, want the desktop's slice 2 and no run", got, got.Check)
+	}
+}
+
+// The losing side of a race: another computer claims between this one's
+// claim and its second look. This one backs off, whichever claim is
+// earlier: it removes its claim, runs nothing, and waits an hour plus its
+// jitter before claiming again.
+func TestARaceForTheMaintenanceBacksOff(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _, _ := scheduledExample(t, m)
+	m.jitterFn = func() time.Duration { return 2 * time.Hour }
+	var other string
+	m.afterClaim = func() {
+		// Later than this computer's claim, so it isn't the earliest.
+		id, err := d.writeMarker(ctx, DataCheck{Host: "example-desktop", Started: noon.Add(time.Minute), Slice: 1})
+		if err != nil {
+			t.Error(err)
+		}
+		other = id
+	}
+
+	if got := runAt(t, m, noon); got.Ran || got.Check != nil {
+		t.Errorf("ran despite example-desktop's claim: %+v", got)
+	}
+	ms, _, err := d.markers(ctx)
+	if err != nil || len(ms) != 1 || ms[0].ID != other {
+		t.Errorf("markers = %+v, %v; want only example-desktop's claim", ms, err)
+	}
+	states, err := m.destinationStates()
+	if err != nil || !states[d.Name].RetryAfter.Equal(noon.Add(2*time.Hour)) {
+		t.Errorf("retry after = %v (%v), want noon plus the 2h jitter", states[d.Name].RetryAfter, err)
+	}
+
+	// example-desktop backed off too and removed its claim. This computer
+	// waits out its jitter, then runs.
+	if err := d.forget(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	m.afterClaim = nil
+	if got := runAt(t, m, noon.Add(time.Hour)); got.Ran {
+		t.Errorf("claimed again before the jitter ran out: %+v", got)
+	}
+	if got := runAt(t, m, noon.Add(2*time.Hour)); !got.Ran {
+		t.Errorf("didn't run after the jitter: %+v", got)
 	}
 }
 

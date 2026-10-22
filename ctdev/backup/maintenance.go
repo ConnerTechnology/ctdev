@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Every destination gets maintenance once a week, run by the hourly runner
@@ -27,13 +28,16 @@ const (
 	Slices = 20
 	// claimTTL is how long a computer's claim on a run stops others from
 	// starting one. A claim older than this, with no result, was abandoned,
-	// as by a computer that slept or crashed mid-run.
+	// as by a computer that slept or crashed mid-run. A maintenance still
+	// running after 24 hours, such as a check reading a slow backend, lets
+	// another computer start one too; restic's exclusive lock then makes
+	// that one's prune and check wait, or find the destination busy.
 	claimTTL = 24 * time.Hour
 )
 
-// The steps of maintenance, as a failed DataCheck names them.
+// The steps of maintenance a failed DataCheck can name. The forget step
+// before them isn't one: a folder's forget failure is that folder's.
 const (
-	StepForget   = "forget"
 	StepPrune    = "prune"
 	StepCheck    = "check"
 	StepDownload = "test download"
@@ -82,21 +86,23 @@ type marker struct {
 	DataCheck
 }
 
-// markers lists the destination's maintenance markers, oldest first.
-func (d *Destination) markers(ctx context.Context) ([]marker, error) {
+// markers lists the destination's maintenance markers, oldest first. A
+// marker whose record can't be read, such as one a newer ctdev wrote, is
+// left out and counted in skipped, rather than stopping every run for good.
+func (d *Destination) markers(ctx context.Context) (ms []marker, skipped int, err error) {
 	out, err := d.restic(ctx, d.asComputer("", "snapshots", "--json", "--retry-lock", retryLock, "--tag", tagMarker))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var raw []struct {
 		ID   string   `json:"id"`
 		Tags []string `json:"tags"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
-		return nil, fmt.Errorf("read restic's snapshot list: %w", err)
+		return nil, 0, fmt.Errorf("read restic's snapshot list: %w", err)
 	}
-	var ms []marker
 	for _, r := range raw {
+		read := false
 		for _, t := range r.Tags {
 			data, ok := strings.CutPrefix(t, tagMarkerData)
 			if !ok {
@@ -107,16 +113,19 @@ func (d *Destination) markers(ctx context.Context) ([]marker, error) {
 			if err == nil {
 				err = json.Unmarshal(b, &c)
 			}
-			if err != nil {
-				return nil, fmt.Errorf("read the maintenance marker %s: %w", short(r.ID), err)
+			if err == nil && !c.Started.IsZero() {
+				ms, read = append(ms, marker{ID: r.ID, DataCheck: c}), true
 			}
-			ms = append(ms, marker{ID: r.ID, DataCheck: c})
+			break
+		}
+		if !read {
+			skipped++
 		}
 	}
 	slices.SortFunc(ms, func(a, b marker) int {
 		return cmp.Or(a.Started.Compare(b.Started), cmp.Compare(a.ID, b.ID))
 	})
-	return ms, nil
+	return ms, skipped, nil
 }
 
 // lastResult is the newest finished run among ms, or nil.
@@ -131,12 +140,15 @@ func lastResult(ms []marker) *marker {
 }
 
 // activeClaims are the runs among ms that started after the last result
-// and haven't finished or been abandoned, earliest first.
-func activeClaims(ms []marker, now time.Time) []marker {
+// and haven't finished or been abandoned, earliest first. A claim by host is
+// left out: this computer runs one maintenance at a time, under its run
+// lock, so an older claim of its own was left by a run that stopped, such
+// as one whose claim couldn't be removed.
+func activeClaims(ms []marker, now time.Time, host string) []marker {
 	last := lastResult(ms)
 	var claims []marker
 	for _, mk := range ms {
-		if !mk.Finished.IsZero() || now.Sub(mk.Started) >= claimTTL {
+		if !mk.Finished.IsZero() || now.Sub(mk.Started) >= claimTTL || mk.Host == host {
 			continue
 		}
 		if last != nil && !mk.Started.After(last.Started) {
@@ -148,13 +160,13 @@ func activeClaims(ms []marker, now time.Time) []marker {
 }
 
 // maintenanceDue reports whether maintenance should start at now: the last
-// run started 7 or more days ago, or there's none, and no computer is
+// run started 7 or more days ago, or there's none, and no other computer is
 // running one.
-func maintenanceDue(ms []marker, now time.Time) bool {
+func maintenanceDue(ms []marker, now time.Time, host string) bool {
 	if last := lastResult(ms); last != nil && now.Sub(last.Started) < maintenanceInterval {
 		return false
 	}
-	return len(activeClaims(ms, now)) == 0
+	return len(activeClaims(ms, now, host)) == 0
 }
 
 // nextSlice is the slice after the last result's, wrapping after Slices.
@@ -171,7 +183,12 @@ const maxMarkerError = 400
 // writeMarker saves c as a new marker and returns its ID.
 func (d *Destination) writeMarker(ctx context.Context, c DataCheck) (string, error) {
 	if len(c.Error) > maxMarkerError {
-		c.Error = c.Error[:maxMarkerError] + "…"
+		// Cut on a rune boundary, so the record stays valid UTF-8.
+		n := maxMarkerError
+		for n > 0 && !utf8.RuneStart(c.Error[n]) {
+			n--
+		}
+		c.Error = c.Error[:n] + "…"
 	}
 	data, err := json.Marshal(c)
 	if err != nil {
@@ -195,15 +212,11 @@ func (d *Destination) writeMarker(ctx context.Context, c DataCheck) (string, err
 // LastDataCheck is the destination's newest finished maintenance, or nil
 // when none has run yet. Every computer reads the same one.
 func (d *Destination) LastDataCheck(ctx context.Context) (*DataCheck, error) {
-	ms, err := d.markers(ctx)
+	ms, _, err := d.markers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if last := lastResult(ms); last != nil {
-		c := last.DataCheck
-		return &c, nil
-	}
-	return nil, nil
+	return resultOf(ms), nil
 }
 
 // Maintenance is what one scheduled run found, and did, about a
@@ -212,7 +225,14 @@ type Maintenance struct {
 	Destination string
 	Ran         bool       // this computer ran it
 	Check       *DataCheck // the newest result, nil when none has run
-	Err         error      // the run failed, or the marker couldn't be read or written
+	// Busy means this computer started it but couldn't lock the
+	// destination for prune or check, so it recorded nothing and retries
+	// next hour.
+	Busy bool
+	// Skipped counts markers in the destination that couldn't be read and
+	// were left out.
+	Skipped int
+	Err     error // the run failed, or the marker couldn't be read or written
 }
 
 // maintainIfDue runs d's weekly maintenance when it's due and this computer
@@ -220,13 +240,24 @@ type Maintenance struct {
 // keep rules the forget step applies.
 func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []listedFolder) Maintenance {
 	res := Maintenance{Destination: d.Name}
-	ms, err := d.markers(ctx)
+	ms, skipped, err := d.markers(ctx)
+	res.Skipped = skipped
 	if err != nil {
 		res.Err = err
 		return res
 	}
 	res.Check = resultOf(ms)
-	if !maintenanceDue(ms, m.now()) {
+	if !maintenanceDue(ms, m.now(), m.Hostname) {
+		return res
+	}
+	// After a lost race this computer waits a random 0 to 2 hours more, so
+	// two computers that keep finding it due at the same hour drift apart.
+	states, err := m.destinationStates()
+	if err != nil {
+		res.Err = err
+		return res
+	}
+	if m.now().Before(states[d.Name].RetryAfter) {
 		return res
 	}
 	claim := DataCheck{Host: m.Hostname, Started: m.now(), Slice: nextSlice(ms)}
@@ -235,23 +266,45 @@ func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []l
 		res.Err = err
 		return res
 	}
+	if m.afterClaim != nil {
+		m.afterClaim()
+	}
 	// Another computer may have found it due at the same time. Every
-	// computer sees the same markers, and the earliest claim runs.
-	if ms, err = d.markers(ctx); err != nil {
+	// computer sees the same markers: whenever there's an active claim other
+	// than this one, every claimant backs off and retries later
+	// (coordinator, CTD-122 review), so no two run at once, and the 7-day
+	// window leaves days of hourly runs to catch up in.
+	if ms, _, err = d.markers(ctx); err != nil {
 		res.Err = err
 		return res
 	}
-	claims := activeClaims(ms, m.now())
-	if last := lastResult(ms); (last != nil && m.now().Sub(last.Started) < maintenanceInterval) ||
-		len(claims) == 0 || claims[0].ID != claimID {
+	contended := len(activeClaims(ms, m.now(), m.Hostname)) > 0
+	if last := lastResult(ms); (last != nil && m.now().Sub(last.Started) < maintenanceInterval) || contended {
 		res.Check = resultOf(ms)
+		if err := d.forget(ctx, claimID); err != nil {
+			res.Err = fmt.Errorf("remove this computer's claim on the maintenance: %w", err)
+		}
+		if contended {
+			wait := m.jitter()
+			if err := m.updateDestination(d.Name, func(s *DestinationState) { s.RetryAfter = m.now().Add(wait) }); err != nil {
+				res.Err = errors.Join(res.Err, err)
+			}
+		}
+		return res
+	}
+
+	result, busy := m.maintain(ctx, d, folders, claim)
+	if busy {
+		// Couldn't lock the destination for prune or check within 30
+		// minutes: another computer's backup or maintenance holds it. That
+		// isn't a failed data check (coordinator, CTD-122 review): nothing
+		// is recorded or notified, and the next hour tries again.
+		res.Busy = true
 		if err := d.forget(ctx, claimID); err != nil {
 			res.Err = fmt.Errorf("remove this computer's claim on the maintenance: %w", err)
 		}
 		return res
 	}
-
-	result := m.maintain(ctx, d, folders, claim)
 	res.Ran, res.Check = true, &result
 	if _, err := d.writeMarker(ctx, result); err != nil {
 		res.Err = err
@@ -276,6 +329,7 @@ func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []l
 	return res
 }
 
+// resultOf is a copy of the newest finished run among ms, or nil.
 func resultOf(ms []marker) *DataCheck {
 	if last := lastResult(ms); last != nil {
 		c := last.DataCheck
@@ -290,27 +344,28 @@ type listedFolder struct {
 	Config
 }
 
-// maintain runs the four steps in order, stopping at the first that fails.
-func (m *Machine) maintain(ctx context.Context, d *Destination, folders []listedFolder, claim DataCheck) DataCheck {
+// maintain runs the four steps in order. The data check's result is prune,
+// check and test download's, stopping at the first that fails. busy means
+// prune or check couldn't lock the destination, and there's no result.
+func (m *Machine) maintain(ctx context.Context, d *Destination, folders []listedFolder, claim DataCheck) (result DataCheck, busy bool) {
 	c := claim
-	fail := func(step string, err error) DataCheck {
+	fail := func(step string, err error) (DataCheck, bool) {
 		c.Finished, c.Step, c.Error = m.now(), step, strings.ReplaceAll(err.Error(), "\n", "; ")
-		return c
+		return c, false
 	}
 	// 1. The keep rules of this computer's folders, again: a safety net for
-	// a run whose retention failed, which this clears when it succeeds.
-	var errs []error
+	// a run whose retention failed, which this clears when it succeeds. A
+	// failure is that folder's, recorded on it as its yellow retention
+	// error by Retain, and isn't the data check's (coordinator, CTD-122
+	// review): maintenance goes on.
 	for _, f := range folders {
-		if err := m.Retain(ctx, d, f.Root, f.Config); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", DisplayPath(m.Home, f.Root), err))
-		}
-	}
-	if err := errors.Join(errs...); err != nil {
-		return fail(StepForget, err)
+		_ = m.Retain(ctx, d, f.Root, f.Config)
 	}
 	// 2. Prune frees the space of every forgotten backup. It takes the
 	// exclusive lock, so backups wait for it (--retry-lock).
-	if _, err := d.restic(ctx, d.asComputer("", "prune", "--retry-lock", retryLock)); err != nil {
+	if _, err := d.restic(ctx, d.asComputer("", "prune", "--retry-lock", retryLock)); errors.Is(err, ErrDestinationBusy) {
+		return DataCheck{}, true
+	} else if err != nil {
 		return fail(StepPrune, err)
 	}
 	// 3. Read this week's twentieth of the stored data.
@@ -318,7 +373,9 @@ func (m *Machine) maintain(ctx context.Context, d *Destination, folders []listed
 	check := d.asComputer("", "check", "--retry-lock", retryLock, subset)
 	var stderr bytes.Buffer
 	check.stderr = &stderr
-	if _, err := d.restic(ctx, check); err != nil {
+	if _, err := d.restic(ctx, check); errors.Is(err, ErrDestinationBusy) {
+		return DataCheck{}, true
+	} else if err != nil {
 		return fail(StepCheck, checkFailure(stderr.Bytes(), err))
 	}
 	// 4. A small test restore: one random file from each folder's latest
@@ -327,7 +384,16 @@ func (m *Machine) maintain(ctx context.Context, d *Destination, folders []listed
 		return fail(StepDownload, err)
 	}
 	c.Finished, c.OK = m.now(), true
-	return c
+	return c, false
+}
+
+// jitter is how much longer than an hour this computer waits after losing a
+// race for the maintenance: 0, 1 or 2 hours.
+func (m *Machine) jitter() time.Duration {
+	if m.jitterFn != nil {
+		return m.jitterFn()
+	}
+	return time.Duration(rand.IntN(3)) * time.Hour
 }
 
 // checkFailure says which packs restic check found damaged, from its

@@ -200,14 +200,14 @@ esac
 	if _, err := d.writeMarker(ctx, DataCheck{Host: m.Hostname, Started: noon, Slice: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.markers(ctx); err != nil {
+	if _, _, err := d.markers(ctx); err != nil {
 		t.Fatal(err)
 	}
 	// Its forget retries the keep rules a backup's run failed to apply.
 	if err := m.updateRun(root, func(r *Run) { r.RetentionError = "example failure" }); err != nil {
 		t.Fatal(err)
 	}
-	if c := m.maintain(ctx, d, []listedFolder{{Root: root, Config: cfg}}, DataCheck{Started: noon, Slice: 1}); !c.OK {
+	if c, busy := m.maintain(ctx, d, []listedFolder{{Root: root, Config: cfg}}, DataCheck{Started: noon, Slice: 1}); !c.OK || busy {
 		t.Fatalf("maintenance with the stand-in: %+v", c)
 	}
 	if r, _, _ := m.lastRun(root); r.RetentionError != "" {

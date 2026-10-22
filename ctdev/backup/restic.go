@@ -20,6 +20,11 @@ import (
 // master password or Secret Key, or a computer key that has been removed.
 var ErrWrongPassword = errors.New("wrong master password or Secret Key")
 
+// ErrDestinationBusy means restic couldn't lock the destination within its
+// --retry-lock wait: another computer holds the lock, usually for the
+// weekly maintenance's prune or check.
+var ErrDestinationBusy = errors.New("the destination is busy: another computer holds its lock")
+
 // ErrNoRestic means the restic binary isn't installed.
 var ErrNoRestic = errors.New("restic isn't installed: run ctdev install restic")
 
@@ -85,6 +90,8 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 			return stdout.Bytes(), ErrWrongPassword
 		case 3: // restic backup: snapshot made, but some files couldn't be read
 			return stdout.Bytes(), errPartial
+		case 11: // restic: couldn't lock the repository, even after --retry-lock
+			return stdout.Bytes(), ErrDestinationBusy
 		}
 	}
 	return stdout.Bytes(), fmt.Errorf("restic %s: %s", r.args[0], resticMessage(stderr.Bytes(), err))

@@ -97,9 +97,14 @@ func runBackupScheduled(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(out, line)
 	}
 	for _, r := range maint {
+		if r.Skipped > 0 {
+			fmt.Fprintf(out, "%s: skipped %d maintenance markers that couldn't be read\n", r.Destination, r.Skipped)
+		}
 		// Only a run worth a line in the journal: one this computer made,
 		// or one that couldn't be checked for.
 		switch {
+		case r.Busy:
+			fmt.Fprintf(out, "%s: weekly maintenance waiting: the destination is busy, trying again next hour\n", r.Destination)
 		case r.Ran && r.Check != nil && r.Check.OK:
 			fmt.Fprintf(out, "%s: weekly maintenance done, data check %d/%d OK\n", r.Destination, r.Check.Slice, backup.Slices)
 		case r.Ran && r.Check != nil:
