@@ -75,8 +75,16 @@ type BackupDataCheck struct {
 func dataCheckResult(c BackupDataCheck) Result {
 	day := c.Finished.Local().Format("Jan 2")
 	if !c.OK {
-		return failf("The backups in "+c.Destination+" may not restore. The weekly maintenance checks again a week after this one; restic's troubleshooting guide covers repairing damaged packs.",
-			"%s · failed at %s: %s", day, c.Step, c.Error)
+		var advice string
+		switch c.Step {
+		case "check":
+			advice = "Some stored data in " + c.Destination + " is damaged, so backups that use it may not restore. restic's troubleshooting guide covers repairing damaged packs; the weekly maintenance checks again a week after this one."
+		case "test download":
+			advice = "A file from a backup in " + c.Destination + " didn't read back whole, so that backup may not restore. Download it from 'ctdev backup' → List backups to see; the weekly maintenance tries again a week after this one."
+		default:
+			advice = "Freeing deleted backups' space in " + c.Destination + " failed, so the destination keeps it for now. The weekly maintenance tries again a week after this one."
+		}
+		return failf(advice, "%s · failed at %s: %s", day, c.Step, c.Error)
 	}
 	return okf("%s · OK · read slice %d of %d · by %s", day, c.Slice, c.Slices, c.Host)
 }

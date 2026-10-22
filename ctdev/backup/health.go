@@ -1,6 +1,9 @@
 package backup
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // Due reports whether a folder on schedule s is due a backup at now: when it
 // has never succeeded, or its last success is at least one interval ago.
@@ -81,26 +84,43 @@ type DestinationCheck struct {
 	Check       DataCheck
 }
 
-// DataChecks is the last maintenance result of each destination this
-// computer is set up on, as its hourly runner last saw it. Like Health, it
-// reads only files in ~/.config/ctdev/backup, so ctdev doctor can call it.
-// A destination the runner hasn't checked yet has none.
+// DataChecks is the last maintenance result of each destination a folder on
+// this computer's schedule list uses, as its hourly runner last saw it. Like
+// Health, it reads only folders.json and state.json, so ctdev doctor can
+// call it; with nothing scheduled there are none. A destination the runner
+// hasn't checked yet has none.
 func (m *Machine) DataChecks() ([]DestinationCheck, error) {
+	folders, err := m.scheduledFolders()
+	if err != nil {
+		return nil, err
+	}
 	states, err := m.destinationStates()
 	if err != nil {
 		return nil, err
 	}
-	names, err := m.Destinations()
-	if err != nil {
-		return nil, err
+	used := map[string]bool{}
+	for _, e := range folders {
+		if e.Destination != "" {
+			used[e.Destination] = true
+		}
 	}
 	var out []DestinationCheck
-	for _, name := range names { // sorted
+	for _, name := range sortedKeys(used) {
 		if s, ok := states[name]; ok {
 			out = append(out, DestinationCheck{Destination: name, Check: s.DataCheck})
 		}
 	}
 	return out, nil
+}
+
+// sortedKeys is a map's keys in order.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // schedule is the entry's schedule: daily for an entry written before the

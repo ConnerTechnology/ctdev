@@ -93,7 +93,8 @@ func TestDoctorFactsCarryBackupHealth(t *testing.T) {
 }
 
 // Each destination's data check reaches doctor from the copy the hourly
-// runner keeps in state.json, for the destinations this computer has.
+// runner keeps in state.json, for the destinations this computer's
+// scheduled folders use; with none scheduled, there are none.
 func TestDoctorFactsCarryTheDataCheck(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -104,16 +105,20 @@ func TestDoctorFactsCarryTheDataCheck(t *testing.T) {
 	if got, errText := doctorDataCheckFacts(m); len(got) != 0 || errText != "" {
 		t.Errorf("with nothing set up: %v, %q", got, errText)
 	}
-	if err := os.MkdirAll(filepath.Join(m.Dir, "destinations"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(m.Dir, "destinations", "example-backups.env"), []byte("RESTIC_REPOSITORY=/example/repo\n"), 0o600); err != nil {
+	if err := os.MkdirAll(m.Dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	state := `{"folders":{},"destinations":{` +
 		`"example-backups":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":false,"step":"check","error":"damaged pack 0123abcd"}},` +
-		`"example-gone":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":true}}}}`
+		`"example-unused":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":true}}}}`
 	if err := os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, errText := doctorDataCheckFacts(m); len(got) != 0 || errText != "" {
+		t.Errorf("with nothing scheduled: %v, %q; want none", got, errText)
+	}
+	folders := `{"folders":[{"path":"` + filepath.Join(home, "website") + `","id":"00000000-0000-4000-8000-000000000000","schedule":"daily","destination":"example-backups"}]}`
+	if err := os.WriteFile(filepath.Join(m.Dir, "folders.json"), []byte(folders), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	got, errText := doctorDataCheckFacts(m)

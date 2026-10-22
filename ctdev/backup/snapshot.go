@@ -330,6 +330,9 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	if err := m.addFolder(root, cfg.ID, cfg.Schedule); err != nil {
 		return err
 	}
+	if err := m.setListed(root, cfg); err != nil {
+		return err
+	}
 	if len(ids) > 0 {
 		if _, err := d.restic(ctx, tag); err != nil {
 			return fmt.Errorf("add the folder's earlier backups to its history: %w", err)

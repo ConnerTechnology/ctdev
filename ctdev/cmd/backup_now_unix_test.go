@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -76,6 +77,24 @@ func TestBackUpNowRecordsARetentionFailure(t *testing.T) {
 	s := m.Status(ctx, dir)
 	if s.Last == nil || s.Last.Failed() || !strings.Contains(s.Last.RetentionError, "example failure") {
 		t.Errorf("last run = %+v, want a success with the keep-rules failure recorded", s.Last)
+	}
+}
+
+// After a delete, ctdev says when the space is freed: the destination's
+// next weekly maintenance.
+func TestSpaceFreedSaysWhen(t *testing.T) {
+	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.Local)
+	for _, c := range []struct {
+		next time.Time
+		want string
+	}{
+		{time.Time{}, "Space is freed at the next weekly maintenance."},
+		{now, "Space is freed at the weekly maintenance, which is due within the hour."},
+		{now.Add(5 * 24 * time.Hour), "Space is freed at the next weekly maintenance, due Oct 27."},
+	} {
+		if got := spaceFreedOn(c.next, now); got != c.want {
+			t.Errorf("next %v: %q, want %q", c.next, got, c.want)
+		}
 	}
 }
 

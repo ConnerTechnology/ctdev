@@ -12,14 +12,16 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/secretfile"
 )
 
-// folderEntry is one folder this computer backs up on a schedule. Schedule
-// and Added are copied here so ctdev doctor can judge the folder's health from
-// this file and state.json alone, without opening the folder.
+// folderEntry is one folder this computer backs up on a schedule. Schedule,
+// Destination and Added are copied here so ctdev doctor can judge the
+// folder's health, and show its destination's data check, from this file and
+// state.json alone, without opening the folder.
 type folderEntry struct {
-	Path     string    `json:"path"`
-	ID       string    `json:"id"`
-	Schedule Schedule  `json:"schedule,omitempty"`
-	Added    time.Time `json:"added,omitzero"`
+	Path        string    `json:"path"`
+	ID          string    `json:"id"`
+	Schedule    Schedule  `json:"schedule,omitempty"`
+	Destination string    `json:"destination,omitempty"`
+	Added       time.Time `json:"added,omitzero"`
 }
 
 type foldersFile struct {
@@ -113,9 +115,10 @@ func exists(p string) bool {
 	return !errors.Is(err, os.ErrNotExist)
 }
 
-// setSchedule records a folder's schedule on the list when its config file
-// has changed it, such as after a git pull, so doctor judges it by the new one.
-func (m *Machine) setSchedule(root string, schedule Schedule) error {
+// setListed records a folder's schedule and destination on the list when
+// its config file has changed them, such as after a git pull, so doctor
+// judges it by the new ones.
+func (m *Machine) setListed(root string, cfg Config) error {
 	unlock, err := m.stateLock()
 	if err != nil {
 		return err
@@ -127,8 +130,8 @@ func (m *Machine) setSchedule(root string, schedule Schedule) error {
 	}
 	changed := false
 	for i, e := range f.Folders {
-		if e.Path == root && e.Schedule != schedule {
-			f.Folders[i].Schedule, changed = schedule, true
+		if e.Path == root && (e.Schedule != cfg.Schedule || e.Destination != cfg.Destination) {
+			f.Folders[i].Schedule, f.Folders[i].Destination, changed = cfg.Schedule, cfg.Destination, true
 		}
 	}
 	if !changed {

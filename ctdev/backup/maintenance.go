@@ -219,6 +219,21 @@ func (d *Destination) LastDataCheck(ctx context.Context) (*DataCheck, error) {
 	return resultOf(ms), nil
 }
 
+// NextMaintenance is when the destination's weekly maintenance, which frees
+// deleted backups' space, is next due: a week after the last one started,
+// or now when that has passed or none has run.
+func (d *Destination) NextMaintenance(ctx context.Context) (time.Time, error) {
+	ms, _, err := d.markers(ctx)
+	if err != nil {
+		return time.Time{}, err
+	}
+	now := d.m.now()
+	if last := lastResult(ms); last != nil && last.Started.Add(maintenanceInterval).After(now) {
+		return last.Started.Add(maintenanceInterval), nil
+	}
+	return now, nil
+}
+
 // Maintenance is what one scheduled run found, and did, about a
 // destination's weekly maintenance.
 type Maintenance struct {

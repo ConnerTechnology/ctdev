@@ -211,6 +211,29 @@ func TestBackupNowWaitsAMinuteForALockedDestination(t *testing.T) {
 	}
 }
 
+// The next maintenance is a week after the last one started, or now when
+// that's passed or none has run.
+func TestNextMaintenance(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	at(m, noon)
+	d, _ := maintenanceStandin(t, m, nil)
+	ctx := context.Background()
+	if next, err := d.NextMaintenance(ctx); err != nil || !next.Equal(noon) {
+		t.Errorf("with none run: %v, %v; want now", next, err)
+	}
+	last := noon.Add(-48 * time.Hour)
+	if _, err := d.writeMarker(ctx, DataCheck{Host: "example-desktop", Started: last, Finished: last, Slice: 1, OK: true}); err != nil {
+		t.Fatal(err)
+	}
+	if next, err := d.NextMaintenance(ctx); err != nil || !next.Equal(last.Add(maintenanceInterval)) {
+		t.Errorf("two days after one: %v, %v; want five days on", next, err)
+	}
+	at(m, noon.Add(maintenanceInterval))
+	if next, err := d.NextMaintenance(ctx); err != nil || !next.Equal(noon.Add(maintenanceInterval)) {
+		t.Errorf("overdue: %v, %v; want now", next, err)
+	}
+}
+
 // A marker that can't be read is skipped and counted, not a failure.
 func TestAnUnreadableMarkerIsSkipped(t *testing.T) {
 	m := testMachine(t, "example-laptop")

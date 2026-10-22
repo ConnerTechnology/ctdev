@@ -93,6 +93,25 @@ func TestBackupsSectionShowsEachDestinationsDataCheck(t *testing.T) {
 	}
 }
 
+// A failed data check's advice fits the step that failed: only a failed
+// check talks about damaged packs.
+func TestDataCheckAdviceFitsTheStep(t *testing.T) {
+	at := time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local)
+	for step, want := range map[string]string{
+		"check":         "damaged packs",
+		"test download": "didn't read back",
+		"prune":         "space",
+	} {
+		r := dataCheckResult(BackupDataCheck{Destination: "example-backups", Finished: at, Slice: 3, Slices: 20, Step: step, Error: "example failure"})
+		if r.Severity != Fail || !strings.Contains(r.Advice, want) {
+			t.Errorf("%s: %v %q, want advice about %q", step, r.Severity, r.Advice, want)
+		}
+		if step != "check" && strings.Contains(r.Advice, "damaged") {
+			t.Errorf("%s: advice %q talks about damage", step, r.Advice)
+		}
+	}
+}
+
 // A machine with nothing scheduled has no Backups section at all.
 func TestNoBackupsSectionWithNothingScheduled(t *testing.T) {
 	if rows := backupRows(t, Facts{Platform: platform.Info{OS: platform.MacOS}}); len(rows) != 0 {

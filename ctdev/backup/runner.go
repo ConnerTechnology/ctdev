@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"sort"
 )
 
 // Outcome is what a scheduled run did with one folder.
@@ -106,13 +105,8 @@ func (m *Machine) maintainDestinations(ctx context.Context, folders []folderEntr
 			byDest[cfg.Destination] = append(byDest[cfg.Destination], listedFolder{Root: e.Path, Config: cfg})
 		}
 	}
-	names := make([]string, 0, len(byDest))
-	for name := range byDest {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 	var out []Maintenance
-	for _, name := range names {
+	for _, name := range sortedKeys(byDest) {
 		if ctx.Err() != nil {
 			break
 		}
@@ -171,7 +165,7 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 		}
 		last.Missing, last.Error = false, ""
 	}
-	if err := m.setSchedule(e.Path, cfg.Schedule); err != nil {
+	if err := m.setListed(e.Path, cfg); err != nil {
 		res.Outcome, res.Err = Failed, err
 		return res
 	}
@@ -260,12 +254,7 @@ func (m *Machine) notifyChanges(ctx context.Context, folders []folderEntry) erro
 	if err != nil {
 		return err
 	}
-	names := make([]string, 0, len(dests))
-	for name := range dests {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range sortedKeys(dests) {
 		s := dests[name]
 		failing := s.DataCheck.Failed()
 		if failing == s.Alerted {

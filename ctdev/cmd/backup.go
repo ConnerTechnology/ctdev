@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
@@ -276,8 +277,31 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 var errDestinationBusy = errors.New("The destination is busy (another computer's weekly maintenance or backup). Try again in a few minutes.")
 
 // spaceFreed is said after every delete: forget doesn't free space, the
-// weekly maintenance's prune does (CTD-87).
-const spaceFreed = "Space is freed at the next weekly maintenance."
+// weekly maintenance's prune does (CTD-87), so it says when that's due, as
+// the destination's maintenance marker has it. Deletes from more than one
+// destination, or a marker that can't be read, get no date.
+func spaceFreed(ctx context.Context, dests ...*backup.Destination) string {
+	if len(dests) != 1 {
+		return spaceFreedOn(time.Time{}, time.Now())
+	}
+	next, err := dests[0].NextMaintenance(ctx)
+	if err != nil {
+		return spaceFreedOn(time.Time{}, time.Now())
+	}
+	return spaceFreedOn(next, time.Now())
+}
+
+// spaceFreedOn says when space is freed, with the next maintenance due at
+// next; zero means unknown.
+func spaceFreedOn(next, now time.Time) string {
+	switch {
+	case next.IsZero():
+		return "Space is freed at the next weekly maintenance."
+	case next.Sub(now) < time.Hour:
+		return "Space is freed at the weekly maintenance, which is due within the hour."
+	}
+	return "Space is freed at the next weekly maintenance, due " + next.Local().Format("Jan 2") + "."
+}
 
 // runScreen runs a Bubble Tea screen to completion; tests answer it instead.
 var runScreen = func(screen tea.Model) error {
@@ -412,7 +436,7 @@ func backupDetail(ctx context.Context, m *backup.Machine, d *backup.Destination,
 				return err
 			}
 			if !m.Opts.DryRun {
-				fmt.Println("  " + styles.Success.Render("✓ Deleted backup "+snap.ShortID+".") + " " + spaceFreed)
+				fmt.Println("  " + styles.Success.Render("✓ Deleted backup "+snap.ShortID+".") + " " + spaceFreed(ctx, d))
 			}
 			return nil
 		default:
@@ -453,9 +477,13 @@ func deleteAllBackups(ctx context.Context, m *backup.Machine, s backup.Status) e
 		fmt.Println("  Nothing was deleted.")
 		return nil
 	}
+	var deletedFrom []*backup.Destination
 	for i, d := range dests {
 		if err := d.DeleteBackups(ctx, found[i]); err != nil {
 			return err
+		}
+		if len(found[i]) > 0 {
+			deletedFrom = append(deletedFrom, d)
 		}
 	}
 	if !m.Opts.DryRun {
@@ -463,7 +491,7 @@ func deleteAllBackups(ctx context.Context, m *backup.Machine, s backup.Status) e
 		if total == 1 {
 			deleted = "1 backup"
 		}
-		fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Deleted %s of %s.", deleted, where)) + " " + spaceFreed)
+		fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Deleted %s of %s.", deleted, where)) + " " + spaceFreed(ctx, deletedFrom...))
 	}
 	return nil
 }
@@ -533,7 +561,7 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 		}
 		unscheduleIfIdle(ctx, m)
 		if !m.Opts.DryRun {
-			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted its backups.", where)) + " " + spaceFreed)
+			fmt.Println("  " + styles.Success.Render(fmt.Sprintf("✓ Stopped backing up %s and deleted its backups.", where)) + " " + spaceFreed(ctx, d))
 			if n := len(appeared); n > 0 {
 				// A backup that was running, here or on another computer,
 				// finished after the list was confirmed.
