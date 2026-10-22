@@ -96,8 +96,11 @@ func TestRepoSetupInstallsLocallyAndStartsTheSkill(t *testing.T) {
 	if _, err := os.Stat(script); !os.IsNotExist(err) {
 		t.Error("the askpass script was left behind")
 	}
-	if env := f.claude.GitConfigEnv(); !strings.Contains(env, "GIT_CONFIG_VALUE_0=!gh auth git-credential") {
-		t.Errorf("the marketplace clone didn't get gh's credentials:\n%s", env)
+	for _, line := range strings.Split(f.claude.GitConfigEnv(), "\n") {
+		has := strings.Contains(line, "GIT_CONFIG_VALUE_0=!gh auth git-credential")
+		if strings.HasPrefix(line, "plugin marketplace add") != has {
+			t.Errorf("gh's credentials belong to the marketplace clone only: %s", line)
+		}
 	}
 	want := []string{
 		"plugin marketplace add " + pluginMarketplace + " --scope local --json",

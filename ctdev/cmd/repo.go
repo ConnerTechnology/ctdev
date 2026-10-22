@@ -107,10 +107,10 @@ func setupRepo(ctx context.Context, batch bool) error {
 	fmt.Println()
 
 	if !ghLoggedIn(ctx) {
-		if flagDryRun {
-			fmt.Println("  [dry-run] gh isn't signed in to github.com; would run: gh auth login --hostname github.com")
-		} else if batch {
+		if batch {
 			return errors.New("gh is not signed in to github.com; run 'gh auth login', then run this again")
+		} else if flagDryRun {
+			fmt.Println("  [dry-run] gh isn't signed in to github.com; would run: gh auth login --hostname github.com")
 		} else {
 			fmt.Println("  gh isn't signed in to github.com, which the private engineering repo needs.")
 			if err := ghLogin(ctx); err != nil {

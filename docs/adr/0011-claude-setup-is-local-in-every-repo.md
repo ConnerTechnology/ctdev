@@ -29,11 +29,11 @@ per-repo Claude settings and no `ctdev repo diff`.
 ## Consequences
 
 The plugin is pinned to a tag in ctdev's code, and a third-party marketplace doesn't auto-update,
-so a repo moves to a new library version only when a ctdev release moves the pin and
+so the library moves to a new version only when a ctdev release moves the pin and
 `ctdev repo setup` runs again. The marketplace clone uses gh's github.com login for that one
 command, through `GIT_CONFIG_*` variables, without touching `~/.gitconfig`.
 
-Each repo's `.claude/settings.local.json` records the source it was set up with, but Claude Code
-keeps one clone per marketplace name on a machine, and adding it again with a new source repoints
-that clone. After a pin moves, run `ctdev repo setup` again in each repo, so none still names the
-old tag.
+Claude Code keeps one clone per marketplace name on a machine, and adding it again with a new
+source repoints that clone for every repo, while each repo's `.claude/settings.local.json` still
+records the source it was set up with. After a pin moves, run `ctdev repo setup` again in each
+repo, so none still names the old tag.

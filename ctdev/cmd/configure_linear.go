@@ -99,8 +99,10 @@ func linearWizard(ctx context.Context) error {
 	}
 	fmt.Println()
 
-	if ok, err := ensureTool(ctx, "claude-code", "Claude Code", false); !ok || err != nil {
+	if ok, err := ensureTool(ctx, "claude-code", "Claude Code", false); err != nil {
 		return err
+	} else if !ok {
+		return errors.New("Claude Code isn't installed; nothing was changed")
 	}
 
 	ws, needCreds, err := chooseLinearWorkspace(ctx, client, current, hasCurrent, st)
@@ -343,11 +345,12 @@ func addLocalServer(ctx context.Context, root, name string, existing json.RawMes
 	}
 	if err := claudecli.AddLocalMCPServer(ctx, root, name, want); err != nil {
 		if hasExisting {
-			// Put the old one back rather than leave the repo with neither.
-			if rerr := claudecli.AddLocalMCPServer(ctx, root, name, existing); rerr != nil {
+			// Put the old one back rather than leave the repo with neither,
+			// even when the failure was a Ctrl-C.
+			if rerr := claudecli.AddLocalMCPServer(context.WithoutCancel(ctx), root, name, existing); rerr != nil {
 				return false, fmt.Errorf("%w; the old %s server was removed and could not be put back: %v", err, name, rerr)
 			}
-			return false, fmt.Errorf("%w; the old %s server was kept", err, name)
+			return false, fmt.Errorf("%w; the old %s server was put back", err, name)
 		}
 		return false, err
 	}

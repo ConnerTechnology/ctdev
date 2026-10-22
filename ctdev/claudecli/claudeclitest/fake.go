@@ -16,7 +16,7 @@ import (
 // ("plugin-install.out", "plugin-install.exit"), so a test can script a reply.
 const script = `#!/bin/sh
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
-env | grep '^GIT_CONFIG_' | sort >> "$FAKE_CLAUDE_LOG.env"
+{ printf '%s:' "$*"; env | grep '^GIT_CONFIG_' | sort | tr '\n' ' '; echo; } >> "$FAKE_CLAUDE_LOG.env"
 key=$(printf '%s-%s' "$1" "$2")
 if [ "$1 $2" = "plugin marketplace" ]; then key=plugin-marketplace-$3; fi
 if [ -f "$FAKE_CLAUDE_DIR/$key.out" ]; then cat "$FAKE_CLAUDE_DIR/$key.out"; fi
@@ -73,8 +73,8 @@ func (f *Fake) Calls() []string {
 	return strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 }
 
-// GitConfigEnv is the GIT_CONFIG_* variables each call saw, one
-// "NAME=value" per line, all calls together.
+// GitConfigEnv is the GIT_CONFIG_* variables each call saw, one call per
+// line: its arguments, a colon, then the variables separated by spaces.
 func (f *Fake) GitConfigEnv() string {
 	f.t.Helper()
 	data, err := os.ReadFile(f.log + ".env")

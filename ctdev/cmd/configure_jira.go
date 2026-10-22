@@ -85,8 +85,10 @@ func jiraWizard(ctx context.Context) error {
 	}
 	fmt.Println()
 
-	if ok, err := ensureTool(ctx, "claude-code", "Claude Code", false); !ok || err != nil {
+	if ok, err := ensureTool(ctx, "claude-code", "Claude Code", false); err != nil {
 		return err
+	} else if !ok {
+		return errors.New("Claude Code isn't installed; nothing was changed")
 	}
 	site, err := pickJiraSite(ctx, sites)
 	if err != nil {
