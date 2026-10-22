@@ -52,6 +52,26 @@ func TestInspectLocal(t *testing.T) {
 	}
 }
 
+// Folders restic made on the way to a new repository go too, but only those.
+func TestFailedCreateRemovesTheFoldersItMade(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	fakeRestic(t, m)
+	existing := filepath.Join(m.Home, "media")
+	if err := os.Mkdir(existing, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(existing, "usb", "ctdev", "backups")
+	if _, err := m.CreateDestination(context.Background(), NewDestination{Name: "example-backups", Address: repo}, exampleMaster); err == nil {
+		t.Fatal("want a failure")
+	}
+	if _, err := os.Stat(filepath.Join(existing, "usb")); !os.IsNotExist(err) {
+		t.Errorf("%s/usb, made for the repository, is still there", existing)
+	}
+	if _, err := os.Stat(existing); err != nil {
+		t.Errorf("%s was there before and must stay: %v", existing, err)
+	}
+}
+
 // A failed creation at a symlink leaves the link and what it points at.
 func TestFailedCreateLeavesASymlinkAlone(t *testing.T) {
 	m := testMachine(t, "example-laptop")

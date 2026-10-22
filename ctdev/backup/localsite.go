@@ -22,6 +22,9 @@ const (
 type localSite struct {
 	path  string
 	state siteState
+	// madeParents are the path's ancestors that didn't exist either, nearest
+	// first: restic makes them, so a cleanup removes them once empty.
+	madeParents []string
 }
 
 // inspectLocal looks at a local path without following a symlink. Only a
@@ -32,6 +35,12 @@ func inspectLocal(path string) localSite {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		s.state = siteMissing
+		for p := filepath.Dir(path); p != filepath.Dir(p); p = filepath.Dir(p) {
+			if _, err := os.Lstat(p); !errors.Is(err, fs.ErrNotExist) {
+				break
+			}
+			s.madeParents = append(s.madeParents, p)
+		}
 	case err != nil, fi.Mode()&fs.ModeSymlink != 0, !fi.IsDir():
 		s.state = siteUnknown
 	default:
@@ -59,6 +68,13 @@ func (s localSite) cleanup(err error) error {
 	case siteMissing:
 		if rerr := os.RemoveAll(s.path); rerr != nil {
 			return fmt.Errorf("%w; removing the half-created repository at %s also failed: %v", err, s.path, rerr)
+		}
+		for _, p := range s.madeParents {
+			// os.Remove takes only an empty directory; anything else, or a
+			// symlink put there since, stays.
+			if fi, lerr := os.Lstat(p); lerr != nil || !fi.IsDir() || os.Remove(p) != nil {
+				break
+			}
 		}
 	case siteEmptyDir:
 		entries, _ := os.ReadDir(s.path)
