@@ -28,6 +28,16 @@ type Machine struct {
 	Username string
 	Restic   string // the restic binary; "" means restic on PATH
 	Opts     sysutil.Opts
+
+	// Now is the clock; nil means the real time. Tests set it.
+	Now func() time.Time
+	// Exe is the absolute path of the ctdev binary the scheduler runs.
+	Exe string
+	// GOOS picks the scheduler (systemd or launchd) and notifier; "" means
+	// this computer's. Tests set it to check both on one runner.
+	GOOS string
+	// Notifier sends desktop notifications; nil means the desktop's own.
+	Notifier Notifier
 }
 
 // ThisMachine is the machine ctdev is running on, as the current user.
@@ -44,12 +54,19 @@ func ThisMachine(o sysutil.Opts) (*Machine, error) {
 	if u, err := user.Current(); err == nil {
 		name = u.Username
 	}
+	// The scheduler runs this binary by its absolute path: the hourly
+	// runner gets no shell PATH to find ctdev on.
+	exe, _ := os.Executable()
+	if exe != "" {
+		exe, _ = filepath.Abs(exe)
+	}
 	return &Machine{
 		Dir:      filepath.Join(home, ".config", "ctdev", "backup"),
 		Home:     home,
 		Hostname: host,
 		Username: name,
 		Opts:     o,
+		Exe:      exe,
 	}, nil
 }
 

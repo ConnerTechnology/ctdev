@@ -26,7 +26,7 @@ func configured() backup.Status {
 		Target: website, Destination: "example-backups", Backend: "Backblaze B2",
 		Size: 1_200_000_000, Files: 4812,
 		Last:      &backup.Run{LastAttempt: time.Date(2026, 10, 21, 21, 12, 0, 0, time.Local), LastSuccess: time.Date(2026, 10, 21, 21, 12, 0, 0, time.Local)},
-		Scheduled: true, NextDue: time.Date(2026, 10, 22, 21, 12, 0, 0, time.Local),
+		Scheduled: true, SchedulerInstalled: true, NextDue: time.Date(2026, 10, 22, 21, 12, 0, 0, time.Local),
 		// The status carries the time it was taken, so no test depends on today.
 		At:      time.Date(2026, 10, 22, 12, 0, 0, 0, time.Local),
 		Backups: 14, Oldest: time.Date(2026, 9, 2, 2, 0, 0, 0, time.Local), Stored: 1_600_000_000,
@@ -212,6 +212,60 @@ func TestStatusOfACloneSaysNotScheduledHere(t *testing.T) {
 	s := configured()
 	s.Scheduled = false
 	if got := plain(Status(s, home)); !strings.Contains(got, "daily · not scheduled on this computer") {
+		t.Errorf("status:\n%s", got)
+	}
+}
+
+// The runner not being installed reads the same as not being on the list,
+// in red.
+func TestStatusSaysNotScheduledWhenTheRunnerIsMissing(t *testing.T) {
+	s := configured()
+	s.SchedulerInstalled = false
+	got := Status(s, home)
+	if !strings.Contains(plain(got), "daily · not scheduled on this computer") {
+		t.Errorf("status:\n%s", plain(got))
+	}
+	if !strings.Contains(got, styles.Error.Render("daily · not scheduled on this computer")) {
+		t.Errorf("not scheduled isn't in red:\n%q", got)
+	}
+}
+
+func TestStatusOfAnOverdueFolder(t *testing.T) {
+	s := configured()
+	s.Overdue = true
+	s.At = time.Date(2026, 10, 24, 9, 0, 0, 0, time.Local)
+	got := Status(s, home)
+	want := "daily · overdue: no backup since Oct 21, 9:12 PM"
+	if !strings.Contains(plain(got), want) {
+		t.Errorf("status:\n%s", plain(got))
+	}
+	if !strings.Contains(got, styles.Error.Render(want)) {
+		t.Errorf("overdue isn't in red:\n%q", got)
+	}
+	s.Last = nil
+	if got := plain(Status(s, home)); !strings.Contains(got, "daily · overdue: never backed up") {
+		t.Errorf("status:\n%s", got)
+	}
+}
+
+func TestStatusDueNow(t *testing.T) {
+	s := configured()
+	s.At = s.NextDue
+	if got := plain(Status(s, home)); !strings.Contains(got, "daily · due now") {
+		t.Errorf("status:\n%s", got)
+	}
+}
+
+// On Linux the status says the runner works only while you're logged in:
+// ctdev never enables lingering.
+func TestStatusSaysScheduledBackupsNeedYouLoggedIn(t *testing.T) {
+	s := configured()
+	const note = "runs only while you're logged in"
+	if got := plain(Status(s, home)); strings.Contains(got, note) {
+		t.Errorf("macOS status has the Linux note:\n%s", got)
+	}
+	s.LoggedInOnly = true
+	if got := plain(Status(s, home)); !strings.Contains(got, "Schedule       daily · next due Oct 22, 9:12 PM\n                 "+note+"\n") {
 		t.Errorf("status:\n%s", got)
 	}
 }

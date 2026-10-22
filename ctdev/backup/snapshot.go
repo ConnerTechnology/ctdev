@@ -85,7 +85,7 @@ func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *
 		d.dryRun(r)
 		return Snapshot{}, nil
 	}
-	started := time.Now()
+	started := m.now()
 	out, err := d.restic(ctx, r)
 	partial := errors.Is(err, errPartial)
 	if partial {
@@ -269,7 +269,7 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	if err := WriteConfig(root, cfg); err != nil {
 		return err
 	}
-	if err := m.addFolder(root, cfg.ID); err != nil {
+	if err := m.addFolder(root, cfg.ID, cfg.Schedule); err != nil {
 		return err
 	}
 	if len(ids) > 0 {

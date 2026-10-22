@@ -45,6 +45,15 @@ type Status struct {
 	Last      *Run      // this computer's last attempt, if it made one
 	Scheduled bool      // on this computer's schedule list
 	NextDue   time.Time // when Scheduled
+	// Overdue means a scheduled folder has had no success on this computer
+	// within twice its interval.
+	Overdue bool
+	// SchedulerInstalled is whether this computer's hourly runner (the
+	// systemd user timer or launchd agent) is installed, when Scheduled.
+	SchedulerInstalled bool
+	// LoggedInOnly says scheduled backups run only while the user is
+	// logged in: ctdev never enables lingering on Linux (CTD-87).
+	LoggedInOnly bool
 
 	// At is when the status was taken; "due now" is judged against it.
 	At time.Time
@@ -70,7 +79,7 @@ func (s Status) Failed() bool { return s.Last != nil && s.Last.Failed() }
 // Status reports on the backed-up folder at or above cwd. Problems reading
 // the folder or the destination land in ReadErr, so a status can always be shown.
 func (m *Machine) Status(ctx context.Context, cwd string) Status {
-	s := Status{Hostname: m.Hostname, At: time.Now()}
+	s := Status{Hostname: m.Hostname, At: m.now()}
 	f, err := Find(cwd)
 	s.Folder = f
 	if err != nil {
@@ -97,9 +106,10 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 	}
 
 	var dests []*Destination
+	var entry folderEntry
 	if f.Config != nil {
 		s.Destination = f.Config.Destination
-		if s.Scheduled, err = m.scheduled(f.Root, f.Config.ID); err != nil {
+		if entry, s.Scheduled, err = m.scheduled(f.Root, f.Config.ID); err != nil {
 			s.ReadErr = errors.Join(s.ReadErr, err)
 		}
 		if names, err := m.Destinations(); err != nil {
@@ -153,12 +163,21 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 	}
 
 	if s.Scheduled {
+		now := s.At
 		// No time of day: the next backup is due an interval after the last
 		// success, and right away when there hasn't been one.
-		s.NextDue = s.At
-		if s.Last != nil && !s.Last.LastSuccess.IsZero() {
-			s.NextDue = s.Last.LastSuccess.Add(f.Config.Schedule.Interval())
+		s.NextDue = now
+		var last Run
+		if s.Last != nil {
+			last = *s.Last
 		}
+		if !last.LastSuccess.IsZero() {
+			s.NextDue = last.LastSuccess.Add(f.Config.Schedule.Interval())
+		}
+		entry.Schedule = f.Config.Schedule
+		s.Overdue = judge(entry, Run{LastSuccess: last.LastSuccess}, now) == HealthOverdue
+		s.SchedulerInstalled = m.SchedulerInstalled()
+		s.LoggedInOnly = m.goos() == "linux"
 	}
 	return s
 }
