@@ -38,6 +38,10 @@ type Status struct {
 	Size  int64 // bytes in the folder now
 	Files int   // files in the folder now
 
+	// Unreadable counts files and folders the size walk couldn't read; a
+	// backup would skip them too.
+	Unreadable int
+
 	Last      *Run      // this computer's last attempt, if it made one
 	Scheduled bool      // on this computer's schedule list
 	NextDue   time.Time // when Scheduled
@@ -70,7 +74,7 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 	if s.Target == "" {
 		s.Target = f.Cwd
 	}
-	s.Size, s.Files, err = folderSize(s.Target)
+	s.Size, s.Files, s.Unreadable, err = folderSize(s.Target)
 	s.ReadErr = errors.Join(s.ReadErr, err)
 
 	if run, ok, err := m.lastRun(s.Target); err != nil {
@@ -144,24 +148,32 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 }
 
 // folderSize counts the regular files under dir and their bytes, the way the
-// backup will see them. Unreadable directories are skipped, as restic would.
-func folderSize(dir string) (size int64, files int, err error) {
+// backup will see them. What it can't read is counted and skipped, as restic
+// would skip it; only an unreadable dir itself is an error.
+func folderSize(dir string) (size int64, files, unreadable int, err error) {
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if d != nil && d.IsDir() && p != dir {
+			if p == dir {
+				return err
+			}
+			unreadable++
+			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
-			return err
+			return nil
 		}
 		if d.Type().IsRegular() {
-			if info, err := d.Info(); err == nil {
-				size += info.Size()
-				files++
+			info, err := d.Info()
+			if err != nil {
+				unreadable++
+				return nil
 			}
+			size += info.Size()
+			files++
 		}
 		return nil
 	})
-	return size, files, err
+	return size, files, unreadable, err
 }
 
 func contains(xs []string, s string) bool {

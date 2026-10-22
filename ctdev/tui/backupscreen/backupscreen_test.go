@@ -180,6 +180,14 @@ func TestStatusOfACloneSaysNotScheduledHere(t *testing.T) {
 	}
 }
 
+func TestStatusNotesWhatCouldntBeRead(t *testing.T) {
+	s := configured()
+	s.Unreadable = 3
+	if got := plain(Status(s, home)); !strings.Contains(got, "1.2 GB · 4,812 files · couldn't read 3") {
+		t.Errorf("status:\n%s", got)
+	}
+}
+
 func TestStatusOfAFailedBackup(t *testing.T) {
 	s := configured()
 	s.Last.Error = "example failure"

@@ -194,7 +194,11 @@ func Status(s backup.Status, home string) string {
 	default:
 		row("Destination", fmt.Sprintf("%s (%s)", s.Destination, s.Backend), false)
 	}
-	row("Size now", Bytes(s.Size)+" · "+Files(s.Files), false)
+	size := Bytes(s.Size) + " · " + Files(s.Files)
+	if s.Unreadable > 0 {
+		size += fmt.Sprintf(" · couldn't read %d", s.Unreadable)
+	}
+	row("Size now", size, false)
 
 	switch {
 	case s.Last != nil && s.Last.Failed():

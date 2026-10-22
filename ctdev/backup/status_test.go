@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -103,6 +104,34 @@ func TestStatusOfAnUnconfiguredFolderCountsItsOneOffs(t *testing.T) {
 	}
 	if s.Destination != "example-backups" || s.Backups != 1 || !s.HasBackups() || s.Scheduled {
 		t.Errorf("after a one-off: destination %q, backups %d, scheduled %v", s.Destination, s.Backups, s.Scheduled)
+	}
+}
+
+// An unreadable folder inside is counted, not a reason to stop counting.
+func TestSizeNowSkipsWhatItCantRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	m := testMachine(t, "example-laptop")
+	root := exampleFolder(t, m)
+	locked := filepath.Join(root, "locked")
+	if err := os.Mkdir(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "secret.txt"), []byte("example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+
+	s := m.Status(context.Background(), root)
+	if s.Files != 2 || s.Unreadable != 1 {
+		t.Errorf("files %d, unreadable %d; want the 2 readable files and 1 unreadable folder", s.Files, s.Unreadable)
+	}
+	if s.ReadErr != nil {
+		t.Errorf("an unreadable subfolder isn't a read error: %v", s.ReadErr)
 	}
 }
 
