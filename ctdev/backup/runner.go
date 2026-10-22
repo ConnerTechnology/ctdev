@@ -17,6 +17,9 @@ const (
 	NotDue   Outcome = "not due"
 	Missing  Outcome = "missing"
 	Failed   Outcome = "failed"
+	// Deferred means the destination was locked, usually by another
+	// computer's weekly maintenance, so the backup waits for the next hour.
+	Deferred Outcome = "deferred"
 )
 
 // ScheduledRun is one listed folder's result from RunScheduled.
@@ -186,6 +189,13 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 	}
 	// Backup records the result in state.json itself.
 	res.Snapshot, err = m.Backup(ctx, d, e.Path, &cfg)
+	if errors.Is(err, ErrDestinationBusy) {
+		// Not a failure (coordinator, CTD-122 review): Backup recorded it as
+		// deferred, nothing notifies, and the next hour tries again. A
+		// destination busy for long enough still turns overdue.
+		res.Outcome = Deferred
+		return res
+	}
 	if err != nil {
 		res.Outcome, res.Err = Failed, err
 		return res

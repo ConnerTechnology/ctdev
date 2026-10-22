@@ -72,7 +72,25 @@ type Snapshot struct {
 // the folder so the backup holds relative paths. With a nil cfg it is a
 // one-off: tagged with the path and hostname only. The result is recorded in
 // this machine's state.
+//
+// A destination locked for longer than restic waits (ErrDestinationBusy) is
+// recorded as deferred, not as a failure (coordinator, CTD-122 review).
 func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *Config) (Snapshot, error) {
+	return m.backup(ctx, d, root, cfg, retryLock)
+}
+
+// backupNowWait is how long Back up now waits for a locked destination:
+// someone is watching, so it says the destination is busy instead of
+// waiting half an hour.
+const backupNowWait = "1m"
+
+// BackupNow is Backup for someone waiting at the screen: it waits only a
+// minute for a locked destination before returning ErrDestinationBusy.
+func (m *Machine) BackupNow(ctx context.Context, d *Destination, root string, cfg *Config) (Snapshot, error) {
+	return m.backup(ctx, d, root, cfg, backupNowWait)
+}
+
+func (m *Machine) backup(ctx context.Context, d *Destination, root string, cfg *Config, wait string) (Snapshot, error) {
 	if root == "" {
 		return Snapshot{}, errors.New("no folder to back up")
 	}
@@ -80,7 +98,7 @@ func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *
 		return Snapshot{}, err
 	}
 	ref := m.Ref(root, cfg)
-	args := []string{"backup", ".", "--json", "--retry-lock", retryLock, "--host", m.Hostname,
+	args := []string{"backup", ".", "--json", "--retry-lock", wait, "--host", m.Hostname,
 		"--tag", tagPath + tagValue(ref.Path), "--tag", tagHost + tagValue(m.Hostname)}
 	if ref.FolderID != "" {
 		args = append(args, "--tag", tagFolder+ref.FolderID)
@@ -103,6 +121,14 @@ func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *
 	snap.Host, snap.FolderID, snap.Path = m.Hostname, ref.FolderID, ref.Path
 	if partial && err == nil {
 		snap.Warning = errPartial.Error()
+	}
+	if errors.Is(err, ErrDestinationBusy) {
+		// Nothing ran: the destination was locked, usually by another
+		// computer's weekly maintenance. That's deferred, not failed.
+		if serr := m.updateRun(root, func(r *Run) { r.Deferred, r.DeferredAt = err.Error(), started }); serr != nil {
+			err = errors.Join(err, serr)
+		}
+		return snap, err
 	}
 	if serr := m.recordRun(root, started, err); serr != nil && err == nil {
 		err = serr

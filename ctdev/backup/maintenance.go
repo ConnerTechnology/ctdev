@@ -238,8 +238,15 @@ type Maintenance struct {
 // maintainIfDue runs d's weekly maintenance when it's due and this computer
 // wins the claim. folders are this computer's scheduled folders on d, whose
 // keep rules the forget step applies.
-func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []listedFolder) Maintenance {
-	res := Maintenance{Destination: d.Name}
+func (m *Machine) maintainIfDue(ctx context.Context, d *Destination, folders []listedFolder) (res Maintenance) {
+	res.Destination = d.Name
+	defer func() {
+		// A marker read or write that found the destination locked is the
+		// same as a busy prune or check: nothing to report, retry next hour.
+		if errors.Is(res.Err, ErrDestinationBusy) {
+			res.Busy, res.Err = true, nil
+		}
+	}()
 	ms, skipped, err := d.markers(ctx)
 	res.Skipped = skipped
 	if err != nil {

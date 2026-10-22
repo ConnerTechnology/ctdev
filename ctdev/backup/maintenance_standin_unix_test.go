@@ -4,10 +4,12 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // maintenanceStandin gives m a destination whose stand-in restic keeps one
@@ -105,6 +107,107 @@ func TestAForgetFailureIsTheFoldersNotTheDataChecks(t *testing.T) {
 		if !strings.Contains(string(data), cmd) {
 			t.Errorf("restic%s didn't run after the forget failed:\n%s", cmd, data)
 		}
+	}
+}
+
+// lockedStandin gives the failingMachine's destination a stand-in restic
+// that finds it locked (exit 11) for everything but version, logging each
+// command.
+func lockedStandin(t *testing.T, m *Machine) (log string) {
+	t.Helper()
+	dir := t.TempDir()
+	log = filepath.Join(dir, "restic.log")
+	m.Restic = filepath.Join(dir, "restic")
+	script := `#!/bin/sh
+echo "$*" >> "` + log + `"
+case "$1" in
+version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
+*) echo "Fatal: unable to create lock in backend: repository is already locked exclusively" >&2; exit 11 ;;
+esac
+`
+	if err := os.WriteFile(m.Restic, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := m.destinationFile("example-backups")
+	if err := os.MkdirAll(filepath.Dir(env), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env, []byte("RESTIC_REPOSITORY="+filepath.Join(dir, "repo")+"\nCTDEV_COMPUTER_KEY=example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return log
+}
+
+// A scheduled backup that finds the destination locked is deferred: no
+// error, no notification, and its last attempt and success stand. Only the
+// overdue rule turns it red.
+func TestALockedDestinationDefersTheScheduledBackup(t *testing.T) {
+	m, root, n := failingMachine(t)
+	lockedStandin(t, m)
+	if err := m.recordRun(root, noon.Add(-25*time.Hour), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	results, maint, err := m.RunScheduled(context.Background())
+	if err != nil {
+		t.Errorf("err = %v, want none", err)
+	}
+	if len(results) != 1 || results[0].Outcome != Deferred || results[0].Err != nil {
+		t.Errorf("results = %+v, want the folder deferred", results)
+	}
+	if len(maint) != 1 || !maint[0].Busy || maint[0].Err != nil {
+		t.Errorf("maintenance = %+v, want busy", maint)
+	}
+	r, _, _ := m.lastRun(root)
+	if r.Failed() || r.Deferred == "" || !r.DeferredAt.Equal(noon) || !r.LastAttempt.Equal(noon.Add(-25*time.Hour)) {
+		t.Errorf("state = %+v, want deferred at noon, the last attempt unchanged", r)
+	}
+	if len(n.sent) != 0 {
+		t.Errorf("notifications = %q, want none", n.sent)
+	}
+	if h := health(t, m); h[0].State != HealthOK {
+		t.Errorf("health = %q, want ok", h[0].State)
+	}
+	// Still locked a day later: the last success is 49 hours old, which
+	// is overdue for a daily folder.
+	at(m, noon.Add(24*time.Hour))
+	if _, _, err := m.RunScheduled(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if h := health(t, m); h[0].State != HealthOverdue {
+		t.Errorf("health = %q, want overdue", h[0].State)
+	}
+	// A backup that runs clears it.
+	if err := m.recordRun(root, noon.Add(25*time.Hour), nil); err != nil {
+		t.Fatal(err)
+	}
+	if r, _, _ := m.lastRun(root); r.Deferred != "" {
+		t.Errorf("state = %+v, want deferred cleared", r)
+	}
+}
+
+// Back up now waits a minute for a locked destination, not half an hour,
+// then returns ErrDestinationBusy, recorded as deferred.
+func TestBackupNowWaitsAMinuteForALockedDestination(t *testing.T) {
+	m, root, _ := failingMachine(t)
+	log := lockedStandin(t, m)
+	d, err := m.Destination("example-backups")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := ReadConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.BackupNow(context.Background(), d, root, &cfg); !errors.Is(err, ErrDestinationBusy) {
+		t.Errorf("err = %v, want ErrDestinationBusy", err)
+	}
+	data, _ := os.ReadFile(log)
+	if !strings.Contains(string(data), "backup . --json --retry-lock 1m ") {
+		t.Errorf("restic ran:\n%s\nwant a backup waiting 1m for the lock", data)
+	}
+	if r, _, _ := m.lastRun(root); r.Failed() || r.Deferred == "" {
+		t.Errorf("state = %+v, want deferred", r)
 	}
 }
 

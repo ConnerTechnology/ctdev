@@ -241,6 +241,11 @@ func Status(s backup.Status, home string) string {
 	default:
 		row("Last backup", "never", false)
 	}
+	if s.Last != nil && s.Last.Deferred != "" {
+		// A locked destination isn't a failure (coordinator, CTD-122
+		// review): the next hour tries again, so it's only noted.
+		fmt.Fprintf(&b, "  %s %s\n", label.Render(""), styles.Dimmed.Render("waiting: destination busy (weekly maintenance)"))
+	}
 
 	if s.Config != nil {
 		sched, bad := string(s.Config.Schedule), true

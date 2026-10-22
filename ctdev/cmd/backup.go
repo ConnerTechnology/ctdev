@@ -90,6 +90,8 @@ func runBackupScheduled(cmd *cobra.Command, _ []string) error {
 			line += ": " + r.Err.Error()
 		case r.Outcome == backup.BackedUp && r.Snapshot.ShortID != "":
 			line += " as " + r.Snapshot.ShortID
+		case r.Outcome == backup.Deferred:
+			line += ": the destination is busy, trying again next hour"
 		}
 		if r.RetentionErr != nil {
 			line += ", but retention failed: " + r.RetentionErr.Error()
@@ -239,7 +241,12 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 		return err
 	}
 	fmt.Printf("  Backing up %s to %s…\n", where, d.Name)
-	snap, err := m.Backup(ctx, d, s.Target, s.Config)
+	// Someone is waiting, so a locked destination gets a minute, not the
+	// half hour a scheduled backup waits (coordinator, CTD-122 review).
+	snap, err := m.BackupNow(ctx, d, s.Target, s.Config)
+	if errors.Is(err, backup.ErrDestinationBusy) {
+		return errDestinationBusy
+	}
 	if err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}
@@ -263,6 +270,10 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 	}
 	return nil
 }
+
+// errDestinationBusy is Back up now's answer when the destination stayed
+// locked for its minute's wait.
+var errDestinationBusy = errors.New("The destination is busy (another computer's weekly maintenance or backup). Try again in a few minutes.")
 
 // spaceFreed is said after every delete: forget doesn't free space, the
 // weekly maintenance's prune does (CTD-87).

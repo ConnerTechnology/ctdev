@@ -295,6 +295,21 @@ func TestStatusOfAFailedBackup(t *testing.T) {
 	}
 }
 
+// A backup deferred because the destination was locked is noted in dim
+// text under Last backup, not shown as a failure.
+func TestStatusOfADeferredBackup(t *testing.T) {
+	s := configured()
+	s.Last.Deferred = "the destination is busy: another computer holds its lock"
+	got := Status(s, home)
+	const note = "waiting: destination busy (weekly maintenance)"
+	if !strings.Contains(plain(got), "Last backup    Oct 21, 9:12 PM · succeeded\n                 "+note+"\n") {
+		t.Errorf("status:\n%s", plain(got))
+	}
+	if !strings.Contains(got, styles.Dimmed.Render(note)) || strings.Contains(got, styles.Error.Render(note)) {
+		t.Errorf("the note isn't dim:\n%q", got)
+	}
+}
+
 // The destination's weekly data check has its own line once it's been read:
 // not run yet, OK, or failed in red with the reason.
 func TestStatusDataCheckLine(t *testing.T) {

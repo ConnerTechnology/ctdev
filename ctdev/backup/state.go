@@ -199,6 +199,12 @@ type Run struct {
 	// successful backup failed. The backup still succeeded, so it isn't
 	// Error; it's cleared the next time the keep rules apply.
 	RetentionError string `json:"retention_error,omitempty"`
+	// Deferred is why the last try didn't run at all: the destination was
+	// locked, usually by another computer's weekly maintenance. It isn't a
+	// failure: Error, LastAttempt and the notification are left alone, and
+	// the next hour tries again. Only the overdue rule can turn it red.
+	Deferred   string    `json:"deferred,omitempty"`
+	DeferredAt time.Time `json:"deferred_at,omitzero"`
 	// Missing means a scheduled run found the folder gone, or its config
 	// file gone or holding another folder's ID, and skipped it.
 	Missing bool `json:"missing,omitempty"`
@@ -285,6 +291,7 @@ func (m *Machine) updateRun(root string, change func(*Run)) error {
 func (m *Machine) recordRun(root string, at time.Time, runErr error) error {
 	return m.updateRun(root, func(r *Run) {
 		r.LastAttempt, r.Error, r.Missing = at, "", false
+		r.Deferred, r.DeferredAt = "", time.Time{}
 		if runErr != nil {
 			r.Error = runErr.Error()
 		} else {
