@@ -81,6 +81,12 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 	if s.Target == "" {
 		s.Target = f.Cwd
 	}
+	if f.ConfigErr != nil {
+		// Without the config there's no destination or ID to look up.
+		s.Size, s.Files, s.Unreadable, err = folderSize(s.Target)
+		s.ReadErr = errors.Join(s.ReadErr, err)
+		return s
+	}
 	s.Size, s.Files, s.Unreadable, err = folderSize(s.Target)
 	s.ReadErr = errors.Join(s.ReadErr, err)
 

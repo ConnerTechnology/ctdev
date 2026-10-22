@@ -55,6 +55,15 @@ func New(s backup.Status, home string) *Model {
 // leads with Back up now, one that isn't with Configure. List and Delete all
 // need a backup to act on, and an unconfigured folder has nothing to stop.
 func menu(s backup.Status) []Item {
+	if s.ConfigErr != nil {
+		// Every action would act on a config ctdev can't read; fix it first.
+		var items []Item
+		for _, it := range menu(backup.Status{Folder: backup.Folder{Config: &backup.Config{}}}) {
+			it.Dimmed = it.Action != Quit
+			items = append(items, it)
+		}
+		return items
+	}
 	noBackups := !s.HasBackups()
 	list := Item{Action: ListBackups, Label: "List backups", Dimmed: noBackups, ComingSoon: true}
 	deleteAll := Item{Action: DeleteAll, Label: "Delete all backups", Dimmed: noBackups, ComingSoon: true}
@@ -162,14 +171,29 @@ func (m *Model) View() tea.View {
 // Header is the first line: which backed-up folder this is, and where you
 // are in it.
 func Header(s backup.Status, home string) string {
+	var h string
 	switch {
 	case s.Root == "":
 		return "Not backed up: " + backup.DisplayPath(home, s.Cwd)
 	case s.Root == s.Cwd:
-		return "Backed up folder: " + backup.DisplayPath(home, s.Root)
+		h = "Backed up folder: " + backup.DisplayPath(home, s.Root)
 	default:
-		return fmt.Sprintf("Backed up folder: %s  (you're in %s)", backup.DisplayPath(home, s.Root), backup.DisplayPath(home, s.Cwd))
+		h = fmt.Sprintf("Backed up folder: %s  (you're in %s)", backup.DisplayPath(home, s.Root), backup.DisplayPath(home, s.Cwd))
 	}
+	if s.ConfigErr != nil {
+		h += " · config can't be read: " + configReason(s.ConfigErr)
+	}
+	return h
+}
+
+// configReason drops the file's path from a config error: the header has
+// already named the folder.
+func configReason(err error) string {
+	_, reason, ok := strings.Cut(err.Error(), backup.ConfigFileName+": ")
+	if !ok {
+		return err.Error()
+	}
+	return reason
 }
 
 // Status renders the header and the status lines.
@@ -186,6 +210,17 @@ func Status(s backup.Status, home string) string {
 		fmt.Fprintf(&b, "  %s %s\n", label.Render(name), value)
 	}
 
+	size := Bytes(s.Size) + " · " + Files(s.Files)
+	if s.Unreadable > 0 {
+		size += fmt.Sprintf(" · couldn't read %d", s.Unreadable)
+	}
+	if s.ConfigErr != nil {
+		// Without the config, the rest would describe a folder that isn't
+		// set up, which this one is.
+		row("Size now", size, false)
+		return b.String()
+	}
+
 	switch {
 	case s.Destination == "":
 		row("Destination", "none on this computer", false)
@@ -193,10 +228,6 @@ func Status(s backup.Status, home string) string {
 		row("Destination", s.Destination+" (not set up on this computer)", true)
 	default:
 		row("Destination", fmt.Sprintf("%s (%s)", s.Destination, s.Backend), false)
-	}
-	size := Bytes(s.Size) + " · " + Files(s.Files)
-	if s.Unreadable > 0 {
-		size += fmt.Sprintf(" · couldn't read %d", s.Unreadable)
 	}
 	row("Size now", size, false)
 

@@ -120,6 +120,40 @@ func TestBackupWithoutATerminalFailsWhenNotBackedUp(t *testing.T) {
 	}
 }
 
+// A config file that can't be read fails the check with the reason, and
+// the status is the folder's, not "Not backed up".
+func TestBackupWithoutATerminalFailsWhenTheConfigCantBeRead(t *testing.T) {
+	dir := backupFolderForTest(t)
+	body := `{"id": "website", "destination": "example-backups", "schedule": "daily", "keep": {}}`
+	if err := os.WriteFile(filepath.Join(dir, backup.ConfigFileName), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runBackupBatch(t)
+	if err == nil || !strings.Contains(err.Error(), "isn't a UUID") {
+		t.Errorf("want a failure with the reason, got %v", err)
+	}
+	if !strings.HasPrefix(out, "Backed up folder: ~/Projects/website · config can't be read: ") {
+		t.Errorf("status = %q", out)
+	}
+}
+
+// Back up now and Configure refuse a status with no folder to act on.
+func TestActionsRefuseAnEmptyTarget(t *testing.T) {
+	backupFolderForTest(t)
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	var s backup.Status // what a status that couldn't find the folder looks like
+	if err := backupNow(ctx, m, s); err == nil {
+		t.Error("backupNow with no target: want an error")
+	}
+	if err := configureFolder(ctx, m, s); err == nil {
+		t.Error("configureFolder with no target: want an error")
+	}
+}
+
 // A check that passes when backups can't run is useless: a destination this
 // computer isn't set up on fails it.
 func TestBackupWithoutATerminalFailsWhenTheDestinationIsMissing(t *testing.T) {

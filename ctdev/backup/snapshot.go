@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -67,6 +68,9 @@ type Snapshot struct {
 // one-off: tagged with the path and hostname only. The result is recorded in
 // this machine's state.
 func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *Config) (Snapshot, error) {
+	if root == "" {
+		return Snapshot{}, errors.New("no folder to back up")
+	}
 	if err := d.notInside(root); err != nil {
 		return Snapshot{}, err
 	}
@@ -226,8 +230,16 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	if err != nil {
 		return err
 	}
+	if root == "" {
+		return errors.New("no folder to configure")
+	}
 	if err := d.notInside(root); err != nil {
 		return err
+	}
+	if _, err := os.Stat(filepath.Join(root, ConfigFileName)); err == nil {
+		if _, err := ReadConfig(root); err != nil {
+			return fmt.Errorf("the folder's config file can't be read, so it isn't replaced; fix or remove it first: %w", err)
+		}
 	}
 	if _, err := CheckConfigurable(root); err != nil {
 		return err

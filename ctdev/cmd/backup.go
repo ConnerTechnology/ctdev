@@ -92,6 +92,8 @@ func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io
 	}
 	fmt.Fprint(out, text)
 	switch {
+	case s.ConfigErr != nil:
+		return s.ConfigErr
 	case s.Config == nil:
 		return fmt.Errorf("%s isn't backed up: run ctdev backup in a terminal and choose Configure", backup.DisplayPath(m.Home, s.Target))
 	case s.DestinationMissing:
@@ -104,10 +106,25 @@ func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io
 	return nil
 }
 
+// actionable refuses a status with no folder to act on, or whose config file
+// can't be read: acting would back up the wrong place or replace the file.
+func actionable(s backup.Status) error {
+	switch {
+	case s.Target == "":
+		return errors.New("no folder to act on")
+	case s.ConfigErr != nil:
+		return fmt.Errorf("fix the folder's config file first: %w", s.ConfigErr)
+	}
+	return nil
+}
+
 // backupNow backs up the whole folder after a confirmation. A folder that
 // isn't configured is backed up once to this computer's destination, which
 // is set up first when there isn't one, and gets no config file or schedule.
 func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
+	if err := actionable(s); err != nil {
+		return err
+	}
 	var d *backup.Destination
 	var err error
 	if s.Config != nil {
@@ -177,6 +194,9 @@ func pickDestinationForOnce(ctx context.Context, m *backup.Machine, folder strin
 // configureFolder sets up the folder (or reconfigures it, starting from its
 // current values): destination, schedule and retention.
 func configureFolder(ctx context.Context, m *backup.Machine, s backup.Status) error {
+	if err := actionable(s); err != nil {
+		return err
+	}
 	// From a subfolder, this is the backed-up folder above it: status, menu
 	// and actions all apply to the backed-up folder (CTD-87). The menu never
 	// offers setting up a new folder inside one, which the package refuses.

@@ -69,6 +69,9 @@ type Folder struct {
 	Cwd    string
 	Root   string
 	Config *Config
+	// ConfigErr is why the config file at Root can't be read. Root is still
+	// the folder's, so nothing treats it as a folder that isn't backed up.
+	ConfigErr error
 }
 
 // Find walks up from cwd to the nearest folder holding a .ctdev-backup.json,
@@ -83,11 +86,13 @@ func Find(cwd string) (Folder, error) {
 	if err != nil || root == "" {
 		return f, err
 	}
+	f.Root = root
 	cfg, err := ReadConfig(root)
 	if err != nil {
-		return f, err
+		f.ConfigErr = err
+		return f, nil
 	}
-	f.Root, f.Config = root, &cfg
+	f.Config = &cfg
 	return f, nil
 }
 

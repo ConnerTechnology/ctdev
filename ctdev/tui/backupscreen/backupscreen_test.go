@@ -1,6 +1,7 @@
 package backupscreen
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -171,6 +172,31 @@ func TestStatusLines(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("status is missing %q:\n%s", want, got)
 		}
+	}
+}
+
+// A config file that can't be read: the header says so, and only Quit is left.
+func TestUnreadableConfig(t *testing.T) {
+	s := backup.Status{
+		Folder: backup.Folder{Cwd: docs, Root: website, ConfigErr: errors.New(`schedule "monthly" isn't hourly, daily or weekly`)},
+		Target: website, Backups: 3,
+	}
+	want := `Backed up folder: ~/Projects/website  (you're in ~/Projects/website/docs) · config can't be read: schedule "monthly" isn't hourly, daily or weekly`
+	if got := firstLine(New(s, home)); got != want {
+		t.Errorf("header = %q\nwant     %q", got, want)
+	}
+	if got := plain(Status(s, home)); strings.Contains(got, "isn't configured") || strings.Contains(got, "Destination") {
+		t.Errorf("an unreadable config isn't an unconfigured folder:\n%s", got)
+	}
+	m := New(s, home)
+	for _, it := range m.Items() {
+		if it.Dimmed != (it.Action != Quit) {
+			t.Errorf("%s: dimmed %v; want everything but Quit dimmed", it.Label, it.Dimmed)
+		}
+	}
+	press(m, key(tea.KeyEnter))
+	if m.Chosen() != Quit {
+		t.Errorf("chosen = %v, want Quit, the only item left", m.Chosen())
 	}
 }
 
