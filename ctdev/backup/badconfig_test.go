@@ -49,11 +49,13 @@ func TestEmptyTargetsAndUnreadableConfigsAreRefused(t *testing.T) {
 	m := testMachine(t, "example-laptop")
 	d := &Destination{Name: "example-backups", Address: filepath.Join(t.TempDir(), "repo"), m: m, computerKey: "example"}
 	ctx := context.Background()
-	if _, err := m.Backup(ctx, d, "", nil); err == nil {
-		t.Error("Backup with an empty folder: want an error")
+	// Each guard's own message: a later check failing for another reason
+	// mustn't hide a missing guard.
+	if _, err := m.Backup(ctx, d, "", nil); err == nil || err.Error() != "no folder to back up" {
+		t.Errorf("Backup with an empty folder: want \"no folder to back up\", got %v", err)
 	}
-	if err := m.Configure(ctx, d, "", NewConfig(d.Name)); err == nil {
-		t.Error("Configure with an empty folder: want an error")
+	if err := m.Configure(ctx, d, "", NewConfig(d.Name)); err == nil || err.Error() != "no folder to configure" {
+		t.Errorf("Configure with an empty folder: want \"no folder to configure\", got %v", err)
 	}
 
 	root := filepath.Join(m.Home, "Projects", "website")
