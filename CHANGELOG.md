@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
+  "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
+  suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
+  in the wizard, the settings browser and `--show`. Driver signing shows as not needed
+  when Secure Boot is off, including on a legacy BIOS machine, which has none, and the
+  suspend services when suspend is masked. When `mokutil` can't tell, signing counts as
+  needed, in `--show` too. A setting that isn't needed isn't applied by `--batch` (even with
+  `--force`), the wizard asks "Apply anyway?" once, defaulting to no, and `configure
+  gpu` skips the signing flow. Both stay on-only, and the wizard says why
+  there's no off switch.
 - **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
   machine's partitions and you check which to hide from the file manager. It writes
   `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem UUID for exactly those,
