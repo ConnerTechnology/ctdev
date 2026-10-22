@@ -249,6 +249,18 @@ func TestSecondComputerConnectsWithKitAndMasterPassword(t *testing.T) {
 	if _, err := second.Backup(ctx, d, root, &cfg); err != nil {
 		t.Fatal(err)
 	}
+
+	// The first computer's status shows that backup as the folder's newest,
+	// made on the second computer.
+	firstRoot := exampleFolder(t, first)
+	writeConfig(t, firstRoot, cfg)
+	st := first.Status(ctx, firstRoot)
+	if st.ReadErr != nil {
+		t.Fatal(st.ReadErr)
+	}
+	if st.Latest.IsZero() || st.LatestHost != "example-desktop" || st.Hostname != "example-laptop" {
+		t.Errorf("latest %v on %q, this computer %q; want the desktop's backup", st.Latest, st.LatestHost, st.Hostname)
+	}
 }
 
 func TestOneOffBackupsJoinTheFolderWhenConfigured(t *testing.T) {

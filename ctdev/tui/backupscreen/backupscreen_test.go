@@ -194,4 +194,23 @@ func TestStatusOfAFailedBackup(t *testing.T) {
 	if got := plain(Status(s, home)); !strings.Contains(got, "failed: example failure") {
 		t.Errorf("status:\n%s", got)
 	}
+	s.Latest, s.LatestHost = time.Date(2026, 10, 22, 8, 30, 0, 0, time.Local), "example-desktop"
+	if got := plain(Status(s, home)); !strings.Contains(got, "failed: example failure · newest backup Oct 22, 8:30 AM on example-desktop") {
+		t.Errorf("status:\n%s", got)
+	}
+}
+
+// Last backup is the folder's newest from any computer, named when it isn't
+// this one.
+func TestLastBackupComesFromTheDestination(t *testing.T) {
+	s := configured()
+	s.Latest = time.Date(2026, 10, 22, 8, 30, 0, 0, time.Local)
+	s.LatestHost, s.Hostname = "example-desktop", "example-laptop"
+	if got := plain(Status(s, home)); !strings.Contains(got, "Oct 22, 8:30 AM · succeeded on example-desktop") {
+		t.Errorf("status:\n%s", got)
+	}
+	s.LatestHost = "example-laptop"
+	if got := plain(Status(s, home)); !strings.Contains(got, "Oct 22, 8:30 AM · succeeded\n") {
+		t.Errorf("status:\n%s", got)
+	}
 }

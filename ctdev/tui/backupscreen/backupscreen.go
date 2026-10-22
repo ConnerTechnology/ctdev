@@ -202,11 +202,18 @@ func Status(s backup.Status, home string) string {
 
 	switch {
 	case s.Last != nil && s.Last.Failed():
-		row("Last backup", when(s.Last.LastAttempt)+" · failed: "+s.Last.Error, true)
-	case s.Last != nil:
-		row("Last backup", when(s.Last.LastSuccess)+" · succeeded", false)
+		// This computer's failure stays in red even when another computer
+		// has backed the folder up since.
+		failed := when(s.Last.LastAttempt) + " · failed: " + s.Last.Error
+		if !s.Latest.IsZero() {
+			failed += " · newest backup " + when(s.Latest) + onHost(s)
+		}
+		row("Last backup", failed, true)
 	case !s.Latest.IsZero():
-		row("Last backup", when(s.Latest)+" · succeeded", false)
+		row("Last backup", when(s.Latest)+" · succeeded"+onHost(s), false)
+	case s.Last != nil:
+		// The destination couldn't be read; this computer's record is all there is.
+		row("Last backup", when(s.Last.LastSuccess)+" · succeeded", false)
 	default:
 		row("Last backup", "never", false)
 	}
@@ -238,6 +245,14 @@ func Status(s backup.Status, home string) string {
 		row("Problem", strings.ReplaceAll(s.ReadErr.Error(), "\n", "; "), true)
 	}
 	return b.String()
+}
+
+// onHost names the computer that made the newest backup when it isn't this one.
+func onHost(s backup.Status) string {
+	if s.LatestHost == "" || s.LatestHost == s.Hostname {
+		return ""
+	}
+	return " on " + s.LatestHost
 }
 
 func when(t time.Time) string { return t.Local().Format("Jan 2, 3:04 PM") }

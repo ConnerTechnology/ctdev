@@ -48,8 +48,12 @@ type Status struct {
 
 	Backups int       // the folder's backups in the destination
 	Oldest  time.Time // the oldest of them
-	Latest  time.Time // the newest of them
-	Stored  int64     // space they take in the destination
+	Latest  time.Time // the newest of them, from any computer
+	// LatestHost is the computer that made the newest backup.
+	LatestHost string
+	// Hostname is this computer's, to tell its backups from others'.
+	Hostname string
+	Stored   int64 // space they take in the destination
 
 	ReadErr error // the destination couldn't be read
 }
@@ -63,7 +67,7 @@ func (s Status) Failed() bool { return s.Last != nil && s.Last.Failed() }
 // Status reports on the backed-up folder at or above cwd. Problems reading
 // the folder or the destination land in ReadErr, so a status can always be shown.
 func (m *Machine) Status(ctx context.Context, cwd string) Status {
-	var s Status
+	s := Status{Hostname: m.Hostname}
 	f, err := Find(cwd)
 	s.Folder = f
 	if err != nil {
@@ -127,8 +131,8 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 			if first := snaps[0].Time; s.Oldest.IsZero() || first.Before(s.Oldest) {
 				s.Oldest = first
 			}
-			if last := snaps[len(snaps)-1].Time; last.After(s.Latest) {
-				s.Latest = last
+			if last := snaps[len(snaps)-1]; last.Time.After(s.Latest) {
+				s.Latest, s.LatestHost = last.Time, last.Host
 			}
 			stored, err := d.Stored(ctx, ref)
 			s.ReadErr = errors.Join(s.ReadErr, err)
