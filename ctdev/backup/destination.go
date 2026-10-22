@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -173,7 +174,7 @@ func (m *Machine) CreateDestination(ctx context.Context, nd NewDestination, mast
 	if m.Opts.DryRun {
 		return Setup{}, ErrDryRun
 	}
-	if err := m.checkNewName(nd.Name); err != nil {
+	if err := m.checkNewDestination(nd.Name); err != nil {
 		return Setup{}, err
 	}
 	if master == "" {
@@ -257,8 +258,7 @@ func (m *Machine) finishCreate(ctx context.Context, d *Destination, master strin
 	if err := m.save(d); err != nil {
 		return Setup{}, err
 	}
-	kit := Kit{Destination: d.Name, Address: d.Address, Credentials: d.credentials, SecretKey: d.secretKey}
-	return Setup{Destination: d, Kit: kit.String(), RecoveryCode: recovery}, nil
+	return Setup{Destination: d, Kit: d.kit().String(), RecoveryCode: recovery}, nil
 }
 
 // ConnectDestination sets this machine up on an existing destination from its
@@ -273,7 +273,7 @@ func (m *Machine) ConnectDestination(ctx context.Context, kitText, master string
 	if err != nil {
 		return nil, err
 	}
-	if err := m.checkNewName(kit.Destination); err != nil {
+	if err := m.checkNewDestination(kit.Destination); err != nil {
 		return nil, err
 	}
 	sk, err := parseSecretKey(kit.SecretKey)
@@ -297,17 +297,25 @@ func (m *Machine) ConnectDestination(ctx context.Context, kitText, master string
 	}
 	if err := m.save(d); err != nil {
 		// The key would open the repository with a password nobody kept.
-		// restic won't remove the key a run opened with, so use the account key.
-		rm := run{password: account, args: []string{"key", "remove", "--retry-lock", retryLock, d.computerKeyID}}
-		if _, rerr := d.restic(context.WithoutCancel(ctx), rm); rerr != nil {
-			return nil, fmt.Errorf("%w; removing the new key %s from the destination also failed: %v", err, short(d.computerKeyID), rerr)
-		}
-		return nil, err
+		return nil, d.takeBack(ctx, account, "", d.computerKeyID, err)
 	}
 	return d, nil
 }
 
-func (m *Machine) checkNewName(name string) error {
+// kit is the destination's Emergency Kit as this computer has it.
+func (d *Destination) kit() Kit {
+	return Kit{Destination: d.Name, Address: d.Address, Credentials: d.credentials, SecretKey: d.secretKey}
+}
+
+// checkNewDestination is checked before this computer adds its key to a
+// destination it isn't set up on: by creating, connecting or recovering.
+func (m *Machine) checkNewDestination(name string) error {
+	// The key would be labeled with this hostname, and ctdev keeps the host
+	// ctdev for the account and Recovery Code keys.
+	if m.Hostname == ctdevHost {
+		return fmt.Errorf("this computer's hostname is %s, which ctdev keeps for its own keys on a destination: "+
+			"rename the computer, then try again", ctdevHost)
+	}
 	if !destinationName.MatchString(name) {
 		return fmt.Errorf("%q can't be a destination name: use lower-case letters, digits, dots, dashes and underscores", name)
 	}
@@ -358,10 +366,29 @@ func (m *Machine) Destination(name string) (*Destination, error) {
 	for _, k := range CredentialNames(d.Address) {
 		d.credentials[k] = vals[k]
 	}
+	// A file saved by v17.0.0 from a forged kit can hold a line restic would
+	// act on, such as RESTIC_PASSWORD_COMMAND (CTD-130). Refuse it rather
+	// than drop it silently, so the person sees the kit wasn't theirs.
+	for _, k := range sortedNames(vals) {
+		if !savedName(k, d.Address) {
+			return nil, fmt.Errorf("%s has a %s line, which ctdev doesn't write and won't run restic with: "+
+				"delete that line, and if you connected with a kit you didn't make yourself, "+
+				"remove this computer's key from another computer and connect again", m.destinationFile(name), k)
+		}
+	}
 	if d.Address == "" || d.computerKey == "" {
 		return nil, fmt.Errorf("%s is incomplete", m.destinationFile(name))
 	}
 	return d, nil
+}
+
+// savedName reports whether save writes the name for a destination at address.
+func savedName(name, address string) bool {
+	switch name {
+	case "RESTIC_REPOSITORY", "CTDEV_SECRET_KEY", "CTDEV_COMPUTER_KEY", "CTDEV_COMPUTER_KEY_ID":
+		return true
+	}
+	return slices.Contains(CredentialNames(address), name)
 }
 
 func (m *Machine) destinationFile(name string) string {
@@ -375,13 +402,10 @@ func (m *Machine) save(d *Destination) error {
 	var b strings.Builder
 	b.WriteString("# ctdev backup destination " + d.Name + ". Secret: keep this file private.\n")
 	fmt.Fprintf(&b, "RESTIC_REPOSITORY=%s\n", d.Address)
-	names := make([]string, 0, len(d.credentials))
-	for k := range d.credentials {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	for _, k := range names {
-		fmt.Fprintf(&b, "%s=%s\n", k, d.credentials[k])
+	for _, k := range CredentialNames(d.Address) {
+		if v, ok := d.credentials[k]; ok {
+			fmt.Fprintf(&b, "%s=%s\n", k, v)
+		}
 	}
 	fmt.Fprintf(&b, "CTDEV_SECRET_KEY=%s\n", d.secretKey)
 	fmt.Fprintf(&b, "CTDEV_COMPUTER_KEY=%s\n", d.computerKey)
@@ -389,10 +413,18 @@ func (m *Machine) save(d *Destination) error {
 	return secretfile.WritePrivate(m.destinationFile(d.Name), []byte(b.String()))
 }
 
-// addKey adds a restic key and returns its ID.
+// addKey adds a restic key, opening the repository with password, and
+// returns the new key's ID.
 func (d *Destination) addKey(ctx context.Context, password, user, host, newPassword string) (string, error) {
+	return d.addKeyHinted(ctx, password, "", user, host, newPassword)
+}
+
+// addKeyHinted is addKey given the ID of the key password opens, which
+// saves restic trying each key in turn.
+func (d *Destination) addKeyHinted(ctx context.Context, password, hint, user, host, newPassword string) (string, error) {
 	out, err := d.restic(ctx, run{
 		password:    password,
+		keyHint:     hint,
 		newPassword: newPassword,
 		args:        []string{"key", "add", "--retry-lock", retryLock, "--user", user, "--host", host, "--new-password-file", "/dev/fd/3"},
 	})
@@ -418,7 +450,12 @@ type resticKey struct {
 }
 
 func (d *Destination) keys(ctx context.Context, password string) ([]resticKey, error) {
-	out, err := d.restic(ctx, run{password: password, args: []string{"key", "list", "--json"}})
+	return d.keysHinted(ctx, password, "")
+}
+
+// keysHinted is keys, trying the key hint names first.
+func (d *Destination) keysHinted(ctx context.Context, password, hint string) ([]resticKey, error) {
+	out, err := d.restic(ctx, run{password: password, keyHint: hint, args: []string{"key", "list", "--json"}})
 	if err != nil {
 		return nil, err
 	}
@@ -435,6 +472,7 @@ func parseKeys(out []byte) ([]resticKey, error) {
 
 // Computer is one computer with access to a destination.
 type Computer struct {
+	ID           string // its restic key
 	Hostname     string
 	Added        time.Time
 	ThisComputer bool
@@ -453,12 +491,18 @@ func (d *Destination) Computers(ctx context.Context) ([]Computer, error) {
 	}
 	var cs []Computer
 	for _, k := range keys {
-		if k.HostName == ctdevHost && (k.UserName == accountUser || k.UserName == recoveryUser) {
+		if labeled(k, accountUser) || labeled(k, recoveryUser) {
 			continue
 		}
 		added, _ := time.ParseInLocation("2006-01-02 15:04:05", k.Created, time.Local)
-		cs = append(cs, Computer{Hostname: k.HostName, Added: added, ThisComputer: k.Current})
+		cs = append(cs, Computer{ID: k.ID, Hostname: k.HostName, Added: added, ThisComputer: k.Current})
 	}
-	sort.Slice(cs, func(i, j int) bool { return cs[i].Hostname < cs[j].Hostname })
+	// A computer set up twice under one hostname has two keys, oldest first.
+	sort.SliceStable(cs, func(i, j int) bool {
+		if cs[i].Hostname != cs[j].Hostname {
+			return cs[i].Hostname < cs[j].Hostname
+		}
+		return cs[i].Added.Before(cs[j].Added)
+	})
 	return cs, nil
 }

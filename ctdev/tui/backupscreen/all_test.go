@@ -36,15 +36,14 @@ func TestAllHeader(t *testing.T) {
 	}
 }
 
-// Computers and Emergency Kit and password are shown, dimmed, until they're
-// built; List backups is dimmed only when there's nothing to list.
+// List backups is dimmed only when there's nothing to list.
 func TestAllMenu(t *testing.T) {
 	for name, tc := range map[string]struct {
 		o      backup.Overview
 		dimmed string
 	}{
-		"with folders": {exampleOverview(), "Computers,Emergency Kit and password"},
-		"empty":        {backup.Overview{Computers: 1}, "List backups,Computers,Emergency Kit and password"},
+		"with folders": {exampleOverview(), ""},
+		"empty":        {backup.Overview{Computers: 1}, "List backups"},
 	} {
 		labels, dimmed := items(NewAll("example-backups", "local path", tc.o, 0))
 		if got, want := strings.Join(labels, ","), "List backups,Computers,Emergency Kit and password,Quit"; got != want {
@@ -62,8 +61,19 @@ func TestAllMenu(t *testing.T) {
 	}
 	m = NewAll("example-backups", "local path", exampleOverview(), 0)
 	press(m, key(tea.KeyDown), key(tea.KeyEnter))
-	if m.Chosen() != Quit {
-		t.Errorf("chosen = %v, want Quit: the dimmed items are skipped", m.Chosen())
+	if m.Chosen() != Computers {
+		t.Errorf("chosen = %v, want Computers", m.Chosen())
+	}
+	m = NewAll("example-backups", "local path", exampleOverview(), 0)
+	press(m, key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
+	if m.Chosen() != EmergencyKit {
+		t.Errorf("chosen = %v, want Emergency Kit and password", m.Chosen())
+	}
+	// With nothing to list, the cursor starts on Computers.
+	m = NewAll("example-backups", "local path", backup.Overview{Computers: 1}, 0)
+	press(m, key(tea.KeyEnter))
+	if m.Chosen() != Computers {
+		t.Errorf("empty: chosen = %v, want Computers: List backups is skipped", m.Chosen())
 	}
 }
 

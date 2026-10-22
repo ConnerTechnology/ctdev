@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **A pasted Emergency Kit can only set the destination's own credentials.** In v17.0.0,
+  connecting with a kit passed every `NAME: value` line in it to restic as an environment
+  variable, so a forged kit could add `RESTIC_PASSWORD_COMMAND` or `LD_PRELOAD` and run a
+  command. This affects anyone who connected with a kit they didn't create themselves. A kit
+  with any line its backend doesn't use is now refused, restic never gets a `RESTIC_` variable
+  from a destination's file, and a destination file holding such a line is refused with the
+  steps to fix it.
+
 ### Changed
 - **`ctdev repo setup` pins the `connertechnology` plugin to `v1.1.0`** (was `v1.0.2`), which
   runs the engineering skills on Jira Cloud as well as Linear, through one tracker layer, and
