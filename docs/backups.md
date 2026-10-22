@@ -189,19 +189,22 @@ Each computer has one hourly runner, installed by Configure and running as you:
   at the top of every hour; an hour missed while the Mac slept runs when it wakes.
 
 Both run `ctdev backup run-scheduled` by ctdev's absolute path, since the runner has no shell PATH.
-Configuring again rewrites them, which picks up a ctdev that has moved. On macOS an agent that's
-loaded and unchanged is left alone, and a changed one isn't reloaded while a scheduled backup is
-running: Configure says so, and the new one takes effect at your next login. If systemd won't enable
-the timer, Configure removes the units it wrote and the status shows "not scheduled on this
-computer". Only one scheduled run happens at a time; one that starts while another is running exits
-without doing anything. Every hour, the runner backs
-up each folder on this computer's list whose schedule is due: an hour, a day or a week after its
+Configuring again rewrites them, which picks up a ctdev that has moved. On macOS, reloading the
+agent would stop a backup it's making, so an agent already loaded with this ctdev and this plist is
+left alone, and while a scheduled backup is running Configure changes nothing and says to choose
+Configure again after it finishes. If systemd won't enable the timer, Configure puts back whatever
+units were there before: a scheduler that worked keeps working, and on a computer that had none the
+status shows "not scheduled on this computer". Only one scheduled run happens at a time; one that
+starts while another is running exits without doing anything. Configure and Back up now never wait
+for a scheduled backup to finish. Every hour, the runner backs up each folder on this computer's list whose schedule is due: an hour, a day or a week after its
 last successful backup. A computer that was asleep catches up on its next run. Each folder's result
 is recorded in `state.json`.
 
 A listed folder that has been moved or deleted, or whose `.ctdev-backup.json` is gone or now holds
 another folder's ID, is skipped and recorded as missing. Run `ctdev backup` in its new place and
-choose Configure: that replaces the old place on the list, so it stops showing as missing.
+choose Configure: once a scheduled run has recorded the old place as missing, Configure removes it
+from the list and says so. A folder on a drive that isn't mounted, which was fine at its last run,
+stays on the list.
 
 **On Linux, scheduled backups run only while you're logged in.** A systemd user timer stops at
 logout unless lingering is on, and ctdev never turns lingering on. A computer you stay logged in to,

@@ -43,6 +43,8 @@ type Machine struct {
 	// run runs the scheduler's systemctl and launchctl commands; nil means
 	// sysutil.Run. Tests set it so they never touch real timers or agents.
 	run func(ctx context.Context, o sysutil.Opts, name string, args ...string) error
+	// capture runs launchctl print; nil means exec. Tests set it.
+	capture func(ctx context.Context, name string, args ...string) ([]byte, error)
 	// lingerDir is systemd's /var/lib/systemd/linger; tests point it elsewhere.
 	lingerDir string
 

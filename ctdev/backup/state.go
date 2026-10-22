@@ -190,7 +190,6 @@ func (m *Machine) scheduledEntry(root, id string) (folderEntry, bool, error) {
 	return folderEntry{}, false, nil
 }
 
-
 // Run is the record of a folder's last backup on this computer.
 type Run struct {
 	LastAttempt time.Time `json:"last_attempt"`

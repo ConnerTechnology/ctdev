@@ -9,8 +9,10 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -78,8 +80,9 @@ func (m *Machine) schedulerFiles() []schedulerFile {
 // runs a missed hour once after the computer wakes or boots. The service
 // runs at low priority so a backup doesn't slow the desktop down.
 func (m *Machine) systemdUnits() (service, timer string) {
-	// systemd expands % specifiers in ExecStart, so a literal % is %%.
-	exe := strings.ReplaceAll(strconv.Quote(m.Exe), "%", "%%")
+	// systemd expands % specifiers and $ variables in ExecStart, so a
+	// literal % is %% and a literal $ is $$.
+	exe := strings.NewReplacer("%", "%%", "$", "$$").Replace(strconv.Quote(m.Exe))
 	service = "# Written by ctdev: backs up the folders whose schedule is due.\n" +
 		"[Unit]\nDescription=ctdev scheduled folder backups\n\n" +
 		"[Service]\nType=oneshot\n" +
@@ -198,8 +201,36 @@ func (m *Machine) writeSchedulerFile(f schedulerFile) error {
 	return os.WriteFile(f.path, []byte(f.content), 0o644)
 }
 
+// previous is what a scheduler file held before an install, so a failed
+// install can put it back.
+type previous struct {
+	path    string
+	content []byte
+	existed bool
+}
+
+func remember(path string) previous {
+	content, err := os.ReadFile(path)
+	return previous{path: path, content: content, existed: err == nil}
+}
+
+// restore puts the file back as it was: its old contents, or gone if the
+// install created it.
+func (p previous) restore() {
+	if p.existed {
+		_ = os.WriteFile(p.path, p.content, 0o644)
+	} else {
+		_ = os.Remove(p.path)
+	}
+}
+
 func (m *Machine) installSystemd(ctx context.Context) error {
 	files := m.schedulerFiles()
+	var before []previous
+	for _, f := range files {
+		before = append(before, remember(f.path))
+	}
+	_, wantsErr := os.Lstat(m.timerWants())
 	for _, f := range files {
 		if err := m.writeSchedulerFile(f); err != nil {
 			return err
@@ -211,9 +242,14 @@ func (m *Machine) installSystemd(ctx context.Context) error {
 		err = m.runCmd(ctx, o, "systemctl", "--user", "enable", "--now", systemdUnit+".timer")
 	}
 	if err != nil && !m.Opts.DryRun {
-		// Units systemd wouldn't take are no use; leave none behind.
-		for _, f := range files {
-			_ = os.Remove(f.path)
+		// Put back what was there: a scheduler that worked before keeps
+		// working, and a new one leaves nothing behind, not even the
+		// enable link, so the status says "not scheduled on this computer".
+		for _, p := range before {
+			p.restore()
+		}
+		if wantsErr != nil {
+			_ = os.Remove(m.timerWants())
 		}
 		_ = m.runCmd(ctx, o, "systemctl", "--user", "daemon-reload")
 		return fmt.Errorf("enable the hourly timer: %w", err)
@@ -221,10 +257,29 @@ func (m *Machine) installSystemd(ctx context.Context) error {
 	return err
 }
 
+// launchdArgs reads the program and arguments `launchctl print` reports for
+// a loaded agent, from its "arguments = { … }" block.
+func launchdArgs(out []byte) []string {
+	var args []string
+	in := false
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case !in && line == "arguments = {":
+			in = true
+		case in && line == "}":
+			return args
+		case in:
+			args = append(args, line)
+		}
+	}
+	return nil
+}
+
 // installLaunchd writes the agent and loads it. Reloading stops a running
-// agent, so it leaves a loaded agent with the same plist alone, and when the
-// plist changed during a scheduled run it leaves the new one for the next
-// load rather than kill the backup in progress.
+// agent and the backup it's making, so it does nothing when the loaded agent
+// already runs this ctdev from this plist, and when something changed during
+// a scheduled run it changes nothing and says to come back.
 func (m *Machine) installLaunchd(ctx context.Context) error {
 	f := m.schedulerFiles()[0]
 	target := m.launchdDomain() + "/" + launchdLabel
@@ -232,27 +287,43 @@ func (m *Machine) installLaunchd(ctx context.Context) error {
 	if !quiet.DryRun {
 		quiet.Stdout = io.Discard
 	}
-	old, err := os.ReadFile(f.path)
-	if err == nil && string(old) == f.content {
-		if m.runCmd(ctx, quiet, "launchctl", "print", target) == nil {
-			return nil // loaded, and already what it would be
-		}
-	} else if err := m.writeSchedulerFile(f); err != nil {
-		return err
+	before := remember(f.path)
+	fileSame := before.existed && string(before.content) == f.content
+	printed, err := m.captureCmd(ctx, "launchctl", "print", target)
+	loadedSame := err == nil && slices.Equal(launchdArgs(printed), []string{m.Exe, "backup", "run-scheduled"})
+	if fileSame && loadedSame {
+		return nil
 	}
 	if !m.Opts.DryRun && m.runInProgress() {
-		fmt.Fprintln(m.out(), "A scheduled backup is running, so the new schedule takes effect at your next login.")
+		fmt.Fprintln(m.out(), "A scheduled backup is running; choose Configure again after it finishes to update the schedule.")
 		return nil
+	}
+	if !fileSame {
+		if err := m.writeSchedulerFile(f); err != nil {
+			return err
+		}
 	}
 	// bootout fails when the agent isn't loaded yet, which is fine.
 	_ = m.runCmd(ctx, quiet, "launchctl", "bootout", target)
 	if err := m.runCmd(ctx, m.Opts, "launchctl", "bootstrap", m.launchdDomain(), f.path); err != nil {
 		if !m.Opts.DryRun {
-			_ = os.Remove(f.path)
+			before.restore()
+			if before.existed {
+				_ = m.runCmd(ctx, quiet, "launchctl", "bootstrap", m.launchdDomain(), f.path)
+			}
 		}
 		return fmt.Errorf("load the hourly agent: %w", err)
 	}
 	return nil
+}
+
+// captureCmd runs a read-only command for its output: exec, or the fake a
+// test set.
+func (m *Machine) captureCmd(ctx context.Context, name string, args ...string) ([]byte, error) {
+	if m.capture != nil {
+		return m.capture(ctx, name, args...)
+	}
+	return exec.CommandContext(ctx, name, args...).Output()
 }
 
 // RemoveScheduler stops this computer's hourly runner and deletes its files.

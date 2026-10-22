@@ -22,6 +22,10 @@ func schedulerMachine(t *testing.T, goos string) (*Machine, *bytes.Buffer) {
 	out := &bytes.Buffer{}
 	m.Opts.Stdout, m.Opts.DryRun = out, true
 	m.GOOS, m.Exe = goos, exampleExe
+	// No agent is loaded, and the real launchctl is never asked.
+	m.capture = func(context.Context, string, ...string) ([]byte, error) {
+		return nil, errors.New("Could not find service")
+	}
 	return m, out
 }
 
@@ -200,21 +204,40 @@ func TestSchedulerInstalledFollowsItsFiles(t *testing.T) {
 }
 
 // fakeCommands answers the scheduler's systemctl and launchctl commands
-// instead of running them, failing the ones named in fail.
+// instead of running them, failing the ones named in fail. loaded, when set,
+// is the program and arguments `launchctl print` reports for the agent.
 type fakeCommands struct {
-	ran  []string
-	fail map[string]bool // "launchctl print", "systemctl --user enable", ...
+	ran    []string
+	fail   map[string]bool // "systemctl --user enable", ...
+	loaded []string
+	// before runs ahead of each command, to stand in for its side effects.
+	before func(line string)
 }
 
 func (f *fakeCommands) run(_ context.Context, _ sysutil.Opts, name string, args ...string) error {
 	line := strings.Join(append([]string{name}, args...), " ")
 	f.ran = append(f.ran, line)
+	if f.before != nil {
+		f.before(line)
+	}
 	for prefix := range f.fail {
 		if strings.HasPrefix(line, prefix) {
 			return errors.New("example failure")
 		}
 	}
 	return nil
+}
+
+func (f *fakeCommands) capture(_ context.Context, name string, args ...string) ([]byte, error) {
+	if f.loaded == nil {
+		return nil, errors.New("Could not find service")
+	}
+	out := "gui/501/io.connertechnology.ctdev.backup = {\n\tactive count = 0\n\tpath = /example/plist\n\tprogram = " +
+		f.loaded[0] + "\n\targuments = {\n"
+	for _, a := range f.loaded {
+		out += "\t\t" + a + "\n"
+	}
+	return []byte(out + "\t}\n\n\tinherited environment = {\n\t\tHOME => /example\n\t}\n}\n"), nil
 }
 
 // realMachine is a machine that writes files but whose commands go to a fake.
@@ -226,14 +249,20 @@ func realMachine(t *testing.T, goos string, fail ...string) (*Machine, *fakeComm
 	for _, c := range fail {
 		f.fail[c] = true
 	}
-	m.run = f.run
+	m.run, m.capture = f.run, f.capture
 	return m, f, out
 }
 
-// A timer systemd wouldn't enable leaves no units behind, so the status
-// shows "not scheduled on this computer".
+// A timer systemd wouldn't enable leaves no units and no enable link
+// behind, so the status shows "not scheduled on this computer".
 func TestAFailedEnableLeavesNoScheduler(t *testing.T) {
 	m, cmds, _ := realMachine(t, "linux", "systemctl --user enable")
+	// enable can make its link and still fail.
+	cmds.before = func(line string) {
+		if strings.HasPrefix(line, "systemctl --user enable") {
+			enableTimer(t, m)
+		}
+	}
 	if err := m.InstallScheduler(context.Background()); err == nil {
 		t.Fatal("InstallScheduler succeeded though enable failed")
 	}
@@ -241,6 +270,9 @@ func TestAFailedEnableLeavesNoScheduler(t *testing.T) {
 		if _, err := os.Stat(f.path); err == nil {
 			t.Errorf("%s was left behind", f.path)
 		}
+	}
+	if _, err := os.Lstat(m.timerWants()); err == nil {
+		t.Error("the enable link was left behind")
 	}
 	if m.SchedulerInstalled() {
 		t.Error("a scheduler that failed to enable counts as installed")
@@ -252,6 +284,30 @@ func TestAFailedEnableLeavesNoScheduler(t *testing.T) {
 	m, _, _ = realMachine(t, "linux", "systemctl --user daemon-reload")
 	if err := m.InstallScheduler(context.Background()); err == nil || m.SchedulerInstalled() {
 		t.Errorf("a failed daemon-reload: err %v, installed %v", err, m.SchedulerInstalled())
+	}
+}
+
+// A failed reinstall over a working scheduler puts the old units back and
+// keeps the enable link: the scheduler that worked keeps working.
+func TestAFailedReinstallKeepsTheWorkingScheduler(t *testing.T) {
+	m, _, _ := realMachine(t, "linux", "systemctl --user enable")
+	m.Exe = "/opt/example/old/ctdev"
+	writeSchedulerFiles(t, m)
+	enableTimer(t, m)
+	oldService, oldTimer := m.systemdUnits()
+
+	m.Exe = exampleExe
+	if err := m.InstallScheduler(context.Background()); err == nil {
+		t.Fatal("InstallScheduler succeeded though enable failed")
+	}
+	files := m.schedulerFiles()
+	for i, want := range []string{oldService, oldTimer} {
+		if got, _ := os.ReadFile(files[i].path); string(got) != want {
+			t.Errorf("%s = %q, want its old contents back", files[i].path, got)
+		}
+	}
+	if !m.SchedulerInstalled() {
+		t.Error("the working scheduler was torn down")
 	}
 }
 
@@ -269,39 +325,60 @@ func TestInstallSystemdWritesTheUnits(t *testing.T) {
 	}
 }
 
-// Reloading a launchd agent stops a backup it's running, so Configure
-// leaves a loaded, unchanged agent alone.
-func TestLaunchdAgentUnchangedAndLoadedIsLeftAlone(t *testing.T) {
-	m, cmds, _ := realMachine(t, "darwin")
-	writeSchedulerFiles(t, m)
-	if err := m.InstallScheduler(context.Background()); err != nil {
-		t.Fatal(err)
+func TestLaunchdArgsReadsLaunchctlPrint(t *testing.T) {
+	f := &fakeCommands{loaded: []string{"/opt/example tools/bin/ctdev", "backup", "run-scheduled"}}
+	out, _ := f.capture(context.Background(), "launchctl")
+	if got := launchdArgs(out); strings.Join(got, "|") != "/opt/example tools/bin/ctdev|backup|run-scheduled" {
+		t.Errorf("launchdArgs = %q", got)
 	}
-	target := m.launchdDomain() + "/" + launchdLabel
-	if got := strings.Join(cmds.ran, ","); got != "launchctl print "+target {
-		t.Errorf("ran %q, want only launchctl print", got)
-	}
-
-	// Unchanged but not loaded: load it.
-	m, cmds, _ = realMachine(t, "darwin", "launchctl print")
-	writeSchedulerFiles(t, m)
-	if err := m.InstallScheduler(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	want := "launchctl print " + target + ",launchctl bootout " + target + ",launchctl bootstrap " + m.launchdDomain() + " " + m.launchdPath()
-	if got := strings.Join(cmds.ran, ","); got != want {
-		t.Errorf("ran %q\nwant %q", got, want)
+	if got := launchdArgs([]byte("no agent here")); got != nil {
+		t.Errorf("launchdArgs of nothing = %q", got)
 	}
 }
 
-// A changed plist during a scheduled run is written but not loaded, so the
-// run isn't killed; the next load picks it up.
-func TestLaunchdAgentChangedDuringARunWaits(t *testing.T) {
-	m, cmds, out := realMachine(t, "darwin")
+// Reloading a launchd agent stops a backup it's running, so Configure
+// leaves alone an agent whose plist and loaded program are already right.
+func TestLaunchdAgentAlreadyRightIsLeftAlone(t *testing.T) {
+	m, cmds, _ := realMachine(t, "darwin")
 	writeSchedulerFiles(t, m)
-	m.Exe = "/opt/example/moved/ctdev"
+	cmds.loaded = []string{exampleExe, "backup", "run-scheduled"}
+	if err := m.InstallScheduler(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cmds.ran) != 0 {
+		t.Errorf("ran %q, want nothing", cmds.ran)
+	}
 
-	// Another process's scheduled run holds the lock.
+	target := m.launchdDomain() + "/" + launchdLabel
+	for name, loaded := range map[string][]string{
+		"not loaded":                nil,
+		"loaded with another ctdev": {"/opt/example/old/ctdev", "backup", "run-scheduled"},
+	} {
+		m, cmds, _ := realMachine(t, "darwin")
+		writeSchedulerFiles(t, m)
+		cmds.loaded = loaded
+		if err := m.InstallScheduler(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		reload := "launchctl bootout " + target + ",launchctl bootstrap " + m.launchdDomain() + " " + m.launchdPath()
+		if got := strings.Join(cmds.ran, ","); got != reload {
+			t.Errorf("%s: ran %q\nwant %q", name, got, reload)
+		}
+	}
+}
+
+// ctdev moved while a scheduled run is going: Configure changes nothing and
+// says to come back, rather than kill the run; Configure again after the
+// run writes the new plist and reloads the agent.
+func TestCtdevMovedDuringARunThenConfigureAgain(t *testing.T) {
+	m, cmds, out := realMachine(t, "darwin")
+	m.Exe = "/opt/example/old/ctdev"
+	writeSchedulerFiles(t, m)
+	oldPlist := m.launchdPlist()
+	cmds.loaded = []string{m.Exe, "backup", "run-scheduled"}
+	m.Exe = "/opt/example/new/ctdev"
+
+	// Another process's scheduled run holds the run lock.
 	other := &Machine{Dir: m.Dir}
 	unlock, err := other.runLock()
 	if err != nil {
@@ -314,28 +391,30 @@ func TestLaunchdAgentChangedDuringARunWaits(t *testing.T) {
 	if len(cmds.ran) != 0 {
 		t.Errorf("ran %q during a scheduled run, want nothing", cmds.ran)
 	}
-	if got, _ := os.ReadFile(m.launchdPath()); !strings.Contains(string(got), "/opt/example/moved/ctdev") {
-		t.Error("the new plist wasn't written")
+	if got, _ := os.ReadFile(m.launchdPath()); string(got) != oldPlist {
+		t.Error("the plist was changed during a scheduled run")
 	}
-	if !strings.Contains(out.String(), "next login") {
-		t.Errorf("output %q doesn't say when the new schedule takes effect", out)
+	if want := "A scheduled backup is running; choose Configure again after it finishes to update the schedule.\n"; out.String() != want {
+		t.Errorf("said %q, want %q", out, want)
 	}
 
-	// With no run in progress, it's reloaded.
-	m.Exe = "/opt/example/again/ctdev"
 	if err := m.InstallScheduler(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(m.launchdPath()); !strings.Contains(string(got), "/opt/example/new/ctdev") {
+		t.Error("the new plist wasn't written after the run")
 	}
 	if got := strings.Join(cmds.ran, ","); !strings.Contains(got, "launchctl bootout") || !strings.Contains(got, "launchctl bootstrap") {
 		t.Errorf("ran %q, want a reload", got)
 	}
 }
 
-// systemd expands % in ExecStart, so a path holding one is doubled.
-func TestExecStartEscapesPercent(t *testing.T) {
+// systemd expands % specifiers and $ variables in ExecStart, so a path
+// holding either is doubled.
+func TestExecStartEscapesPercentAndDollar(t *testing.T) {
 	m, _ := schedulerMachine(t, "linux")
-	m.Exe = "/opt/100%/ctdev"
-	if service, _ := m.systemdUnits(); !strings.Contains(service, `ExecStart="/opt/100%%/ctdev" backup run-scheduled`) {
+	m.Exe = "/opt/100%/$HOME/ctdev"
+	if service, _ := m.systemdUnits(); !strings.Contains(service, `ExecStart="/opt/100%%/$$HOME/ctdev" backup run-scheduled`) {
 		t.Errorf("service:\n%s", service)
 	}
 }
