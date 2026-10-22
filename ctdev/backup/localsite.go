@@ -19,6 +19,9 @@ const (
 	siteFull                      // a directory with files in it
 )
 
+// resticLayout is what restic init puts in a repository folder.
+var resticLayout = []string{"config", "data", "index", "keys", "locks", "snapshots"}
+
 type localSite struct {
 	path  string
 	state siteState
@@ -65,22 +68,21 @@ func (s localSite) cleanup(err error) error {
 		return fmt.Errorf("%w; %s isn't a plain folder now, so the half-created repository there was left: delete it before trying again", err, s.path)
 	}
 	switch s.state {
-	case siteMissing:
-		if rerr := os.RemoveAll(s.path); rerr != nil {
-			return fmt.Errorf("%w; removing the half-created repository at %s also failed: %v", err, s.path, rerr)
-		}
-		for _, p := range s.madeParents {
-			// os.Remove takes only an empty directory; anything else, or a
-			// symlink put there since, stays.
-			if fi, lerr := os.Lstat(p); lerr != nil || !fi.IsDir() || os.Remove(p) != nil {
-				break
+	case siteMissing, siteEmptyDir:
+		// Only restic's own layout goes: anything else that appeared in the
+		// folder meanwhile isn't ctdev's to delete.
+		for _, name := range resticLayout {
+			if rerr := os.RemoveAll(filepath.Join(s.path, name)); rerr != nil {
+				return fmt.Errorf("%w; removing the half-created repository at %s also failed: %v", err, s.path, rerr)
 			}
 		}
-	case siteEmptyDir:
-		entries, _ := os.ReadDir(s.path)
-		for _, e := range entries {
-			if rerr := os.RemoveAll(filepath.Join(s.path, e.Name())); rerr != nil {
-				return fmt.Errorf("%w; emptying the half-created repository at %s also failed: %v", err, s.path, rerr)
+		if s.state == siteMissing {
+			// The folder and the parents made for it go too, while empty;
+			// os.Remove takes only an empty directory.
+			for _, p := range append([]string{s.path}, s.madeParents...) {
+				if fi, lerr := os.Lstat(p); lerr != nil || !fi.IsDir() || os.Remove(p) != nil {
+					break
+				}
 			}
 		}
 	default:
