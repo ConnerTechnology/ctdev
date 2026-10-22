@@ -72,26 +72,67 @@ either. It also runs after any install that includes `claude-code`.
 
 Every category, with what each one does, is listed in [Commands](commands.md).
 
-## Linear for Claude Code
+## Claude Code in a repo
 
-`ctdev configure linear` acts on the git repo you run it in, not on the machine.
-It points that repo's Claude Code at Linear's MCP server as an OAuth app, so what
-a session does in Linear shows up as the app and notifies you. You create one app
-per computer. The wizard prints the steps, then checks the client ID and secret
-with Linear before it saves them.
+Three commands act on the git repo you run them in, not on the machine. None of
+them writes a file the repo commits, so they work the same in your repos and in
+anyone else's. What Claude Code loads in a repo (skills, plugins, MCP servers,
+settings) is a preference, and the engineering library's setup skill decides
+it. ctdev only installs and connects.
+
+### Setting a repo up
+
+`ctdev repo setup` installs git, gh and Claude Code when they're missing, signs
+gh in to GitHub if it isn't, and installs the `connertechnology` plugin from the
+private `ConnerTechnology/engineering` marketplace, pinned to a tag. The
+marketplace and the plugin are both at local scope, recorded in the repo's
+`.claude/settings.local.json`, which ctdev adds to `.git/info/exclude` unless
+something already ignores it. Then it starts Claude Code on
+`/connertechnology:setup`, which asks how the repo should be set up.
+
+Running it again changes nothing, unless a new ctdev release moved the pinned
+tag; then it updates the plugin. With `--batch` it stops before starting Claude
+Code and prints the command to run.
+
+### Linear
+
+`ctdev configure linear` points the repo's Claude Code at Linear's MCP server as
+an OAuth app, so what a session does in Linear shows up as the app and notifies
+you. You create one app per computer. The wizard prints the steps, then checks
+the client ID and secret with Linear before it saves them.
 
 - Credentials are kept per Linear workspace, in
   `~/.config/ctdev/linear/<workspace>.env` (owner-only). The app token is cached
   in `~/.cache/ctdev/linear/<workspace>.json`.
-- The repo gets a `linear` server in `.mcp.json` whose `headersHelper` is
-  `ctdev linear mcp-headers --workspace <workspace>`, and the server is
-  pre-approved in `.claude/settings.local.json`.
-- In your own repo you commit `.mcp.json`. In someone else's, the wizard adds it
-  to the repo's git exclude file so it stays local.
+- Claude Code gets a `linear` server at local scope (kept in `~/.claude.json`
+  for this repo only) whose `headersHelper` is
+  `ctdev linear mcp-headers --workspace <workspace>`.
+- A repo set up before this kept the server in `.mcp.json`. The wizard offers
+  that workspace, adds the server locally, and says the `.mcp.json` entry can
+  go. Claude Code uses the local one when both exist.
 
 `ctdev configure linear --show` reports the repo's workspace, whether its
 credentials are saved, and who the app connects as. Restart Claude Code in the
 repo after setting it up.
+
+### Jira
+
+`ctdev configure jira` adds Atlassian's Rovo MCP server (`atlassian`) at local
+scope. Claude Code signs in to it as you, with OAuth, the first time you run
+`/mcp` there. Scripts that call Jira's REST API use your Atlassian API token
+instead: the wizard gives the steps to create one, checks it with the site, and
+saves it in `~/.config/ctdev/jira/<site>.env` (owner-only), where `<site>` is the
+name before `.atlassian.net`. A script reads it as a header:
+
+```bash
+curl -H "$(ctdev jira auth-header --site example)" \
+  https://example.atlassian.net/rest/api/3/myself
+```
+
+Atlassian API tokens expire within a year. When one does, the header stops
+working; run `ctdev configure jira` again to save a new one.
+`ctdev configure jira --show` reports the repo's server and whether each saved
+site's token still works.
 
 ## Secrets
 

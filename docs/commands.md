@@ -41,9 +41,11 @@ ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocki
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)
 ctdev configure restic          # restic backups (repo, credentials, paths) — --show
-ctdev configure linear          # this repo's Linear MCP server, as this computer's Linear app (--show)
+ctdev configure linear          # this repo's Linear MCP server (local scope), as this computer's Linear app (--show)
+ctdev configure jira            # this repo's Atlassian MCP server (local scope), and your Jira API token for scripts (--show)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
+ctdev repo setup                # install git, gh, Claude Code and the connertechnology plugin for this repo, then start /connertechnology:setup
 ctdev backup now                # Run a restic snapshot of this machine now
 ctdev backup test               # Check backups are set up correctly (config, connection, paths)
 ctdev backup disable            # Pause scheduled backups (config + snapshots kept)

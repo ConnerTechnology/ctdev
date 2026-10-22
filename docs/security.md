@@ -49,7 +49,7 @@ ctdev follows them, as the uninstaller does for `XDG_CACHE_HOME`.
 
 **No secret is ever stored in this repository.** Every secret ctdev handles —
 a Cloudflare API token, a restic repository password and its backend
-credentials, a Pi-hole password, a Beszel key, a Claude
+credentials, a Pi-hole password, a Beszel key, a Linear app secret, a Jira API
 token — is entered at its `configure` step and written only to the device that
 needs it, with a file mode that restricts it to its owner.
 

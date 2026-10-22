@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/claudecli/claudeclitest"
 	"github.com/ConnerTechnology/ctdev/ctdev/linear"
 )
 
@@ -191,6 +192,7 @@ func tempGitRepo(t *testing.T) string {
 func TestConfigureLinearShow(t *testing.T) {
 	isolateLinear(t)
 	fakeLinearAPI(t)
+	f := claudeclitest.New(t)
 	flagConfigShow = true
 	t.Cleanup(func() { flagConfigShow = false })
 
@@ -203,8 +205,7 @@ func TestConfigureLinearShow(t *testing.T) {
 	repo := tempGitRepo(t)
 	t.Chdir(repo)
 	_ = linear.SaveCredentials("acme", linear.Credentials{ClientID: fakeLinearID, ClientSecret: fakeLinearSecret})
-	plan, _ := linear.PlanMCPJSON(nil, "acme")
-	_ = os.WriteFile(filepath.Join(repo, ".mcp.json"), plan.Content, 0o644)
+	f.SetLocalMCPServer(repo, "linear", string(linear.MCPEntry("acme")))
 
 	var err error
 	out := captureStdout(t, func() { err = configureLinear(context.Background()) })
@@ -259,165 +260,68 @@ func TestEnterLinearCredentialsValidatesBeforeSaving(t *testing.T) {
 	}
 }
 
-func TestWriteLinearRepoFilesSomeoneElsesRepo(t *testing.T) {
-	repo := tempGitRepo(t)
-	r := linear.Repo{Root: repo}
+func TestAddLocalServer(t *testing.T) {
+	f := claudeclitest.New(t)
 	ctx := context.Background()
-	existing := []byte(`{"mcpServers":{"notion":{"type":"http","url":"https://mcp.example.invalid"}}}`)
-	_ = os.WriteFile(r.Path(".mcp.json"), existing, 0o644)
+	root := t.TempDir()
+	want := linear.MCPEntry("acme")
 
+	// None yet: added, without a question.
 	var done bool
 	var err error
-	captureStdout(t, func() { done, err = writeLinearRepoFiles(ctx, r, existing, "acme", false) })
+	captureStdout(t, func() { done, err = addLocalServer(ctx, root, "linear", nil, false, want) })
 	if err != nil || !done {
 		t.Fatalf("done %v, err %v", done, err)
 	}
-	mcp, _ := os.ReadFile(r.Path(".mcp.json"))
-	if ws, ok := linear.CurrentWorkspace(mcp); !ok || ws != "acme" || !strings.Contains(string(mcp), "notion") {
-		t.Errorf(".mcp.json:\n%s", mcp)
-	}
-	settings, _ := os.ReadFile(r.Path(".claude/settings.local.json"))
-	if !strings.Contains(string(settings), `"linear"`) {
-		t.Errorf("settings.local.json:\n%s", settings)
-	}
-	for _, rel := range []string{".mcp.json", ".claude/settings.local.json"} {
-		if !r.IsIgnored(ctx, rel) {
-			t.Errorf("%s should be git-ignored", rel)
-		}
+	if calls := f.Calls(); len(calls) != 1 || !strings.HasPrefix(calls[0], "mcp add-json linear {") || !strings.HasSuffix(calls[0], "--scope local") {
+		t.Fatalf("calls %q", calls)
 	}
 
-	// Running it again changes nothing and duplicates no exclude line.
-	captureStdout(t, func() { _, err = writeLinearRepoFiles(ctx, r, mcp, "acme", false) })
-	if err != nil {
-		t.Fatal(err)
+	// The same entry: nothing runs.
+	captureStdout(t, func() { done, err = addLocalServer(ctx, root, "linear", want, true, want) })
+	if err != nil || !done || len(f.Calls()) != 1 {
+		t.Fatalf("same entry: done %v, err %v, calls %q", done, err, f.Calls())
 	}
-	exclude, _ := r.ExcludeFile(ctx)
-	data, _ := os.ReadFile(exclude)
-	if strings.Count(string(data), ".mcp.json") != 1 || strings.Count(string(data), "settings.local.json") != 1 {
-		t.Errorf("exclude file:\n%s", data)
+
+	// A different one, declined: left alone.
+	other := json.RawMessage(`{"type":"http","url":"https://mcp.linear.app/mcp","headersHelper":"./scripts/linear-app.sh"}`)
+	feedStdin(t, "n\n")
+	captureStdout(t, func() { done, err = addLocalServer(ctx, root, "linear", other, true, want) })
+	if err != nil || done || len(f.Calls()) != 1 {
+		t.Fatalf("declined: done %v, err %v, calls %q", done, err, f.Calls())
+	}
+
+	// Accepted: removed, then added.
+	feedStdin(t, "y\n")
+	captureStdout(t, func() { done, err = addLocalServer(ctx, root, "linear", other, true, want) })
+	calls := f.Calls()
+	if err != nil || !done || len(calls) != 3 || calls[1] != "mcp remove linear --scope local" {
+		t.Fatalf("accepted: done %v, err %v, calls %q", done, err, calls)
 	}
 }
 
-func TestWriteLinearRepoFilesOwnRepo(t *testing.T) {
-	repo := tempGitRepo(t)
-	r := linear.Repo{Root: repo}
-	ctx := context.Background()
-	// A repo that already ignores settings.local.json, as this one does.
-	_ = os.WriteFile(r.Path(".gitignore"), []byte(".claude/settings.local.json\n"), 0o644)
-
-	var err error
-	out := captureStdout(t, func() { _, err = writeLinearRepoFiles(ctx, r, nil, "acme", true) })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.IsIgnored(ctx, ".mcp.json") {
-		t.Error(".mcp.json should stay committable in your own repo")
-	}
-	if !strings.Contains(out, "Commit .mcp.json") {
-		t.Errorf("should say to commit .mcp.json:\n%s", out)
-	}
-	exclude, _ := r.ExcludeFile(ctx)
-	if data, _ := os.ReadFile(exclude); strings.Contains(string(data), "settings.local.json") {
-		t.Error("an already-ignored settings.local.json should not be added to the exclude file")
-	}
-}
-
-// A settings.local.json someone else made, and git would track, gets excluded
-// too: the check runs on every write, not only when ctdev creates the file.
-func TestWriteLinearRepoFilesExcludesExistingUnignoredSettings(t *testing.T) {
-	repo := tempGitRepo(t)
-	r := linear.Repo{Root: repo}
-	ctx := context.Background()
-	if err := os.MkdirAll(r.Path(".claude"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	_ = os.WriteFile(r.Path(".claude/settings.local.json"), []byte(`{"permissions":{"allow":["Bash(ls)"]}}`), 0o600)
-	if r.IsIgnored(ctx, ".claude/settings.local.json") {
-		t.Fatal("precondition: the file should not be ignored yet")
-	}
-
-	var err error
-	captureStdout(t, func() { _, err = writeLinearRepoFiles(ctx, r, nil, "acme", true) })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !r.IsIgnored(ctx, ".claude/settings.local.json") {
-		t.Error("a pre-existing settings.local.json should end up git-ignored")
-	}
-	settings, _ := os.ReadFile(r.Path(".claude/settings.local.json"))
-	if !strings.Contains(string(settings), "Bash(ls)") || !strings.Contains(string(settings), `"linear"`) {
-		t.Errorf("settings.local.json:\n%s", settings)
-	}
-	fi, _ := os.Stat(r.Path(".claude/settings.local.json"))
-	if fi.Mode().Perm() != 0o600 {
-		t.Errorf("mode %o; the existing mode should be kept", fi.Mode().Perm())
-	}
-}
-
-func writeBrokenMCPJSON(t *testing.T) string {
-	t.Helper()
-	repo := tempGitRepo(t)
-	t.Chdir(repo)
-	_ = os.WriteFile(filepath.Join(repo, ".mcp.json"), []byte(`{"mcpServers": {`), 0o644)
-	return repo
-}
-
-func TestConfigureLinearShowRejectsInvalidMCPJSON(t *testing.T) {
+// A repo set up before CTD-109 has the server in .mcp.json; --show reports
+// that workspace, and setting up writes nothing in the repo.
+func TestConfigureLinearShowReadsLegacyMCPJSON(t *testing.T) {
 	isolateLinear(t)
 	fakeLinearAPI(t)
+	claudeclitest.New(t)
 	flagConfigShow = true
 	t.Cleanup(func() { flagConfigShow = false })
-	writeBrokenMCPJSON(t)
+
+	repo := tempGitRepo(t)
+	t.Chdir(repo)
+	_ = linear.SaveCredentials("acme", linear.Credentials{ClientID: fakeLinearID, ClientSecret: fakeLinearSecret})
+	_ = os.WriteFile(filepath.Join(repo, ".mcp.json"), []byte(`{"mcpServers":{"linear":`+string(linear.MCPEntry("acme"))+`}}`), 0o644)
 
 	var err error
 	out := captureStdout(t, func() { err = configureLinear(context.Background()) })
-	if err == nil || !strings.Contains(err.Error(), ".mcp.json") {
-		t.Fatalf("got %v, want an error naming .mcp.json", err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(out, "not set up") {
-		t.Errorf("should stop before reporting status:\n%s", out)
-	}
-}
-
-// The wizard must stop before its first prompt, so nothing (credentials
-// included) is saved for a repo it then can't write to.
-func TestLinearWizardRejectsInvalidMCPJSONBeforePrompting(t *testing.T) {
-	isolateLinear(t)
-	fakeLinearAPI(t)
-	writeBrokenMCPJSON(t)
-	// Answers that would create a workspace and save credentials, if asked.
-	feedStdin(t, "acme\n"+fakeLinearID+"\n"+fakeLinearSecret+"\n\n")
-
-	var err error
-	out := captureStdout(t, func() { err = linearWizard(context.Background()) })
-	if err == nil || !strings.Contains(err.Error(), ".mcp.json") {
-		t.Fatalf("got %v, want an error naming .mcp.json", err)
-	}
-	if strings.Contains(out, "Workspace name") || strings.Contains(out, "Client ID") {
-		t.Errorf("prompted before validating:\n%s", out)
-	}
-	if ws, _ := linear.Workspaces(); len(ws) != 0 {
-		t.Errorf("credentials were saved: %v", ws)
-	}
-}
-
-func TestWriteLinearRepoFilesConfirmsReplacingOtherEntry(t *testing.T) {
-	repo := tempGitRepo(t)
-	r := linear.Repo{Root: repo}
-	existing := []byte(`{"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp","headersHelper":"./scripts/linear-app.sh --mcp-headers"}}}`)
-	_ = os.WriteFile(r.Path(".mcp.json"), existing, 0o644)
-
-	feedStdin(t, "n\n")
-	var done bool
-	var err error
-	out := captureStdout(t, func() { done, err = writeLinearRepoFiles(context.Background(), r, existing, "acme", true) })
-	if err != nil || done {
-		t.Fatalf("declining should stop: done %v, err %v", done, err)
-	}
-	if !strings.Contains(out, "linear-app.sh") || !strings.Contains(out, "--workspace acme") {
-		t.Errorf("should show the old and new entries:\n%s", out)
-	}
-	if got, _ := os.ReadFile(r.Path(".mcp.json")); !bytes.Equal(got, existing) {
-		t.Error(".mcp.json changed after declining")
+	for _, want := range []string{".mcp.json names acme", "connected as Claude Code (testhost)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("show output should contain %q:\n%s", want, out)
+		}
 	}
 }

@@ -2,13 +2,15 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/claudecli"
+	"github.com/ConnerTechnology/ctdev/ctdev/gitrepo"
 	"github.com/ConnerTechnology/ctdev/ctdev/linear"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/spf13/cobra"
@@ -20,9 +22,10 @@ var configureLinearCmd = &cobra.Command{
 	Long: "Set up the Linear MCP server for the git repo you are in. Claude Code reaches Linear " +
 		"as an OAuth app (one per computer), so what a session does there shows up as the app " +
 		"and notifies you. The app's client ID and secret are entered here and stored only on " +
-		"this machine, in ~/.config/ctdev/linear/<workspace>.env (owner-only). The repo gets a " +
-		"`linear` server in .mcp.json whose headersHelper is `ctdev linear mcp-headers`, and " +
-		"the server is pre-approved in .claude/settings.local.json.\n\n" +
+		"this machine, in ~/.config/ctdev/linear/<workspace>.env (owner-only). Claude Code gets " +
+		"a `linear` server at local scope (`claude mcp add-json --scope local`, kept in " +
+		"~/.claude.json for this repo only) whose headersHelper is `ctdev linear mcp-headers`. " +
+		"Nothing is written in the repo.\n\n" +
 		"With --show, report the repo's workspace and whether it connects, and change nothing.",
 	Args: cobra.NoArgs,
 	RunE: runConfigureLinear,
@@ -51,45 +54,54 @@ func linearWizard(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	repo, err := linear.RepoRoot(ctx, cwd)
+	repo, err := gitrepo.Find(ctx, cwd)
 	if err != nil {
 		return err
 	}
-	mcpPath := repo.Path(linear.MCPJSONFile)
-	existing, err := os.ReadFile(mcpPath)
+	local, hasLocal, err := claudecli.LocalMCPServer(repo.Root, linear.ServerName)
+	if err != nil {
+		return err
+	}
+	current, hasCurrent := "", false
+	if hasLocal {
+		current, hasCurrent = linear.EntryWorkspace(local)
+	}
+	// Before CTD-109 ctdev wrote the server into .mcp.json. Its workspace is
+	// the default here, so moving a repo to local scope asks nothing new.
+	mcpJSON, err := os.ReadFile(repo.Path(linear.MCPJSONFile))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	// Checked before any prompt, so a broken file stops the run before
-	// credentials are saved for a repo that can't then be wired up.
-	if err := linear.ValidateMCPJSON(existing); err != nil {
-		return fmt.Errorf("%s: %w; fix or remove it, then run this again", mcpPath, err)
-	}
-	if !flagConfigShow {
-		if err := validateSettingsLocal(repo); err != nil {
-			return err
-		}
-	}
-	current, hasCurrent := linear.CurrentWorkspace(existing)
+	legacy, hasLegacy := linear.MCPJSONWorkspace(mcpJSON)
 	client := newLinearClient()
 
 	fmt.Println(styles.Title.Render("Linear for Claude Code"))
 	fmt.Println()
 	fmt.Printf("  %s %s\n", styles.Label(14).Render("Repo:"), styles.Value.Render(repo.Root))
 	var st linear.Status
-	if hasCurrent {
+	switch {
+	case hasCurrent:
 		st = client.CheckStatus(ctx, current)
 		printLinearStatus(st)
-	} else {
+	case hasLocal:
 		fmt.Printf("  %s %s\n", styles.Label(14).Render("Workspace:"), styles.Dimmed.Render("not set up in this repo"))
-		if linear.HasLinearServer(existing) {
-			fmt.Println(styles.Dimmed.Render("  .mcp.json has a linear server that doesn't use ctdev; setting up offers to replace it."))
-		}
+		fmt.Println(styles.Dimmed.Render("  This repo has a local linear server that doesn't use ctdev; setting up offers to replace it."))
+	case hasLegacy:
+		current, hasCurrent = legacy, true
+		fmt.Printf("  %s %s\n", styles.Label(14).Render("Workspace:"), styles.Dimmed.Render("not set up locally; .mcp.json names "+legacy))
+		st = client.CheckStatus(ctx, current)
+		printLinearStatus(st)
+	default:
+		fmt.Printf("  %s %s\n", styles.Label(14).Render("Workspace:"), styles.Dimmed.Render("not set up in this repo"))
 	}
 	if flagConfigShow {
 		return nil
 	}
 	fmt.Println()
+
+	if ok, err := ensureTool(ctx, "claude-code", "Claude Code", false); !ok || err != nil {
+		return err
+	}
 
 	ws, needCreds, err := chooseLinearWorkspace(ctx, client, current, hasCurrent, st)
 	if err != nil {
@@ -101,20 +113,18 @@ func linearWizard(ctx context.Context) error {
 			return err
 		}
 		if !saved {
-			fmt.Println(styles.Warning.Render("  Credentials not saved; the repo was left as it was."))
+			fmt.Println(styles.Warning.Render("  Credentials not saved; Claude Code was left as it was."))
 			return nil
 		}
 	}
 	fmt.Println()
 
-	own, err := promptLinearOwnership(ctx, repo)
-	if err != nil {
+	if done, err := addLocalServer(ctx, repo.Root, linear.ServerName, local, hasLocal, linear.MCPEntry(ws)); err != nil || !done {
 		return err
 	}
-	fmt.Println()
-
-	if done, err := writeLinearRepoFiles(ctx, repo, existing, ws, own); err != nil || !done {
-		return err
+	if linear.HasMCPJSONServer(mcpJSON) {
+		fmt.Println(styles.Dimmed.Render("  .mcp.json also has a linear server. Claude Code uses the local one; remove the"))
+		fmt.Println(styles.Dimmed.Render("  .mcp.json entry when nothing else needs it."))
 	}
 
 	fmt.Println()
@@ -300,158 +310,42 @@ func shortHostname() string {
 	return h
 }
 
-// promptLinearOwnership asks whether .mcp.json is committed (the user's own
-// repo) or kept local (someone else's). The default follows the remotes.
-func promptLinearOwnership(ctx context.Context, repo linear.Repo) (own bool, err error) {
-	def := 2
-	if linear.OwnRepoDefault(repo.Remotes(ctx)) {
-		def = 1
+// addLocalServer adds an MCP server at local scope for the repo, asking
+// first when a different server of that name is already there. done is false
+// when the user declined to replace it.
+func addLocalServer(ctx context.Context, root, name string, existing json.RawMessage, hasExisting bool, want json.RawMessage) (done bool, err error) {
+	if hasExisting && claudecli.SameEntry(existing, want) {
+		fmt.Println(styles.Dimmed.Render("  The local " + name + " server is already set up."))
+		return true, nil
 	}
-	fmt.Println("  Whose repo is this?")
-	fmt.Println("  1) Your repo (commit .mcp.json)")
-	fmt.Println("  2) Someone else's repo (keep .mcp.json local)")
-	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Choice [%d]:", def)))
-	choice, err := promptChoiceCtx(ctx, def)
-	if err != nil {
-		return false, err
-	}
-	if choice != 1 && choice != 2 {
-		choice = def
-	}
-	return choice == 1, nil
-}
-
-// writeLinearRepoFiles writes .mcp.json and .claude/settings.local.json and
-// keeps them out of git where they should be. done is false when the user
-// declined to replace an existing linear server.
-func writeLinearRepoFiles(ctx context.Context, repo linear.Repo, existing []byte, ws string, own bool) (done bool, err error) {
-	plan, err := linear.PlanMCPJSON(existing, ws)
-	if err != nil {
-		return false, err
-	}
-	if plan.Previous != nil && plan.Changed {
-		fmt.Println("  .mcp.json already has a linear server:")
-		fmt.Println(indentBlock(string(plan.Previous), "    "))
+	if hasExisting {
+		fmt.Printf("  This repo already has a local %s server:\n", name)
+		fmt.Println(indentBlock(string(existing), "    "))
 		fmt.Println("  It would become:")
-		fmt.Println(indentBlock(string(linear.MCPEntry(ws)), "    "))
+		fmt.Println(indentBlock(string(want), "    "))
 		replace, err := promptYesNoCtx(ctx, "Replace it?", true)
 		if err != nil {
 			return false, err
 		}
 		if !replace {
-			fmt.Println(styles.Warning.Render("  Left .mcp.json as it was; this repo is not connected to " + ws + "."))
+			fmt.Println(styles.Warning.Render("  Left the " + name + " server as it was."))
 			return false, nil
 		}
 	}
-	mcpPath := repo.Path(linear.MCPJSONFile)
-	if plan.Changed || existing == nil {
-		if err := writeRepoFile(mcpPath, plan.Content); err != nil {
-			return false, err
-		}
-	} else {
-		fmt.Println(styles.Dimmed.Render("  .mcp.json already points at " + ws))
-	}
-
-	settingsPath := repo.Path(linear.SettingsLocalFile)
-	settings, err := os.ReadFile(settingsPath)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return false, err
-	}
-	merged, changed, err := linear.MergeSettingsLocal(settings)
-	if err != nil {
-		return false, err
-	}
-	if changed {
-		if err := writeRepoFile(settingsPath, merged); err != nil {
-			return false, err
-		}
-	}
-
-	exclude, err := repo.ExcludeFile(ctx)
-	if err != nil {
-		return false, err
-	}
-	// Every run, not just when ctdev created it: settings.local.json is
-	// per-machine by design, and one that git would track is a leak waiting to
-	// be committed whoever made it.
-	if !repo.IsIgnored(ctx, linear.SettingsLocalFile) {
-		if err := addExclude(exclude, linear.SettingsLocalFile); err != nil {
-			return false, err
-		}
-		if repo.IsTracked(ctx, linear.SettingsLocalFile) {
-			fmt.Println(styles.Warning.Render("  " + linear.SettingsLocalFile + " is already committed in this repo; excluding it won't untrack it (git rm --cached it)."))
-		}
-	}
-
-	if own {
-		if repo.IsIgnored(ctx, linear.MCPJSONFile) {
-			fmt.Println(styles.Warning.Render("  git ignores .mcp.json here; remove it from " + exclude + " (or .gitignore) to commit it."))
-		} else if plan.Changed || !repo.IsTracked(ctx, linear.MCPJSONFile) {
-			fmt.Println(styles.Value.Render("  Commit .mcp.json so the repo's other machines use it too."))
-		}
+	if flagDryRun {
+		fmt.Printf("  [dry-run] would add the %s server at local scope:\n%s\n", name, indentBlock(string(want), "    "))
 		return true, nil
 	}
-	if err := addExclude(exclude, linear.MCPJSONFile); err != nil {
+	if hasExisting {
+		if err := claudecli.RemoveLocalMCPServer(ctx, root, name); err != nil {
+			return false, err
+		}
+	}
+	if err := claudecli.AddLocalMCPServer(ctx, root, name, want); err != nil {
 		return false, err
 	}
-	if repo.IsTracked(ctx, linear.MCPJSONFile) {
-		fmt.Println(styles.Warning.Render("  .mcp.json is already committed in this repo, so excluding it won't hide the change; don't commit it."))
-	}
+	fmt.Println(styles.Success.Render("  Added the " + name + " server for this repo, at local scope"))
 	return true, nil
-}
-
-func addExclude(exclude, line string) error {
-	if flagDryRun {
-		fmt.Printf("  [dry-run] would add %s to %s\n", line, exclude)
-		return nil
-	}
-	added, err := linear.AppendExclude(exclude, line)
-	if err != nil {
-		return fmt.Errorf("could not update %s: %w", exclude, err)
-	}
-	if added {
-		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added %s to %s", line, exclude)))
-	}
-	return nil
-}
-
-// validateSettingsLocal checks the repo's settings.local.json can be merged
-// into, before anything is prompted for or saved.
-func validateSettingsLocal(repo linear.Repo) error {
-	path := repo.Path(linear.SettingsLocalFile)
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if _, _, err := linear.MergeSettingsLocal(data); err != nil {
-		return fmt.Errorf("%s: %w; fix or remove it, then run this again", path, err)
-	}
-	return nil
-}
-
-// writeRepoFile writes a repo file atomically, keeping its mode when it
-// exists and 0644 when it is new.
-func writeRepoFile(path string, data []byte) error {
-	if flagDryRun {
-		fmt.Printf("  [dry-run] would write %s:\n%s", path, indentBlock(string(data), "    "))
-		fmt.Println()
-		return nil
-	}
-	mode := fs.FileMode(0o644)
-	if fi, err := os.Stat(path); err == nil {
-		mode = fi.Mode().Perm()
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := linear.WriteFileAtomic(path, data, mode); err != nil {
-		return err
-	}
-	fmt.Println(styles.Success.Render("  Wrote " + path))
-	return nil
 }
 
 func indentBlock(s, prefix string) string {
