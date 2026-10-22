@@ -222,7 +222,7 @@ func TestRetentionWithNoRulesKeepsEverything(t *testing.T) {
 }
 
 // Stopping takes the folder off this computer's list and removes its config
-// file; its backups stay, found as the folder's by path and host.
+// file; its backups stay in the repository under the folder's ID.
 func TestStopBackingUpKeepsTheBackups(t *testing.T) {
 	requireRestic(t)
 	ctx := context.Background()
@@ -252,11 +252,13 @@ func TestStopBackingUpKeepsTheBackups(t *testing.T) {
 	if st.Config != nil || st.Root != "" {
 		t.Errorf("status still shows the folder as configured: %+v", st.Folder)
 	}
-	if st.Backups != 1 {
-		t.Errorf("status shows %d backups, want the 1 kept", st.Backups)
+	// Stop never rewrites tags: the backups stay the folder ID's, so the
+	// unconfigured folder lists only one-offs, and it has none.
+	if st.Backups != 0 {
+		t.Errorf("status shows %d backups, want none: the kept ones keep the folder's ID", st.Backups)
 	}
-	if n := countBackups(t, m, d, root, nil); n != 1 {
-		t.Errorf("the folder's backups list %d, want the 1 kept", n)
+	if n := countBackups(t, m, d, root, &cfg); n != 1 {
+		t.Errorf("%d backups with the folder's ID are in the repository, want the 1 kept", n)
 	}
 }
 
@@ -317,6 +319,53 @@ func TestStopWithoutDeletingKeepsEveryComputersBackups(t *testing.T) {
 	}
 	if n := countBackups(t, m, d, root, &cfg); n != 2 {
 		t.Errorf("%d backups with the folder's ID are left, want both computers'", n)
+	}
+}
+
+// A configured folder that moves takes its ID with it. A new, unconfigured
+// folder later made at its old path must not claim the moved folder's
+// backups, which carry that old path and this host: an ID-less reference
+// matches only ID-less one-offs.
+func TestANewFolderAtAMovedFoldersOldPathLeavesItsBackupsAlone(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	root, cfg := configuredExample(t, m, d)
+	backUp(t, m, d, root, &cfg)
+	backUp(t, m, d, root, &cfg)
+
+	moved := filepath.Join(filepath.Dir(root), "site")
+	if err := os.Rename(root, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "draft.txt"), []byte("example draft\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newRef := m.Ref(root, nil)
+	if snaps, err := d.Snapshots(ctx, newRef); err != nil || len(snaps) != 0 {
+		t.Fatalf("the new folder lists %d backups (%v), want none of the moved folder's", len(snaps), err)
+	}
+	st := m.Status(ctx, root)
+	if st.ReadErr != nil || st.Backups != 0 || st.Stored != 0 {
+		t.Errorf("status of the new folder: %d backups, %d stored, %v; want none", st.Backups, st.Stored, st.ReadErr)
+	}
+
+	oneOff := backUp(t, m, d, root, nil)
+	snaps, err := d.Snapshots(ctx, newRef)
+	if err != nil || len(snaps) != 1 || snaps[0].ID != oneOff.ID {
+		t.Fatalf("the new folder lists %v (%v), want only its one-off", snaps, err)
+	}
+	n, err := d.DeleteAll(ctx, newRef)
+	if err != nil || n != 1 {
+		t.Fatalf("DeleteAll() = %d, %v; want only the one-off", n, err)
+	}
+	if n := countBackups(t, m, d, moved, &cfg); n != 2 {
+		t.Errorf("the moved folder has %d backups, want its 2 untouched", n)
 	}
 }
 

@@ -11,9 +11,10 @@ import (
 )
 
 // StopBackingUp makes the folder at root no longer backed up: it deletes the
-// folder's config file and takes it off this computer's schedule list. Its
-// backups are kept, as a folder that isn't configured, found by its path and
-// this computer's name; DeleteAll removes them.
+// folder's config file, then takes it off this computer's schedule list.
+// Its backups are kept, still tagged with the folder's ID, which is never
+// rewritten: the folder, now unconfigured, lists only ID-less one-offs, and
+// `ctdev backup --all` finds the kept backups.
 func (m *Machine) StopBackingUp(root string) error {
 	cfgPath := filepath.Join(root, ConfigFileName)
 	if m.Opts.DryRun {
@@ -21,19 +22,18 @@ func (m *Machine) StopBackingUp(root string) error {
 		fmt.Fprintf(m.out(), "[dry-run] remove %s from %s\n", root, m.foldersFile())
 		return nil
 	}
-	if err := m.removeFolder(root); err != nil {
-		return err
-	}
+	// The config file first: a folder left on the list without one is
+	// reported as missing, where one left with a config and off the list
+	// would still look backed up.
 	if err := os.Remove(cfgPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	return nil
+	return m.removeFolder(root)
 }
 
 // StopAndDelete is StopBackingUp that also forgets every backup with the
 // folder's ID, from every computer. The backups go first, while the ID is
-// still in the config file: once it's gone, the folder's backups can only be
-// found by path and this computer's name. It returns how many it forgot.
+// still in the config file to find them by. It returns how many it forgot.
 func (m *Machine) StopAndDelete(ctx context.Context, d *Destination, root string, cfg Config) (int, error) {
 	n, err := d.DeleteAll(ctx, Ref{FolderID: cfg.ID})
 	if err != nil {
@@ -55,17 +55,23 @@ func (d *Destination) DeleteAll(ctx context.Context, ref Ref) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if err := d.DeleteBackups(ctx, snaps); err != nil {
+		return 0, err
+	}
+	return len(snaps), nil
+}
+
+// DeleteBackups forgets exactly these backups, such as a listing just shown
+// to someone confirming its count. Like Delete, it doesn't prune.
+func (d *Destination) DeleteBackups(ctx context.Context, snaps []Snapshot) error {
 	if len(snaps) == 0 {
-		return 0, nil
+		return nil // with no IDs, forget would act on its policy, not on nothing
 	}
 	ids := make([]string, len(snaps))
 	for i, s := range snaps {
 		ids[i] = s.ID
 	}
-	if err := d.forget(ctx, ids...); err != nil {
-		return 0, err
-	}
-	return len(ids), nil
+	return d.forget(ctx, ids...)
 }
 
 // ApplyRetention forgets the configured folder's backups that its keep rules
@@ -141,41 +147,44 @@ func DownloadDir(root string) (string, error) {
 // Download writes a backup of the folder at root as a zip beside the folder
 // (see DownloadDir) and returns its path. The zip holds the folder's contents
 // at their relative paths. restic writes it into a temporary file that is
-// renamed into place once complete, so a zip under the final name is whole.
+// linked into place once complete, so a zip under the final name is whole,
+// and a file that took the name meanwhile is never overwritten.
 func (m *Machine) Download(ctx context.Context, d *Destination, root string, snap Snapshot) (string, error) {
 	dir, err := DownloadDir(root)
 	if err != nil {
 		return "", err
 	}
 	path := filepath.Join(dir, ZipName(root, snap))
+	exists := func() error {
+		return fmt.Errorf("%s already exists: move it away to download this backup again", path)
+	}
 	if _, err := os.Lstat(path); err == nil {
-		return "", fmt.Errorf("%s already exists: move it away to download this backup again", path)
+		return "", exists()
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", err
 	}
+	tmpPattern := "." + filepath.Base(path) + ".partial-*"
 	if m.Opts.DryRun {
-		d.dryRun(d.asComputer("", "dump", "--retry-lock", retryLock, "--archive", "zip", "--target", path+".partial", snap.ID, "/"))
+		d.dryRun(d.asComputer("", "dump", "--retry-lock", retryLock, "--archive", "zip", "--target", filepath.Join(dir, tmpPattern), snap.ID, "/"))
 		return path, nil
 	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".partial-*")
+	tmp, err := os.CreateTemp(dir, tmpPattern)
 	if err != nil {
 		return "", err
 	}
 	tmp.Close()
-	done := false
-	defer func() {
-		if !done {
-			os.Remove(tmp.Name())
-		}
-	}()
+	defer os.Remove(tmp.Name())
 	// "/" is the backup's root, which is the folder: backups are made from
 	// inside it with relative paths.
 	if _, err := d.restic(ctx, d.asComputer("", "dump", "--retry-lock", retryLock, "--archive", "zip", "--target", tmp.Name(), snap.ID, "/")); err != nil {
 		return "", err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	// A hard link, unlike a rename, fails when the name is taken.
+	if err := os.Link(tmp.Name(), path); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return "", exists()
+		}
 		return "", err
 	}
-	done = true
 	return path, nil
 }

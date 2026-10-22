@@ -148,8 +148,10 @@ backup before it, how long it took, the computer that made it and its short ID. 
 ## Delete all backups
 
 Delete all backups asks `[y/N]`, then has you type the folder's name, and forgets every backup of
-the folder: by its ID once configured, or, for a folder that isn't, the backups this computer made
-of its path. After any delete, ctdev says "Space is freed at the next weekly maintenance."
+the folder: by its ID once configured, or, for a folder that isn't, its one-offs, the backups with
+no folder ID that this computer made of its path. A backup that carries a folder ID always belongs
+to that folder, so a new folder made where a backed-up one used to be never claims the old one's
+backups. After any delete, ctdev says "Space is freed at the next weekly maintenance."
 
 ## Stop backing up
 
@@ -158,10 +160,10 @@ computer's list. It then asks whether to also delete all the folder's backups, f
 saying yes has you type the folder's name, as Delete all backups does, and forgets every backup with
 the folder's ID before its config file goes.
 
-Otherwise the backups are kept. `ctdev backup` then shows the folder as not backed up. With no
-config file there's no folder ID to find its backups by, so List backups and Delete all backups
-there see only the backups this computer made of the folder's path; other computers' stay in the
-destination.
+Otherwise the backups are kept, still tagged with the folder's ID. `ctdev backup` then shows the
+folder as not backed up, and since the folder no longer has that ID, List backups there shows only
+its one-offs. `ctdev backup --all` lists the kept backups. To back the folder up again with its
+history, choose Configure, then "Connect to an existing folder's backups".
 
 ## Where things are kept
 

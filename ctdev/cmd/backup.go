@@ -240,7 +240,7 @@ func listBackups(ctx context.Context, m *backup.Machine, s backup.Status) error 
 			}
 			snaps = append(snaps, found...)
 			if len(found) > 0 {
-				n, err := d.Stored(ctx, ref)
+				n, err := d.Stored(ctx, found)
 				if err != nil {
 					return err
 				}
@@ -322,8 +322,23 @@ func deleteAllBackups(ctx context.Context, m *backup.Machine, s backup.Status) e
 		return err
 	}
 	where := backup.DisplayPath(m.Home, s.Target)
+	// List now and delete exactly what was listed, so the count you confirm
+	// is the count that goes, even if a backup ran since the status.
+	ref := m.Ref(s.Target, s.Config)
+	found := make([][]backup.Snapshot, len(dests))
+	total := 0
+	for i, d := range dests {
+		if found[i], err = d.Snapshots(ctx, ref); err != nil {
+			return err
+		}
+		total += len(found[i])
+	}
+	if total == 0 {
+		fmt.Println("\n  " + where + " has no backups.")
+		return nil
+	}
 	fmt.Println()
-	confirm := backupscreen.NewDeleteAll(where, filepath.Base(s.Target), s.Backups)
+	confirm := backupscreen.NewDeleteAll(where, filepath.Base(s.Target), total)
 	if err := runScreen(confirm); err != nil {
 		return err
 	}
@@ -331,12 +346,8 @@ func deleteAllBackups(ctx context.Context, m *backup.Machine, s backup.Status) e
 		fmt.Println("  Nothing was deleted.")
 		return nil
 	}
-	ref := m.Ref(s.Target, s.Config)
-	total := 0
-	for _, d := range dests {
-		n, err := d.DeleteAll(ctx, ref)
-		total += n
-		if err != nil {
+	for i, d := range dests {
+		if err := d.DeleteBackups(ctx, found[i]); err != nil {
 			return err
 		}
 	}
@@ -415,14 +426,14 @@ func stopBackingUp(ctx context.Context, m *backup.Machine, s backup.Status) erro
 	}
 	fmt.Println("  " + styles.Success.Render("✓ Stopped backing up "+where+"."))
 	if s.HasBackups() {
-		// Without its config the folder has no ID, so from here its backups
-		// are found by path and this computer's name only (CTD-120).
-		kept := fmt.Sprintf("Its %d backups are", s.Backups)
+		// The backups keep the folder's ID, which the folder no longer has,
+		// so they no longer list here (CTD-120).
+		kept := fmt.Sprintf("Its %d backups are kept. ctdev backup --all lists them.", s.Backups)
 		if s.Backups == 1 {
-			kept = "Its backup is"
+			kept = "Its backup is kept. ctdev backup --all lists it."
 		}
-		fmt.Printf("  %s kept in %s. From now on, List backups and Delete all backups\n", kept, s.Config.Destination)
-		fmt.Println("  here see only the ones this computer made of " + where + ".")
+		fmt.Println("  " + kept)
+		fmt.Println("  To back this folder up again with its history, choose Configure, then 'Connect to an existing folder's backups'.")
 	}
 	return nil
 }
