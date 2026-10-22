@@ -240,16 +240,28 @@ func Status(s backup.Status, home string) string {
 	}
 
 	if s.Config != nil {
-		sched := string(s.Config.Schedule)
-		switch {
-		case !s.Scheduled:
+		sched, bad := string(s.Config.Schedule), true
+		if !s.Scheduled || !s.SchedulerInstalled {
+			// Not on this computer's list (a fresh clone), or the hourly
+			// runner isn't installed: either way nothing will run it here.
 			sched += " · not scheduled on this computer"
-		case !s.NextDue.After(s.At):
-			sched += " · due now"
-		default:
-			sched += " · next due " + when(s.NextDue)
 		}
-		row("Schedule", sched, false)
+		switch {
+		case s.Overdue && (s.Last == nil || s.Last.LastSuccess.IsZero()):
+			sched += " · overdue: never backed up"
+		case s.Overdue:
+			sched += " · overdue: no backup since " + when(s.Last.LastSuccess)
+		case !s.Scheduled || !s.SchedulerInstalled:
+		case !s.NextDue.After(s.At):
+			sched, bad = sched+" · due now", false
+		default:
+			sched, bad = sched+" · next due "+when(s.NextDue), false
+		}
+		row("Schedule", sched, bad)
+		if s.Scheduled && s.SchedulerInstalled && s.LoggedInOnly {
+			// ctdev never enables lingering (CTD-87).
+			fmt.Fprintf(&b, "  %s %s\n", label.Render(""), styles.Dimmed.Render("runs only while you're logged in"))
+		}
 		k := s.Config.Keep
 		row("Keeping", fmt.Sprintf("%d hourly, %d daily, %d weekly, %d monthly, %d yearly", k.Hourly, k.Daily, k.Weekly, k.Monthly, k.Yearly), false)
 	} else {
