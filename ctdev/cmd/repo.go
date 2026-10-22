@@ -84,8 +84,12 @@ func repoSetup(ctx context.Context) error {
 func setupRepo(ctx context.Context, batch bool) error {
 	// git first: finding the repo needs it.
 	for _, t := range []struct{ name, label string }{{"git", "Git"}, {"gh", "GitHub CLI"}, {"claude-code", "Claude Code"}} {
-		if ok, err := ensureTool(ctx, t.name, t.label, batch); !ok || err != nil {
+		ok, err := ensureTool(ctx, t.name, t.label, batch)
+		if err != nil {
 			return err
+		}
+		if !ok {
+			return fmt.Errorf("repo setup needs %s; nothing was changed", t.label)
 		}
 	}
 	cwd, err := os.Getwd()
@@ -103,14 +107,17 @@ func setupRepo(ctx context.Context, batch bool) error {
 	fmt.Println()
 
 	if !ghLoggedIn(ctx) {
-		if batch {
+		if flagDryRun {
+			fmt.Println("  [dry-run] gh isn't signed in to github.com; would run: gh auth login --hostname github.com")
+		} else if batch {
 			return errors.New("gh is not signed in to github.com; run 'gh auth login', then run this again")
+		} else {
+			fmt.Println("  gh isn't signed in to github.com, which the private engineering repo needs.")
+			if err := ghLogin(ctx); err != nil {
+				return fmt.Errorf("gh auth login: %w", err)
+			}
+			fmt.Println()
 		}
-		fmt.Println("  gh isn't signed in to github.com, which the private engineering repo needs.")
-		if err := ghLogin(ctx); err != nil {
-			return fmt.Errorf("gh auth login: %w", err)
-		}
-		fmt.Println()
 	}
 
 	if err := excludeSettingsLocal(ctx, repo); err != nil {
@@ -140,6 +147,7 @@ func setupRepo(ctx context.Context, batch bool) error {
 	}
 	fmt.Println()
 	fmt.Println(styles.Dimmed.Render("  Starting Claude Code on " + setupSkill + "..."))
+	releaseProcessState()
 	return launchClaude(repo.Root, setupSkill)
 }
 

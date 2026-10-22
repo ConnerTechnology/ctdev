@@ -108,3 +108,16 @@ func TestLocalPluginInstalled(t *testing.T) {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
 }
+
+func TestGitHubCredentialEnvKeepsTheCallersSettings(t *testing.T) {
+	t.Setenv("GIT_CONFIG_COUNT", "")
+	want := []string{"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.https://github.com.helper", "GIT_CONFIG_VALUE_0=!gh auth git-credential"}
+	if got := claudecli.GitHubCredentialEnv(); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+	t.Setenv("GIT_CONFIG_COUNT", "2")
+	want = []string{"GIT_CONFIG_COUNT=3", "GIT_CONFIG_KEY_2=credential.https://github.com.helper", "GIT_CONFIG_VALUE_2=!gh auth git-credential"}
+	if got := claudecli.GitHubCredentialEnv(); !reflect.DeepEqual(got, want) {
+		t.Errorf("with two already: got %q", got)
+	}
+}

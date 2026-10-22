@@ -33,5 +33,7 @@ so a repo moves to a new library version only when a ctdev release moves the pin
 `ctdev repo setup` runs again. The marketplace clone uses gh's github.com login for that one
 command, through `GIT_CONFIG_*` variables, without touching `~/.gitconfig`.
 
-Claude Code keeps one source per marketplace name on a machine, so every repo on a machine uses
-the same pinned version.
+Each repo's `.claude/settings.local.json` records the source it was set up with, but Claude Code
+keeps one clone per marketplace name on a machine, and adding it again with a new source repoints
+that clone. After a pin moves, run `ctdev repo setup` again in each repo, so none still names the
+old tag.

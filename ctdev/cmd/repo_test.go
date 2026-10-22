@@ -20,6 +20,8 @@ type repoSetupFakes struct {
 	claude   *claudeclitest.Fake
 	logins   int
 	launched []string
+	// askpass is SUDO_ASKPASS as the launched session would see it.
+	askpass string
 }
 
 func useRepoSetupFakes(t *testing.T, repo string, loggedIn bool) *repoSetupFakes {
@@ -34,7 +36,11 @@ func useRepoSetupFakes(t *testing.T, repo string, loggedIn bool) *repoSetupFakes
 	origIn, origLogin, origLaunch := ghLoggedIn, ghLogin, launchClaude
 	ghLoggedIn = func(context.Context) bool { return loggedIn }
 	ghLogin = func(context.Context) error { f.logins++; loggedIn = true; return nil }
-	launchClaude = func(root, prompt string) error { f.launched = append(f.launched, root, prompt); return nil }
+	launchClaude = func(root, prompt string) error {
+		f.launched = append(f.launched, root, prompt)
+		f.askpass = os.Getenv("SUDO_ASKPASS")
+		return nil
+	}
 	t.Cleanup(func() { ghLoggedIn, ghLogin, launchClaude = origIn, origLogin, origLaunch })
 	return f
 }
@@ -71,11 +77,27 @@ func TestRepoSetupInstallsLocallyAndStartsTheSkill(t *testing.T) {
 	repo := cloneLikeRepo(t)
 	f := useRepoSetupFakes(t, repo, true)
 	t.Chdir(repo)
+	t.Setenv("GIT_CONFIG_COUNT", "")
+	// What Execute sets up for ctdev itself, which the session must not get.
+	script := filepath.Join(t.TempDir(), "ctdev-askpass-test.sh")
+	_ = os.WriteFile(script, []byte("#!/bin/sh\nexit 1\n"), 0o700)
+	t.Setenv("SUDO_ASKPASS", script)
+	askpassPath, ctdevEnv = script, []string{"SUDO_ASKPASS"}
+	t.Cleanup(func() { askpassPath, ctdevEnv = "", nil })
 
 	var err error
 	out := captureStdout(t, func() { err = setupRepo(context.Background(), false) })
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
+	}
+	if f.askpass != "" {
+		t.Errorf("the session would inherit SUDO_ASKPASS=%s", f.askpass)
+	}
+	if _, err := os.Stat(script); !os.IsNotExist(err) {
+		t.Error("the askpass script was left behind")
+	}
+	if env := f.claude.GitConfigEnv(); !strings.Contains(env, "GIT_CONFIG_VALUE_0=!gh auth git-credential") {
+		t.Errorf("the marketplace clone didn't get gh's credentials:\n%s", env)
 	}
 	want := []string{
 		"plugin marketplace add " + pluginMarketplace + " --scope local --json",
@@ -216,5 +238,40 @@ func TestKeepBytesIfSame(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(path); string(got) != string(changed) {
 		t.Errorf("a real change was undone: %q", got)
+	}
+}
+
+func TestRepoSetupDryRunChangesNothing(t *testing.T) {
+	repo := cloneLikeRepo(t)
+	f := useRepoSetupFakes(t, repo, false)
+	t.Chdir(repo)
+	flagDryRun = true
+	t.Cleanup(func() { flagDryRun = false })
+	var err error
+	out := captureStdout(t, func() { err = setupRepo(context.Background(), false) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.logins != 0 || len(f.claude.Calls()) != 0 || len(f.launched) != 0 {
+		t.Errorf("dry run acted: logins %d, calls %q, launched %q", f.logins, f.claude.Calls(), f.launched)
+	}
+	if exclude, _ := os.ReadFile(filepath.Join(repo, ".git", "info", "exclude")); strings.Contains(string(exclude), settingsLocalFile) {
+		t.Error("dry run wrote the exclude file")
+	}
+	if !strings.Contains(out, "gh auth login") {
+		t.Errorf("dry run should say it would sign gh in:\n%s", out)
+	}
+}
+
+func TestRepoSetupStopsWhenAToolIsDeclined(t *testing.T) {
+	repo := cloneLikeRepo(t)
+	f := useRepoSetupFakes(t, repo, true)
+	useFakeTool(t, false)
+	feedStdin(t, "n\n")
+	t.Chdir(repo)
+	var err error
+	captureStdout(t, func() { err = setupRepo(context.Background(), false) })
+	if err == nil || !strings.Contains(err.Error(), "needs Git") || len(f.claude.Calls()) != 0 {
+		t.Errorf("err %v, calls %q", err, f.claude.Calls())
 	}
 }

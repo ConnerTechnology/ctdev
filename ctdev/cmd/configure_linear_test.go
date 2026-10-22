@@ -300,6 +300,25 @@ func TestAddLocalServer(t *testing.T) {
 	}
 }
 
+// When adding the replacement fails, the old server is put back, or the
+// error says it is gone.
+func TestAddLocalServerRestoresTheOldOneOnFailure(t *testing.T) {
+	f := claudeclitest.New(t)
+	f.Reply("mcp-add-json", "Example failure\n", 1)
+	other := json.RawMessage(`{"type":"http","url":"https://mcp.linear.app/mcp","headersHelper":"./scripts/linear-app.sh"}`)
+	feedStdin(t, "y\n")
+	var err error
+	captureStdout(t, func() {
+		_, err = addLocalServer(context.Background(), t.TempDir(), "linear", other, true, linear.MCPEntry("acme"))
+	})
+	if err == nil || !strings.Contains(err.Error(), "could not be put back") {
+		t.Errorf("got %v", err)
+	}
+	if calls := f.Calls(); len(calls) != 3 || !strings.Contains(calls[2], "linear-app.sh") {
+		t.Errorf("calls %q", calls)
+	}
+}
+
 // A repo set up before CTD-109 has the server in .mcp.json; --show reports
 // that workspace, and setting up writes nothing in the repo.
 func TestConfigureLinearShowReadsLegacyMCPJSON(t *testing.T) {

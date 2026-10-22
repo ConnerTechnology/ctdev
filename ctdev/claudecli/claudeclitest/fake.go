@@ -16,6 +16,7 @@ import (
 // ("plugin-install.out", "plugin-install.exit"), so a test can script a reply.
 const script = `#!/bin/sh
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
+env | grep '^GIT_CONFIG_' | sort >> "$FAKE_CLAUDE_LOG.env"
 key=$(printf '%s-%s' "$1" "$2")
 if [ "$1 $2" = "plugin marketplace" ]; then key=plugin-marketplace-$3; fi
 if [ -f "$FAKE_CLAUDE_DIR/$key.out" ]; then cat "$FAKE_CLAUDE_DIR/$key.out"; fi
@@ -70,6 +71,17 @@ func (f *Fake) Calls() []string {
 		f.t.Fatal(err)
 	}
 	return strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+}
+
+// GitConfigEnv is the GIT_CONFIG_* variables each call saw, one
+// "NAME=value" per line, all calls together.
+func (f *Fake) GitConfigEnv() string {
+	f.t.Helper()
+	data, err := os.ReadFile(f.log + ".env")
+	if err != nil && !os.IsNotExist(err) {
+		f.t.Fatal(err)
+	}
+	return string(data)
 }
 
 // SetLocalMCPServer writes a local-scope server for root into the fake config

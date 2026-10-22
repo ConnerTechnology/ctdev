@@ -342,6 +342,13 @@ func addLocalServer(ctx context.Context, root, name string, existing json.RawMes
 		}
 	}
 	if err := claudecli.AddLocalMCPServer(ctx, root, name, want); err != nil {
+		if hasExisting {
+			// Put the old one back rather than leave the repo with neither.
+			if rerr := claudecli.AddLocalMCPServer(ctx, root, name, existing); rerr != nil {
+				return false, fmt.Errorf("%w; the old %s server was removed and could not be put back: %v", err, name, rerr)
+			}
+			return false, fmt.Errorf("%w; the old %s server was kept", err, name)
+		}
 		return false, err
 	}
 	fmt.Println(styles.Success.Render("  Added the " + name + " server for this repo, at local scope"))

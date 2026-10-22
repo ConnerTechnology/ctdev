@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -94,12 +95,17 @@ func AddMarketplace(ctx context.Context, root, source string, env ...string) (me
 // GitHubCredentialEnv makes git, for one command, ask gh for github.com
 // credentials, after any helper the user's git config already names. It is
 // how a private marketplace clones over the machine's gh login without
-// touching ~/.gitconfig.
+// touching ~/.gitconfig. Settings already passed through GIT_CONFIG_COUNT are
+// kept: this one is added after them.
 func GitHubCredentialEnv() []string {
+	n, err := strconv.Atoi(os.Getenv("GIT_CONFIG_COUNT"))
+	if err != nil || n < 0 {
+		n = 0
+	}
 	return []string{
-		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=credential.https://github.com.helper",
-		"GIT_CONFIG_VALUE_0=!gh auth git-credential",
+		fmt.Sprintf("GIT_CONFIG_COUNT=%d", n+1),
+		fmt.Sprintf("GIT_CONFIG_KEY_%d=credential.https://github.com.helper", n),
+		fmt.Sprintf("GIT_CONFIG_VALUE_%d=!gh auth git-credential", n),
 	}
 }
 
