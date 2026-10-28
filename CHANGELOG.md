@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`ctdev install herdr`** installs [herdr](https://herdr.dev/), the background runtime for
+  coding agents: from Homebrew on macOS, and on Linux as the release binary, checked against
+  the SHA-256 in herdr's published manifest and installed to `/usr/local/bin`.
+  `ctdev uninstall herdr` removes the binary and leaves `~/.config/herdr` and your sessions
+  alone. ctdev ships no herdr config, so every machine gets herdr's own defaults.
+  `ctdev update` doesn't update the Linux binary; run `ctdev install herdr --force` to get
+  the latest.
+
 ## [15.0.0] - 2026-10-19
 
 ### Added

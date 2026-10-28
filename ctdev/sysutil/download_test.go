@@ -165,3 +165,69 @@ func TestVerifyChecksumFileMissing(t *testing.T) {
 		t.Error("expected error for missing file in checksums")
 	}
 }
+
+func writeTestArchive(t *testing.T, content string) (path, sum string) {
+	t.Helper()
+	path = filepath.Join(t.TempDir(), "asset.bin")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256([]byte(content))
+	return path, hex.EncodeToString(h[:])
+}
+
+func TestVerifyDownload_ChecksumFuncMatch(t *testing.T) {
+	path, sum := writeTestArchive(t, "binary")
+	var gotVer, gotOS, gotArch string
+	spec := GitHubBinarySpec{Checksum: func(_ context.Context, ver, goos, goarch string) (string, error) {
+		gotVer, gotOS, gotArch = ver, goos, goarch
+		return strings.ToUpper(sum), nil // manifests may publish uppercase hex
+	}}
+	if err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "arm64", path, t.TempDir()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotVer != "1.2.3" || gotOS != "linux" || gotArch != "arm64" {
+		t.Errorf("Checksum called with (%q, %q, %q)", gotVer, gotOS, gotArch)
+	}
+}
+
+func TestVerifyDownload_ChecksumFuncMismatch(t *testing.T) {
+	path, _ := writeTestArchive(t, "binary")
+	spec := GitHubBinarySpec{Checksum: func(context.Context, string, string, string) (string, error) {
+		return strings.Repeat("0", 64), nil
+	}}
+	err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "amd64", path, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("expected checksum mismatch, got %v", err)
+	}
+}
+
+func TestVerifyDownload_ChecksumFuncError(t *testing.T) {
+	path, _ := writeTestArchive(t, "binary")
+	spec := GitHubBinarySpec{Checksum: func(context.Context, string, string, string) (string, error) {
+		return "", fmt.Errorf("no checksum for 1.2.3")
+	}}
+	err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "amd64", path, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "no checksum for 1.2.3") {
+		t.Fatalf("a lookup failure must fail the install, got %v", err)
+	}
+}
+
+func TestVerifyDownload_NoChecksumConfigured(t *testing.T) {
+	path, _ := writeTestArchive(t, "binary")
+	if err := verifyDownload(context.Background(), GitHubBinarySpec{}, "1.2.3", "linux", "amd64", path, t.TempDir()); err != nil {
+		t.Fatalf("specs without a checksum behave as before, got %v", err)
+	}
+}
+
+func TestVerifyDownload_ChecksumURLStillWorks(t *testing.T) {
+	path, sum := writeTestArchive(t, "binary")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s  %s\n", sum, filepath.Base(path))
+	}))
+	defer srv.Close()
+	spec := GitHubBinarySpec{ChecksumURL: func(string, string, string) string { return srv.URL }}
+	if err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "amd64", path, t.TempDir()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

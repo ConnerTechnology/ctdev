@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-59 components, counted in `ctdev/component/registry.go` on 2026-10-19. A
+60 components, counted in `ctdev/component/registry.go` on 2026-10-28. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -52,6 +52,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `git-spice` | Git Spice stacked branches tool | Linux, macOS |
 | `gws` | Google Workspace CLI (Drive, Gmail, Calendar, and more) | Linux, macOS |
 | `helm` | Kubernetes package manager | Linux, macOS |
+| `herdr` | Background runtime for coding agents: sessions keep running when you disconnect | Linux, macOS |
 | `jq` | JSON processor | Linux, macOS |
 | `kubectl` | Kubernetes CLI | Linux, macOS |
 | `lazygit` | Terminal UI for git | Linux, macOS |

@@ -181,9 +181,36 @@ type GitHubBinarySpec struct {
 	Repo        string                                    // e.g. "helm/helm"
 	ArchiveURL  func(version, goos, goarch string) string // returns download URL
 	ChecksumURL func(version, goos, goarch string) string // optional, returns checksum URL
-	BinaryPath  func(goos, goarch string) string          // path within extracted archive
-	InstallDest string                                    // e.g. "/usr/local/bin/helm"
-	ArchFormat  string                                    // "tar.gz", "zip", or "" for raw binary
+	// Checksum is optional and returns the expected SHA-256 of the download,
+	// for releases that publish hashes somewhere other than a checksums file.
+	// An error fails the install: a hash that can't be found is never skipped.
+	Checksum    func(ctx context.Context, version, goos, goarch string) (string, error)
+	BinaryPath  func(goos, goarch string) string // path within extracted archive
+	InstallDest string                           // e.g. "/usr/local/bin/helm"
+	ArchFormat  string                           // "tar.gz", "zip", or "" for raw binary
+}
+
+// verifyDownload checks archivePath against whichever checksum source the spec
+// names. A spec with neither is unchecked, as it always was.
+func verifyDownload(ctx context.Context, spec GitHubBinarySpec, ver, goos, goarch, archivePath, tmpDir string) error {
+	if spec.ChecksumURL != nil {
+		csURL := spec.ChecksumURL(ver, goos, goarch)
+		csPath := filepath.Join(tmpDir, "checksums.txt")
+		if err := DownloadFile(ctx, csURL, csPath); err != nil {
+			return fmt.Errorf("download checksums for %s: %w", spec.Repo, err)
+		}
+		if err := VerifyChecksumFile(archivePath, csPath); err != nil {
+			return err
+		}
+	}
+	if spec.Checksum != nil {
+		want, err := spec.Checksum(ctx, ver, goos, goarch)
+		if err != nil {
+			return fmt.Errorf("checksum for %s: %w", spec.Repo, err)
+		}
+		return VerifyChecksum(archivePath, strings.ToLower(want))
+	}
+	return nil
 }
 
 // DownloadGitHubBinary fetches the latest release, downloads, verifies, extracts, and installs.
@@ -216,15 +243,8 @@ func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (s
 		return ver, fmt.Errorf("download %s: %w", spec.Repo, err)
 	}
 
-	if spec.ChecksumURL != nil {
-		csURL := spec.ChecksumURL(ver, goos, goarch)
-		csPath := filepath.Join(tmpDir, "checksums.txt")
-		if err := DownloadFile(ctx, csURL, csPath); err != nil {
-			return ver, fmt.Errorf("download checksums for %s: %w", spec.Repo, err)
-		}
-		if err := VerifyChecksumFile(archivePath, csPath); err != nil {
-			return ver, err
-		}
+	if err := verifyDownload(ctx, spec, ver, goos, goarch, archivePath, tmpDir); err != nil {
+		return ver, err
 	}
 
 	switch spec.ArchFormat {
