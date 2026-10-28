@@ -304,3 +304,57 @@ func TestDownloadGitHubBinary_PinnedBz2UserInstall(t *testing.T) {
 		})
 	}
 }
+
+// A release whose hash comes from a Checksum hook installs the raw binary only
+// after the hash matches, and installs nothing when it doesn't or can't be found.
+func TestDownloadGitHubBinary_ChecksumHookGatesInstall(t *testing.T) {
+	body := []byte("fake herdr binary\n")
+	sum := sha256.Sum256(body)
+	for _, tc := range []struct {
+		name    string
+		hash    string
+		hashErr error
+		wantErr string
+	}{
+		{"hash matches", hex.EncodeToString(sum[:]), nil, ""},
+		{"hash mismatch", strings.Repeat("0", 64), nil, "checksum mismatch"},
+		{"hash not published", "", fmt.Errorf("manifest has no checksum for v1.2.3"), "no checksum for v1.2.3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}))
+			defer srv.Close()
+
+			dest := filepath.Join(t.TempDir(), "bin", "tool")
+			_, err := DownloadGitHubBinary(context.Background(), Opts{Stdout: os.Stdout}, GitHubBinarySpec{
+				Repo:    "example/tool",
+				Version: "1.2.3",
+				ArchiveURL: func(ver, goos, goarch string) string {
+					return fmt.Sprintf("%s/v%s/tool-%s-%s", srv.URL, ver, goos, goarch)
+				},
+				Checksum: func(context.Context, string, string, string) (string, error) {
+					return tc.hash, tc.hashErr
+				},
+				InstallDest: dest,
+				UserInstall: true,
+			})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("want an error containing %q, got %v", tc.wantErr, err)
+				}
+				if _, statErr := os.Stat(dest); statErr == nil {
+					t.Error("binary installed despite a failed checksum")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(dest)
+			if err != nil || string(got) != string(body) {
+				t.Errorf("installed contents = %q, %v", got, err)
+			}
+		})
+	}
+}
