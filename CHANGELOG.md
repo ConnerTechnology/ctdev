@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`ctdev install herdr`** installs [herdr](https://herdr.dev/), the background runtime for
+  coding agents: from Homebrew on macOS, and on Linux as the release binary, checked against
+  the SHA-256 in herdr's published manifest and installed to `/usr/local/bin`.
+  `ctdev uninstall herdr` removes the binary and leaves `~/.config/herdr` and your sessions
+  alone. ctdev ships no herdr config, so every machine gets herdr's own defaults.
+  `ctdev update` doesn't update the Linux binary; run `ctdev install herdr --force` to get
+  the latest.
+
 ### Changed
 - **`ctdev repo setup` pins the `connertechnology` plugin to `v1.1.0`** (was `v1.0.2`), which
   runs the engineering skills on Jira Cloud as well as Linear, through one tracker layer, and

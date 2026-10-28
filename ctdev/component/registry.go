@@ -41,6 +41,7 @@ var Registry = []Component{
 	{Name: "go", Description: "Go toolchain (official tarball)", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, GoInstall: goInstall, GoUninstall: goUninstall, Tags: []string{"golang", "runtime"}},
 	{Name: "gws", Description: "Google Workspace CLI (Drive, Gmail, Calendar, and more)", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: gwsInstall, GoUninstall: gwsUninstall, Tags: []string{"google", "workspace"}},
 	{Name: "helm", Description: "Kubernetes package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Dependencies: []string{"kubectl"}, GoInstall: helmInstall, GoUninstall: helmUninstall, Tags: []string{"kubernetes", "k8s"}},
+	{Name: "herdr", Description: "Background runtime for coding agents: sessions keep running when you disconnect", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: herdrInstall, GoUninstall: herdrUninstall, Tags: []string{"agents", "sessions"}},
 	{Name: "jq", Description: "JSON processor", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("jq"), GoUninstall: SimplePackageUninstaller("jq"), Tags: []string{"json", "parser"}},
 	{Name: "kubectl", Description: "Kubernetes CLI", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: kubectlInstall, GoUninstall: kubectlUninstall, Tags: []string{"kubernetes", "k8s"}},
 	{Name: "lazygit", Description: "Terminal UI for git", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: lazygitInstall, GoUninstall: lazygitUninstall, Tags: []string{"git", "tui"}},
