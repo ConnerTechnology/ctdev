@@ -10,6 +10,9 @@ func init() {
 	PostApplyHooks["grub"] = applyUpdateGrub
 	PostApplyHooks["pihole-ftl"] = applyPiholeRestart
 	PostApplyHooks[macKeyRepeatGroup] = macKeyRepeatNote
+	for group, app := range macRestartGroups {
+		PostApplyHooks[group] = macRestartHook(app)
+	}
 }
 
 // Registry is the single source of truth for all setup settings.
@@ -17,28 +20,32 @@ var Registry = []Setting{
 	// ── GPU & Boot ──────────────────────────────────────────────────────
 
 	{
-		Name:        "NVIDIA driver signing",
+		Name:        "NVIDIA driver works with Secure Boot",
 		Slug:        "gpu",
 		Category:    "GPU",
-		Description: "Signs the NVIDIA kernel module with a Machine Owner Key so Secure Boot accepts it. Without this, the driver won't load on Secure-Boot-enabled systems.",
+		Description: "Secure Boot only loads signed drivers, so this signs the NVIDIA driver with this machine's own key.",
 		Control:     ControlToggle,
 		OneWay:      true,
+		NoOffSwitch: "Undoing it would only stop the driver loading under Secure Boot again.",
 		Default:     "signed",
 		DetectFunc:  detectModuleSigned,
+		NotNeededFn: NvidiaSigningNotNeeded,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyNvidiaSigning(ctx, o)
 		},
 		HardwareFn: detectNvidiaLoaded,
 	},
 	{
-		Name:        "NVIDIA suspend services",
+		Name:        "NVIDIA GPU wakes from sleep cleanly",
 		Slug:        "gpu",
 		Category:    "GPU",
-		Description: "Enables systemd services that properly suspend and resume the NVIDIA GPU. Prevents black screens or freezes after waking from sleep.",
+		Description: "Lets the NVIDIA driver suspend and resume with the machine, so you don't wake to a black screen or a frozen desktop.",
 		Control:     ControlToggle,
 		OneWay:      true,
+		NoOffSwitch: "Undoing it would only bring the black screens and freezes after sleep back.",
 		Default:     "enabled",
 		DetectFunc:  detectNvidiaSuspendServices,
+		NotNeededFn: suspendNotNeeded,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
 			return applyNvidiaSuspendServices(ctx, o)
 		},
@@ -208,6 +215,19 @@ var Registry = []Setting{
 		},
 		HardwareFn: gateCinnamon,
 	},
+	{
+		Name:        "Ask for the password right after the screensaver",
+		Slug:        "power",
+		Category:    "Power",
+		Description: "Asks for your password the moment the screensaver ends, with no grace period, so a Mac you walk away from stays locked. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macPowerScreensaverPassword) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macPowerScreensaverPassword, v)
+		},
+		HardwareFn: gateMacOS,
+	},
 
 	// ── Keyboard ───────────────────────────────────────────────────────
 
@@ -215,7 +235,7 @@ var Registry = []Setting{
 		Name:        "Key repeat delay",
 		Slug:        "keyboard",
 		Category:    "Keyboard",
-		Description: "How long a key must be held before it starts repeating.",
+		Description: "How long you hold a key before it repeats: short enough to hold a key on purpose, long enough not to repeat by accident.",
 		Control:     ControlSlider,
 		Default:     "200",
 		Slider:      &SliderRange{Min: 100, Max: 1000, Step: 25, Unit: "ms"},
@@ -235,7 +255,7 @@ var Registry = []Setting{
 		Name:        "Key repeat rate",
 		Slug:        "keyboard",
 		Category:    "Keyboard",
-		Description: "How many characters per second are generated while a key is held down.",
+		Description: "How many characters per second a held key types, so moving the cursor or deleting with a held key is quick.",
 		Control:     ControlSlider,
 		Default:     "50",
 		Slider:      &SliderRange{Min: 10, Max: 100, Step: 5, Unit: "cps"},
@@ -255,8 +275,8 @@ var Registry = []Setting{
 		Name:     "Key repeat delay",
 		Slug:     "keyboard",
 		Category: "Keyboard",
-		Description: "How long a key must be held before it starts repeating. " +
-			"macOS stores this in 15 ms steps; takes effect after logging out and back in.",
+		Description: "How long you hold a key before it repeats: short enough to hold a key on purpose, long enough not to repeat by accident. " +
+			"macOS moves in 15 ms steps; takes effect after logging out and back in.",
 		Control:    ControlSlider,
 		Default:    macKeyRepeatDelayDefaultMs,
 		Slider:     &SliderRange{Min: 120, Max: 1800, Step: keyRepeatUnitMs, Unit: "ms"},
@@ -268,45 +288,64 @@ var Registry = []Setting{
 		HardwareFn: gateMacOS,
 	},
 	{
-		Name:     "Key repeat interval",
+		Name:     "Key repeat rate",
 		Slug:     "keyboard",
 		Category: "Keyboard",
-		Description: "Time between repeated characters while a key is held: 15 ms ≈ 67/s, 30 ms ≈ 33/s. " +
-			"macOS stores this in 15 ms steps; takes effect after logging out and back in.",
-		Control:    ControlSlider,
-		Default:    macKeyRepeatIntervalDefaultMs,
-		Slider:     &SliderRange{Min: 15, Max: 120, Step: keyRepeatUnitMs, Unit: "ms"},
-		DetectFunc: func(ctx context.Context) string { return detectMacKeyRepeat(ctx, "KeyRepeat") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
-			return applyMacKeyRepeat(ctx, o, "KeyRepeat", v)
-		},
+		// "Faster than System Settings allows" rests on community reports that
+		// the slider's fastest setting is KeyRepeat 2; Apple doesn't document it.
+		Description: "How many characters per second a held key types, so moving the cursor or deleting with a held key is quick. " +
+			"ctdev offers the eight fastest 15 ms steps (15–120 ms); 67 cps is faster than System Settings allows. " +
+			"Takes effect after logging out and back in.",
+		Control:    ControlPicker,
+		Default:    macKeyRepeatRateDefaultCps,
+		Choices:    macKeyRepeatRateChoices(),
+		DetectFunc: detectMacKeyRepeatRate,
+		ApplyFunc:  applyMacKeyRepeatRate,
 		ApplyGroup: macKeyRepeatGroup,
+		HardwareFn: gateMacOS,
+	},
+	{
+		Name:        "Type exactly what I type",
+		Slug:        "keyboard",
+		Category:    "Keyboard",
+		Description: "Stops macOS swapping in curly quotes and long dashes, fixing spelling, capitalizing and adding periods as you type, which breaks code and commands. Off puts back the macOS defaults.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macKeyboardTypeAsTyped) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macKeyboardTypeAsTyped, v)
+		},
+		HardwareFn: gateMacOS,
+	},
+	{
+		Name:        "Holding a key repeats it",
+		Slug:        "keyboard",
+		Category:    "Keyboard",
+		Description: "Holding a key repeats it instead of opening the accent popup, so a held arrow or Delete key keeps going. Off brings back the accent popup.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macKeyboardHoldToRepeat) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macKeyboardHoldToRepeat, v)
+		},
 		HardwareFn: gateMacOS,
 	},
 	{
 		Name:        "NumLock on boot",
 		Slug:        "keyboard",
 		Category:    "Keyboard",
-		Description: "Ensures NumLock is turned on at login. Installs numlockx if needed.",
+		Description: "Turns NumLock on at login, so the number pad types numbers straight away. Installs numlockx; off removes it.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(ctx context.Context) string {
-			if detectPackageInstalled(ctx, "numlockx") {
-				return "installed"
-			}
-			return "not installed"
-		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyPackages(ctx, o, []string{"numlockx"})
-		},
-		HardwareFn: gateDesktop,
+		DetectFunc:  detectNumlockx,
+		ApplyFunc:   applyNumlockx,
+		HardwareFn:  gateDesktop,
 	},
 	{
-		Name:        "Mouse accel profile",
+		Name:        "Mouse acceleration",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Controls pointer acceleration. 'flat' gives raw 1:1 input, 'adaptive' accelerates based on speed.",
+		Description: "Flat makes the pointer move the same distance for the same hand movement, so aim stays predictable.",
 		Control:     ControlPicker,
 		Default:     "flat",
 		Choices: []PickerChoice{
@@ -325,10 +364,10 @@ var Registry = []Setting{
 		Name:        "Mouse speed",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Overall pointer speed multiplier.",
+		Description: "How far the pointer moves for a given hand movement.",
 		Control:     ControlSlider,
-		Default:     "0.65",
-		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: 0.05, Unit: ""},
+		Default:     "0.46",
+		Slider:      &SliderRange{Min: 0.0, Max: 1.0, Step: mouseSpeedStep, Unit: ""},
 		DetectFunc:  detectMouseSpeed,
 		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
 			return applyDconf(ctx, o, "/org/gnome/desktop/peripherals/mouse/speed", v)
@@ -339,7 +378,7 @@ var Registry = []Setting{
 		Name:        "Natural scroll",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Reverses scroll direction so content moves with your fingers, like a touchscreen.",
+		Description: "Content moves the way the wheel turns, like a touchscreen.",
 		Control:     ControlToggle,
 		Default:     "true",
 		DetectFunc:  detectNaturalScroll,
@@ -349,23 +388,26 @@ var Registry = []Setting{
 		HardwareFn: gateDconfDesktop,
 	},
 	{
-		Name:        "Mouse bindings (xbindkeys)",
+		Name:        "Middle-click opens the window overview",
 		Slug:        "mouse",
 		Category:    "Mouse",
-		Description: "Installs xbindkeys and xdotool for custom mouse button mappings.",
+		Description: "Shows every open window at once, so switching windows is one click.",
 		Control:     ControlToggle,
-		OneWay:      true,
 		Default:     "installed",
-		DetectFunc: func(ctx context.Context) string {
-			if detectPackageInstalled(ctx, "xbindkeys") && detectPackageInstalled(ctx, "xdotool") {
-				return "installed"
-			}
-			return "not installed"
-		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyXbindkeys(ctx, o)
-		},
-		HardwareFn: gateDesktop,
+		DetectFunc:  detectXbindkeys,
+		ApplyFunc:   setXbindkeys,
+		HardwareFn:  gateCinnamon,
+	},
+	{
+		Name:        "Keep the Logitech mouse working after a KVM switch",
+		Slug:        "mouse",
+		Category:    "Mouse",
+		Description: "Middle-click and Solaar settings keep working after the KVM switches back.",
+		Control:     ControlToggle,
+		Default:     "installed",
+		DetectFunc:  detectLogitechKVMFix,
+		ApplyFunc:   setLogitechKVMFix,
+		HardwareFn:  gateLogitechKVMFix,
 	},
 
 	// ── Audio ──────────────────────────────────────────────────────────
@@ -422,6 +464,19 @@ var Registry = []Setting{
 		},
 		HardwareFn: gateCinnamon,
 	},
+	{
+		Name:        "Click when changing volume",
+		Slug:        "audio",
+		Category:    "Audio",
+		Description: "Plays a click as you change the volume, so you hear how loud it is before anything else plays. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macAudioVolumeClick) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macAudioVolumeClick, v)
+		},
+		HardwareFn: gateMacOS,
+	},
 
 	// ── Bluetooth ──────────────────────────────────────────────────────
 
@@ -477,34 +532,87 @@ var Registry = []Setting{
 		Name:        "Hide drives",
 		Slug:        "desktop",
 		Category:    "Desktop",
-		Description: "Hides Windows/secondary NVMe partitions from the file manager so they don't clutter the sidebar.",
-		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc:  func(_ context.Context) string { return detectFileExists("/etc/udev/rules.d/99-hide-drives.rules") },
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyHideDrives(ctx, o)
-		},
-		HardwareFn: gateCinnamon,
+		Description: "Hides the partitions you check (a Windows install, a recovery partition) from the file manager, so they can't be opened or ejected by mistake.",
+		Control:     ControlMultiPick,
+		// No Default: which partitions to hide is a per-machine choice.
+		ChoicesFunc: hideDrivesChoices,
+		DetectFunc:  detectHideDrives,
+		ApplyFunc:   applyHideDrives,
+		HardwareFn:  gateCinnamon,
 	},
 
-	// ── System ─────────────────────────────────────────────────────────
+	{
+		Name:        "Auto-hiding Dock",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Hides the Dock until you point at it, with no delay and no recent-apps section, so windows get the whole screen. Restarts the Dock.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDock) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopDock, v)
+		},
+		ApplyGroup: macDockGroup,
+		HardwareFn: gateMacOS,
+	},
 
 	{
-		Name:        "Logitech KVM mouse fix",
-		Slug:        "system",
-		Category:    "System",
-		Description: "Installs a udev rule and systemd user service that restarts Solaar when the Logi Bolt receiver reconnects after a KVM switch. Fixes middle-click not working.",
+		Name:        "Faster animations",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Drops the app-launch bounce and window open/close animations and speeds up minimize and Mission Control, so the Mac feels quicker. Restarts the Dock.",
 		Control:     ControlToggle,
-		OneWay:      true,
-		Default:     "installed",
-		DetectFunc: func(_ context.Context) string {
-			return detectFileExists("/etc/udev/rules.d/99-logitech-kvm-fix.rules")
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopAnimations) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopAnimations, v)
 		},
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return applyLogitechKVMFix(ctx, o)
+		ApplyGroup: macDockGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "Finder list view with path and status bars",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Opens folders as lists, shows where you are and how much is there, searches the current folder, and adds Quit to the Finder menu. Restarts Finder.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopFinder) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopFinder, v)
 		},
-		HardwareFn: detectLogitechBolt,
+		ApplyGroup: macFinderGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "No .DS_Store files on network and USB drives",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Stops Finder leaving its hidden folder-settings files on shared and removable drives, where other computers see them as clutter. Restarts Finder.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDSStore) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopDSStore, v)
+		},
+		ApplyGroup: macFinderGroup,
+		HardwareFn: gateMacOS,
+	},
+
+	{
+		Name:        "Expanded save and print dialogs",
+		Slug:        "desktop",
+		Category:    "Desktop",
+		Description: "Opens Save and Print dialogs with all their options showing, so you can pick a folder or print settings without an extra click. Off puts back the macOS default.",
+		Control:     ControlToggle,
+		Default:     "enabled",
+		DetectFunc:  func(ctx context.Context) string { return detectMacDefaults(ctx, macDesktopDialogs) },
+		ApplyFunc: func(ctx context.Context, o sysutil.Opts, v string) error {
+			return applyMacDefaults(ctx, o, macDesktopDialogs, v)
+		},
+		HardwareFn: gateMacOS,
 	},
 
 	// ── Network ────────────────────────────────────────────────────────
@@ -625,7 +733,9 @@ var Registry = []Setting{
 		Category:    "Pi-hole DNS",
 		Description: "Upstream resolvers Pi-hole forwards cache misses to.",
 		Control:     ControlPicker,
-		Default:     "cloudflare",
+		// `configure pihole --batch` applies every default, so batch-applying the
+		// category moves a node on Unbound back to Cloudflare.
+		Default: "cloudflare",
 		Choices: []PickerChoice{
 			{Value: "cloudflare", Description: "Cloudflare (1.1.1.1, 1.0.0.1)"},
 			{Value: "cloudflare-family", Description: "Cloudflare for Families (1.1.1.3 — blocks malware + adult content network-wide)"},
@@ -682,27 +792,5 @@ var Registry = []Setting{
 			return applyPiholeHostResolver(ctx, o)
 		},
 		HardwareFn: gatePiholeHostResolver,
-	},
-
-	// ── macOS ────────────────────────────────────────────────────────────
-
-	{
-		Name:     "macOS defaults",
-		Slug:     "macos",
-		Category: "macOS",
-		Description: "Applies opinionated macOS defaults: Dock auto-hide with no delay and a fast slide (no launch animation or recents), " +
-			"scale minimize, fast Mission Control, no window open/close animations, " +
-			"Finder path/status bars with list view and current-folder search, no .DS_Store on network/USB drives, " +
-			"smart quotes/dashes/autocorrect/auto-capitalize off, key repeat instead of the press-and-hold accent popup, " +
-			"expanded save/print dialogs, and password required immediately after screensaver. Restarts Dock and Finder. " +
-			"Key repeat speed is in the keyboard category.",
-		Control:    ControlToggle,
-		OneWay:     true,
-		Default:    "applied",
-		DetectFunc: detectMacOSDefaults,
-		ApplyFunc: func(ctx context.Context, o sysutil.Opts, _ string) error {
-			return ApplyMacOSDefaults(ctx, o)
-		},
-		HardwareFn: gateMacOS,
 	},
 }

@@ -39,9 +39,8 @@ updates, the GPU driver, your git identity. Interactive by default, or
 components, the runtimes they manage and the container stacks ctdev brought up,
 then you pick what to install.
 
-**[Backups](docs/backups.md).** Encrypted restic snapshots on a daily timer, to
-any backend restic supports. Opt-in: you choose what to include in a local web
-UI, and nothing is snapshotted until you do.
+**[Backups](docs/backups.md).** `ctdev backup` shows whether the folder you're in
+is backed up, sets it up with a destination, and backs it up whole with restic.
 
 **[Doctor](docs/doctor.md).** A read-only health report for a machine and the
 network it sits on — hardware, OS, DNS, routing, the path out — with a
@@ -100,7 +99,6 @@ there are no dates, on purpose.
 ## Documentation
 
 - [Documentation index](docs/README.md) — every page, in this order
-- [RECOVERY.md](RECOVERY.md) — restoring a machine from a restic backup
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — symptoms and fixes on a live machine
 - [CHANGELOG.md](CHANGELOG.md) — what shipped in each version
 

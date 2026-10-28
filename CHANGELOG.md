@@ -13,6 +13,125 @@ All notable changes to this project will be documented in this file.
   `ctdev update` doesn't update the Linux binary; run `ctdev install herdr --force` to get
   the latest.
 
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.1.0`** (was `v1.0.2`), which
+  runs the engineering skills on Jira Cloud as well as Linear, through one tracker layer, and
+  files requests as `request`-labeled issues. Run `ctdev repo setup` again in a repo to move it
+  to 1.1.0, then `/connertechnology:setup` to add the new allow-list entries.
+- **`ctdev configure jira` adds Atlassian's server as `https://mcp.atlassian.com/v2/mcp?tools=all`.**
+  Without `?tools=all`, Atlassian's v2 server lists only a few tools and reaches the rest
+  through generic ones, so the engineering plugin's allow list couldn't name the Jira tools
+  its skills use. On a repo set up with v17.0.0 or earlier, rerun `ctdev configure jira`,
+  answer yes to replacing the `atlassian` server, then run `/mcp` in Claude Code and sign in
+  to Atlassian again.
+
+## [17.0.0] - 2026-10-22
+
+### Added
+- **`ctdev backup` backs up the folder you're in.** Run it in a folder to set it up: it
+  creates or connects a destination (a Secret Key and master password make the account
+  key, each computer gets its own key, and you get a Recovery Code and an Emergency Kit),
+  then backs the folder up with restic, run as you. The folder's settings live in
+  `.ctdev-backup.json`. From then on the screen shows the folder's status and offers
+  "Back up now". Without a terminal, or with `--batch`, it prints the status and exits 1
+  when the folder isn't set up, the last backup failed, or the destination can't be read.
+  Listing backups, stopping and deleting them are shown dimmed as coming soon. The
+  encryption model is ADR-0016. See `docs/backups.md`.
+
+### Changed
+- **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
+  machine's partitions and you check which to hide from the file manager. It writes
+  `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem UUID for exactly those,
+  and checking nothing removes the rule. The old rule, hard-coded to one computer's
+  partitions, is gone; on a machine that has it, the wizard shows "legacy rule" until
+  you pick. `--batch` leaves Hide drives as it is.
+- **`configure desktop` covers macOS too.** The Dock, Finder and animation defaults move
+  from `configure macos` into `desktop` as four settings you can turn on or off: an
+  auto-hiding Dock, faster animations, Finder list view with path and status bars, and
+  no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
+  macOS goes back to its own default.
+- **`ctdev configure keyboard` holds the macOS typing settings, and shows the repeat rate
+  in characters per second on every machine.** On macOS ctdev offers the eight fastest
+  15 ms steps (15–120 ms, 67 cps down to 8 cps), converted to and from `KeyRepeat` behind
+  the scenes; a Mac set slower shows its own rate. The recommended rate is 67 cps, the
+  step nearest the Linux default of 50 cps and faster than System Settings allows; the
+  delay stays 195 ms. "Type exactly what I type" (no smart quotes, dashes, autocorrect,
+  auto-capitalize or double-space period) and "Holding a key repeats it" (no accent popup)
+  move here from `configure macos`, and each has an off switch that deletes the keys ctdev
+  wrote. "NumLock on boot" can be turned off, which removes numlockx.
+- **The last macOS defaults moved by topic, each with an off switch** that deletes its
+  keys: "Click when changing volume" is in `ctdev configure audio`, "Expanded save and
+  print dialogs" in `configure desktop`, and "Ask for the password right after the
+  screensaver" in `configure power`. Each shows only on macOS and is on by default, as
+  before.
+- **`ctdev configure mouse` names its settings by what they do, and each says why.**
+  "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
+  only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
+  Logitech mouse working after a KVM switch"; it also shows while it's installed, so it
+  can be turned off after the receiver is unplugged. Both can now be turned off: off
+  removes the xbindkeys config and autostart entry and puts back any file of yours they
+  replaced (an edited config is left alone, and the xbindkeys and xdotool packages stay),
+  or the Logitech udev rule and Solaar user service. A half-installed setting shows as
+  "partly installed", so either choice repairs or removes it. `ctdev reset` removes both
+  the same way. The recommended mouse speed is now 0.46, and the slider moves in steps
+  of 0.01. The current speed shows rounded to that step, so a desktop-set 0.46218… reads
+  as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
+- **`ctdev install restic` installs only restic**: apt on Linux, and now Homebrew on macOS.
+  It no longer sets up systemd units, scripts or `/etc/restic`.
+
+### Removed
+- **The whole-machine restic backup is gone** (breaking). `ctdev configure restic`,
+  `ctdev backup now | snapshots | paths | test | enable | disable` and `ctdev restore` no
+  longer exist, along with the restic systemd units and scripts, `/etc/restic` handling,
+  the path-picker web page, the healthcheck ping and `RECOVERY.md`. Nothing on a machine
+  is removed; no machine runs the old setup. Per-folder `ctdev backup` replaces it.
+- **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
+  `configure storage` and the Logitech KVM fix to `configure mouse`.
+  `ctdev configure system` now reports an unknown category.
+- **`ctdev configure macos` is gone.** Its settings are in `desktop`, `keyboard`, `audio`
+  and `power`, by topic; `ctdev configure macos` now reports an unknown category. Where
+  you ran `configure macos --batch`, run those four categories instead.
+
+## [16.0.1] - 2026-10-22
+
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.0.2`** (was `v1.0.0`), which
+  narrows the plugin's merge rule to `gh pr merge * --merge`. Run `ctdev repo setup` again in
+  a repo to move it to 1.0.2: it re-points the marketplace and updates the plugin at local
+  scope.
+
+## [16.0.0] - 2026-10-22
+
+### Added
+- **`ctdev repo setup`** sets up the git repo you're in for Claude Code, whether the repo is
+  yours or someone else's, without committing anything to it. It installs git, gh and
+  Claude Code when they're missing, and signs gh in to GitHub if it isn't. It installs the
+  `connertechnology` plugin at local scope from the private `ConnerTechnology/engineering`
+  marketplace, pinned to `v1.0.0` and cloned over gh's login. Then it starts Claude Code on
+  `/connertechnology:setup`. `.claude/settings.local.json` is added to `.git/info/exclude`
+  unless something already ignores it. Running it again changes nothing.
+- **`ctdev configure jira`** adds Atlassian's Rovo MCP server (`atlassian`) to the repo at
+  local scope, where it signs in as you with OAuth. It also saves your Atlassian API token
+  for scripts in `~/.config/ctdev/jira/<site>.env` (owner-only), after checking it with
+  the site. Scripts read it with `ctdev jira auth-header --site <site>`.
+
+### Changed
+- **`ctdev configure linear` writes nothing in the repo.** The `linear` server is added at
+  local scope (`claude mcp add-json --scope local`, kept in `~/.claude.json`) instead of in
+  `.mcp.json`, and the "whose repo is this?" question is gone. A repo set up the old way
+  keeps working: the wizard offers its `.mcp.json` workspace and says the entry can be
+  removed.
+- **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
+  "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
+  suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
+  in the wizard, the settings browser and `--show`. Driver signing shows as not needed
+  when Secure Boot is off, including on a legacy BIOS machine, which has none, and the
+  suspend services when suspend is masked. When `mokutil` can't tell, signing counts as
+  needed, in `--show` too. A setting that isn't needed isn't applied by `--batch` (even with
+  `--force`), the wizard asks "Apply anyway?" once, defaulting to no, and `configure
+  gpu` skips the signing flow. Both stay on-only, and the wizard says why
+  there's no off switch.
+
 ## [15.0.0] - 2026-10-19
 
 ### Added

@@ -31,7 +31,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 		fmt.Fprintln(w, "[DRY-RUN] Would disable fstrim.timer")
 		fmt.Fprintln(w, "[DRY-RUN] Would remove Logitech KVM mouse fix (udev rule + systemd service)")
 		fmt.Fprintln(w, "[DRY-RUN] Would remove hide-drives udev rule")
-		fmt.Fprintln(w, "[DRY-RUN] Would reset xbindkeys (stop, remove autostart and config symlink)")
+		fmt.Fprintln(w, "[DRY-RUN] Would remove ctdev's xbindkeys config and autostart entry, restoring any backups")
 		fmt.Fprintln(w, "[DRY-RUN] Would remove WirePlumber LDAC config")
 		fmt.Fprintln(w, "[DRY-RUN] Would reset remote access (unmask sleep targets, remove sshd/NM drop-ins, disable UFW + linger, uninstall VS Code tunnel)")
 		return nil
@@ -111,14 +111,10 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 			"pipewire", "pipewire-pulse", "wireplumber")
 	}
 
-	// xbindkeys
+	// Middle-click window overview (xbindkeys)
 	fmt.Fprintf(w, "Resetting xbindkeys...\n")
-	_ = sysutil.Run(ctx, o, "killall", "xbindkeys")
-	home, _ := os.UserHomeDir()
-	_ = os.Remove(home + "/.config/autostart/xbindkeys.desktop")
-	info, err := os.Lstat(home + "/.xbindkeysrc")
-	if err == nil && info.Mode()&os.ModeSymlink != 0 {
-		_ = os.Remove(home + "/.xbindkeysrc")
+	if err := removeXbindkeys(ctx, o); err != nil {
+		return fmt.Errorf("remove xbindkeys config: %w", err)
 	}
 
 	// GRUB settings
@@ -169,18 +165,11 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 	}
 
 	// Logitech KVM fix
-	kvmRule := "/etc/udev/rules.d/99-logitech-kvm-fix.rules"
-	if _, err := os.Stat(kvmRule); err == nil {
+	if logitechFixPresent() {
 		fmt.Fprintf(w, "Removing Logitech KVM mouse fix...\n")
-		if err := sysutil.SudoRun(ctx, o, "rm", "-f", kvmRule); err != nil {
-			return fmt.Errorf("remove logitech kvm udev rule: %w", err)
+		if err := removeLogitechKVMFix(ctx, o); err != nil {
+			return err
 		}
-	}
-	kvmService := home + "/.config/systemd/user/solaar-restart.service"
-	if _, err := os.Stat(kvmService); err == nil {
-		_ = sysutil.Run(ctx, o, "systemctl", "--user", "disable", "solaar-restart.service")
-		_ = os.Remove(kvmService)
-		_ = sysutil.Run(ctx, o, "systemctl", "--user", "daemon-reload")
 	}
 
 	// Hide drives udev rule

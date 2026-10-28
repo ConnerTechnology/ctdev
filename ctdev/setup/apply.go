@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -179,11 +178,14 @@ func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error
 	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
-// applyNvidiaSigning runs the GPU signing setup via the gpu package.
+// applyNvidiaSigning runs the GPU signing setup via the gpu package. It only
+// runs once the user has said yes, or in --batch when signing is needed, so
+// RunSetup doesn't ask about Secure Boot a second time.
 func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{
-		Stdout: o.Stdout,
-		Stdin:  os.Stdin,
+		Stdout:              o.Stdout,
+		Stdin:               os.Stdin,
+		SecureBootConfirmed: true,
 	})
 }
 
@@ -209,94 +211,6 @@ func applyNvidiaSuspendServices(ctx context.Context, o sysutil.Opts) error {
 		}
 	}
 	return nil
-}
-
-// applyXbindkeys installs xbindkeys and xdotool, deploys the config, and sets up autostart.
-func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
-	if err := applyPackages(ctx, o, []string{"xbindkeys", "xdotool"}); err != nil {
-		return fmt.Errorf("install xbindkeys/xdotool: %w", err)
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
-	}
-	configDst := filepath.Join(home, ".xbindkeysrc")
-
-	// Use DeployFileFromFS so any pre-existing user-customized file gets
-	// backed up on diff instead of silently overwritten.
-	if err := sysutil.DeployFileFromFS(Configs, "configs/xbindkeys/.xbindkeysrc", configDst); err != nil {
-		return fmt.Errorf("deploy .xbindkeysrc: %w", err)
-	}
-
-	autostartDir := filepath.Join(home, ".config", "autostart")
-	if err := os.MkdirAll(autostartDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir autostart: %w", err)
-	}
-
-	desktopDst := filepath.Join(autostartDir, "xbindkeys.desktop")
-	if err := sysutil.DeployFileFromFS(Configs, "configs/xbindkeys/xbindkeys.desktop", desktopDst); err != nil {
-		return fmt.Errorf("deploy xbindkeys.desktop: %w", err)
-	}
-
-	// Restart xbindkeys to pick up new config; best-effort.
-	_ = sysutil.Run(ctx, o, "killall", "xbindkeys")
-	// Fire-and-forget: don't block on xbindkeys.
-	_ = startDetached("xbindkeys")
-
-	return nil
-}
-
-// applyLogitechKVMFix installs a udev rule and systemd user service to restart Solaar
-// when the Logi Bolt receiver reconnects after a KVM switch.
-func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {
-	// Deploy udev rule
-	udevContent, err := Configs.ReadFile("configs/udev/99-logitech-kvm-fix.rules")
-	if err != nil {
-		return fmt.Errorf("read embedded udev rule: %w", err)
-	}
-	if err := sysutil.SudoWriteFile(ctx, o, string(udevContent), "/etc/udev/rules.d/99-logitech-kvm-fix.rules"); err != nil {
-		return fmt.Errorf("copy udev rule: %w", err)
-	}
-
-	// Deploy systemd user service
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
-	}
-	serviceDir := filepath.Join(home, ".config", "systemd", "user")
-	if err := os.MkdirAll(serviceDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir systemd user dir: %w", err)
-	}
-	serviceContent, err := Configs.ReadFile("configs/udev/solaar-restart.service")
-	if err != nil {
-		return fmt.Errorf("read embedded service file: %w", err)
-	}
-	serviceDst := filepath.Join(serviceDir, "solaar-restart.service")
-	if err := os.WriteFile(serviceDst, serviceContent, 0o644); err != nil {
-		return fmt.Errorf("write service file: %w", err)
-	}
-
-	// Enable the user service and reload udev
-	_ = sysutil.Run(ctx, o, "systemctl", "--user", "daemon-reload")
-	_ = sysutil.Run(ctx, o, "systemctl", "--user", "enable", "solaar-restart.service")
-	if err := sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules"); err != nil {
-		return fmt.Errorf("reload udev rules: %w", err)
-	}
-
-	return nil
-}
-
-// applyHideDrives installs a udev rule to hide Windows/secondary partitions from the file manager.
-func applyHideDrives(ctx context.Context, o sysutil.Opts) error {
-	content, err := Configs.ReadFile("configs/udev/99-hide-drives.rules")
-	if err != nil {
-		return fmt.Errorf("read embedded hide-drives rule: %w", err)
-	}
-	if err := sysutil.SudoWriteFile(ctx, o, string(content), "/etc/udev/rules.d/99-hide-drives.rules"); err != nil {
-		return fmt.Errorf("copy udev rule: %w", err)
-	}
-	return sysutil.SudoRun(ctx, o, "udevadm", "control", "--reload-rules")
 }
 
 // applySSDTrim turns the fstrim.timer systemd unit (weekly SSD TRIM) on for

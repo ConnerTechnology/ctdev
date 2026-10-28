@@ -19,8 +19,8 @@ installed says so and jumps straight to configuration. Everything is idempotent.
 Most components declare nothing and take the default: root is needed to put the
 software in place — a package manager, `/usr/local`, a systemd unit — while
 re-running over one already installed only re-syncs files under `$HOME`. A few
-declare otherwise: the ones that do privileged work on every run (`restic`,
-`caddy`, `nomachine`, `smartmontools`) and the ones that never need it
+declare otherwise: the ones that do privileged work on every run (`caddy`,
+`nomachine`, `smartmontools`) and the ones that never need it
 at all, because they install entirely inside `$HOME` or through the Docker
 socket. ctdev asks for a sudo password only when something in the run is
 actually going to use it. See [Security](../security.md).
@@ -109,7 +109,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `caddy` | Caddy reverse proxy (Cloudflare DNS-01 wildcard) | Linux |
 | `pihole` | Pi-hole network-wide DNS ad blocker (Docker) | Linux |
 | `portainer` | Portainer CE Docker management UI (Docker) | Linux |
-| `restic` | restic backups to B2 + local USB (systemd timer) | Linux |
+| `restic` | restic backup program | Linux, macOS |
 | `terraform` | Terraform infrastructure tool | Linux, macOS |
 
 ### System Tools

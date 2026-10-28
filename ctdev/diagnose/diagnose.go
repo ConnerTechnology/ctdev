@@ -98,7 +98,7 @@ const (
 
 // GroupOrder is the render order for check groups. Anything not listed sorts
 // after these, alphabetically.
-var GroupOrder = []string{GroupNetwork, GroupInternet, GroupHardware, GroupSystem, GroupSecurity, GroupTools}
+var GroupOrder = []string{GroupNetwork, GroupInternet, GroupHardware, GroupSystem, GroupSecurity, GroupBackups, GroupTools}
 
 // Check is one diagnostic probe. It never mutates the system.
 type Check struct {
@@ -172,7 +172,7 @@ func skipf(format string, a ...any) Result {
 // ctdev normally installs to ~/.local/bin, which sudo's secure_path excludes, so
 // `sudo ctdev doctor` fails with "command not found" on a stock Debian or Mint
 // box. `ctdev doctor --root` prompts once up front and elevates only the checks
-// that need it. what completes the sentence — "for disk health".
+// that need it. `what` completes the sentence — "for disk health".
 func needsRootSkip(what string) Result {
 	return skipf("needs root — re-run with 'ctdev doctor --root' %s", what)
 }
@@ -217,6 +217,14 @@ type Facts struct {
 	// service or socket) is installed. ssh isn't a ctdev component, so this
 	// is what gates its service row, and only alongside Components.
 	SSHUnitInstalled bool
+
+	// Backups is each folder on this machine's backup schedule with its
+	// health, read from ~/.config/ctdev/backup's folders.json and
+	// state.json. Like Components, GatherFacts leaves it empty and `ctdev
+	// doctor` fills it, so this package never imports package backup.
+	// BackupsErr says why that state couldn't be read.
+	Backups    []BackupFolder
+	BackupsErr string
 }
 
 // Finding is a verdict the correlation engine reached by combining several
@@ -259,6 +267,7 @@ func Catalog(info platform.Info, f Facts) []Check {
 		checks = append(checks, windowsChecks(info, f)...)
 	}
 	checks = append(checks, managedChecks(info, f, systemProbe{})...)
+	checks = append(checks, backupChecks(f)...)
 	return checks
 }
 

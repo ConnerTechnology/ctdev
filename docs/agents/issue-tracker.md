@@ -4,11 +4,11 @@ Issues, specs and design docs for this repo live in **Linear**, team **CTDev** (
 sub-team of Conner Technology. Use the Linear MCP tools (`mcp__linear__*`) for every operation;
 GitHub Issues are not used. Issues moved from `CON` on 2026-09-24; their old IDs still resolve.
 
-Sessions reach Linear as the **Claude Code app**, not as Thomas: `.mcp.json` gives the `linear`
+Sessions reach Linear as the **Claude Code app**, not as the human: `.mcp.json` gives the `linear`
 server a `headersHelper`, `ctdev linear mcp-headers --workspace connertechnology`, which trades
 this computer's app client ID and secret for a token. Each computer has its own Linear app, and its
 credentials live only on that computer, in `~/.config/ctdev/linear/connertechnology.env`. The
-app's comments and status changes notify Thomas the way a teammate's would. The app sees only
+app's comments and status changes notify the human the way a teammate's would. The app sees only
 teams it can reach. `ctdev linear graphql --workspace connertechnology QUERY [VARIABLES_JSON]`
 sends one request as the app, for what the MCP has no tool for.
 
@@ -25,20 +25,25 @@ When the Linear connection fails (no credentials, wrong ones, or a rotated secre
 - **List issues**: `list_issues` with `team: "CTDev"`, plus `project`, `state` or `label`.
 - **States**: Backlog → Todo → In Progress → In Review (the pull request is open) → **Done**
   (merged to `main`; comment the merge commit hash). Canceled and Duplicate close without work.
-- **`/implement` and builders never close a ticket.** The coordinator moves it to Done after
-  reviewing the diff and the evidence, and Thomas merges.
+- **`/implement` and builders never close a ticket.** The coordinator merges the pull request once
+  its review passes and CI is green, then moves the ticket to Done. The human doesn't merge; they
+  approve governing-file diffs before they land.
+- **A bug that shipped in a release gets an `escaped` label** on its fix ticket, and a
+  **How it escaped** section in the description: what would have caught it, why that didn't exist
+  or didn't fire, and the change that catches it now (a test, a CI check, a rule or a skill step).
+  That change lands with the fix, so the same kind of bug can't ship the same way again.
 - **A dispatched ticket is reviewed by the coordinator before merge.** A builder doesn't review
   its own work, so the review judges the diff and the evidence rather than the builder's report.
   The builder follows `/implement` minus the review and commits on its worktree branch; the
   coordinator runs `/code-review main` on that branch in a fresh context, with the ticket as the
-  spec. When Thomas types `/implement` himself, the skill's own order (review before commit) holds.
+  spec. When the human types `/implement` themselves, the skill's own order (review before commit) holds.
 - **A builder runs unattended, so it's told not to stop early.** Its prompt ends with the
   instruction under "Keeping implementers working" in `.claude/skills/implement-spec/SKILL.md`.
   If its run ends with acceptance criteria still open and no blocker named, the coordinator sends
-  it one message naming them, at most twice, and then raises it with Thomas.
+  it one message naming them, at most twice, and then raises it with the human.
 - **A QA plan is a checklist in the ticket description.** One checkbox per thing to verify; under
-  it the exact actions as numbered sub-steps, then a **See:** line. Thomas ticks the box when he
-  saw it; an item that needs a reading kept says **Paste:** and he adds it as a comment. An
+  it the exact actions as numbered sub-steps, then a **See:** line. The human ticks the box when they
+  saw it; an item that needs a reading kept says **Paste:** and they add it as a comment. An
   unticked box with a note under it is a finding, and becomes a linked issue. The coordinator
   reads the boxes, not the chat, to know the walk is done.
 - **Who takes it next** is a label: `ready-for-agent` or `ready-for-human` (see `triage-labels.md`).
