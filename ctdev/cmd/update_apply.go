@@ -1,5 +1,6 @@
 // Update apply phase: updateStep construction and the per-tool updaters
-// (helm, kubectl, terraform, go) with their download/verify helpers.
+// (helm, kubectl, terraform, go, ctdev itself) with their download/verify
+// helpers.
 package cmd
 
 import (
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -108,8 +110,7 @@ func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 		steps = append(steps, updateStep{
 			name: fmt.Sprintf("ctdev %s → %s", item.CurrentVer, item.NewVer),
 			run: func(ctx context.Context, o sysutil.Opts) error {
-				return sysutil.Run(ctx, o, "bash", "-c",
-					"curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install.sh | bash")
+				return updateSelf(ctx, o, item.NewVer)
 			},
 		})
 	}
@@ -370,6 +371,76 @@ func updateGo(ctx context.Context, o sysutil.Opts, ver string) error {
 		return fmt.Errorf("install new go failed: %w", err)
 	}
 	return nil
+}
+
+var releaseTagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
+
+// selfInstallScriptURL is install.sh as it was at the release being
+// installed. Never main: main is unreviewed relative to any release, and
+// self-update runs the script with whatever privileges the binary's directory
+// needs.
+func selfInstallScriptURL(tag string) string {
+	return "https://raw.githubusercontent.com/ConnerTechnology/ctdev/" + tag + "/install.sh"
+}
+
+// updateSelf replaces the running ctdev binary in place with release newVer,
+// using that release's own install.sh. Passing the binary's directory as
+// INSTALL_DIR keeps a system install in /usr/local/bin there instead of
+// growing a second copy in ~/.local/bin.
+func updateSelf(ctx context.Context, o sysutil.Opts, newVer string) error {
+	tag := "v" + strings.TrimPrefix(newVer, "v")
+	if !releaseTagPattern.MatchString(tag) {
+		return fmt.Errorf("unexpected ctdev release tag %q", tag)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate running ctdev: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	dir := filepath.Dir(exe)
+	url := selfInstallScriptURL(tag)
+
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "  [dry-run] download %s and run it with INSTALL_DIR=%s CTDEV_VERSION=%s\n", url, dir, tag)
+		return nil
+	}
+
+	script, err := os.CreateTemp("", "ctdev-install-*.sh")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	scriptPath := script.Name()
+	script.Close()
+	defer os.Remove(scriptPath)
+	if err := sysutil.DownloadFile(ctx, url, scriptPath); err != nil {
+		return fmt.Errorf("download install.sh for %s: %w", tag, err)
+	}
+
+	args := selfInstallArgs(dir, tag, scriptPath)
+	if dirWritable(dir) {
+		return sysutil.Run(ctx, o, args[0], args[1:]...)
+	}
+	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
+}
+
+// selfInstallArgs runs install.sh through env so the variables survive sudo,
+// which drops the caller's environment.
+func selfInstallArgs(dir, tag, scriptPath string) []string {
+	return []string{"env", "INSTALL_DIR=" + dir, "CTDEV_VERSION=" + tag, "bash", scriptPath}
+}
+
+// dirWritable reports whether a file can be created in dir, which is the
+// question install.sh's atomic rename asks.
+func dirWritable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".ctdev-write-check-*")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
 }
 
 func detectUpdateOS() string {
