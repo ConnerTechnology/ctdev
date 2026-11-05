@@ -44,7 +44,7 @@ func linuxTasks(info platform.Info) []Task {
 			},
 			Task{
 				ID: "apt-rc-purge", Name: "Config of removed packages", Group: "Packages",
-				Detail: "dpkg --purge (rc state)", Risk: Safe,
+				Detail: "apt-get purge (rc state)", Risk: Safe,
 				Scan: func(ctx context.Context) ScanResult {
 					pkgs := rcPackages(ctx)
 					if len(pkgs) == 0 {
@@ -57,7 +57,7 @@ func linuxTasks(info platform.Info) []Task {
 					if len(pkgs) == 0 {
 						return nil
 					}
-					return sysutil.SudoRun(ctx, o, "dpkg", append([]string{"--purge"}, pkgs...)...)
+					return sysutil.APTGet(ctx, o, append([]string{"purge", "-y"}, pkgs...)...)
 				},
 			},
 		)

@@ -40,28 +40,25 @@ func alreadyInstalled(name string) bool {
 	return c != nil && c.IsInstalled()
 }
 
-// installDebWithDepFix installs a .deb via dpkg, recovers missing dependencies
-// with `apt-get install -f`, and then verifies that pkgName is actually
-// installed. Returns the original dpkg error (wrapped) when post-fix
-// verification shows the package still isn't present — previously this path
-// silently treated a successful `apt-get -f` as a successful install even
-// when dpkg had failed for non-dependency reasons (corrupt .deb, wrong arch).
+// installDebWithDepFix installs a downloaded .deb with `apt-get install`,
+// which pulls in its dependencies in the same step and goes through
+// sysutil.APTGet's lock wait, unlike `dpkg -i`. apt-get takes a file only when
+// the argument looks like a path, so debPath is made absolute. It then
+// verifies pkgName is actually installed rather than trusting the exit code.
 func installDebWithDepFix(ctx context.Context, o sysutil.Opts, debPath, pkgName string) error {
-	dpkgErr := sysutil.SudoRun(ctx, o, "dpkg", "-i", debPath)
-	if dpkgErr != nil {
-		if fixErr := sysutil.APTGet(ctx, o, "install", "-f", "-y"); fixErr != nil {
-			return fmt.Errorf("dpkg failed and apt-get fix failed: dpkg: %w; fix: %v", dpkgErr, fixErr)
-		}
+	abs, err := filepath.Abs(debPath)
+	if err != nil {
+		return err
+	}
+	if err := sysutil.APTGet(ctx, o, "install", "-y", abs); err != nil {
+		return err
 	}
 	// Dry-run can't verify; trust the call chain.
 	if o.DryRun {
 		return nil
 	}
 	if !sysutil.IsPackageInstalled(pkgName) {
-		if dpkgErr != nil {
-			return fmt.Errorf("dpkg -i failed and %s not installed after apt-get fix: %w", pkgName, dpkgErr)
-		}
-		return fmt.Errorf("%s not reported installed after dpkg -i", pkgName)
+		return fmt.Errorf("%s not reported installed after installing %s", pkgName, abs)
 	}
 	return nil
 }

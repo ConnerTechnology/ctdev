@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
@@ -58,6 +57,8 @@ func TestAPTGetArgv(t *testing.T) {
 		{[]string{"remove", "-y", "jq"}, unattended + " remove -y jq"},
 		{[]string{"autoremove", "--purge", "-y"}, unattended + " autoremove --purge -y"},
 		{[]string{"clean"}, unattended + " clean"},
+		{[]string{"purge", "-y", "oldpkg"}, unattended + " purge -y oldpkg"},
+		{[]string{"install", "-y", "/tmp/x.deb"}, unattended + confold + " install -y /tmp/x.deb"},
 	}
 	for _, tt := range tests {
 		if got := strings.Join(aptGetArgv(tt.args...), " "); got != tt.want {
@@ -105,8 +106,9 @@ func fakeAPTGet(t *testing.T, script string) func() int {
 		}
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	aptListsRetryDelay = 0
-	t.Cleanup(func() { aptListsRetryDelay = 10 * time.Second })
+	delay := aptLockRetryDelay
+	aptLockRetryDelay = 0
+	t.Cleanup(func() { aptLockRetryDelay = delay })
 	return func() int {
 		data, _ := os.ReadFile(calls)
 		return strings.Count(string(data), "x")
@@ -114,7 +116,7 @@ func fakeAPTGet(t *testing.T, script string) func() int {
 }
 
 // apt-get update ignores DPkg::Lock::Timeout and fails at once on the lists
-// lock, which apt-daily holds on a VM's first boot; APTUpdate waits it out.
+// lock, which apt-daily holds on a VM's first boot; APTGet waits it out.
 func TestAPTUpdateRetriesWhileListsLockHeld(t *testing.T) {
 	calls := fakeAPTGet(t, `if [ "$n" -lt 3 ]; then
   echo "E: Could not get lock /var/lib/apt/lists/lock. It is held by process 42 (apt-get)" >&2
@@ -127,6 +129,22 @@ fi
 	}
 	if got := calls(); got != 3 {
 		t.Errorf("apt-get ran %d times, want 3", got)
+	}
+}
+
+// An install's download takes the archives lock, which DPkg::Lock::Timeout
+// doesn't cover either.
+func TestAPTGetRetriesWhileArchivesLockHeld(t *testing.T) {
+	calls := fakeAPTGet(t, `if [ "$n" -lt 2 ]; then
+  echo "E: Could not get lock /var/cache/apt/archives/lock. It is held by process 42 (apt-get)" >&2
+  exit 100
+fi
+`)
+	if err := APTGet(context.Background(), Opts{Stdout: &bytes.Buffer{}}, "install", "-y", "jq"); err != nil {
+		t.Fatalf("want success once the lock is released, got %v", err)
+	}
+	if got := calls(); got != 2 {
+		t.Errorf("apt-get ran %d times, want 2", got)
 	}
 }
 
