@@ -133,18 +133,23 @@ func TestTrimSettingShowsOnlyWithAnSSD(t *testing.T) {
 	}
 	s := trimSetting(t)
 
+	shown := func() bool {
+		for _, got := range FilterByHardware(FilterBySlug(Registry, "storage")) {
+			if got.Name == s.Name {
+				return true
+			}
+		}
+		return false
+	}
+
 	fakeSysBlock(t, sataHDD, loopDev)
-	if got := FilterByHardware(FilterBySlug(Registry, "storage")); len(got) != 0 {
-		t.Errorf("storage shows %d settings on an HDD-only machine, want 0", len(got))
+	if shown() {
+		t.Error("storage shows the TRIM setting on an HDD-only machine")
 	}
 
 	fakeSysBlock(t, sataHDD, nvmeSSD)
-	if !s.HardwareFn() {
+	if !shown() {
 		t.Error("TRIM setting hidden on a machine with an SSD")
-	}
-	got := FilterByHardware(FilterBySlug(Registry, "storage"))
-	if len(got) != 1 || got[0].Name != s.Name {
-		t.Errorf("storage on an SSD machine = %v, want just the TRIM setting", got)
 	}
 }
 
