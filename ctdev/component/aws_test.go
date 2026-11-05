@@ -121,7 +121,7 @@ func TestAWSEmbeddedKeyIsAWSCLITeam(t *testing.T) {
 		t.Skip("gpg not installed")
 	}
 	// Fingerprint as published by AWS for the AWS CLI Team key.
-	if err := requireKeyFingerprint(context.Background(), awsPublicKey, "FB5DB77FD5C118B80511ADA8A6310ACC4672475C"); err != nil {
+	if _, err := verifiedPublicKey(context.Background(), awsPublicKey, "FB5DB77FD5C118B80511ADA8A6310ACC4672475C"); err != nil {
 		t.Errorf("embedded key doesn't match AWS's published one: %v", err)
 	}
 }

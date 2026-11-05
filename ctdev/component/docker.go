@@ -128,14 +128,21 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 }
 
 // dockerAddKey downloads Docker's apt key and installs it only if it is the key
-// Docker signs its packages with. It goes in ASCII-armored, as Docker's own
-// install steps put it: apt reads an armored .asc named by signed-by.
+// Docker signs its packages with. What gets installed is gpg's re-export of
+// that one public key, never the downloaded bytes, so nothing else a tampered
+// download carried can reach the keyring. It goes in ASCII-armored, as Docker's
+// own install steps put it: apt reads an armored .asc named by signed-by.
 func dockerAddKey(ctx context.Context, o sysutil.Opts, keyURL, keyring string) error {
 	if o.DryRun {
 		fmt.Fprintf(o.Stdout, "[dry-run] download %s, check fingerprint %s → %s\n", keyURL, dockerKeyFingerprint, keyring)
 		return nil
 	}
 	if !sysutil.CommandExists("gpg") {
+		// A fresh image ships with empty package lists, where installing
+		// gnupg fails with "no installation candidate".
+		if err := sysutil.APTUpdate(ctx, o); err != nil {
+			return err
+		}
 		if err := sysutil.InstallPackage(ctx, o, "gnupg"); err != nil {
 			return err
 		}
@@ -150,10 +157,11 @@ func dockerAddKey(ctx context.Context, o sysutil.Opts, keyURL, keyring string) e
 	if err := sysutil.DownloadFile(ctx, keyURL, tmp.Name()); err != nil {
 		return fmt.Errorf("download docker apt key: %w", err)
 	}
-	if err := requireKeyFingerprint(ctx, tmp.Name(), dockerKeyFingerprint); err != nil {
+	key, err := verifiedPublicKey(ctx, tmp.Name(), dockerKeyFingerprint)
+	if err != nil {
 		return fmt.Errorf("docker apt key from %s is not Docker's signing key, not installing: %w", keyURL, err)
 	}
-	return sysutil.SudoRun(ctx, o, "install", "-m", "0644", tmp.Name(), keyring)
+	return sysutil.SudoWriteFileMode(ctx, o, string(key), keyring, "0644")
 }
 
 // dockerWriteDaemonConfig writes the log-rotation daemon.json when there is

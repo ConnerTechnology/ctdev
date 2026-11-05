@@ -32,9 +32,44 @@ func requireGPG(t *testing.T) {
 // If Docker rotates its key, this is the test that says the pin is stale.
 func TestDockerKeyFingerprintMatchesDocker(t *testing.T) {
 	requireGPG(t)
-	if err := requireKeyFingerprint(context.Background(), "testdata/docker.asc", dockerKeyFingerprint); err != nil {
+	key, err := verifiedPublicKey(context.Background(), "testdata/docker.asc", dockerKeyFingerprint)
+	if err != nil {
 		t.Fatal(err)
 	}
+	// What gets installed is gpg's re-export: still Docker's key, still public.
+	exported := filepath.Join(t.TempDir(), "exported.asc")
+	if err := os.WriteFile(exported, key, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := verifiedPublicKey(context.Background(), exported, dockerKeyFingerprint); err != nil {
+		t.Errorf("re-exported key doesn't verify: %v", err)
+	}
+}
+
+// serveKey serves body as the docker apt key and returns its URL.
+func serveKey(t *testing.T, body []byte) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// dockerAddKeyFails runs dockerAddKey against a served body and checks the
+// install stops before anything reaches the keyring path.
+func dockerAddKeyFails(t *testing.T, body []byte) error {
+	t.Helper()
+	keyring := filepath.Join(t.TempDir(), "docker.asc")
+	var out bytes.Buffer
+	err := dockerAddKey(context.Background(), sysutil.Opts{Stdout: &out}, serveKey(t, body), keyring)
+	if err == nil || !strings.Contains(err.Error(), "not Docker's signing key") {
+		t.Fatalf("expected the docker key check to fail, got %v", err)
+	}
+	if _, statErr := os.Stat(keyring); statErr == nil {
+		t.Error("a key that failed the check was installed")
+	}
+	return err
 }
 
 // A key server handing out some other key must stop the install before the key
@@ -45,41 +80,60 @@ func TestDockerAddKeyRejectsWrongKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(wrongKey)
-	}))
-	defer srv.Close()
-
-	keyring := filepath.Join(t.TempDir(), "docker.asc")
-	var out bytes.Buffer
-	err = dockerAddKey(context.Background(), sysutil.Opts{Stdout: &out}, srv.URL, keyring)
-	if err == nil || !strings.Contains(err.Error(), "not Docker's signing key") || !strings.Contains(err.Error(), "FB5DB77FD5C118B80511ADA8A6310ACC4672475C") {
-		t.Fatalf("expected a fingerprint failure, got %v", err)
-	}
-	if _, statErr := os.Stat(keyring); statErr == nil {
-		t.Error("a key with the wrong fingerprint was installed")
+	err = dockerAddKeyFails(t, wrongKey)
+	if !strings.Contains(err.Error(), "FB5DB77FD5C118B80511ADA8A6310ACC4672475C") {
+		t.Errorf("error should name the fingerprint it got: %v", err)
 	}
 }
 
 // Two keys in one file fail even when one of them is Docker's: apt would
 // trust both.
-func TestRequireKeyFingerprintRejectsExtraKey(t *testing.T) {
+func TestDockerAddKeyRejectsExtraKey(t *testing.T) {
 	requireGPG(t)
-	docker, err := os.ReadFile("testdata/docker.asc")
-	if err != nil {
-		t.Fatal(err)
-	}
 	other, err := Configs.ReadFile(awsPublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	both := filepath.Join(t.TempDir(), "both.asc")
-	if err := os.WriteFile(both, append(append(docker, '\n'), other...), 0o644); err != nil {
+	dockerAddKeyFails(t, append(append(dockerTestKey(t), '\n'), other...))
+}
+
+// A secret key alongside Docker's public one fails: gpg lists it as "sec",
+// not "pub", and apt's sqv on Debian 13 accepts signatures made with it.
+func TestDockerAddKeyRejectsSecretKey(t *testing.T) {
+	requireGPG(t)
+	secret := throwawaySecretKey(t)
+	err := dockerAddKeyFails(t, append(append(dockerTestKey(t), '\n'), secret...))
+	if !strings.Contains(err.Error(), "secret key material") {
+		t.Errorf("error should say the file carries a secret key: %v", err)
+	}
+}
+
+func dockerTestKey(t *testing.T) []byte {
+	t.Helper()
+	key, err := os.ReadFile("testdata/docker.asc")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := requireKeyFingerprint(context.Background(), both, dockerKeyFingerprint); err == nil {
-		t.Error("a file with a second key alongside Docker's should fail")
+	return key
+}
+
+// throwawaySecretKey generates an unprotected signing key in a temp GnuPG home
+// and returns it armored. It exists only for the length of the test.
+func throwawaySecretKey(t *testing.T) []byte {
+	t.Helper()
+	home := t.TempDir()
+	// gpg-agent outlives the command; stop it before TempDir is removed.
+	t.Cleanup(func() { _ = exec.Command("gpgconf", "--homedir", home, "--kill", "gpg-agent").Run() })
+	gpg := func(args ...string) []byte {
+		out, err := exec.Command("gpg", append([]string{"--homedir", home, "--batch",
+			"--pinentry-mode", "loopback", "--passphrase", ""}, args...)...).Output()
+		if err != nil {
+			t.Fatalf("gpg %v: %v", args, err)
+		}
+		return out
 	}
+	gpg("--quick-gen-key", "Throwaway Test Key <test@example.invalid>", "ed25519", "sign", "never")
+	return gpg("--export-secret-keys", "--armor")
 }
 
 func TestDockerWriteDaemonConfigWritesWhenMissing(t *testing.T) {
