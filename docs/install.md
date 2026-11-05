@@ -1,11 +1,14 @@
 # Install
 
 `install.sh` installs just the `ctdev` binary: it downloads the latest release
-for this platform, verifies it against the release's `SHA256SUMS`, and moves it
-into place. There is no source-build path and nothing else is installed. It
-never sits on a password prompt: the one privileged thing it does — clearing a
-stale `ctdev` out of `/usr/local/bin` that an older install left there — uses
-`sudo -n` and warns instead of asking if that is not already allowed.
+(or the one `CTDEV_VERSION` names) for this platform, verifies it against the
+release's `SHA256SUMS`, and moves it into place. If the binary already in the
+install directory reports that version, it stops there and downloads nothing.
+There is no source-build path and nothing else is installed. It never sits on a
+password prompt: the one privileged thing it does — clearing a stale `ctdev`
+out of `/usr/local/bin` that an older install left there — uses `sudo -n` and
+warns instead of asking if that is not already allowed. That cleanup is skipped
+when `/usr/local/bin` is the install directory.
 
 ## Install (ctdev only)
 
@@ -16,6 +19,22 @@ curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install
 The binary lands in `~/.local/bin/ctdev`. Set `INSTALL_DIR` to put it somewhere
 else. If the install directory is not on your `PATH`, the script says so and
 prints the line to add to your shell profile.
+
+## Pinned, system-wide install
+
+A machine that installs ctdev unattended — a cloud node's boot script, say —
+runs one exact release as root, fetched from that release's tag so the script
+and the binary match:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/v17.1.0/install.sh \
+  | CTDEV_VERSION=v17.1.0 INSTALL_DIR=/usr/local/bin bash
+```
+
+It is safe to run on every boot: once `/usr/local/bin/ctdev` reports that
+version, the script exits 0 without downloading. `CTDEV_VERSION` must be a tag
+of the form `vX.Y.Z`; anything else is refused. Pinning applies to `install.sh`
+only — `install.ps1` always installs the latest release.
 
 On Windows, `install.ps1` is the equivalent. It installs to
 `%LOCALAPPDATA%\Programs\ctdev` and adds that to the user `PATH`; Windows runs
