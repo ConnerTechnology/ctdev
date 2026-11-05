@@ -3,7 +3,8 @@
 `install.sh` installs just the `ctdev` binary: it downloads the latest release
 (or the one `CTDEV_VERSION` names) for this platform, verifies it against the
 release's `SHA256SUMS`, and moves it into place. If the binary already in the
-install directory reports that version, it stops there and downloads nothing.
+install directory matches that release's checksum, it stops there and does not
+download it again.
 There is no source-build path and nothing else is installed. It never sits on a
 password prompt: the one privileged thing it does — clearing a stale `ctdev`
 out of `/usr/local/bin` that an older install left there — uses `sudo -n` and
@@ -31,9 +32,12 @@ curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/v17.1.0/inst
   | CTDEV_VERSION=v17.1.0 INSTALL_DIR=/usr/local/bin bash
 ```
 
-It is safe to run on every boot: once `/usr/local/bin/ctdev` reports that
-version, the script exits 0 without downloading. `CTDEV_VERSION` must be a tag
-of the form `vX.Y.Z`; anything else is refused. Pinning applies to `install.sh`
+It is safe to run on every boot: once `/usr/local/bin/ctdev` hashes to that
+release's checksum, the script exits 0 after fetching only `SHA256SUMS`. It
+never runs the existing binary to ask its version, so a file that merely claims
+the right version is replaced. With `CTDEV_SKIP_VERIFY=1` there is nothing to
+compare against and it reinstalls every time. `CTDEV_VERSION` takes
+`vX.Y.Z` or `X.Y.Z` (the `v` is optional); anything else is refused. Pinning applies to `install.sh`
 only — `install.ps1` always installs the latest release.
 
 On Windows, `install.ps1` is the equivalent. It installs to
