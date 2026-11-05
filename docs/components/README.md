@@ -120,6 +120,18 @@ component unsupported on this OS reports as skipped rather than failing.
 | `smartmontools` | SMART disk-health monitoring (smartd) | Linux |
 | `solaar` | Logitech Unifying/Bolt receiver manager | Linux |
 
+## Docker on Linux
+
+On Linux, `docker` comes from Docker's own apt repository. Before ctdev trusts
+the repository key, it checks that the key's fingerprint is Docker's
+(`9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`). If the key is different,
+the install stops and nothing gets added to `/etc/apt/keyrings`. If there is no
+`/etc/docker/daemon.json`, the install writes one that caps each container's
+json-file log at three 10 MB files. Without that cap the logs grow until the
+disk is full. An existing `daemon.json` is never changed. The cap applies only
+to containers created after the file is written. On macOS, Docker Desktop comes
+from Homebrew.
+
 ## Adding one
 
 The template, the `Root` rules and the two-phase install contract are in

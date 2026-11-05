@@ -3,7 +3,10 @@ package component
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -90,4 +93,54 @@ func deployOrDryRun(o sysutil.Opts, srcEmbed, dst string) error {
 		return nil
 	}
 	return sysutil.DeployFileFromFS(Configs, srcEmbed, dst)
+}
+
+// requireKeyFingerprint fails unless keyPath holds exactly one OpenPGP primary
+// key and its fingerprint is want (40 hex digits, no spaces). One key, not "at
+// least one": a key file is trusted whole, so a second key riding along with
+// the vendor's would be trusted too. gpg runs in a throwaway home, so the
+// user's own keyring is never read or touched.
+func requireKeyFingerprint(ctx context.Context, keyPath, want string) error {
+	home, err := os.MkdirTemp("", "ctdev-gnupg-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(home)
+	out, err := exec.CommandContext(ctx, "gpg", "--homedir", home, "--batch",
+		"--show-keys", "--with-colons", keyPath).Output()
+	if err != nil {
+		return fmt.Errorf("read OpenPGP key %s: %w", keyPath, err)
+	}
+	got := primaryKeyFingerprints(string(out))
+	switch {
+	case len(got) == 1 && got[0] == want:
+		return nil
+	case len(got) == 0:
+		return fmt.Errorf("no OpenPGP key in %s, want %s", keyPath, want)
+	default:
+		return fmt.Errorf("key fingerprint is %s, want %s", strings.Join(got, ", "), want)
+	}
+}
+
+// primaryKeyFingerprints picks the primary keys' fingerprints out of gpg
+// --with-colons output. Each "pub" record is followed by its "fpr"; the "fpr"
+// records after a "sub" belong to subkeys and are skipped.
+func primaryKeyFingerprints(colons string) []string {
+	var fprs []string
+	afterPub := false
+	for _, line := range strings.Split(colons, "\n") {
+		fields := strings.Split(line, ":")
+		switch fields[0] {
+		case "pub":
+			afterPub = true
+		case "sub":
+			afterPub = false
+		case "fpr":
+			if afterPub && len(fields) > 9 {
+				fprs = append(fprs, fields[9])
+				afterPub = false
+			}
+		}
+	}
+	return fprs
 }
