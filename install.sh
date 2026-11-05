@@ -46,8 +46,8 @@ usage() {
 Usage: install.sh [--doctor [doctor options]]
 
 Installs the ctdev binary. With no arguments it installs the latest release
-to ~/.local/bin. If the binary already there reports the version being
-installed, it exits without downloading anything.
+to ~/.local/bin. If the binary already there matches that release's checksum,
+it exits without downloading it again.
 
 Options:
   --doctor [args]    Don't install. Download ctdev to a temporary directory,
@@ -195,12 +195,39 @@ if [[ $EPHEMERAL -eq 0 ]]; then
     fi
 fi
 
+# Fetch the release's checksum first: it decides both whether the binary
+# already installed can stay, and whether the download can be trusted. Fail
+# closed: a missing SUMS file or sha256sum binary aborts the install — anyone
+# who can tamper with the download path could otherwise just break the SUMS
+# fetch to skip verification. CTDEV_SKIP_VERIFY=1 is the explicit escape hatch
+# for old releases that predate checksum publishing.
+SUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/SHA256SUMS"
+expected=""
+if [[ "${CTDEV_SKIP_VERIFY:-}" == "1" ]]; then
+    warn "CTDEV_SKIP_VERIFY=1 — skipping checksum verification"
+else
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        error "sha256sum is required to verify the download (or set CTDEV_SKIP_VERIFY=1 to skip)"
+    fi
+    SUMS_TMP=$(mktemp)
+    if ! download "$SUMS_URL" "$SUMS_TMP" 2>/dev/null; then
+        error "Could not fetch SHA256SUMS for ${VERSION} — refusing to install an unverified binary.\n  Check that the release exists, retry, or set CTDEV_SKIP_VERIFY=1 if it predates checksums."
+    fi
+    expected=$(grep "ctdev-${PLATFORM}\$" "$SUMS_TMP" | awk '{print $1}')
+    if [[ -z "$expected" ]]; then
+        error "No checksum entry for ctdev-${PLATFORM} in SHA256SUMS — refusing to install (or set CTDEV_SKIP_VERIFY=1)"
+    fi
+fi
+
 # Already there? A boot script runs this on every boot, and re-downloading a
-# binary it already has is wasted time and one more way to fail. Ephemeral runs
-# start from an empty temp directory, so there is never anything to find.
-if [[ $EPHEMERAL -eq 0 ]] && [[ -x "$INSTALL_DIR/ctdev" ]]; then
-    installed=$("$INSTALL_DIR/ctdev" --version 2>/dev/null | awk '{print $NF}' || true)
-    if [[ "$installed" == "${VERSION#v}" ]]; then
+# binary it already has is wasted time and one more way to fail. "There" means
+# the file hashes to the release's checksum, not that it claims the version:
+# this never runs the existing binary, which as root could be anything. With
+# CTDEV_SKIP_VERIFY=1 there is nothing to compare against, so it reinstalls.
+# Ephemeral runs start from an empty temp directory and never match.
+if [[ $EPHEMERAL -eq 0 ]] && [[ -n "$expected" ]] && [[ -f "$INSTALL_DIR/ctdev" ]]; then
+    current=$(sha256sum "$INSTALL_DIR/ctdev" | awk '{print $1}')
+    if [[ "$current" == "$expected" ]]; then
         success "ctdev ${VERSION} is already installed at $INSTALL_DIR/ctdev"
         exit 0
     fi
@@ -221,26 +248,7 @@ if ! download "$BINARY_URL" "$TMP"; then
     error "Download failed. Check that a release exists for $PLATFORM at:\n  https://github.com/${REPO}/releases/tag/${VERSION}"
 fi
 
-# Verify checksum against the release's SHA256SUMS. Fail closed: a missing
-# SUMS file or sha256sum binary aborts the install — anyone who can tamper
-# with the download path could otherwise just break the SUMS fetch to skip
-# verification. CTDEV_SKIP_VERIFY=1 is the explicit escape hatch for old
-# releases that predate checksum publishing.
-SUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/SHA256SUMS"
-SUMS_TMP=$(mktemp)
-if [[ "${CTDEV_SKIP_VERIFY:-}" == "1" ]]; then
-    warn "CTDEV_SKIP_VERIFY=1 — skipping checksum verification"
-else
-    if ! command -v sha256sum >/dev/null 2>&1; then
-        error "sha256sum is required to verify the download (or set CTDEV_SKIP_VERIFY=1 to skip)"
-    fi
-    if ! download "$SUMS_URL" "$SUMS_TMP" 2>/dev/null; then
-        error "Could not fetch SHA256SUMS for ${VERSION} — refusing to install an unverified binary.\n  Retry, or set CTDEV_SKIP_VERIFY=1 if this release predates checksums."
-    fi
-    expected=$(grep "ctdev-${PLATFORM}\$" "$SUMS_TMP" | awk '{print $1}')
-    if [[ -z "$expected" ]]; then
-        error "No checksum entry for ctdev-${PLATFORM} in SHA256SUMS — refusing to install (or set CTDEV_SKIP_VERIFY=1)"
-    fi
+if [[ -n "$expected" ]]; then
     actual=$(sha256sum "$TMP" | awk '{print $1}')
     if [[ "$expected" != "$actual" ]]; then
         error "Checksum mismatch for ctdev-${PLATFORM}.\n  expected: $expected\n  actual:   $actual"
@@ -248,11 +256,12 @@ else
     info "Checksum verified"
 fi
 
-# Install
-chmod +x "$TMP"
+# Install. mktemp creates the file 0600; a system-wide binary has to be
+# readable by everyone, not just executable.
+chmod 0755 "$TMP"
 mv "$TMP" "$INSTALL_DIR/ctdev"
 TMP=""
-rm -f "$SUMS_TMP"
+if [[ -n "$SUMS_TMP" ]]; then rm -f "$SUMS_TMP"; fi
 SUMS_TMP=""
 
 # Ephemeral: run from the temp directory and let the EXIT trap delete it.
