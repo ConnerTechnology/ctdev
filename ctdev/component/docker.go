@@ -137,15 +137,8 @@ func dockerAddKey(ctx context.Context, o sysutil.Opts, keyURL, keyring string) e
 		fmt.Fprintf(o.Stdout, "[dry-run] download %s, check fingerprint %s → %s\n", keyURL, dockerKeyFingerprint, keyring)
 		return nil
 	}
-	if !sysutil.CommandExists("gpg") {
-		// A fresh image ships with empty package lists, where installing
-		// gnupg fails with "no installation candidate".
-		if err := sysutil.APTUpdate(ctx, o); err != nil {
-			return err
-		}
-		if err := sysutil.InstallPackage(ctx, o, "gnupg"); err != nil {
-			return err
-		}
+	if err := sysutil.EnsureGPG(ctx, o); err != nil {
+		return err
 	}
 	tmp, err := os.CreateTemp("", "docker-key-*.asc")
 	if err != nil {
