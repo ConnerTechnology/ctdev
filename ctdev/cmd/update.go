@@ -124,14 +124,19 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 //   - the cli tools resolve their destination at run time via `which` and fall
 //     back to /usr/local/bin, so assume root.
 //   - docker stacks can rebuild through `sudo docker compose`.
+//   - the ctdev self-update replaces the binary where it lives, so it needs
+//     root only when that directory (say /usr/local/bin) isn't writable.
 //
-// flatpak, npm, oh-my-zsh and the ctdev self-update run unprivileged (ctdev's
-// install.sh targets ~/.local/bin and only ever uses `sudo -n`).
+// flatpak, npm and oh-my-zsh run unprivileged.
 func updateNeedsRoot(items []checklist.UpdateItem) bool {
 	for _, item := range items {
 		switch item.Source {
 		case "apt", "brew-cask", "docker", "cli":
 			return true
+		case "ctdev":
+			if selfUpdateNeedsRoot() {
+				return true
+			}
 		case "runtime":
 			if item.Name == "go" {
 				return true
