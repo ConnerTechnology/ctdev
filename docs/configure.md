@@ -20,7 +20,7 @@ recommended defaults without asking, which is what you want in a script.
 
 They fall into three groups.
 
-**Machine behavior** — `ssh`, `power`, `gpu`. These change the machine itself:
+**Machine behavior** — `ssh`, `power`, `gpu`, `storage`. These change the machine itself:
 remote access, power (the power profile, the display, idle-suspend and
 screensaver timers in minutes or never, "Never suspend, even when asked", and on
 macOS a password right after the screensaver), and the NVIDIA driver and MOK
@@ -29,6 +29,18 @@ on the platform it applies to, so there is no `macos` category. Typing is in
 `keyboard`, which shows the repeat rate in characters per second on both
 Cinnamon and macOS and holds the macOS text-substitution and press-and-hold
 settings.
+
+`storage` is the machine's disks and swap: weekly SSD TRIM (only with an SSD),
+and on Linux a swapfile and swappiness. The swapfile is `/swapfile`, 1 GiB by
+default, with one `/etc/fstab` line so it comes back after a reboot; 0 removes
+it, and a new size switches it off, recreates it and switches it back on.
+Swappiness defaults to 10, written to `/etc/sysctl.d/99-ctdev-swappiness.conf`.
+ctdev's fstab line carries a comment saying ctdev owns it. A machine that
+already has swap ctdev didn't set up (a partition, zram, or a swapfile made by
+hand) shows that swap and "not needed", and `--batch` leaves it and its
+swappiness alone; to change it, run `ctdev configure storage` and say yes.
+Choosing a size for a hand-made `/swapfile` takes it over, and a matching size
+leaves the file as it is.
 
 **Desktop** — `audio`, `bluetooth`, `desktop`. `bluetooth` installs bluez and Blueman and
 turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
