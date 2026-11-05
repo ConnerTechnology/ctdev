@@ -3,7 +3,10 @@ package component
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -90,4 +93,88 @@ func deployOrDryRun(o sysutil.Opts, srcEmbed, dst string) error {
 		return nil
 	}
 	return sysutil.DeployFileFromFS(Configs, srcEmbed, dst)
+}
+
+// verifiedPublicKey returns the armored public key in keyPath, provided the
+// file holds exactly one OpenPGP primary key, its fingerprint is want (40 hex
+// digits, no spaces) and nothing in it is secret key material. Exactly one,
+// not "at least one": a keyring file is trusted whole, so a second key riding
+// along with the vendor's would be trusted too, and apt's sqv accepts
+// signatures from a secret key in a signed-by file.
+//
+// The bytes returned are gpg's re-export of the pinned key, not the file
+// itself, so whatever else the file carried never reaches the caller. gpg runs
+// in a throwaway home; the user's own keyring is never read or touched.
+func verifiedPublicKey(ctx context.Context, keyPath, want string) ([]byte, error) {
+	home, err := os.MkdirTemp("", "ctdev-gnupg-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(home)
+
+	out, err := runGPG(ctx, home, "--show-keys", "--with-colons", keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read OpenPGP key %s: %w", keyPath, err)
+	}
+	got, err := primaryKeyFingerprints(string(out))
+	switch {
+	case err != nil:
+		return nil, fmt.Errorf("%s: %w", keyPath, err)
+	case len(got) == 0:
+		return nil, fmt.Errorf("no OpenPGP key in %s, want %s", keyPath, want)
+	case len(got) != 1 || got[0] != want:
+		return nil, fmt.Errorf("key fingerprint is %s, want %s", strings.Join(got, ", "), want)
+	}
+
+	if _, err := runGPG(ctx, home, "--import", keyPath); err != nil {
+		return nil, fmt.Errorf("import OpenPGP key %s: %w", keyPath, err)
+	}
+	key, err := runGPG(ctx, home, "--export", "--armor", want)
+	if err != nil {
+		return nil, fmt.Errorf("export OpenPGP key %s: %w", want, err)
+	}
+	if len(key) == 0 {
+		return nil, fmt.Errorf("export OpenPGP key %s: gpg exported nothing", want)
+	}
+	return key, nil
+}
+
+// runGPG runs gpg against home and returns its stdout. On failure the error
+// carries gpg's stderr, which is where it says what was wrong with the key.
+func runGPG(ctx context.Context, home string, args ...string) ([]byte, error) {
+	var stderr strings.Builder
+	cmd := exec.CommandContext(ctx, "gpg", append([]string{"--homedir", home, "--batch"}, args...)...)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("gpg: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return out, nil
+}
+
+// primaryKeyFingerprints picks the primary keys' fingerprints out of gpg
+// --with-colons output. Each primary record is followed by its "fpr"; the
+// "fpr" records after a "sub" belong to subkeys and are skipped. Any secret
+// key or subkey ("sec", "ssb") is an error: a vendor's public key file never
+// has one.
+func primaryKeyFingerprints(colons string) ([]string, error) {
+	var fprs []string
+	afterPrimary := false
+	for _, line := range strings.Split(colons, "\n") {
+		fields := strings.Split(line, ":")
+		switch fields[0] {
+		case "sec", "ssb":
+			return nil, fmt.Errorf("contains secret key material (%s record)", fields[0])
+		case "pub":
+			afterPrimary = true
+		case "sub":
+			afterPrimary = false
+		case "fpr":
+			if afterPrimary && len(fields) > 9 {
+				fprs = append(fprs, fields[9])
+				afterPrimary = false
+			}
+		}
+	}
+	return fprs, nil
 }
