@@ -33,14 +33,21 @@ settings.
 `storage` is the machine's disks and swap: weekly SSD TRIM (only with an SSD),
 and on Linux a swapfile and swappiness. The swapfile is `/swapfile`, 1 GiB by
 default, with one `/etc/fstab` line so it comes back after a reboot; 0 removes
-it, and a new size switches it off, recreates it and switches it back on.
-Swappiness defaults to 10, written to `/etc/sysctl.d/99-ctdev-swappiness.conf`.
-ctdev's fstab line carries a comment saying ctdev owns it. A machine that
-already has swap ctdev didn't set up (a partition, zram, or a swapfile made by
-hand) shows that swap and "not needed", and `--batch` leaves it and its
-swappiness alone; to change it, run `ctdev configure storage` and say yes.
-Choosing a size for a hand-made `/swapfile` takes it over, and a matching size
-leaves the file as it is.
+it. Swappiness defaults to 10, written to
+`/etc/sysctl.d/zz-ctdev-swappiness.conf`, which sorts after every other sysctl
+file so its value is the one that holds at boot. ctdev's fstab line carries a
+comment saying ctdev owns it.
+
+`--batch` only creates a swapfile where there is no swap at all. It never
+resizes one, ctdev's included, and leaves alone any swap ctdev didn't set up,
+switched on or not: a partition or zram, a swap line in `/etc/fstab`, or any
+file already at `/swapfile`. On such a machine `--show` reports that swap as
+"not needed", and swappiness is left alone too. The wizard, `ctdev configure
+storage` without `--batch`, can still resize ctdev's swapfile or take over a
+hand-made `/swapfile` that is switched on, after you say yes; a matching size
+leaves the file as it is. A new size refuses to start when the swap in use
+wouldn't fit in free memory or the disk lacks room, and on a filesystem other
+than ext4, XFS or btrfs there is no swapfile.
 
 **Desktop** — `audio`, `bluetooth`, `desktop`. `bluetooth` installs bluez and Blueman and
 turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
