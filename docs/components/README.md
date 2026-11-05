@@ -125,12 +125,19 @@ component unsupported on this OS reports as skipped rather than failing.
 On Linux, `docker` comes from Docker's own apt repository. Before ctdev trusts
 the repository key, it checks that the key's fingerprint is Docker's
 (`9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`). If the key is different,
-the install stops and nothing gets added to `/etc/apt/keyrings`. If there is no
+or the file carries anything besides that one public key, the install stops and
+nothing gets added to `/etc/apt/keyrings`. If there is no
 `/etc/docker/daemon.json`, the install writes one that caps each container's
 json-file log at three 10 MB files. Without that cap the logs grow until the
 disk is full. An existing `daemon.json` is never changed. The cap applies only
-to containers created after the file is written. On macOS, Docker Desktop comes
-from Homebrew.
+to containers created after the file is written.
+
+The file is written only when Docker is actually installed. If Docker is
+already there, `ctdev install docker` stops at "Docker already installed", so
+an existing machine gets the cap through `ctdev install docker --force`. On a
+machine where Docker is running and has no `daemon.json`, `--force` restarts
+Docker, which stops running containers unless `live-restore` is on. On macOS,
+Docker Desktop comes from Homebrew.
 
 ## Adding one
 
