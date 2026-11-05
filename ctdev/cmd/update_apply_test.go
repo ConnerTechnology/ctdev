@@ -76,3 +76,54 @@ func TestSelfInstallArgs_SurviveSudo(t *testing.T) {
 		t.Errorf("args = %v, want %v", got, want)
 	}
 }
+
+// withSelfInstallDir points the self-update at dir for the rest of the test.
+func withSelfInstallDir(t *testing.T, dir string) {
+	t.Helper()
+	orig := selfInstallDir
+	selfInstallDir = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { selfInstallDir = orig })
+}
+
+// readOnlyDir is a directory the current user can't create files in, like
+// /usr/local/bin for a non-root user.
+func readOnlyDir(t *testing.T) string {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root can write to any directory")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	return dir
+}
+
+func TestUpdateNeedsRoot_CtdevInUnwritableDir(t *testing.T) {
+	withSelfInstallDir(t, readOnlyDir(t))
+	items := []checklist.UpdateItem{{Source: "ctdev", Name: "ctdev"}}
+	if !updateNeedsRoot(items) {
+		t.Error("updateNeedsRoot() = false for a ctdev binary in an unwritable dir, want true")
+	}
+}
+
+func TestUpdateNeedsRoot_CtdevInWritableDir(t *testing.T) {
+	withSelfInstallDir(t, t.TempDir())
+	items := []checklist.UpdateItem{{Source: "ctdev", Name: "ctdev"}}
+	if updateNeedsRoot(items) {
+		t.Error("updateNeedsRoot() = true for a ctdev binary in a writable dir, want false")
+	}
+}
+
+func TestUpdateSelf_DryRunSaysAsRoot(t *testing.T) {
+	dir := readOnlyDir(t)
+	withSelfInstallDir(t, dir)
+	var out bytes.Buffer
+	if err := updateSelf(context.Background(), sysutil.Opts{DryRun: true, Stdout: &out}, "17.2.0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); !strings.Contains(got, "(as root)") || !strings.Contains(got, "INSTALL_DIR="+dir) {
+		t.Errorf("dry run = %q, want it to say (as root) and INSTALL_DIR=%s", got, dir)
+	}
+}

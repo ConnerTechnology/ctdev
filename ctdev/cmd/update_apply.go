@@ -392,18 +392,19 @@ func updateSelf(ctx context.Context, o sysutil.Opts, newVer string) error {
 	if !releaseTagPattern.MatchString(tag) {
 		return fmt.Errorf("unexpected ctdev release tag %q", tag)
 	}
-	exe, err := os.Executable()
+	dir, err := selfInstallDir()
 	if err != nil {
-		return fmt.Errorf("locate running ctdev: %w", err)
+		return err
 	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
-	}
-	dir := filepath.Dir(exe)
 	url := selfInstallScriptURL(tag)
+	asRoot := !dirWritable(dir)
 
 	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "  [dry-run] download %s and run it with INSTALL_DIR=%s CTDEV_VERSION=%s\n", url, dir, tag)
+		how := ""
+		if asRoot {
+			how = " (as root)"
+		}
+		fmt.Fprintf(o.Stdout, "  [dry-run] download %s and run it%s with INSTALL_DIR=%s CTDEV_VERSION=%s\n", url, how, dir, tag)
 		return nil
 	}
 
@@ -419,10 +420,31 @@ func updateSelf(ctx context.Context, o sysutil.Opts, newVer string) error {
 	}
 
 	args := selfInstallArgs(dir, tag, scriptPath)
-	if dirWritable(dir) {
-		return sysutil.Run(ctx, o, args[0], args[1:]...)
+	if asRoot {
+		return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 	}
-	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
+	return sysutil.Run(ctx, o, args[0], args[1:]...)
+}
+
+// selfInstallDir is the directory of the running ctdev binary, the one a
+// self-update replaces. A variable so tests can point it at a directory they
+// control.
+var selfInstallDir = func() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate running ctdev: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return filepath.Dir(exe), nil
+}
+
+// selfUpdateNeedsRoot reports whether replacing the running binary needs
+// sudo: it does exactly when its directory isn't writable as the current user.
+func selfUpdateNeedsRoot() bool {
+	dir, err := selfInstallDir()
+	return err == nil && !dirWritable(dir)
 }
 
 // selfInstallArgs runs install.sh through env so the variables survive sudo,
