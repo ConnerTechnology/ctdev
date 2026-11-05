@@ -6,6 +6,9 @@ set -euo pipefail
 #
 # Or, to check a machine without installing anything at all:
 #   curl -fsSL .../install.sh | bash -s -- --doctor
+#
+# Or, to install one exact release system-wide (as root, e.g. a boot script):
+#   CTDEV_VERSION=v1.2.3 INSTALL_DIR=/usr/local/bin bash install.sh
 
 REPO="ConnerTechnology/ctdev"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
@@ -42,7 +45,9 @@ usage() {
     cat <<'EOF'
 Usage: install.sh [--doctor [doctor options]]
 
-Installs the ctdev binary. With no arguments it installs to ~/.local/bin.
+Installs the ctdev binary. With no arguments it installs the latest release
+to ~/.local/bin. If the binary already there reports the version being
+installed, it exits without downloading anything.
 
 Options:
   --doctor [args]    Don't install. Download ctdev to a temporary directory,
@@ -53,6 +58,7 @@ Options:
 
 Environment:
   INSTALL_DIR        Where to install (default: ~/.local/bin)
+  CTDEV_VERSION      Release to install, e.g. v17.1.0 (default: latest)
   CTDEV_SKIP_VERIFY  Set to 1 to skip checksum verification
 EOF
 }
@@ -149,13 +155,22 @@ fi
 PLATFORM=$(detect_platform)
 info "Detected platform: $PLATFORM"
 
-# Get latest version
-info "Checking latest release..."
-VERSION=$(get_latest_version)
-if [[ -z "$VERSION" ]]; then
-    error "Could not determine latest version. Check https://github.com/${REPO}/releases"
+if [[ -n "${CTDEV_VERSION:-}" ]]; then
+    # The value goes straight into download URLs, so accept a release tag
+    # shape and nothing else.
+    if [[ ! "$CTDEV_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        error "CTDEV_VERSION must look like v1.2.3, got: $CTDEV_VERSION"
+    fi
+    VERSION="v${CTDEV_VERSION#v}"
+    info "Requested version: $VERSION"
+else
+    info "Checking latest release..."
+    VERSION=$(get_latest_version)
+    if [[ -z "$VERSION" ]]; then
+        error "Could not determine latest version. Check https://github.com/${REPO}/releases"
+    fi
+    info "Latest version: $VERSION"
 fi
-info "Latest version: $VERSION"
 
 # Clean up old bash-based install. Skipped entirely when running ephemerally:
 # removing things from someone else's machine is exactly what --doctor
@@ -168,12 +183,26 @@ if [[ $EPHEMERAL -eq 0 ]]; then
             rm -f "$INSTALL_DIR/ctdev"
         fi
     fi
-    if [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; then
+    # /usr/local/bin/ctdev is a leftover only when it isn't the install
+    # target. Root installing system-wide (a cloud node's boot script, or
+    # `ctdev update` of a system install) puts it there on purpose.
+    if [[ "${INSTALL_DIR%/}" != "/usr/local/bin" ]] && { [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; }; then
         # sudo -n only: a script running from a curl|bash pipe should never sit on a
         # password prompt (and training people to type sudo passwords into piped
         # scripts is its own problem).
         info "Removing old ctdev from /usr/local/bin..."
         sudo -n rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev (needs sudo) — run: sudo rm /usr/local/bin/ctdev"
+    fi
+fi
+
+# Already there? A boot script runs this on every boot, and re-downloading a
+# binary it already has is wasted time and one more way to fail. Ephemeral runs
+# start from an empty temp directory, so there is never anything to find.
+if [[ $EPHEMERAL -eq 0 ]] && [[ -x "$INSTALL_DIR/ctdev" ]]; then
+    installed=$("$INSTALL_DIR/ctdev" --version 2>/dev/null | awk '{print $NF}' || true)
+    if [[ "$installed" == "${VERSION#v}" ]]; then
+        success "ctdev ${VERSION} is already installed at $INSTALL_DIR/ctdev"
+        exit 0
     fi
 fi
 
