@@ -67,6 +67,8 @@ eval "$(/usr/local/bin/brew shellenv)"     # Intel
 ctdev update --refresh-keys
 ```
 
+**Install pauses on a machine that just booted:** Another apt run (unattended-upgrades or apt-daily) holds an apt lock. ctdev waits up to 5 minutes for it, then fails with apt's "Could not get lock" error, which names the process holding it.
+
 **Fonts not showing:** Run `fc-cache -fv` and restart terminal.
 
 **Package manager not detected:** Run `ctdev info` to see what was detected.

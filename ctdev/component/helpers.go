@@ -49,7 +49,7 @@ func alreadyInstalled(name string) bool {
 func installDebWithDepFix(ctx context.Context, o sysutil.Opts, debPath, pkgName string) error {
 	dpkgErr := sysutil.SudoRun(ctx, o, "dpkg", "-i", debPath)
 	if dpkgErr != nil {
-		if fixErr := sysutil.SudoRun(ctx, o, "apt-get", "install", "-f", "-y"); fixErr != nil {
+		if fixErr := sysutil.APTGet(ctx, o, "install", "-f", "-y"); fixErr != nil {
 			return fmt.Errorf("dpkg failed and apt-get fix failed: dpkg: %w; fix: %v", dpkgErr, fixErr)
 		}
 	}

@@ -182,8 +182,7 @@ func applyOwnedPackages(ctx context.Context, o sysutil.Opts, key string, pkgs []
 			return fmt.Errorf("removing %s would also remove %s, which ctdev didn't install; remove those first, or keep this setting on",
 				strings.Join(added, ", "), strings.Join(blockers, ", "))
 		}
-		args := append([]string{"apt-get", "remove", "-y", "-qq"}, added...)
-		if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
+		if err := sysutil.APTGet(ctx, o, append([]string{"remove", "-y", "-qq"}, added...)...); err != nil {
 			return err
 		}
 		return clearAdded(o, key)
@@ -198,8 +197,7 @@ func applyOwnedPackages(ctx context.Context, o sysutil.Opts, key string, pkgs []
 	if len(missing) == 0 {
 		return nil
 	}
-	args := append([]string{"apt-get", "install", "-y", "-qq", "--no-install-recommends"}, missing...)
-	if err := sysutil.SudoRun(ctx, o, args[0], args[1:]...); err != nil {
+	if err := sysutil.APTGet(ctx, o, append([]string{"install", "-y", "-qq", "--no-install-recommends"}, missing...)...); err != nil {
 		return err
 	}
 	return recordAdded(o, key, missing...)
