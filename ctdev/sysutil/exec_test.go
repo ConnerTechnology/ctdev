@@ -124,6 +124,8 @@ func TestCommandLabel(t *testing.T) {
 		{"sudo", []string{"-n", "apt-get", "update"}, "sudo apt-get"},
 		{"sudo", nil, "sudo"},
 		{"sudo", []string{"-n"}, "sudo"},
+		{"env", []string{"DEBIAN_FRONTEND=noninteractive", "apt-get", "update"}, "apt-get"},
+		{"sudo", []string{"-n", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update"}, "sudo apt-get"},
 	}
 	for _, tt := range tests {
 		if got := commandLabel(tt.name, tt.args); got != tt.want {

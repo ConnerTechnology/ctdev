@@ -44,8 +44,7 @@ func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 		steps = append(steps, updateStep{
 			name: fmt.Sprintf("apt (%d packages)", len(names)),
 			run: func(ctx context.Context, o sysutil.Opts) error {
-				args := append([]string{"install", "--only-upgrade", "-y"}, names...)
-				return sysutil.SudoRun(ctx, o, "apt", args...)
+				return sysutil.APTGet(ctx, o, append([]string{"install", "--only-upgrade", "-y"}, names...)...)
 			},
 		})
 	}

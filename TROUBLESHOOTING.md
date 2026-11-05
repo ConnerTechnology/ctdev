@@ -67,6 +67,10 @@ eval "$(/usr/local/bin/brew shellenv)"     # Intel
 ctdev update --refresh-keys
 ```
 
+**Install pauses on a machine that just booted:** Another apt run (unattended-upgrades or apt-daily) holds an apt lock. ctdev waits up to 5 minutes for each lock it finds held, then fails with apt's "Could not get lock" error, which names the process holding it.
+
+**A sudoers rule for apt-get stopped matching:** ctdev runs `sudo env DEBIAN_FRONTEND=noninteractive apt-get ...`, so a rule scoped to `/usr/bin/apt-get` no longer covers it. Allowing `/usr/bin/env` instead is the same as allowing everything.
+
 **Fonts not showing:** Run `fc-cache -fv` and restart terminal.
 
 **Package manager not detected:** Run `ctdev info` to see what was detected.

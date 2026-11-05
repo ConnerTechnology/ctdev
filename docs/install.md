@@ -64,6 +64,13 @@ description of this repo.
 Other package managers (dnf, pacman) are not supported; components on those
 systems report as skipped.
 
+On apt, every `apt-get` ctdev runs is unattended, so it works from a boot script
+with no terminal. It never asks a debconf question, keeps a config file you
+edited when a package ships a new version of it, retries a failed download up
+to 3 times, and waits up to 5 minutes for each apt lock another apt run holds,
+which unattended-upgrades and apt-daily do on a machine that just booted.
+`.deb` downloads install through `apt-get` too, so they get the same.
+
 ## Uninstall
 
 ```bash
