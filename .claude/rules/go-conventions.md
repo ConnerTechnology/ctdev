@@ -16,4 +16,5 @@ paths:
 - Exception: `claude-code` owns files the user also edits (`~/.claude/settings.json`, `CLAUDE.md`), so its Phase 2 writes only missing files and the review in `cmd/configure_claude_code.go` shows the diff and asks before replacing (ADR-0009)
 - For `.deb` installs on apt, use `installDebWithDepFix(ctx, o, debPath, pkgName)`
 - All installers accept `ctx context.Context` as first parameter
+- Run apt-get through `sysutil.APTGet` (or `InstallPackage` / `RemovePackage` / `APTUpdate`), never `SudoRun(..., "apt-get", ...)`: it adds the no-prompt, lock-wait and retry options a boot script with no TTY needs. Read-only `apt-get -s` simulations run as the user are the exception
 - Never spell `sudo` in an argv — use `sysutil.SudoRun` (or `sysutil.SudoNoPrompt` for silent probes). They drop the wrapper when we already are root, which is how a container with no sudo installed still works
