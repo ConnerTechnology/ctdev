@@ -67,6 +67,16 @@ type Status struct {
 	Hostname string
 	Stored   int64 // space they take in the destination
 
+	// DataCheck is the configured folder's destination's last weekly
+	// maintenance, read from the destination; nil when none has run.
+	// DataCheckRead says it was read, so nil means "not run yet".
+	DataCheck     *DataCheck
+	DataCheckRead bool
+	// DataCheckOverdue means the last data check finished more than two
+	// weeks ago, or none has run in the two weeks since the oldest folder on
+	// this computer's list was put on the destination.
+	DataCheckOverdue bool
+
 	ReadErr error // the destination couldn't be read
 }
 
@@ -121,6 +131,11 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 			s.ReadErr = errors.Join(s.ReadErr, err)
 		} else {
 			dests = append(dests, d)
+			if s.DataCheck, err = d.LastDataCheck(ctx); err != nil {
+				s.ReadErr = errors.Join(s.ReadErr, err)
+			} else {
+				s.DataCheckRead = true
+			}
 		}
 	} else {
 		names, err := m.Destinations()
@@ -180,6 +195,18 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 		// Lingering keeps a user timer running after logout. ctdev never turns
 		// it on, but someone may have, and then the note would be wrong.
 		s.LoggedInOnly = m.goos() == "linux" && !m.lingering()
+	}
+	if s.DataCheckRead {
+		// Measured from the oldest folder here on this destination, or this
+		// one when the list doesn't record destinations yet.
+		var oldest time.Time
+		if folders, err := m.scheduledFolders(); err == nil {
+			oldest = oldestAdded(folders)[s.Destination]
+		}
+		if oldest.IsZero() && s.Scheduled {
+			oldest = entry.Added
+		}
+		s.DataCheckOverdue = dataCheckOverdue(s.DataCheck, oldest, s.At)
 	}
 	return s
 }

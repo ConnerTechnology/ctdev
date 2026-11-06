@@ -72,21 +72,66 @@ func TestDoctorFactsCarryBackupHealth(t *testing.T) {
 		}
 	}
 	write("folders.json", `{"folders":[{"path":"`+folder+`","id":"00000000-0000-4000-8000-000000000000","schedule":"weekly","added":"2026-01-01T00:00:00Z"}]}`)
-	write("state.json", `{"folders":{"`+folder+`":{"last_attempt":"2026-01-02T00:00:00Z","last_success":"2026-01-01T00:00:00Z","error":"example failure"}}}`)
+	write("state.json", `{"folders":{"`+folder+`":{"last_attempt":"2026-01-02T00:00:00Z","last_success":"2026-01-01T00:00:00Z","error":"example failure","retention_error":"example retention failure"}}}`)
 
 	got, errText := doctorBackupFacts(m)
 	want := diagnose.BackupFolder{
 		Path: "~/Projects/website", Schedule: "weekly", State: diagnose.BackupFailed,
 		LastSuccess: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Error: "example failure",
+		RetentionError: "example retention failure",
 	}
 	if errText != "" || len(got) != 1 || got[0].Path != want.Path || got[0].Schedule != want.Schedule ||
-		got[0].State != want.State || !got[0].LastSuccess.Equal(want.LastSuccess) || got[0].Error != want.Error {
+		got[0].State != want.State || !got[0].LastSuccess.Equal(want.LastSuccess) || got[0].Error != want.Error ||
+		got[0].RetentionError != want.RetentionError {
 		t.Errorf("facts = %+v, %q; want %+v", got, errText, want)
 	}
 
 	write("state.json", "not json")
 	if _, errText := doctorBackupFacts(m); errText == "" {
 		t.Error("unreadable state gave no error")
+	}
+}
+
+// Each destination's data check reaches doctor from the copy the hourly
+// runner keeps in state.json, for the destinations this computer's
+// scheduled folders use; with none scheduled, there are none.
+func TestDoctorFactsCarryTheDataCheck(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	m, err := backup.ThisMachine(sysutil.Opts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, errText := doctorDataCheckFacts(m); len(got) != 0 || errText != "" {
+		t.Errorf("with nothing set up: %v, %q", got, errText)
+	}
+	if err := os.MkdirAll(m.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state := `{"folders":{},"destinations":{` +
+		`"example-backups":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":false,"step":"check","error":"damaged pack 0123abcd"}},` +
+		`"example-unused":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":true}}}}`
+	if err := os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, errText := doctorDataCheckFacts(m); len(got) != 0 || errText != "" {
+		t.Errorf("with nothing scheduled: %v, %q; want none", got, errText)
+	}
+	folders := `{"folders":[{"path":"` + filepath.Join(home, "website") + `","id":"00000000-0000-4000-8000-000000000000","schedule":"daily","destination":"example-backups"}]}`
+	if err := os.WriteFile(filepath.Join(m.Dir, "folders.json"), []byte(folders), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, errText := doctorDataCheckFacts(m)
+	want := diagnose.BackupDataCheck{
+		Destination: "example-backups", Finished: time.Date(2026, 10, 20, 3, 10, 0, 0, time.UTC),
+		Host: "example-desktop", Slice: 3, Slices: 20, Step: "check", Error: "damaged pack 0123abcd",
+	}
+	if errText != "" || len(got) != 1 || !got[0].Finished.Equal(want.Finished) {
+		t.Fatalf("facts = %+v, %q; want only %+v", got, errText, want)
+	}
+	got[0].Finished = want.Finished
+	if got[0] != want {
+		t.Errorf("facts = %+v, want %+v", got[0], want)
 	}
 }
 

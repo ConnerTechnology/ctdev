@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -18,6 +19,11 @@ import (
 // ErrWrongPassword means restic found no key the password opens: a wrong
 // master password or Secret Key, or a computer key that has been removed.
 var ErrWrongPassword = errors.New("wrong master password or Secret Key")
+
+// ErrDestinationBusy means restic couldn't lock the destination within its
+// --retry-lock wait: another computer holds the lock, usually for the
+// weekly maintenance's prune or check.
+var ErrDestinationBusy = errors.New("the destination is busy: something else holds its lock")
 
 // ErrNoRestic means the restic binary isn't installed.
 var ErrNoRestic = errors.New("restic isn't installed: run ctdev install restic")
@@ -33,6 +39,9 @@ type run struct {
 	keyHint     string // the key to try first; restic otherwise tries each in turn
 	dir         string // working directory
 	args        []string
+	stdin       []byte    // what restic reads on stdin, such as backup --stdin's file
+	stdout      io.Writer // where restic's output goes instead of being returned, such as a dump
+	stderr      io.Writer // also gets restic's stderr, for a caller that reads more than the error
 }
 
 // restic runs restic as the user (never through sudo) and returns its
@@ -49,6 +58,15 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 	cmd.Env = d.env(r.password, r.keyHint)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if r.stdout != nil {
+		cmd.Stdout = r.stdout
+	}
+	if r.stderr != nil {
+		cmd.Stderr = io.MultiWriter(&stderr, r.stderr)
+	}
+	if r.stdin != nil {
+		cmd.Stdin = bytes.NewReader(r.stdin)
+	}
 	if r.newPassword != "" {
 		pr, pw, err := os.Pipe()
 		if err != nil {
@@ -72,6 +90,8 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 			return stdout.Bytes(), ErrWrongPassword
 		case 3: // restic backup: snapshot made, but some files couldn't be read
 			return stdout.Bytes(), errPartial
+		case 11: // restic: couldn't lock the repository, even after --retry-lock
+			return stdout.Bytes(), ErrDestinationBusy
 		}
 	}
 	return stdout.Bytes(), fmt.Errorf("restic %s: %s", r.args[0], resticMessage(stderr.Bytes(), err))
