@@ -211,6 +211,68 @@ func TestSwapBatchDoesNotResizeCtdevsSwapfile(t *testing.T) {
 	}
 }
 
+// requestedSwapfile runs InitStates and RequestSwapfileSize as `configure
+// storage --batch --swapfile-size gib` does, and returns the swapfile's state.
+func requestedSwapfile(t *testing.T, gib int) SettingState {
+	t.Helper()
+	states := InitStates(context.Background(), swapSettings(t))
+	if err := RequestSwapfileSize(states, gib); err != nil {
+		t.Fatalf("RequestSwapfileSize(%d) = %v", gib, err)
+	}
+	for _, st := range states {
+		if st.Setting.Name == SwapfileSizeSetting {
+			return st
+		}
+	}
+	t.Fatal("no swapfile setting")
+	return SettingState{}
+}
+
+// A server's boot script asks for 2 GiB where ctdev made 1: --swapfile-size
+// resizes ctdev's own swapfile, which the default never does.
+func TestRequestSwapfileSizeResizesCtdevsSwapfile(t *testing.T) {
+	newFakeSwap(t, ctdevSwap1, ctdevFstab)
+	st := requestedSwapfile(t, 2)
+	if !st.NeedsApply(false) || st.DesiredValue != "2" {
+		t.Errorf("state %+v, want 1 -> 2 applied", st)
+	}
+}
+
+func TestRequestSwapfileSizeSameSizeChangesNothing(t *testing.T) {
+	newFakeSwap(t, ctdevSwap1, ctdevFstab)
+	if st := requestedSwapfile(t, 1); st.NeedsApply(false) {
+		t.Errorf("state %+v, want nothing to apply at the size it already has", st)
+	}
+}
+
+func TestRequestSwapfileSizeCreates(t *testing.T) {
+	newFakeSwap(t, "", baseFstab)
+	st := requestedSwapfile(t, 2)
+	if !st.NeedsApply(false) || st.DesiredValue != "2" {
+		t.Errorf("state %+v, want a 2 GiB swapfile created", st)
+	}
+}
+
+// Swap ctdev didn't set up stays the person's, whatever size is asked for.
+func TestRequestSwapfileSizeLeavesOtherSwapAlone(t *testing.T) {
+	f := newFakeSwap(t, handSwapfile8, handFstab)
+	f.makeSwapfile()
+	st := requestedSwapfile(t, 2)
+	if st.NeedsApply(false) || st.NeedsApply(true) || st.DesiredValue != "8" {
+		t.Errorf("state %+v, want the hand-made 8 GiB swapfile left alone", st)
+	}
+}
+
+func TestRequestSwapfileSizeRejectsOutOfRange(t *testing.T) {
+	newFakeSwap(t, "", baseFstab)
+	for _, gib := range []int{-1, 33} {
+		states := InitStates(context.Background(), swapSettings(t))
+		if err := RequestSwapfileSize(states, gib); err == nil {
+			t.Errorf("RequestSwapfileSize(%d) = nil, want an out-of-range error", gib)
+		}
+	}
+}
+
 // ctdev's fstab line with no swapfile switched on (deleted, say): --batch
 // recreates it.
 func TestSwapCtdevsMissingSwapfileIsRecreated(t *testing.T) {

@@ -39,7 +39,8 @@ file so its value is the one that holds at boot. ctdev's fstab line carries a
 comment saying ctdev owns it.
 
 `--batch` only creates a swapfile where there is no swap at all. It never
-resizes one, ctdev's included, and leaves alone any swap ctdev didn't set up,
+resizes one, ctdev's included, unless `--swapfile-size` names the size, and
+leaves alone any swap ctdev didn't set up,
 switched on or not: a partition or zram, a swap line in `/etc/fstab`, or any
 file already at `/swapfile`. On such a machine `--show` reports that swap as
 "not needed", and swappiness is left alone too. The wizard, `ctdev configure
@@ -48,6 +49,14 @@ hand-made `/swapfile` that is switched on, after you say yes; a matching size
 leaves the file as it is. A new size refuses to start when the swap in use
 wouldn't fit in free memory or the disk lacks room, and on a filesystem other
 than ext4, XFS or btrfs there is no swapfile.
+
+`ctdev configure storage --batch --swapfile-size N` is for a server's boot
+script, which knows the size its node needs: it creates a swapfile of N GiB
+where there is no swap, and resizes ctdev's own swapfile to N GiB, with the
+same memory and disk checks. `--swapfile-size 0` removes ctdev's own swapfile
+and its fstab line. Swap ctdev didn't set up is still left alone. It works
+only with `--batch` given as a flag, not piped stdin alone, and not with
+`--show`.
 
 **Desktop** — `audio`, `bluetooth`, `desktop`. `bluetooth` installs bluez and Blueman and
 turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the
