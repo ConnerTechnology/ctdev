@@ -234,11 +234,12 @@ func swapFSSupported(fs string) bool {
 // swapfileNotNeeded is the swapfile's NotNeededFn. --batch only creates a
 // swapfile where there is no swap at all: it never resizes one, ctdev's
 // included, and never touches swap someone else set up. The wizard can still
-// do either when asked.
+// do either when asked, and --swapfile-size can resize ctdev's own
+// (RequestSwapfileSize).
 func swapfileNotNeeded(ctx context.Context) string {
 	if ownsSwapfile() {
 		if size := detectSwapfileSize(ctx); size != "0" && size != ValueUnknown {
-			return fmt.Sprintf("ctdev's %s GiB swapfile is already set up, and --batch doesn't resize it", size)
+			return fmt.Sprintf("ctdev's %s GiB swapfile is already set up, and --batch doesn't resize it without --swapfile-size", size)
 		}
 		return ""
 	}
@@ -250,6 +251,37 @@ func swapfileNotNeeded(ctx context.Context) string {
 		return fmt.Sprintf("%s is on %s, which can't hold a swapfile", dir, fs)
 	}
 	return ""
+}
+
+// SwapfileSizeSetting is the swapfile setting's Name in Registry.
+const SwapfileSizeSetting = "Swapfile size"
+
+// RequestSwapfileSize sets the swapfile's desired size in states to gib, for
+// `configure storage --batch --swapfile-size`. A server's boot script names
+// the size its node needs, which the default can't know, so a size asked for
+// by name also resizes ctdev's own swapfile, which a default never does. Swap
+// ctdev didn't set up is still left alone, and so is a filesystem that can't
+// hold a swapfile: both stay not needed.
+func RequestSwapfileSize(states []SettingState, gib int) error {
+	for i := range states {
+		st := &states[i]
+		if st.Setting == nil || st.Setting.Name != SwapfileSizeSetting {
+			continue
+		}
+		if r := st.Setting.Slider; r != nil && (float64(gib) < r.Min || float64(gib) > r.Max) {
+			return fmt.Errorf("--swapfile-size %d is outside %g to %g GiB", gib, r.Min, r.Max)
+		}
+		if st.NotNeeded != "" && ownsSwapfile() {
+			st.NotNeeded = ""
+			st.Enabled = true
+		}
+		if st.Enabled {
+			st.DesiredValue = strconv.Itoa(gib)
+		}
+		return nil
+	}
+	// No swapfile setting on this machine (macOS): nothing to size.
+	return nil
 }
 
 // swappinessNotNeeded is swappiness's NotNeededFn: on swap someone else set

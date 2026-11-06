@@ -645,10 +645,10 @@ var Registry = []Setting{
 		HardwareFn:  gateSSD,
 	},
 	{
-		Name:        "Swapfile size",
+		Name:        SwapfileSizeSetting,
 		Slug:        "storage",
 		Category:    "Storage",
-		Description: "A swapfile lets a burst of memory use slow the machine down instead of the kernel killing a program; 0 removes it. --batch only adds one where there is no swap, and never resizes.",
+		Description: "A swapfile lets a burst of memory use slow the machine down instead of the kernel killing a program; 0 removes it. --batch only adds one where there is no swap, and resizes ctdev's own only to a size --swapfile-size names.",
 		Control:     ControlSlider,
 		Default:     "1",
 		Slider:      &SliderRange{Min: 0, Max: 32, Step: 1, Unit: "GiB"},
