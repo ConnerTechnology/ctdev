@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [17.3.0] - 2026-11-06
+
 ### Added
+- **`ctdev configure storage --batch --swapfile-size N`** sets the size of ctdev's own
+  swapfile, 0 to 32 GiB: it creates one when the machine has no swap, and resizes the one
+  ctdev set up, which plain `--batch` never does. 0 removes it. Swap ctdev didn't set up is
+  still left alone. The flag needs `--batch` and is refused with `--show`.
 - **`ctdev install kopia`** installs Kopia 0.23.1 on Linux (amd64 and arm64) to
   `/usr/local/bin/kopia`, from its GitHub release, checked against a sha256 pinned in
   ctdev. It installs the binary only: no config, repository or timer. It counts as
