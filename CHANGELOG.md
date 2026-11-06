@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`ctdev install kopia`** installs Kopia 0.23.1 on Linux (amd64 and arm64) to
+  `/usr/local/bin/kopia`, from its GitHub release, checked against a sha256 pinned in
+  ctdev. It installs the binary only: no config, repository or timer. It counts as
+  installed only when the file there hashes to the pinned binary, so a re-run replaces any
+  other version, and it never runs the existing binary to find out. A new Kopia comes with
+  a ctdev release.
+
 ## [17.2.0] - 2026-11-05
 
 ### Added

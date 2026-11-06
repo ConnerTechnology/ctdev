@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-60 components, counted in `ctdev/component/registry.go` on 2026-10-28. A
+61 components, counted in `ctdev/component/registry.go` on 2026-11-06. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -107,6 +107,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | --- | --- | --- |
 | `beszel` | Beszel server/container monitoring (Docker) | Linux |
 | `caddy` | Caddy reverse proxy (Cloudflare DNS-01 wildcard) | Linux |
+| `kopia` | Kopia backup tool, pinned binary only | Linux |
 | `pihole` | Pi-hole network-wide DNS ad blocker (Docker) | Linux |
 | `portainer` | Portainer CE Docker management UI (Docker) | Linux |
 | `restic` | restic backup program | Linux, macOS |
