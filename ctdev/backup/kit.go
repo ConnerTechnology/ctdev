@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -121,12 +122,7 @@ func (k Kit) String() string {
 	}
 	row(kitDestination, k.Destination)
 	row(kitAddress, k.Address)
-	names := make([]string, 0, len(k.Credentials))
-	for name := range k.Credentials {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range sortedNames(k.Credentials) {
 		row(name, k.Credentials[name])
 	}
 	row(kitSecretKey, k.SecretKey)
@@ -135,6 +131,15 @@ func (k Kit) String() string {
 }
 
 var envName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+
+func sortedNames(m map[string]string) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // ParseKit reads a kit pasted back in. It tolerates indentation, Windows line
 // endings and the title line, and ignores the master password line.
@@ -168,7 +173,18 @@ func ParseKit(text string) (Kit, error) {
 	if _, err := parseSecretKey(k.SecretKey); err != nil {
 		return k, err
 	}
-	for _, name := range CredentialNames(k.Address) {
+	// A kit is pasted from wherever it was kept, so it's untrusted input, and
+	// its credentials become restic's environment. Only the backend's own
+	// names are allowed: a line such as RESTIC_PASSWORD_COMMAND or LD_PRELOAD
+	// would run a command on every restic run (CTD-130).
+	allowed := CredentialNames(k.Address)
+	for _, name := range sortedNames(k.Credentials) {
+		if !slices.Contains(allowed, name) {
+			return k, fmt.Errorf("the kit has a %s line, which a %s destination doesn't use: ctdev refuses the whole kit. "+
+				"Use the kit as ctdev showed it, without that line", name, BackendLabel(k.Address))
+		}
+	}
+	for _, name := range allowed {
 		if k.Credentials[name] == "" {
 			return k, fmt.Errorf("the kit has no %s line", name)
 		}

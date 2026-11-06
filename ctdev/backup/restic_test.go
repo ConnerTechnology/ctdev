@@ -75,6 +75,9 @@ func TestMain(m *testing.M) {
 	if template.dir != "" {
 		os.RemoveAll(template.dir)
 	}
+	if fleetTemplate.dir != "" {
+		os.RemoveAll(fleetTemplate.dir)
+	}
 	os.Exit(code)
 }
 

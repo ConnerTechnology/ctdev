@@ -185,13 +185,19 @@ func (d *Destination) env(password, keyHint string) []string {
 			env = append(env, kv)
 		}
 	}
+	// Only the backend's own credentials, never a RESTIC_ name or anything
+	// else a credentials file or kit holds, so it can't add a password
+	// command or override the repository (CTD-130).
+	for _, k := range CredentialNames(d.Address) {
+		if v, ok := d.credentials[k]; ok && !strings.HasPrefix(k, "RESTIC_") {
+			env = append(env, k+"="+v)
+		}
+	}
+	// ctdev's own come last, so nothing before them can override them.
 	env = append(env, "RESTIC_REPOSITORY="+d.Address, "RESTIC_PASSWORD="+password)
 	if keyHint != "" {
 		// Each key restic tries costs a deliberately slow scrypt, so name ours.
 		env = append(env, "RESTIC_KEY_HINT="+keyHint)
-	}
-	for k, v := range d.credentials {
-		env = append(env, k+"="+v)
 	}
 	return env
 }
