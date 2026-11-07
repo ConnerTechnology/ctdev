@@ -22,8 +22,15 @@ a signature. Naming components after it narrows which keys are refreshed
 (`ctdev update --refresh-keys vscode`); the names do not filter the update scan
 itself.
 
+ctdev updates itself by running the new release's own `install.sh` — fetched
+from that release's tag, never from `main` — with the running binary's
+directory as `INSTALL_DIR`, so the binary is replaced where it already lives.
+A system install in `/usr/local/bin` stays there rather than gaining a second
+copy in `~/.local/bin`.
+
 Root is used only for the updates that need it: the system package manager, the
-Go toolchain (it lives in `/usr/local/go`), and rebuilding a Docker stack.
+Go toolchain (it lives in `/usr/local/go`), rebuilding a Docker stack, and
+replacing a ctdev binary in a directory you cannot write to.
 Bun, nodenv, rbenv and pyenv all stay inside `$HOME` and are updated as you.
 
 Python updates stay within the minor version you are on: 3.14.8 is offered

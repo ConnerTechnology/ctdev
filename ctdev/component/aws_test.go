@@ -120,13 +120,9 @@ func TestAWSEmbeddedKeyIsAWSCLITeam(t *testing.T) {
 	if _, err := exec.LookPath("gpg"); err != nil {
 		t.Skip("gpg not installed")
 	}
-	out, err := exec.Command("gpg", "--homedir", t.TempDir(), "--show-keys", "--with-colons", "--fingerprint", awsPublicKey).Output()
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Fingerprint as published by AWS for the AWS CLI Team key.
-	if !strings.Contains(string(out), "FB5DB77FD5C118B80511ADA8A6310ACC4672475C") {
-		t.Errorf("embedded key fingerprint doesn't match AWS's published one:\n%s", out)
+	if _, err := verifiedPublicKey(context.Background(), awsPublicKey, "FB5DB77FD5C118B80511ADA8A6310ACC4672475C"); err != nil {
+		t.Errorf("embedded key doesn't match AWS's published one: %v", err)
 	}
 }
 

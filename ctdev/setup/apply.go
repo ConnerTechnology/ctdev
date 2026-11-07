@@ -174,8 +174,7 @@ func applySystemdEnable(ctx context.Context, o sysutil.Opts, service string) err
 
 // applyPackages installs apt packages quietly.
 func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error {
-	args := append([]string{"apt-get", "install", "-y", "-qq"}, packages...)
-	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
+	return sysutil.APTGet(ctx, o, append([]string{"install", "-y", "-qq"}, packages...)...)
 }
 
 // applyNvidiaSigning runs the GPU signing setup via the gpu package. It only

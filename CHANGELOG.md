@@ -13,6 +13,78 @@ All notable changes to this project will be documented in this file.
   from a destination's file, and a destination file holding such a line is refused with the
   steps to fix it.
 
+## [17.3.0] - 2026-11-06
+
+### Added
+- **`ctdev configure storage --batch --swapfile-size N`** sets the size of ctdev's own
+  swapfile, 0 to 32 GiB: it creates one when the machine has no swap, and resizes the one
+  ctdev set up, which plain `--batch` never does. 0 removes it. Swap ctdev didn't set up is
+  still left alone. The flag needs `--batch` and is refused with `--show`.
+- **`ctdev install kopia`** installs Kopia 0.23.1 on Linux (amd64 and arm64) to
+  `/usr/local/bin/kopia`, from its GitHub release, checked against a sha256 pinned in
+  ctdev. It installs the binary only: no config, repository or timer. It counts as
+  installed only when the file there hashes to the pinned binary, so a re-run replaces any
+  other version, and it never runs the existing binary to find out. A new Kopia comes with
+  a ctdev release.
+
+## [17.2.0] - 2026-11-05
+
+### Added
+- **`install.sh` can install a pinned version, system-wide.** `CTDEV_VERSION=vX.Y.Z` (the
+  `v` is optional) installs exactly that release. As root, `INSTALL_DIR=/usr/local/bin` is a
+  valid target and is no longer removed as an old install. If the binary there already
+  matches the release's SHA256SUMS entry, the script exits without downloading; it never runs
+  the existing binary to find out. `CTDEV_SKIP_VERIFY=1` always reinstalls. This is what a
+  server's boot script runs on every boot.
+- **`ctdev configure storage` can give a Linux machine a swapfile and set swappiness.** The
+  swapfile defaults to 1 GiB (0 removes it) and swappiness to 10, set in
+  `/etc/sysctl.d/zz-ctdev-swappiness.conf`. `--batch` only creates a swapfile when the machine
+  has none, and never resizes one; the wizard can. Swap ctdev didn't set up is left alone:
+  active swap, any file at `/swapfile`, or a swap line in `/etc/fstab`. A resize is refused
+  while the swap in use won't fit in free memory. Supports ext4, xfs and btrfs.
+- **The docker component rotates container logs.** A fresh install writes
+  `/etc/docker/daemon.json` with json-file logs capped at 3 × 10 MB, only when the file
+  doesn't exist. Existing installs get it with `ctdev install docker --force`, which restarts
+  a running Docker if it wrote the file.
+
+### Changed
+- **apt runs unattended.** Every apt-get call ctdev makes uses `DEBIAN_FRONTEND=noninteractive`,
+  waits up to 5 minutes for each apt lock another apt run holds (dpkg, package lists and
+  archives), retries downloads, and keeps your edited config files (`--force-confold`). An
+  install on a just-booted machine waits for unattended-upgrades instead of failing.
+- **`.deb` installs and the rc-state cleanup go through apt-get** instead of `dpkg`, so they
+  get the same lock wait. The `ctdev update` apt step uses `apt-get install --only-upgrade`.
+- **gnupg is installed when a key needs it**, after refreshing the package lists, so adding
+  an apt key works on a fresh image without gpg.
+- **A setting marked "not needed" that you change anyway** now starts from its current value,
+  not the recommended one.
+- Sudo rules scoped to `/usr/bin/apt-get` no longer match: ctdev runs
+  `sudo env DEBIAN_FRONTEND=noninteractive apt-get ...` (see TROUBLESHOOTING.md).
+
+### Security
+- **`ctdev update` no longer runs `main`'s install.sh.** Self-update now downloads install.sh
+  from the new release's tag and replaces the binary where it lives, asking for sudo up front
+  when that directory isn't writable. Machines on 17.1.0 or older update to this release
+  through their old code once, which still pipes `main`'s install.sh; a system install in
+  `/usr/local/bin` should instead be updated by running the pinned install.sh by hand:
+  `curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/v17.2.0/install.sh | sudo env CTDEV_VERSION=v17.2.0 INSTALL_DIR=/usr/local/bin bash`.
+- **Docker's apt key is checked against Docker's fingerprint**
+  (`9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`). The install stops if the downloaded
+  file holds any other key or any secret key material, and only the re-exported public key is
+  installed at `/etc/apt/keyrings/docker.asc`.
+- **The installed binary is 0755**, readable by everyone, instead of 0711.
+
+## [17.1.0] - 2026-10-28
+
+### Added
+- **`ctdev install herdr`** installs [herdr](https://herdr.dev/), the background runtime for
+  coding agents: from Homebrew on macOS, and on Linux as the release binary, checked against
+  the SHA-256 in herdr's published manifest and installed to `/usr/local/bin`.
+  `ctdev uninstall herdr` removes the binary and leaves `~/.config/herdr` and your sessions
+  alone. ctdev ships no herdr config, so every machine gets herdr's own defaults.
+  `ctdev update` doesn't update the Linux binary; run `ctdev install herdr --force` to get
+  the latest.
+
 ### Changed
 - **`ctdev repo setup` pins the `connertechnology` plugin to `v1.1.0`** (was `v1.0.2`), which
   runs the engineering skills on Jira Cloud as well as Linear, through one tracker layer, and

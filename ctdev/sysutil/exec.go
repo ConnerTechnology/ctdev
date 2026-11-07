@@ -26,17 +26,25 @@ func Run(ctx context.Context, o Opts, name string, args ...string) error {
 // commandLabel names the command for an error message. A bare "exit status 1"
 // is useless by the time it reaches a summary screen, and for a sudo invocation
 // the interesting name is the wrapped command, not "sudo" — so skip past sudo's
-// own flags (`-n`) to find it.
+// own flags (`-n`) to find it, and past an `env VAR=value` prefix (APTGet's).
 func commandLabel(name string, args []string) string {
-	if name != "sudo" {
-		return name
-	}
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
-			return "sudo " + a
+	prefix, rest := "", append([]string{name}, args...)
+	if name == "sudo" {
+		prefix, rest = "sudo ", args
+		for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
+			rest = rest[1:]
 		}
 	}
-	return name
+	if len(rest) > 0 && rest[0] == "env" {
+		rest = rest[1:]
+		for len(rest) > 0 && strings.Contains(rest[0], "=") {
+			rest = rest[1:]
+		}
+	}
+	if len(rest) == 0 {
+		return name
+	}
+	return prefix + rest[0]
 }
 
 // SudoRun executes a command with root privileges — through sudo as a normal

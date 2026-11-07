@@ -20,7 +20,7 @@ recommended defaults without asking, which is what you want in a script.
 
 They fall into three groups.
 
-**Machine behavior** — `ssh`, `power`, `gpu`. These change the machine itself:
+**Machine behavior** — `ssh`, `power`, `gpu`, `storage`. These change the machine itself:
 remote access, power (the power profile, the display, idle-suspend and
 screensaver timers in minutes or never, "Never suspend, even when asked", and on
 macOS a password right after the screensaver), and the NVIDIA driver and MOK
@@ -29,6 +29,34 @@ on the platform it applies to, so there is no `macos` category. Typing is in
 `keyboard`, which shows the repeat rate in characters per second on both
 Cinnamon and macOS and holds the macOS text-substitution and press-and-hold
 settings.
+
+`storage` is the machine's disks and swap: weekly SSD TRIM (only with an SSD),
+and on Linux a swapfile and swappiness. The swapfile is `/swapfile`, 1 GiB by
+default, with one `/etc/fstab` line so it comes back after a reboot; 0 removes
+it. Swappiness defaults to 10, written to
+`/etc/sysctl.d/zz-ctdev-swappiness.conf`, which sorts after every other sysctl
+file so its value is the one that holds at boot. ctdev's fstab line carries a
+comment saying ctdev owns it.
+
+`--batch` only creates a swapfile where there is no swap at all. It never
+resizes one, ctdev's included, unless `--swapfile-size` names the size, and
+leaves alone any swap ctdev didn't set up,
+switched on or not: a partition or zram, a swap line in `/etc/fstab`, or any
+file already at `/swapfile`. On such a machine `--show` reports that swap as
+"not needed", and swappiness is left alone too. The wizard, `ctdev configure
+storage` without `--batch`, can still resize ctdev's swapfile or take over a
+hand-made `/swapfile` that is switched on, after you say yes; a matching size
+leaves the file as it is. A new size refuses to start when the swap in use
+wouldn't fit in free memory or the disk lacks room, and on a filesystem other
+than ext4, XFS or btrfs there is no swapfile.
+
+`ctdev configure storage --batch --swapfile-size N` is for a server's boot
+script, which knows the size its node needs: it creates a swapfile of N GiB
+where there is no swap, and resizes ctdev's own swapfile to N GiB, with the
+same memory and disk checks. `--swapfile-size 0` removes ctdev's own swapfile
+and its fstab line. Swap ctdev didn't set up is still left alone. It works
+only with `--batch` given as a flag, not piped stdin alone, and not with
+`--show`.
 
 **Desktop** — `audio`, `bluetooth`, `desktop`. `bluetooth` installs bluez and Blueman and
 turns on `bluetooth.service`; `audio` installs PipeWire, WirePlumber and the

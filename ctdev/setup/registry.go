@@ -644,6 +644,32 @@ var Registry = []Setting{
 		ApplyFunc:   applySSDTrim,
 		HardwareFn:  gateSSD,
 	},
+	{
+		Name:        SwapfileSizeSetting,
+		Slug:        "storage",
+		Category:    "Storage",
+		Description: "A swapfile lets a burst of memory use slow the machine down instead of the kernel killing a program; 0 removes it. --batch only adds one where there is no swap, and resizes ctdev's own only to a size --swapfile-size names.",
+		Control:     ControlSlider,
+		Default:     "1",
+		Slider:      &SliderRange{Min: 0, Max: 32, Step: 1, Unit: "GiB"},
+		DetectFunc:  detectSwapfileSize,
+		ApplyFunc:   applySwapfileSize,
+		NotNeededFn: swapfileNotNeeded,
+		HardwareFn:  gateLinux,
+	},
+	{
+		Name:        "Swappiness",
+		Slug:        "storage",
+		Category:    "Storage",
+		Description: "How readily the kernel moves memory to swap; 10 keeps swap for emergencies, so the machine doesn't slow down while it still has free memory.",
+		Control:     ControlSlider,
+		Default:     "10",
+		Slider:      &SliderRange{Min: 0, Max: 100, Step: 5},
+		DetectFunc:  detectSwappiness,
+		ApplyFunc:   applySwappiness,
+		NotNeededFn: swappinessNotNeeded,
+		HardwareFn:  gateLinux,
+	},
 
 	// ── SSH & remote access ──────────────────────────────────────────────
 	// Everything that lets you reach this machine from somewhere else. Each
