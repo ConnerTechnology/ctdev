@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/ConnerTechnology/ctdev/ctdev/diagnose"
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
@@ -176,6 +178,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	started := time.Now()
 	facts := gatherDoctorFacts(ctx, info, diagnose.GatherFacts, component.InstalledSet)
+	if m, err := backup.ThisMachine(sysutil.Opts{}); err == nil {
+		facts.Backups, facts.BackupsErr = doctorBackupFacts(m)
+	}
 
 	// Resolve credentials before the checks run, not after: any prompt belongs
 	// up front rather than interrupting a report mid-flow, and the gear check
@@ -254,6 +259,28 @@ func gatherDoctorFacts(ctx context.Context, info platform.Info,
 	f := gather(ctx, info)
 	f.Components = installed()
 	return f
+}
+
+// doctorBackupFacts is the Backups section's facts: each folder on this
+// machine's backup schedule, judged by package backup from folders.json and
+// state.json alone, with no network, no restic and no root. diagnose gets it
+// this way so it never imports package backup.
+func doctorBackupFacts(m *backup.Machine) ([]diagnose.BackupFolder, string) {
+	health, err := m.Health()
+	if err != nil {
+		return nil, err.Error()
+	}
+	out := make([]diagnose.BackupFolder, 0, len(health))
+	for _, h := range health {
+		out = append(out, diagnose.BackupFolder{
+			Path:        backup.DisplayPath(m.Home, h.Path),
+			Schedule:    string(h.Schedule),
+			State:       diagnose.BackupState(h.State),
+			LastSuccess: h.Run.LastSuccess,
+			Error:       h.Run.Error,
+		})
+	}
+	return out, ""
 }
 
 // writeDoctorReport saves the Markdown report. It writes to the working

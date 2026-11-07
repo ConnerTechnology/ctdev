@@ -15,10 +15,11 @@
 # `docker compose up -d`) to start the agent. ~/beszel/.env also carries
 # BESZEL_APP_URL, which ctdev writes and re-running the install refreshes.
 #
-# Note: per-container MEMORY stats require the kernel memory cgroup; some nodes
-# (e.g. a customized Raspberry Pi image booting with cgroup_disable=memory in the
-# device-tree bootargs) ship with it off, so container memory shows blank while
-# host memory and all other stats work.
+# Note: per-container CPU, memory AND network stats all require the kernel memory
+# cgroup. The agent aborts its whole container-stats block when a memory read
+# fails (henrygd/beszel#144), so all three read a flat zero while host stats work.
+# Raspberry Pi OS boots with cgroup_disable=memory in the device-tree bootargs;
+# `ctdev doctor` (sys.memcgroup) detects it and gives the fix.
 services:
   beszel:
     image: henrygd/beszel:latest

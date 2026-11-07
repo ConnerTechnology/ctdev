@@ -13,21 +13,18 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-// Key repeat defaults for the macOS `keyboard` sliders, in milliseconds.
-// macOS stores both in units of 15 ms (see keyRepeatUnitMs).
-const (
-	// macKeyRepeatIntervalDefaultMs is the recommended time between repeated
-	// characters: 30 ms is KeyRepeat 2. Set "15" for KeyRepeat 1, the fastest.
-	macKeyRepeatIntervalDefaultMs = "30"
-	// macKeyRepeatDelayDefaultMs is the recommended hold before repeating
-	// starts: the 15 ms step nearest the Linux default of 200 ms.
-	macKeyRepeatDelayDefaultMs = "195"
-)
+// macKeyRepeatDelayDefaultMs is the recommended hold before repeating starts,
+// for the macOS `keyboard` slider: the 15 ms step nearest the Linux default of
+// 200 ms. The rate is in keyboard.go, in characters per second.
+const macKeyRepeatDelayDefaultMs = "195"
 
 // keyRepeatUnitMs is the unit of NSGlobalDomain KeyRepeat and InitialKeyRepeat.
+// Apple doesn't document it: 15 ms per unit is the community's long-standing
+// measurement of these keys, not an Apple spec. Both keys take any positive
+// integer.
 const keyRepeatUnitMs = 15
 
-// macKeyRepeatGroup is the ApplyGroup shared by the macOS key repeat sliders,
+// macKeyRepeatGroup is the ApplyGroup shared by the macOS key repeat settings,
 // so the log-out note prints once however many of them apply.
 const macKeyRepeatGroup = "macos-keyrepeat"
 
@@ -71,11 +68,10 @@ func (t defaultsType) String() string { return strings.TrimPrefix(t.flag(), "-")
 // macDefault is one `defaults` key ctdev sets. Value is what follows the type
 // flag in `defaults write` ("true"/"false" for bools).
 type macDefault struct {
-	Section string // progress heading printed during apply
-	Domain  string
-	Key     string
-	Type    defaultsType
-	Value   string
+	Domain string
+	Key    string
+	Type   defaultsType
+	Value  string
 }
 
 // matches reports whether out, the trimmed output of `defaults read`, equals
@@ -95,46 +91,6 @@ func (d macDefault) matches(out string) bool {
 	default:
 		return out == d.Value
 	}
-}
-
-// macOSDefaults is the table behind the `macos` category: ApplyMacOSDefaults
-// writes every entry and detectMacOSDefaults reads every entry back.
-var macOSDefaults = []macDefault{
-	{"Dock", "com.apple.dock", "autohide", defBool, "true"},
-	{"Dock", "com.apple.dock", "launchanim", defBool, "false"},
-	{"Dock", "com.apple.dock", "show-recents", defBool, "false"},
-	{"Dock", "com.apple.dock", "autohide-delay", defFloat, "0"},
-	{"Dock", "com.apple.dock", "autohide-time-modifier", defFloat, "0.15"},
-	{"Dock", "com.apple.dock", "mineffect", defString, "scale"},
-	{"Dock", "com.apple.dock", "expose-animation-duration", defFloat, "0.1"},
-
-	{"Windows", "NSGlobalDomain", "NSAutomaticWindowAnimationsEnabled", defBool, "false"},
-
-	{"Sound", "NSGlobalDomain", "com.apple.sound.beep.feedback", defBool, "true"},
-
-	{"Finder", "com.apple.finder", "ShowPathbar", defBool, "true"},
-	{"Finder", "com.apple.finder", "ShowStatusBar", defBool, "true"},
-	{"Finder", "com.apple.desktopservices", "DSDontWriteNetworkStores", defBool, "true"},
-	{"Finder", "com.apple.desktopservices", "DSDontWriteUSBStores", defBool, "true"},
-	{"Finder", "com.apple.finder", "FXDefaultSearchScope", defString, "SCcf"},
-	{"Finder", "com.apple.finder", "FXPreferredViewStyle", defString, "Nlsv"},
-	{"Finder", "com.apple.finder", "QuitMenuItem", defBool, "true"},
-
-	// Key repeat speed lives in the `keyboard` category (macKeyRepeat*).
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticQuoteSubstitutionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticDashSubstitutionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticSpellingCorrectionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticCapitalizationEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "NSAutomaticPeriodSubstitutionEnabled", defBool, "false"},
-	{"Keyboard", "NSGlobalDomain", "ApplePressAndHoldEnabled", defBool, "false"},
-
-	{"Dialogs", "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode", defBool, "true"},
-	{"Dialogs", "NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode2", defBool, "true"},
-	{"Dialogs", "NSGlobalDomain", "PMPrintingExpandedStateForPrint", defBool, "true"},
-	{"Dialogs", "NSGlobalDomain", "PMPrintingExpandedStateForPrint2", defBool, "true"},
-
-	{"Security", "com.apple.screensaver", "askForPassword", defInt, "1"},
-	{"Security", "com.apple.screensaver", "askForPasswordDelay", defInt, "0"},
 }
 
 // defaultsRead returns the trimmed output of `defaults read <domain> <key>`.
@@ -160,83 +116,125 @@ func defaultsWrite(ctx context.Context, o sysutil.Opts, errs *[]error, domain, k
 	}
 }
 
-// macOSDefaultsPlan returns one dry-run line per section of macOSDefaults,
-// naming every key and the value it would get.
-func macOSDefaultsPlan() []string {
-	var lines []string
-	var b strings.Builder
-	section, domain := "", ""
-	flush := func() {
-		if b.Len() > 0 {
-			lines = append(lines, b.String())
-			b.Reset()
-		}
+// The macOS `desktop` settings. Each table is one on/off setting: on writes
+// every entry, off deletes every key so macOS falls back to its own default.
+var (
+	macDesktopDock = []macDefault{
+		{"com.apple.dock", "autohide", defBool, "true"},
+		{"com.apple.dock", "autohide-delay", defFloat, "0"},
+		{"com.apple.dock", "autohide-time-modifier", defFloat, "0.15"},
+		{"com.apple.dock", "show-recents", defBool, "false"},
 	}
-	for _, d := range macOSDefaults {
-		if d.Section != section {
-			flush()
-			section, domain = d.Section, ""
-			fmt.Fprintf(&b, "[dry-run] Would configure %s:", section)
-		} else {
-			b.WriteString(",")
-		}
-		if d.Domain != domain {
-			domain = d.Domain
-			fmt.Fprintf(&b, " %s", domain)
-		}
-		fmt.Fprintf(&b, " %s=%s", d.Key, d.Value)
+	macDesktopAnimations = []macDefault{
+		{"com.apple.dock", "launchanim", defBool, "false"},
+		{"com.apple.dock", "mineffect", defString, "scale"},
+		{"com.apple.dock", "expose-animation-duration", defFloat, "0.1"},
+		{"NSGlobalDomain", "NSAutomaticWindowAnimationsEnabled", defBool, "false"},
 	}
-	flush()
-	return lines
-}
+	macDesktopFinder = []macDefault{
+		{"com.apple.finder", "ShowPathbar", defBool, "true"},
+		{"com.apple.finder", "ShowStatusBar", defBool, "true"},
+		{"com.apple.finder", "FXDefaultSearchScope", defString, "SCcf"},
+		{"com.apple.finder", "FXPreferredViewStyle", defString, "Nlsv"},
+		{"com.apple.finder", "QuitMenuItem", defBool, "true"},
+	}
+	macDesktopDSStore = []macDefault{
+		{"com.apple.desktopservices", "DSDontWriteNetworkStores", defBool, "true"},
+		{"com.apple.desktopservices", "DSDontWriteUSBStores", defBool, "true"},
+	}
+	macDesktopDialogs = []macDefault{
+		{"NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode", defBool, "true"},
+		{"NSGlobalDomain", "NSNavPanelExpandedStateForSaveMode2", defBool, "true"},
+		{"NSGlobalDomain", "PMPrintingExpandedStateForPrint", defBool, "true"},
+		{"NSGlobalDomain", "PMPrintingExpandedStateForPrint2", defBool, "true"},
+	}
+)
 
-// detectMacOSDefaults reports "applied" only when every entry in
-// macOSDefaults reads back at its value; a missing key is "not applied".
-func detectMacOSDefaults(ctx context.Context) string {
-	for _, d := range macOSDefaults {
+// The other macOS on/off settings, one table each, in the category of their
+// topic. Like the desktop ones, on writes the table and off deletes its keys.
+// None of them restarts an app.
+var (
+	// macAudioVolumeClick is `audio`'s "Click when changing volume".
+	macAudioVolumeClick = []macDefault{
+		{"NSGlobalDomain", "com.apple.sound.beep.feedback", defBool, "true"},
+	}
+	// macPowerScreensaverPassword is `power`'s "Ask for the password right
+	// after the screensaver".
+	macPowerScreensaverPassword = []macDefault{
+		{"com.apple.screensaver", "askForPassword", defInt, "1"},
+		{"com.apple.screensaver", "askForPasswordDelay", defInt, "0"},
+	}
+	// macKeyboardTypeAsTyped is `keyboard`'s "Type exactly what I type": no
+	// automatic text changes.
+	macKeyboardTypeAsTyped = []macDefault{
+		{"NSGlobalDomain", "NSAutomaticQuoteSubstitutionEnabled", defBool, "false"},
+		{"NSGlobalDomain", "NSAutomaticDashSubstitutionEnabled", defBool, "false"},
+		{"NSGlobalDomain", "NSAutomaticSpellingCorrectionEnabled", defBool, "false"},
+		{"NSGlobalDomain", "NSAutomaticCapitalizationEnabled", defBool, "false"},
+		{"NSGlobalDomain", "NSAutomaticPeriodSubstitutionEnabled", defBool, "false"},
+	}
+	// macKeyboardHoldToRepeat is `keyboard`'s "Holding a key repeats it": no
+	// accent popup.
+	macKeyboardHoldToRepeat = []macDefault{
+		{"NSGlobalDomain", "ApplePressAndHoldEnabled", defBool, "false"},
+	}
+)
+
+// detectMacDefaults reports "enabled" when every entry in table reads back at
+// its value, else "disabled".
+func detectMacDefaults(ctx context.Context, table []macDefault) string {
+	for _, d := range table {
 		out, ok := defaultsRead(ctx, d.Domain, d.Key)
 		if !ok || !d.matches(out) {
-			return "not applied"
+			return "disabled"
 		}
 	}
-	return "applied"
+	return "enabled"
 }
 
-// ApplyMacOSDefaults writes every entry in macOSDefaults (Dock, animations,
-// Finder, typing, dialogs, screensaver security), then restarts Dock and
-// Finder. Exposed as the `macos` configure category.
-func ApplyMacOSDefaults(ctx context.Context, o sysutil.Opts) error {
-	w := o.Stdout
-	if o.DryRun {
-		for _, line := range macOSDefaultsPlan() {
-			fmt.Fprintln(w, line)
+// applyMacDefaults writes table for "enabled" and deletes its keys for
+// "disabled", skipping a key that isn't set (`defaults delete` fails on one).
+// It tries every key and returns every failure; any other value is an error.
+// The app that reads the keys restarts once per apply, in its ApplyGroup's
+// post-apply hook (macRestartGroups).
+func applyMacDefaults(ctx context.Context, o sysutil.Opts, table []macDefault, value string) error {
+	if value != "enabled" && value != "disabled" {
+		return fmt.Errorf("unknown value %q: want enabled or disabled", value)
+	}
+	var errs []error
+	for _, d := range table {
+		if value == "enabled" {
+			defaultsWrite(ctx, o, &errs, d.Domain, d.Key, d.Type.flag(), d.Value)
+			continue
 		}
-		fmt.Fprintln(w, "[dry-run] Would restart Dock and Finder")
+		if _, ok := defaultsRead(ctx, d.Domain, d.Key); !ok {
+			continue
+		}
+		if err := macExec(ctx, o, "defaults", "delete", d.Domain, d.Key); err != nil {
+			fmt.Fprintf(o.Stdout, "warning: defaults delete %s %s failed: %v\n", d.Domain, d.Key, err)
+			errs = append(errs, fmt.Errorf("defaults delete %s %s: %w", d.Domain, d.Key, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ApplyGroups of the macOS desktop settings, keyed by the app each restarts.
+const (
+	macDockGroup   = "macos-dock"
+	macFinderGroup = "macos-finder"
+)
+
+// macRestartGroups maps each group to the app its post-apply hook restarts.
+var macRestartGroups = map[string]string{macDockGroup: "Dock", macFinderGroup: "Finder"}
+
+// macRestartHook returns a post-apply hook that restarts app (best effort;
+// killall's "No matching processes" is noise).
+func macRestartHook(app string) PostApplyHook {
+	return func(ctx context.Context, o sysutil.Opts) error {
+		fmt.Fprintf(o.Stdout, "  Restarting %s...\n", app)
+		_ = macExec(ctx, sysutil.Opts{Stdout: io.Discard, DryRun: o.DryRun}, "killall", app)
 		return nil
 	}
-
-	var errs []error
-	section := ""
-	for _, d := range macOSDefaults {
-		if d.Section != section {
-			section = d.Section
-			fmt.Fprintf(w, "Configuring %s...\n", section)
-		}
-		defaultsWrite(ctx, o, &errs, d.Domain, d.Key, d.Type.flag(), d.Value)
-	}
-
-	fmt.Fprintln(w, "Applying changes...")
-	// Best-effort restarts; killall's "No matching processes" is noise.
-	quiet := sysutil.Opts{Stdout: io.Discard}
-	_ = macExec(ctx, quiet, "killall", "Dock")
-	_ = macExec(ctx, quiet, "killall", "Finder")
-
-	if len(errs) > 0 {
-		fmt.Fprintf(w, "macOS defaults applied with %d warning(s)\n", len(errs))
-		return errors.Join(errs...)
-	}
-	fmt.Fprintln(w, "macOS defaults configured")
-	return nil
 }
 
 // keyRepeatMsToUnits converts a slider value in ms to macOS's 15 ms units,
@@ -253,15 +251,34 @@ func keyRepeatMsToUnits(ms string) (int, error) {
 	return units, nil
 }
 
-// detectMacKeyRepeat reads NSGlobalDomain <key> (KeyRepeat or
-// InitialKeyRepeat) and returns it in ms, or "" when the key is unset.
-func detectMacKeyRepeat(ctx context.Context, key string) string {
+// readMacKeyRepeatUnits reads NSGlobalDomain <key> (KeyRepeat or
+// InitialKeyRepeat) in its raw 15 ms units. ok is false when the key is unset
+// or not an integer.
+func readMacKeyRepeatUnits(ctx context.Context, key string) (int, bool) {
 	out, ok := defaultsRead(ctx, "NSGlobalDomain", key)
 	if !ok {
-		return ""
+		return 0, false
 	}
 	units, err := strconv.Atoi(out)
 	if err != nil {
+		return 0, false
+	}
+	return units, true
+}
+
+// writeMacKeyRepeatUnits writes NSGlobalDomain <key> in its raw 15 ms units.
+func writeMacKeyRepeatUnits(ctx context.Context, o sysutil.Opts, key string, units int) error {
+	if err := macExec(ctx, o, "defaults", "write", "NSGlobalDomain", key, "-int", strconv.Itoa(units)); err != nil {
+		return fmt.Errorf("defaults write NSGlobalDomain %s: %w", key, err)
+	}
+	return nil
+}
+
+// detectMacKeyRepeat reads NSGlobalDomain <key> (KeyRepeat or
+// InitialKeyRepeat) and returns it in ms, or "" when the key is unset.
+func detectMacKeyRepeat(ctx context.Context, key string) string {
+	units, ok := readMacKeyRepeatUnits(ctx, key)
+	if !ok {
 		return ""
 	}
 	return strconv.Itoa(units * keyRepeatUnitMs)
@@ -273,10 +290,7 @@ func applyMacKeyRepeat(ctx context.Context, o sysutil.Opts, key, ms string) erro
 	if err != nil {
 		return err
 	}
-	if err := macExec(ctx, o, "defaults", "write", "NSGlobalDomain", key, "-int", strconv.Itoa(units)); err != nil {
-		return fmt.Errorf("defaults write NSGlobalDomain %s: %w", key, err)
-	}
-	return nil
+	return writeMacKeyRepeatUnits(ctx, o, key, units)
 }
 
 // macKeyRepeatNote is the post-apply hook for macKeyRepeatGroup.

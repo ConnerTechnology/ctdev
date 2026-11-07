@@ -1,7 +1,10 @@
 package gpu
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,17 +21,48 @@ const (
 	DKMSSignScript    = "/etc/dkms/sign-module.sh"
 )
 
-// IsSecureBootEnabled checks mokutil --sb-state for "SecureBoot enabled".
-func IsSecureBootEnabled() bool {
-	out, err := exec.Command("mokutil", "--sb-state").Output()
-	if err != nil {
-		return false
+// SecureBoot is what this machine's firmware says about Secure Boot.
+type SecureBoot int
+
+const (
+	// SecureBootUnknown: mokutil is missing or can't tell. Callers that sign
+	// the driver treat it as on, so signing is never skipped on a guess.
+	SecureBootUnknown SecureBoot = iota
+	SecureBootOn
+	SecureBootOff
+)
+
+// efiDir exists only on a machine booted through UEFI. Without it there is
+// no Secure Boot. A variable so tests can point it elsewhere.
+var efiDir = "/sys/firmware/efi"
+
+// SecureBootState reports whether Secure Boot is on, from mokutil --sb-state.
+// A machine not booted through UEFI has no Secure Boot, so it is off.
+func SecureBootState(ctx context.Context) SecureBoot {
+	if _, err := os.Stat(efiDir); errors.Is(err, fs.ErrNotExist) {
+		return SecureBootOff
 	}
+	// mokutil prints the state to stdout and its "not supported" messages
+	// to stderr, sometimes with a non-zero exit, so read both and ignore the
+	// error. A missing mokutil gives empty output, which parses as unknown.
+	out, _ := exec.CommandContext(ctx, "mokutil", "--sb-state").CombinedOutput()
 	return parseSecureBootState(string(out))
 }
 
-func parseSecureBootState(output string) bool {
-	return strings.Contains(output, "SecureBoot enabled")
+// parseSecureBootState reads mokutil --sb-state output. The strings are
+// mokutil's own (src/mokutil.c). "Cannot determine secure boot state." and
+// anything else unrecognized is unknown.
+func parseSecureBootState(output string) SecureBoot {
+	switch {
+	case strings.Contains(output, "SecureBoot enabled"):
+		return SecureBootOn
+	case strings.Contains(output, "SecureBoot disabled"),
+		// Legacy BIOS boot, or firmware without Secure Boot.
+		strings.Contains(output, "EFI variables are not supported on this system"),
+		strings.Contains(output, "This system doesn't support Secure Boot"):
+		return SecureBootOff
+	}
+	return SecureBootUnknown
 }
 
 // IsNvidiaLoaded checks if the nvidia kernel module is loaded via lsmod.

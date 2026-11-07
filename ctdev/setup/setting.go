@@ -12,6 +12,10 @@ const (
 	ControlToggle ControlType = iota
 	ControlSlider
 	ControlPicker
+	// ControlMultiPick checks any number of ChoicesFunc's choices. Its value
+	// is the checked choice values, sorted and comma-joined (JoinPicks), or
+	// PicksNone when nothing is checked.
+	ControlMultiPick
 )
 
 type SliderRange struct {
@@ -19,6 +23,9 @@ type SliderRange struct {
 	Max  float64
 	Step float64
 	Unit string // "ms", "s", "min", "cps", ""
+	// Never adds a "never" value (SliderNever) one step below Min, for
+	// timers where 0 means "don't do it at all".
+	Never bool
 }
 
 type PickerChoice struct {
@@ -40,17 +47,25 @@ type Setting struct {
 	Category    string // human-readable category for display grouping
 	Description string // shown in wizard prompt
 	Control     ControlType
-	Default     string // our recommended value as string
+	Default     string // our recommended value as string; "" means none, so --batch leaves it alone
 	Slider      *SliderRange
 	Choices     []PickerChoice
-	DetectFunc  func(ctx context.Context) string // reads current system value
-	ApplyFunc   ApplyFunc                        // writes value to system
-	HardwareFn  func() bool                      // optional; setting hidden when returns false
-	ApplyGroup  string                           // settings sharing a group run one post-apply hook
+	ChoicesFunc func(ctx context.Context) []PickerChoice // ControlMultiPick: this machine's choices
+	DetectFunc  func(ctx context.Context) string         // reads current system value
+	ApplyFunc   ApplyFunc                                // writes value to system
+	HardwareFn  func() bool                              // optional; setting hidden when returns false
+	ApplyGroup  string                                   // settings sharing a group run one post-apply hook
 	// OneWay marks install/enable-style settings whose ApplyFunc has no off
 	// path (it ignores the value). The wizard offers these as a single
 	// "apply?" question instead of a fake enable/disable choice.
 	OneWay bool
+	// NoOffSwitch, on a OneWay setting, says why it has no off switch. The
+	// wizard prints it.
+	NoOffSwitch string
+	// NotNeededFn reports why this machine doesn't need the setting, or ""
+	// when it does. A setting that isn't needed is shown as such and is left
+	// out of what --batch applies.
+	NotNeededFn func(ctx context.Context) string
 }
 
 // SettingState holds runtime state for a setting during TUI interaction.
@@ -59,12 +74,23 @@ type SettingState struct {
 	CurrentValue string // detected system value
 	DesiredValue string // what will be applied (initialized to Default)
 	Enabled      bool   // whether included in apply set
+	NotNeeded    string // why this machine doesn't need the setting; "" when it does
 }
+
+// ValueUnknown is what a DetectFunc returns when it can't read the current
+// value, e.g. a root-only probe under --show or --dry-run, which skip sudo.
+// It is shown as is and never applied.
+const ValueUnknown = "unknown"
 
 // NeedsApply returns true if this setting should be applied.
 func (inst *SettingState) NeedsApply(force bool) bool {
-	if !inst.Enabled {
+	if !inst.Enabled || inst.CurrentValue == ValueUnknown {
 		return false
+	}
+	if force && inst.Setting != nil && inst.Setting.Default == "" {
+		// No recommendation to force: --force re-applies defaults, and a
+		// per-machine choice has none, so only an actual change applies.
+		return inst.CurrentValue != inst.DesiredValue
 	}
 	if force {
 		return true
@@ -94,11 +120,27 @@ func InitStates(ctx context.Context, settings []Setting) []SettingState {
 		if settings[i].DetectFunc != nil {
 			current = settings[i].DetectFunc(ctx)
 		}
+		desired := settings[i].Default
+		if desired == "" {
+			// No recommendation (a per-machine choice): keep what is there.
+			desired = current
+		}
+		notNeeded := ""
+		if settings[i].NotNeededFn != nil {
+			notNeeded = settings[i].NotNeededFn(ctx)
+		}
+		if notNeeded != "" {
+			// Changing it anyway starts from what the machine has, not
+			// from a recommendation made for machines that need it.
+			desired = current
+		}
 		states[i] = SettingState{
 			Setting:      &settings[i],
 			CurrentValue: current,
-			DesiredValue: settings[i].Default,
-			Enabled:      true,
+			DesiredValue: desired,
+			// A setting this machine doesn't need isn't applied by default.
+			Enabled:   notNeeded == "",
+			NotNeeded: notNeeded,
 		}
 	}
 	return states

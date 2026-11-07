@@ -24,6 +24,9 @@ var (
 	flagConfigShow    bool
 
 	flagAWSProfile string
+
+	// flagSwapfileSize is `configure storage --swapfile-size`, in GiB.
+	flagSwapfileSize int
 )
 
 var configureCmd = &cobra.Command{
@@ -36,14 +39,15 @@ var configureCmd = &cobra.Command{
 var configureAWSCmd = &cobra.Command{
 	Use:   "aws",
 	Short: "Configure AWS profile",
-	Long:  "Set the default AWS_PROFILE in your shell environment.",
-	RunE:  runConfigureAWS,
+	Long: "Set the default AWS_PROFILE in your shell environment. Installs the AWS CLI first " +
+		"when it's missing, and offers 'aws configure sso' when ~/.aws/config has no profiles.",
+	RunE: runConfigureAWS,
 }
 
 var configureGitCmd = &cobra.Command{
 	Use:   "git",
 	Short: "Configure git user settings",
-	Long:  "Set git user name and email globally or locally.",
+	Long:  "Set git user name and email globally or locally. Installs git first when it's missing.",
 	RunE:  runConfigureGit,
 }
 
@@ -71,6 +75,19 @@ func init() {
 			Use:   slug,
 			Short: fmt.Sprintf("Configure %s settings", slugDescription(slug)),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				var adjust func([]setup.SettingState) error
+				if cmd.Flags().Changed("swapfile-size") {
+					// The wizard asks for the size itself, and --show changes
+					// nothing. It needs --batch itself, not just piped stdin, so
+					// a size applies only when the caller asked for batch.
+					if flagConfigShow || !flagBatch {
+						return fmt.Errorf("--swapfile-size only works with --batch")
+					}
+					gib := flagSwapfileSize
+					adjust = func(states []setup.SettingState) error {
+						return setup.RequestSwapfileSize(states, gib)
+					}
+				}
 				if !flagDryRun && !flagConfigShow {
 					if err := ensureSudo(cmdContext(cmd)); err != nil {
 						return fmt.Errorf("sudo required: %w", err)
@@ -81,10 +98,14 @@ func init() {
 				}
 				// Non-interactive (--batch or piped stdin): apply defaults without prompting.
 				if isBatchMode() {
-					return runCategoryBatch(cmdContext(cmd), slug)
+					return runCategoryBatchAdjusted(cmdContext(cmd), slug, adjust)
 				}
 				return cancelToClean(runCategoryWizard(cmdContext(cmd), slug, false))
 			},
+		}
+		if slug == "storage" {
+			cmd.Flags().IntVar(&flagSwapfileSize, "swapfile-size", 0,
+				"with --batch: the swapfile's size in GiB, which also resizes ctdev's own swapfile")
 		}
 		configureCmd.AddCommand(cmd)
 	}
@@ -93,7 +114,7 @@ func init() {
 }
 
 func runConfigureAll(cmd *cobra.Command, args []string) error {
-	// An unknown category (e.g. `ctdev configure restic`) is not a subcommand, so
+	// An unknown category (e.g. `ctdev configure nosuch`) is not a subcommand, so
 	// cobra falls through to this parent RunE. Reject it instead of silently
 	// walking every category — only a bare `ctdev configure` runs the full sweep.
 	if len(args) > 0 {
@@ -168,6 +189,10 @@ func runConfigureGit(cmd *cobra.Command, args []string) error {
 func configureGit(ctx context.Context) error {
 	if flagConfigShow {
 		return showGitConfig()
+	}
+
+	if ok, err := ensureTool(ctx, "git", "Git", isBatchMode()); !ok || err != nil {
+		return err
 	}
 
 	// If flags provided, set directly (non-interactive). --signing-key counts
@@ -555,13 +580,19 @@ func configureAWS(ctx context.Context) error {
 		return showAWSConfig()
 	}
 
+	if ok, err := ensureTool(ctx, "aws", "AWS CLI", isBatchMode()); !ok || err != nil {
+		return err
+	}
+
 	selected := flagAWSProfile
 
 	if selected == "" {
-		profiles, err := sysutil.ReadAWSProfiles()
-		if err != nil || len(profiles) == 0 {
-			fmt.Println("No AWS profiles found in ~/.aws/config. Set up AWS CLI first: aws configure sso")
-			return nil
+		profiles, _ := sysutil.ReadAWSProfiles()
+		if len(profiles) == 0 {
+			var err error
+			if profiles, err = offerAWSConfigureSSO(ctx, isBatchMode()); err != nil || len(profiles) == 0 {
+				return err
+			}
 		}
 
 		fmt.Println("AWS Profiles:")

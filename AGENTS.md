@@ -24,17 +24,18 @@ of one place in the tree belongs somewhere that loads when you open that place.
 | Home | What is in it |
 | --- | --- |
 | This file | Orientation, and the conventions that bind everywhere |
-| `.claude/rules/` | The facts about one component or one directory. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Caddy, Portainer, Beszel, restic, mcp-email-server, doctor, the install scripts, the Go conventions inside the module |
+| `docs/agents/where-things-go.md` | Where each kind of fact goes, and how to trace a line back to its Linear issue |
+| `.claude/rules/` | What no single file can say about one component or directory: conventions across files, traps, outside facts. Each file is scoped by a `paths:` glob and loads when you open a file it matches — Pi-hole, Beszel, the homelab node, doctor, the install scripts, the Go conventions inside the module |
 | `docs/README.md` | The human-facing docs: one page per capability, in README order |
 | `docs/commands.md` | Every command and flag, with the examples `--help` leaves out |
 | `docs/architecture.md` | The directory map of the Go module |
 | `docs/adding-a-component.md` | The template for a new component, plus the `Root` / Phase 1-2 / `.deb` rules |
-| `RECOVERY.md` | Disaster recovery: restoring a machine from restic |
 | `TROUBLESHOOTING.md` | Symptoms and fixes on a live machine |
 | `CHANGELOG.md` | What shipped in each version |
 
-A fact that is true of one component goes in that component's rule, not here. If you find yourself
-wanting to add a paragraph to this file, it almost certainly belongs in a rule or in `docs/`.
+What ctdev does is what its code says: the why goes in a comment where the code acts on it. A
+paragraph you want to add here almost certainly belongs in a home that
+`docs/agents/where-things-go.md` lists.
 
 ## Where things get recorded
 
@@ -49,24 +50,28 @@ file the next session reads:
 
 ## How we work
 
-- Thomas delegates to the lead session. The lead interviews Thomas (`/grilling`), writes the spec
-  and tickets together (`/to-spec`, `/to-tickets`), and reviews every diff in a fresh context against
-  the plan, judging the diff and the evidence rather than the implementing agent's report.
-- Ask Thomas when unsure or when the decision is Thomas's to make.
+- A human says what they want; the lead session takes it the rest of the way on its own. It
+  interviews the human (`/grilling`), writes the spec and tickets (`/to-spec`, `/to-tickets`), builds,
+  reviews every diff in a fresh context against the plan, merges, and releases. The human doesn't merge.
+- A bug that reaches a release is fixed with a note on how development missed it and what now
+  catches it (`docs/agents/issue-tracker.md`).
+- Wait on CI in the same turn (`gh pr checks <n> --watch`), then merge. A turn that ends on "once
+  CI passes" stalls, because nothing wakes the session.
+- Ask the human when unsure or when the decision is the human's to make.
 - Before a change, say what it does to the work after it on the board, and shape it so that work
   keeps it.
-- Work that needs Thomas comes one item at a time: "what next" names a single item and what it
+- Work that needs the human comes one item at a time: "what next" names a single item and what it
   unblocks. Work agents can do alone runs in parallel.
 - Governing files (`AGENTS.md`, `.claude/settings.json`, `.mcp.json`, `.claude/skills/`,
-  `.claude/rules/`) change by showing Thomas the diff first and landing it after approval.
+  `.claude/rules/`) change by showing the human the diff first and landing it after approval.
 
-## Talking to Thomas
+## Talking to the human
 
 - Concise and direct, in American English.
 - One question or decision per message, with a proposed default. This holds inside `/grilling` too,
   where the skill would ask a numbered round. Reviews and audits go one item at a time. A list of
   already-scoped work can be approved in one go.
-- Anything Thomas does personally comes as numbered steps, one action each (where to go, what to
+- Anything the human does personally comes as numbered steps, one action each (where to go, what to
   click, what to enter), checked against the vendor's current UI. When a step changes, restate the
   sequence from step 1.
 
@@ -74,18 +79,21 @@ file the next session reads:
 
 - Changes reach `main` through a GitHub pull request. The release commit in "Releases" is the one
   exception.
-- Commit messages are one line in conventional-commit form, `type: description`. Attribution is
-  off, set in `.claude/settings.json`.
+- A commit's subject is one line in conventional-commit form, `type: description`. Its body, a
+  line or two, cites the Linear issue and says why; the release commit has no issue and no body.
+  Attribution is off, set in `.claude/settings.json`.
 
 ## Releases
 
 1. Commit changes
-2. Update CHANGELOG.md
-3. Bump VERSION
-4. Commit: `docs: update for vX.Y.Z`
-5. Tag: `git tag vX.Y.Z`
-6. Push: `git push && git push --tags`
-7. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
+2. In a terminal, run `claude --settings '{"disableBundledSkills":false}'` in the repo, then
+   `/doctor prompt-audit`; fix each finding or file an issue for it
+3. Update CHANGELOG.md
+4. Bump VERSION
+5. Commit: `docs: update for vX.Y.Z`
+6. Tag: `git tag vX.Y.Z`
+7. Push: `git push && git push --tags`
+8. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
 
 ## Guidance is checked
 

@@ -2,6 +2,315 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [17.3.0] - 2026-11-06
+
+### Added
+- **`ctdev configure storage --batch --swapfile-size N`** sets the size of ctdev's own
+  swapfile, 0 to 32 GiB: it creates one when the machine has no swap, and resizes the one
+  ctdev set up, which plain `--batch` never does. 0 removes it. Swap ctdev didn't set up is
+  still left alone. The flag needs `--batch` and is refused with `--show`.
+- **`ctdev install kopia`** installs Kopia 0.23.1 on Linux (amd64 and arm64) to
+  `/usr/local/bin/kopia`, from its GitHub release, checked against a sha256 pinned in
+  ctdev. It installs the binary only: no config, repository or timer. It counts as
+  installed only when the file there hashes to the pinned binary, so a re-run replaces any
+  other version, and it never runs the existing binary to find out. A new Kopia comes with
+  a ctdev release.
+
+## [17.2.0] - 2026-11-05
+
+### Added
+- **`install.sh` can install a pinned version, system-wide.** `CTDEV_VERSION=vX.Y.Z` (the
+  `v` is optional) installs exactly that release. As root, `INSTALL_DIR=/usr/local/bin` is a
+  valid target and is no longer removed as an old install. If the binary there already
+  matches the release's SHA256SUMS entry, the script exits without downloading; it never runs
+  the existing binary to find out. `CTDEV_SKIP_VERIFY=1` always reinstalls. This is what a
+  server's boot script runs on every boot.
+- **`ctdev configure storage` can give a Linux machine a swapfile and set swappiness.** The
+  swapfile defaults to 1 GiB (0 removes it) and swappiness to 10, set in
+  `/etc/sysctl.d/zz-ctdev-swappiness.conf`. `--batch` only creates a swapfile when the machine
+  has none, and never resizes one; the wizard can. Swap ctdev didn't set up is left alone:
+  active swap, any file at `/swapfile`, or a swap line in `/etc/fstab`. A resize is refused
+  while the swap in use won't fit in free memory. Supports ext4, xfs and btrfs.
+- **The docker component rotates container logs.** A fresh install writes
+  `/etc/docker/daemon.json` with json-file logs capped at 3 × 10 MB, only when the file
+  doesn't exist. Existing installs get it with `ctdev install docker --force`, which restarts
+  a running Docker if it wrote the file.
+
+### Changed
+- **apt runs unattended.** Every apt-get call ctdev makes uses `DEBIAN_FRONTEND=noninteractive`,
+  waits up to 5 minutes for each apt lock another apt run holds (dpkg, package lists and
+  archives), retries downloads, and keeps your edited config files (`--force-confold`). An
+  install on a just-booted machine waits for unattended-upgrades instead of failing.
+- **`.deb` installs and the rc-state cleanup go through apt-get** instead of `dpkg`, so they
+  get the same lock wait. The `ctdev update` apt step uses `apt-get install --only-upgrade`.
+- **gnupg is installed when a key needs it**, after refreshing the package lists, so adding
+  an apt key works on a fresh image without gpg.
+- **A setting marked "not needed" that you change anyway** now starts from its current value,
+  not the recommended one.
+- Sudo rules scoped to `/usr/bin/apt-get` no longer match: ctdev runs
+  `sudo env DEBIAN_FRONTEND=noninteractive apt-get ...` (see TROUBLESHOOTING.md).
+
+### Security
+- **`ctdev update` no longer runs `main`'s install.sh.** Self-update now downloads install.sh
+  from the new release's tag and replaces the binary where it lives, asking for sudo up front
+  when that directory isn't writable. Machines on 17.1.0 or older update to this release
+  through their old code once, which still pipes `main`'s install.sh; a system install in
+  `/usr/local/bin` should instead be updated by running the pinned install.sh by hand:
+  `curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/v17.2.0/install.sh | sudo env CTDEV_VERSION=v17.2.0 INSTALL_DIR=/usr/local/bin bash`.
+- **Docker's apt key is checked against Docker's fingerprint**
+  (`9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`). The install stops if the downloaded
+  file holds any other key or any secret key material, and only the re-exported public key is
+  installed at `/etc/apt/keyrings/docker.asc`.
+- **The installed binary is 0755**, readable by everyone, instead of 0711.
+
+## [17.1.0] - 2026-10-28
+
+### Added
+- **`ctdev install herdr`** installs [herdr](https://herdr.dev/), the background runtime for
+  coding agents: from Homebrew on macOS, and on Linux as the release binary, checked against
+  the SHA-256 in herdr's published manifest and installed to `/usr/local/bin`.
+  `ctdev uninstall herdr` removes the binary and leaves `~/.config/herdr` and your sessions
+  alone. ctdev ships no herdr config, so every machine gets herdr's own defaults.
+  `ctdev update` doesn't update the Linux binary; run `ctdev install herdr --force` to get
+  the latest.
+
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.1.0`** (was `v1.0.2`), which
+  runs the engineering skills on Jira Cloud as well as Linear, through one tracker layer, and
+  files requests as `request`-labeled issues. Run `ctdev repo setup` again in a repo to move it
+  to 1.1.0, then `/connertechnology:setup` to add the new allow-list entries.
+- **`ctdev configure jira` adds Atlassian's server as `https://mcp.atlassian.com/v2/mcp?tools=all`.**
+  Without `?tools=all`, Atlassian's v2 server lists only a few tools and reaches the rest
+  through generic ones, so the engineering plugin's allow list couldn't name the Jira tools
+  its skills use. On a repo set up with v17.0.0 or earlier, rerun `ctdev configure jira`,
+  answer yes to replacing the `atlassian` server, then run `/mcp` in Claude Code and sign in
+  to Atlassian again.
+
+## [17.0.0] - 2026-10-22
+
+### Added
+- **`ctdev backup` backs up the folder you're in.** Run it in a folder to set it up: it
+  creates or connects a destination (a Secret Key and master password make the account
+  key, each computer gets its own key, and you get a Recovery Code and an Emergency Kit),
+  then backs the folder up with restic, run as you. The folder's settings live in
+  `.ctdev-backup.json`. From then on the screen shows the folder's status and offers
+  "Back up now". Without a terminal, or with `--batch`, it prints the status and exits 1
+  when the folder isn't set up, the last backup failed, or the destination can't be read.
+  Listing backups, stopping and deleting them are shown dimmed as coming soon. The
+  encryption model is ADR-0016. See `docs/backups.md`.
+
+### Changed
+- **Hide drives hides the partitions you pick.** `ctdev configure desktop` lists this
+  machine's partitions and you check which to hide from the file manager. It writes
+  `/etc/udev/rules.d/99-hide-drives.rules` keyed by filesystem UUID for exactly those,
+  and checking nothing removes the rule. The old rule, hard-coded to one computer's
+  partitions, is gone; on a machine that has it, the wizard shows "legacy rule" until
+  you pick. `--batch` leaves Hide drives as it is.
+- **`configure desktop` covers macOS too.** The Dock, Finder and animation defaults move
+  from `configure macos` into `desktop` as four settings you can turn on or off: an
+  auto-hiding Dock, faster animations, Finder list view with path and status bars, and
+  no `.DS_Store` files on network and USB drives. Turning one off deletes its keys, so
+  macOS goes back to its own default.
+- **`ctdev configure keyboard` holds the macOS typing settings, and shows the repeat rate
+  in characters per second on every machine.** On macOS ctdev offers the eight fastest
+  15 ms steps (15–120 ms, 67 cps down to 8 cps), converted to and from `KeyRepeat` behind
+  the scenes; a Mac set slower shows its own rate. The recommended rate is 67 cps, the
+  step nearest the Linux default of 50 cps and faster than System Settings allows; the
+  delay stays 195 ms. "Type exactly what I type" (no smart quotes, dashes, autocorrect,
+  auto-capitalize or double-space period) and "Holding a key repeats it" (no accent popup)
+  move here from `configure macos`, and each has an off switch that deletes the keys ctdev
+  wrote. "NumLock on boot" can be turned off, which removes numlockx.
+- **The last macOS defaults moved by topic, each with an off switch** that deletes its
+  keys: "Click when changing volume" is in `ctdev configure audio`, "Expanded save and
+  print dialogs" in `configure desktop`, and "Ask for the password right after the
+  screensaver" in `configure power`. Each shows only on macOS and is on by default, as
+  before.
+- **`ctdev configure mouse` names its settings by what they do, and each says why.**
+  "Mouse bindings (xbindkeys)" is now "Middle-click opens the window overview" and shows
+  only on Cinnamon. The Logitech KVM fix moved here from `configure system` as "Keep the
+  Logitech mouse working after a KVM switch"; it also shows while it's installed, so it
+  can be turned off after the receiver is unplugged. Both can now be turned off: off
+  removes the xbindkeys config and autostart entry and puts back any file of yours they
+  replaced (an edited config is left alone, and the xbindkeys and xdotool packages stay),
+  or the Logitech udev rule and Solaar user service. A half-installed setting shows as
+  "partly installed", so either choice repairs or removes it. `ctdev reset` removes both
+  the same way. The recommended mouse speed is now 0.46, and the slider moves in steps
+  of 0.01. The current speed shows rounded to that step, so a desktop-set 0.46218… reads
+  as 0.46 and matches. "Mouse accel profile" is now "Mouse acceleration".
+- **`ctdev install restic` installs only restic**: apt on Linux, and now Homebrew on macOS.
+  It no longer sets up systemd units, scripts or `/etc/restic`.
+
+### Removed
+- **The whole-machine restic backup is gone** (breaking). `ctdev configure restic`,
+  `ctdev backup now | snapshots | paths | test | enable | disable` and `ctdev restore` no
+  longer exist, along with the restic systemd units and scripts, `/etc/restic` handling,
+  the path-picker web page, the healthcheck ping and `RECOVERY.md`. Nothing on a machine
+  is removed; no machine runs the old setup. Per-folder `ctdev backup` replaces it.
+- **`ctdev configure` has no system category.** Its two settings moved: SSD TRIM to
+  `configure storage` and the Logitech KVM fix to `configure mouse`.
+  `ctdev configure system` now reports an unknown category.
+- **`ctdev configure macos` is gone.** Its settings are in `desktop`, `keyboard`, `audio`
+  and `power`, by topic; `ctdev configure macos` now reports an unknown category. Where
+  you ran `configure macos --batch`, run those four categories instead.
+
+## [16.0.1] - 2026-10-22
+
+### Changed
+- **`ctdev repo setup` pins the `connertechnology` plugin to `v1.0.2`** (was `v1.0.0`), which
+  narrows the plugin's merge rule to `gh pr merge * --merge`. Run `ctdev repo setup` again in
+  a repo to move it to 1.0.2: it re-points the marketplace and updates the plugin at local
+  scope.
+
+## [16.0.0] - 2026-10-22
+
+### Added
+- **`ctdev repo setup`** sets up the git repo you're in for Claude Code, whether the repo is
+  yours or someone else's, without committing anything to it. It installs git, gh and
+  Claude Code when they're missing, and signs gh in to GitHub if it isn't. It installs the
+  `connertechnology` plugin at local scope from the private `ConnerTechnology/engineering`
+  marketplace, pinned to `v1.0.0` and cloned over gh's login. Then it starts Claude Code on
+  `/connertechnology:setup`. `.claude/settings.local.json` is added to `.git/info/exclude`
+  unless something already ignores it. Running it again changes nothing.
+- **`ctdev configure jira`** adds Atlassian's Rovo MCP server (`atlassian`) to the repo at
+  local scope, where it signs in as you with OAuth. It also saves your Atlassian API token
+  for scripts in `~/.config/ctdev/jira/<site>.env` (owner-only), after checking it with
+  the site. Scripts read it with `ctdev jira auth-header --site <site>`.
+
+### Changed
+- **`ctdev configure linear` writes nothing in the repo.** The `linear` server is added at
+  local scope (`claude mcp add-json --scope local`, kept in `~/.claude.json`) instead of in
+  `.mcp.json`, and the "whose repo is this?" question is gone. A repo set up the old way
+  keeps working: the wizard offers its `.mcp.json` workspace and says the entry can be
+  removed.
+- **`ctdev configure gpu` explains each setting and says whether this machine needs it.**
+  "NVIDIA driver signing" is now "NVIDIA driver works with Secure Boot" and "NVIDIA
+  suspend services" is "NVIDIA GPU wakes from sleep cleanly", each with a one-line why
+  in the wizard, the settings browser and `--show`. Driver signing shows as not needed
+  when Secure Boot is off, including on a legacy BIOS machine, which has none, and the
+  suspend services when suspend is masked. When `mokutil` can't tell, signing counts as
+  needed, in `--show` too. A setting that isn't needed isn't applied by `--batch` (even with
+  `--force`), the wizard asks "Apply anyway?" once, defaulting to no, and `configure
+  gpu` skips the signing flow. Both stay on-only, and the wizard says why
+  there's no off switch.
+
+## [15.0.0] - 2026-10-19
+
+### Added
+- **`ctdev install gws`** installs the Google Workspace CLI: from Homebrew on macOS, and
+  on Linux as the static build from the latest GitHub release, checked against its
+  published SHA-256 and installed to `/usr/local/bin`. `ctdev update` doesn't update the
+  Linux binary; run `ctdev install gws --force` to get the latest.
+- **`ctdev install aws`** installs AWS CLI v2, never from apt (whose `awscli` is v1 on
+  several Ubuntu releases). On Linux it uses AWS's official zip installer, checked
+  against its PGP signature with the AWS CLI Team key and installed to
+  `/usr/local/aws-cli`. On macOS it uses the `awscli` Homebrew formula, which is
+  Homebrew's package rather than AWS's installer (chosen in CTD-90). A v1 `aws` already
+  on the machine doesn't count as installed: v2 goes in over it. Run `ctdev install aws --force` to update the Linux install. It
+  then runs `ctdev configure aws`.
+
+### Changed
+- **`ctdev configure storage`** is a new category holding SSD TRIM, renamed "Keep SSDs
+  fast (weekly TRIM)". It shows only on a Linux machine with a fixed SSD that accepts
+  discards, and it now has an off switch: turning it off stops and disables
+  `fstrim.timer`. It is no longer under `configure system`.
+- **`ctdev configure network`: "WiFi power save off" is now "Keep WiFi connected when
+  idle"**, with a one-line reason in the wizard. It shows only on machines with a WiFi
+  adapter, not on every NetworkManager machine, and it can now be turned off: choosing
+  "not installed" removes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`.
+- **`ctdev configure boot` names its settings by what you get, each with a one-line
+  "why":** "Boot menu at startup" (was "GRUB menu style"), "Boot menu wait time" (was
+  "GRUB timeout") and "Other operating systems in the boot menu" (was "OS prober"). The
+  recommended defaults stay menu, 10 s and on.
+- **`ctdev install git`** now runs `ctdev configure git` afterward.
+- **`ctdev configure aws` and `ctdev configure git` install their tool first** when it's
+  missing, after asking "AWS CLI isn't installed. Install it now? [Y/n]" (or "Git
+  isn't…"). With `--batch` they install without asking.
+- **`ctdev configure aws` with no profiles** in `~/.aws/config` offers to run
+  `aws configure sso` instead of exiting.
+- **`ctdev configure bluetooth` sets up only Bluetooth, and `configure audio` only audio.**
+  `bluetooth` installs bluez and Blueman ("Bluetooth support") and turns on
+  `bluetooth.service` ("Bluetooth on at startup"), so on a machine without bluez it now
+  installs it before enabling the service. `audio` installs PipeWire, WirePlumber and the
+  PulseAudio tools ("Sound system (PipeWire)"), PipeWire's Bluetooth codecs ("Bluetooth
+  headphones"), the LDAC config ("Hi-fi Bluetooth audio") and switches "Alert sounds".
+  Installs skip apt's recommends, so Blueman no longer pulls in
+  `pulseaudio-module-bluetooth`. Each setting has a one-line reason, shows only on a
+  machine with the hardware it needs (a Bluetooth adapter, a sound card), and can be
+  turned off: off removes only the packages and service changes ctdev recorded adding,
+  under `~/.local/state/ctdev/configure-added/`, or the LDAC config file. A removal that
+  would also take a package ctdev didn't install is refused, and the dependencies an
+  install pulled in stay until `sudo apt autoremove`.
+- **`ctdev configure ssh` is the one place for remote access.** `configure linger`,
+  `locale`, `tunnel` and `ufw` are gone, and their settings joined `ssh` under plain
+  names: SSH server, key-only login, keep my programs running after I disconnect
+  (lingering), Mosh support (the `en_US.UTF-8` locale), open this machine from
+  vscode.dev (the VS Code tunnel), and only allow SSH and Mosh from my local network
+  (UFW). Each one can now be turned off, removing what ctdev added: the SSH server
+  units, the sshd drop-in, lingering, the `en_US.UTF-8` locale if ctdev generated it,
+  the tunnel service, and ctdev's UFW rules (UFW itself turns off only when no other
+  rules are left). Turning on vscode.dev also turns on lingering, which the tunnel
+  needs.
+- **Key-only login reads sshd's effective config** (`sshd -T`), so it shows "enabled"
+  only when password login is really off, and a re-run after adding your key finishes
+  the job. ctdev's drop-in is now `/etc/ssh/sshd_config.d/00-ctdev.conf`, which sorts
+  ahead of drop-ins like `50-cloud-init.conf` (sshd keeps the first value it reads);
+  the old `99-ctdev.conf` is removed. The firewall shows "enabled" only when UFW is on
+  and ctdev's SSH and Mosh rules are present. Mosh support shows only when
+  `mosh-server` is installed.
+- **The SSH server defaults to starting on demand** through `ssh.socket` instead of
+  `ssh.service` always running. The setting is a choice of on demand, always on, or
+  off, and installs `openssh-server` when it is missing.
+- **Mosh support no longer changes the system's default language.** It generates
+  `en_US.UTF-8` without running `update-locale`.
+- **`configure ssh --batch` now also applies the firewall**, so on a DNS or proxy
+  host run `ctdev configure ssh` interactively and leave the firewall off. The Pi-hole
+  recipe says so.
+
+- **`ctdev configure sleep` is gone; "Never suspend, even when asked" is in `ctdev
+  configure power`,** next to the idle-suspend timer, and it can now be turned off, which
+  unmasks the sleep targets. Use `ctdev configure power --batch` where you ran
+  `configure sleep --batch`.
+- **`configure power`'s timers are in minutes and can be set to never.** The display,
+  idle-suspend and screensaver timers take `never` (or `0`), and `--show` reads an
+  idle delay of 0 as "never" instead of "uint32 0". A hand-set timer that isn't whole
+  minutes shows exactly, in seconds ("90 s"). The screensaver timer is now written as the
+  `uint32` its schema expects.
+- **With suspend turned off, the idle-suspend timer and "Lock the screen on suspend" show
+  as not needed** and aren't applied unless you ask for them.
+- **`ctdev configure <category> --show` widens its name column to fit the longest
+  setting name,** so plain names no longer wrap.
+- **`configure power`'s settings have plain names, a one-line why, and new recommended
+  defaults:** balanced power profile, display off after 60 min, never suspend when idle,
+  never start the screensaver.
+
+### Removed
+- **`ctdev configure` has no automatic-updates category.** Both of its settings are gone:
+  automatic security updates (unattended-upgrades) and the apt daily job timeout. The
+  node recipes no longer run it. Nothing is uninstalled: a machine already set up keeps
+  the `unattended-upgrades` package, `/etc/apt/apt.conf.d/20auto-upgrades` and the
+  `ctdev-timeout.conf` drop-ins for `apt-daily.service` and `apt-daily-upgrade.service`,
+  and they keep working. Remove them by hand if you no longer want them.
+- **ctdev no longer installs the mcp-email-server.** The `mcp-email-server` component,
+  its `ctdev configure mcp-email-server` wizard, its rules and the AI / MCP node recipe
+  (`docs/node-recipes/ai-node.md`) are gone. There is no uninstall path:
+  `ctdev uninstall mcp-email-server` now reports an unknown component. A node that had
+  it keeps, until you remove each by hand:
+  - the `mcp-email-server` container, still running and restarting with the node:
+    `docker compose -f ~/mcp-email-server/docker-compose.yml down`
+  - the `mcp-email-server:local` image: `docker image rm mcp-email-server:local`
+  - the `tailscale serve` rule that published it to the tailnet, on port 443, or 8443 on
+    a node that also ran caddy (`MCP_SERVE_PORT` in `~/mcp-email-server/.env`).
+    `sudo tailscale serve --https=<port> off` clears everything served on that port, not
+    just this proxy, so first check with `tailscale serve status` that nothing else
+    uses it.
+  - `~/mcp-email-server/`, whose `config/managed.sqlite3` holds every mailbox password
+    unencrypted: `rm -rf ~/mcp-email-server`. If it is backed up, remove it from the
+    includes in `ctdev backup paths` (the ✕ on its chip, then Save & Close). Older
+    restic snapshots keep the passwords until each backup run's `forget --prune` drops
+    them, by default once they fall outside 7 daily, 4 weekly and 6 monthly snapshots.
+
 ## [14.2.0] - 2026-10-15
 
 ### Added

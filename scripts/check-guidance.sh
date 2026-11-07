@@ -65,7 +65,7 @@ done
 
 # 4. Paths ------------------------------------------------------------------------------
 # What counts as a repo path is deliberately narrow, because these files are full of host
-# paths (/etc/restic/restic.env, ~/caddy/), Go identifiers (sysutil.Opts), command lines and
+# paths (/etc/default/grub, ~/caddy/), Go identifiers (sysutil.Opts), command lines and
 # URLs that are not files in this tree. A token qualifies only when it is spelled the way a
 # path in this repo is spelled: allowed characters only, no leading / or ./, no placeholder
 # ellipsis, and either rooted at one of our top-level directories, a dot-directory, or a bare

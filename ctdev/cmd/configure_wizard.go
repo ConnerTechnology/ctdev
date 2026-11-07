@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/setup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -15,26 +16,19 @@ import (
 // slugDescriptions maps slugs to human-readable descriptions for the wizard header.
 // New slugs don't need an entry — the raw slug is used as a fallback.
 var slugDescriptions = map[string]string{
-	"gpu":        "GPU & NVIDIA",
-	"boot":       "Boot (GRUB)",
-	"power":      "Power & Sleep",
-	"keyboard":   "Keyboard",
-	"mouse":      "Mouse & Pointer",
-	"audio":      "Audio",
-	"bluetooth":  "Bluetooth",
-	"desktop":    "Desktop",
-	"network":    "Network & WiFi",
-	"system":     "System",
-	"ssh":        "SSH",
-	"ufw":        "Firewall (UFW)",
-	"locale":     "Locale",
-	"sleep":      "Sleep & Suspend",
-	"linger":     "Service Lingering",
-	"tunnel":     "VS Code Tunnel",
-	"autoupdate": "Automatic Updates",
-	"pihole":     "Pi-hole DNS",
-	"caddy":      "Caddy reverse proxy",
-	"macos":      "macOS Defaults",
+	"gpu":       "GPU & NVIDIA",
+	"boot":      "Boot (GRUB)",
+	"power":     "Power & Sleep",
+	"keyboard":  "Keyboard",
+	"mouse":     "Mouse & Pointer",
+	"audio":     "Audio",
+	"bluetooth": "Bluetooth",
+	"desktop":   "Desktop",
+	"network":   "Network & WiFi",
+	"storage":   "Storage",
+	"ssh":       "SSH & Remote Access",
+	"pihole":    "Pi-hole DNS",
+	"caddy":     "Caddy reverse proxy",
 }
 
 // slugOrder is derived from setup.Registry so adding a setting with a brand
@@ -51,7 +45,10 @@ func slugDescription(slug string) string {
 	return slug
 }
 
-var wizardLabelStyle = styles.Label(26)
+// wizardLabelWidth is the narrowest --show label column; a category with a
+// longer setting name widens it so plain names never wrap.
+const wizardLabelWidth = 26
+
 var wizardValueStyle = styles.Value
 var wizardHeaderStyle = styles.Header
 
@@ -64,6 +61,13 @@ func runCategoryWizard(ctx context.Context, slug string, showOnly bool) error {
 // recommended defaults. Used by bootstrap (`ctdev configure <slug> --batch`).
 // Idempotent: applySettings skips settings already at their desired value.
 func runCategoryBatch(ctx context.Context, slug string) error {
+	return runCategoryBatchAdjusted(ctx, slug, nil)
+}
+
+// runCategoryBatchAdjusted is runCategoryBatch with adjust, when not nil,
+// changing the desired values before they're applied, for flags that name a
+// value (`configure storage --swapfile-size`).
+func runCategoryBatchAdjusted(ctx context.Context, slug string, adjust func([]setup.SettingState) error) error {
 	settings := setup.FilterBySlug(setup.Registry, slug)
 	settings = setup.FilterByHardware(settings)
 	if len(settings) == 0 {
@@ -72,6 +76,11 @@ func runCategoryBatch(ctx context.Context, slug string) error {
 	}
 	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug) + " (batch — applying recommended values)"))
 	states := setup.InitStates(ctx, settings)
+	if adjust != nil {
+		if err := adjust(states); err != nil {
+			return err
+		}
+	}
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
 
@@ -93,8 +102,12 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 	fmt.Println()
 
 	if showOnly {
+		width := wizardLabelWidth
 		for i := range states {
-			showSetting(&states[i])
+			width = max(width, len(states[i].Setting.Name)+1)
+		}
+		for i := range states {
+			showSetting(&states[i], width)
 		}
 		fmt.Println()
 		return nil
@@ -143,17 +156,23 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
 
-// showSetting displays the current value of a setting (read-only).
-func showSetting(state *setup.SettingState) {
+// showSetting displays the current value of a setting (read-only), with its
+// name in a label column width wide.
+func showSetting(state *setup.SettingState, width int) {
 	s := state.Setting
-	label := wizardLabelStyle.Render(s.Name)
-	value := wizardValueStyle.Render(state.CurrentValue)
+	label := styles.Label(width).Render(s.Name)
+	value := wizardValueStyle.Render(setup.DisplayValue(s, state.CurrentValue))
 
 	marker := ""
-	if state.CurrentValue != s.Default {
-		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", s.Default))
+	if state.NotNeeded != "" {
+		marker = styles.Dimmed.Render(fmt.Sprintf(" (not needed: %s)", state.NotNeeded))
+	} else if s.Default != "" && state.CurrentValue != s.Default {
+		marker = styles.Dimmed.Render(fmt.Sprintf(" (recommended: %s)", setup.DisplayValue(s, s.Default)))
 	}
 	fmt.Printf("  %s %s%s\n", label, value, marker)
+	if s.Description != "" {
+		fmt.Printf("  %s\n", styles.Dimmed.Render(s.Description))
+	}
 }
 
 // promptSetting interactively prompts the user for a setting value.
@@ -164,25 +183,33 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 	fmt.Printf("  %s\n", wizardValueStyle.Render(s.Name))
 	fmt.Printf("  %s\n", styles.Dimmed.Render(s.Description))
 	current := state.CurrentValue
-	if s.Default != "" && s.Default != current {
+	if state.NotNeeded == "" && s.Default != "" && s.Default != current {
 		// Default is documented as "our recommended value" — say so; --batch
 		// applies exactly these.
-		fmt.Printf("  %s %s %s\n", styles.Dimmed.Render("Current:"), current,
-			styles.Dimmed.Render(fmt.Sprintf("(recommended: %s)", s.Default)))
+		fmt.Printf("  %s %s %s\n", styles.Dimmed.Render("Current:"), setup.DisplayValue(s, current),
+			styles.Dimmed.Render(fmt.Sprintf("(recommended: %s)", setup.DisplayValue(s, s.Default))))
 	} else {
-		fmt.Printf("  %s %s\n", styles.Dimmed.Render("Current:"), current)
+		fmt.Printf("  %s %s\n", styles.Dimmed.Render("Current:"), setup.DisplayValue(s, current))
 	}
 
 	// One-way settings (install/enable actions with no off path) get a single
 	// honest question instead of an enable/disable choice the apply layer
 	// can't deliver on.
 	if s.OneWay {
+		if s.NoOffSwitch != "" {
+			fmt.Printf("  %s\n", styles.Dimmed.Render("No off switch: "+s.NoOffSwitch))
+		}
 		if current == s.Default {
 			fmt.Printf("  %s\n\n", styles.Dimmed.Render("Already "+current+" — nothing to do."))
 			state.Enabled = false
 			return false, nil
 		}
-		yes, err := promptYesNoCtx(ctx, fmt.Sprintf("Apply now (→ %s)?", s.Default), false)
+		question := fmt.Sprintf("Apply now (→ %s)?", s.Default)
+		if state.NotNeeded != "" {
+			fmt.Printf("  %s\n", styles.Dimmed.Render("Not needed on this machine: "+state.NotNeeded+"."))
+			question = fmt.Sprintf("Apply anyway (→ %s)?", s.Default)
+		}
+		yes, err := promptYesNoCtx(ctx, question, false)
 		if err != nil {
 			return false, err
 		}
@@ -196,6 +223,21 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 		return true, nil
 	}
 
+	// A setting this machine doesn't need stays out of the apply set unless
+	// asked for.
+	if state.NotNeeded != "" {
+		fmt.Printf("  %s\n", styles.Dimmed.Render("Not needed on this machine: "+state.NotNeeded+"."))
+		yes, err := promptYesNoCtx(ctx, "Change it anyway?", false)
+		if err != nil {
+			return false, err
+		}
+		if !yes {
+			fmt.Println()
+			state.Enabled = false
+			return false, nil
+		}
+	}
+
 	var newValue string
 	var err error
 
@@ -206,6 +248,8 @@ func promptSetting(ctx context.Context, state *setup.SettingState) (bool, error)
 		newValue, err = promptPicker(ctx, state)
 	case setup.ControlSlider:
 		newValue, err = promptSlider(ctx, state)
+	case setup.ControlMultiPick:
+		newValue, err = promptMultiPick(ctx, state)
 	}
 	if err != nil {
 		return false, err
@@ -286,15 +330,23 @@ func promptPicker(ctx context.Context, state *setup.SettingState) (string, error
 	s := state.Setting
 
 	defaultIdx := 1
+	matched := false
 	for i, c := range s.Choices {
 		marker := " "
 		if c.Value == state.CurrentValue {
 			marker = "*"
 			defaultIdx = i + 1
+			matched = true
 		}
 		fmt.Printf("   %s%d) %s — %s\n", marker, i+1, c.Value, styles.Dimmed.Render(c.Description))
 	}
-	fmt.Printf("  Select [%d]: ", defaultIdx)
+	// Enter keeps the current value, so when it matches no choice the prompt
+	// names that value rather than a choice number.
+	enterLabel := strconv.Itoa(defaultIdx)
+	if !matched && state.CurrentValue != "" {
+		enterLabel = state.CurrentValue
+	}
+	fmt.Printf("  Select [%s]: ", enterLabel)
 
 	input, ok := readLineCtx(ctx)
 	if !ok {
@@ -312,6 +364,56 @@ func promptPicker(ctx context.Context, state *setup.SettingState) (string, error
 	return s.Choices[n-1].Value, nil
 }
 
+// promptMultiPick lists this machine's choices with the checked ones marked
+// and reads the numbers to check. The answer replaces the whole selection;
+// Enter keeps it, and 0 or "none" checks nothing.
+func promptMultiPick(ctx context.Context, state *setup.SettingState) (string, error) {
+	s := state.Setting
+	var choices []setup.PickerChoice
+	if s.ChoicesFunc != nil {
+		choices = s.ChoicesFunc(ctx)
+	}
+	if len(choices) == 0 {
+		fmt.Println(styles.Dimmed.Render("  Nothing to choose from on this machine."))
+		return state.CurrentValue, nil
+	}
+
+	checked := make(map[string]bool)
+	for _, v := range setup.SplitPicks(state.CurrentValue) {
+		checked[v] = true
+	}
+	for i, c := range choices {
+		box := "[ ]"
+		if checked[c.Value] {
+			box = "[x]"
+		}
+		fmt.Printf("    %s %d) %s %s\n", box, i+1, c.Value, styles.Dimmed.Render("— "+c.Description))
+	}
+	fmt.Printf("  %s ", styles.Dimmed.Render("Numbers to check, e.g. 1 3 (0 for none) [keep]:"))
+
+	input, ok := readLineCtx(ctx)
+	if !ok {
+		return "", errPromptCancelled
+	}
+	if input == "" {
+		return state.CurrentValue, nil
+	}
+	if input == "0" || strings.EqualFold(input, "none") {
+		return setup.PicksNone, nil
+	}
+
+	var picks []string
+	for _, f := range strings.FieldsFunc(input, func(r rune) bool { return r == ' ' || r == ',' }) {
+		n, err := strconv.Atoi(f)
+		if err != nil || n < 1 || n > len(choices) {
+			fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
+			return state.CurrentValue, nil
+		}
+		picks = append(picks, choices[n-1].Value)
+	}
+	return setup.JoinPicks(picks), nil
+}
+
 // promptSlider prompts for a numeric slider setting.
 func promptSlider(ctx context.Context, state *setup.SettingState) (string, error) {
 	s := state.Setting
@@ -320,15 +422,9 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 		return state.CurrentValue, nil
 	}
 
-	unit := ""
-	if r.Unit != "" {
-		unit = r.Unit
-	}
-
-	fmt.Printf("  %s range: %s–%s%s (step %s)\n",
-		styles.Dimmed.Render("Valid"),
-		formatSliderVal(r.Min, r.Step), formatSliderVal(r.Max, r.Step), unit,
-		formatSliderVal(r.Step, r.Step))
+	fmt.Printf("  %s range: %s (step %s)\n",
+		styles.Dimmed.Render("Valid"), setup.SliderRangeLabel(r),
+		setup.FormatSliderVal(r.Step, r.Step))
 	// Enter keeps the current value; when nothing is set yet there is nothing
 	// to keep, so Enter takes the recommended value instead.
 	enterValue := state.CurrentValue
@@ -348,7 +444,13 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 		return enterValue, nil
 	}
 
+	if r.Never && strings.EqualFold(input, setup.SliderNever) {
+		return setup.SliderNever, nil
+	}
 	val, err := strconv.ParseFloat(input, 64)
+	if r.Never && err == nil && val == 0 {
+		return setup.SliderNever, nil
+	}
 	if err != nil {
 		fmt.Printf("  %s\n", styles.Dimmed.Render("Invalid number, keeping current value."))
 		return state.CurrentValue, nil
@@ -364,15 +466,7 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 	// Snap to nearest step
 	val = math.Round(val/r.Step) * r.Step
 
-	return formatSliderVal(val, r.Step), nil
-}
-
-// formatSliderVal formats a float value, using integer format when the step is >= 1.
-func formatSliderVal(val, step float64) string {
-	if step >= 1 {
-		return strconv.Itoa(int(val))
-	}
-	return strconv.FormatFloat(val, 'f', -1, 64)
+	return setup.FormatSliderVal(val, r.Step), nil
 }
 
 // applySettings applies changed settings, running post-apply hooks for groups.

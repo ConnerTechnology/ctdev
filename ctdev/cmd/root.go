@@ -73,7 +73,7 @@ func guardWindows(cmd *cobra.Command, _ []string) error {
 }
 
 // topLevelName returns the name of cmd's outermost ancestor below the root, so
-// `ctdev backup test` reports "backup". The root itself reports "ctdev".
+// `ctdev configure gpu` reports "configure". The root itself reports "ctdev".
 func topLevelName(cmd *cobra.Command) string {
 	for c := cmd; c != nil; c = c.Parent() {
 		if c.Parent() == nil || c.Parent().Parent() == nil {

@@ -29,7 +29,7 @@ var linearCmd = &cobra.Command{
 var linearMCPHeadersCmd = &cobra.Command{
 	Use:   "mcp-headers --workspace <name>",
 	Short: "Print the Authorization header for the Linear MCP server",
-	Long: "The headersHelper `ctdev configure linear` writes into a repo's .mcp.json. Prints " +
+	Long: "The headersHelper of the local-scope linear server `ctdev configure linear` adds. Prints " +
 		`{"Authorization":"Bearer <token>"}` + " and nothing else on stdout, using the cached " +
 		"app token for the workspace, or a new one when it is stale or Linear rejects it.",
 	Args:   cobra.NoArgs,

@@ -13,8 +13,8 @@ import (
 	"github.com/charmbracelet/x/term"
 )
 
-// This file is the single prompt layer for every interactive wizard (restic,
-// caddy, git, aws, the category wizard). All prompts are context-aware so the
+// This file is the single prompt layer for every interactive wizard (caddy,
+// git, aws, the category wizard). All prompts are context-aware so the
 // root SIGINT handler cancels them cleanly — a bare stdin read would swallow
 // the first Ctrl-C and appear to hang.
 

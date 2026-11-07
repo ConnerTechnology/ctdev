@@ -48,16 +48,12 @@ ctdev follows them, as the uninstaller does for `XDG_CACHE_HOME`.
 ## Secrets
 
 **No secret is ever stored in this repository.** Every secret ctdev handles —
-a Cloudflare API token, a restic repository password and its backend
-credentials, a Pi-hole password, a Beszel key, a mailbox password, a Claude
-token — is entered at its `configure` step and written only to the device that
+a Cloudflare API token, a Pi-hole password, a Beszel key, a Linear app secret,
+a Jira API token — is entered at its `configure` step and written only to the device that
 needs it, with a file mode that restricts it to its owner.
 
 The consequence is deliberate: lose a device and you re-enter its secrets from
-your password manager rather than recovering them from somewhere central. A
-restic restore brings back the rendered `.env` files a node had, which is why
-the restic repository password itself belongs in your password manager —
-restic cannot restore its own credentials.
+your password manager rather than recovering them from somewhere central.
 
 Secrets are not passed as command-line flags where a wizard can prompt for them
 instead, because flags land in shell history and in `ps` output.
@@ -83,6 +79,10 @@ SSID, MAC addresses and the public IP.
 `SHA256SUMS` alongside the binaries, and `install.sh` verifies the download
 against it before moving it into place — failing closed if the sums file, the
 entry for this platform, or `sha256sum` itself is missing.
+
+`ctdev update` runs `install.sh` to update itself, and it fetches that script
+from the tag of the release it is installing, never from `main`. What runs is
+the script that shipped with the release, not whatever `main` holds that day.
 
 Be clear about what that does and does not prove. It proves the file you have is
 the file the release page lists, so a truncated or corrupted download is caught.

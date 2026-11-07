@@ -53,7 +53,8 @@ func BackupFile(path string) (string, error) {
 	return backup, nil
 }
 
-// DeployFileFromFS reads a file from an embedded FS and deploys it to dest.
+// DeployFileFromFS reads a file from an embedded FS and deploys it to dest with
+// DeployFile.
 func DeployFileFromFS(fs embed.FS, srcPath, dest string) error {
 	content, err := fs.ReadFile(srcPath)
 	if err != nil {

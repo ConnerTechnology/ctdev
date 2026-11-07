@@ -19,15 +19,15 @@ installed says so and jumps straight to configuration. Everything is idempotent.
 Most components declare nothing and take the default: root is needed to put the
 software in place — a package manager, `/usr/local`, a systemd unit — while
 re-running over one already installed only re-syncs files under `$HOME`. A few
-declare otherwise: the ones that do privileged work on every run (`restic`,
-`caddy`, `nomachine`, `smartmontools`) and the ones that never need it
+declare otherwise: the ones that do privileged work on every run (`caddy`,
+`nomachine`, `smartmontools`) and the ones that never need it
 at all, because they install entirely inside `$HOME` or through the Docker
 socket. ctdev asks for a sudo password only when something in the run is
 actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-58 components, counted in `ctdev/component/registry.go` on 2026-10-15. A
+61 components, counted in `ctdev/component/registry.go` on 2026-11-06. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -35,6 +35,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | Component | What it is | Platforms |
 | --- | --- | --- |
 | `acli` | Atlassian CLI (Jira, Confluence) | Linux, macOS |
+| `aws` | AWS CLI v2 | Linux, macOS |
 | `bat` | cat with syntax highlighting | Linux, macOS |
 | `btop` | Resource monitor | Linux, macOS |
 | `bun` | JavaScript runtime and package manager | Linux, macOS |
@@ -49,7 +50,9 @@ component unsupported on this OS reports as skipped rather than failing.
 | `fzf` | Fuzzy finder for the shell | Linux, macOS |
 | `gh` | GitHub CLI | Linux, macOS |
 | `git-spice` | Git Spice stacked branches tool | Linux, macOS |
+| `gws` | Google Workspace CLI (Drive, Gmail, Calendar, and more) | Linux, macOS |
 | `helm` | Kubernetes package manager | Linux, macOS |
+| `herdr` | Background runtime for coding agents: sessions keep running when you disconnect | Linux, macOS |
 | `jq` | JSON processor | Linux, macOS |
 | `kubectl` | Kubernetes CLI | Linux, macOS |
 | `lazygit` | Terminal UI for git | Linux, macOS |
@@ -104,10 +107,10 @@ component unsupported on this OS reports as skipped rather than failing.
 | --- | --- | --- |
 | `beszel` | Beszel server/container monitoring (Docker) | Linux |
 | `caddy` | Caddy reverse proxy (Cloudflare DNS-01 wildcard) | Linux |
-| `mcp-email-server` | MCP server exposing your mailboxes over IMAP (Docker) | Linux |
+| `kopia` | Kopia backup tool, pinned binary only | Linux |
 | `pihole` | Pi-hole network-wide DNS ad blocker (Docker) | Linux |
 | `portainer` | Portainer CE Docker management UI (Docker) | Linux |
-| `restic` | restic backups to B2 + local USB (systemd timer) | Linux |
+| `restic` | restic backup program | Linux, macOS |
 | `terraform` | Terraform infrastructure tool | Linux, macOS |
 
 ### System Tools
@@ -117,6 +120,25 @@ component unsupported on this OS reports as skipped rather than failing.
 | `earlyoom` | Early OOM killer for Linux | Linux |
 | `smartmontools` | SMART disk-health monitoring (smartd) | Linux |
 | `solaar` | Logitech Unifying/Bolt receiver manager | Linux |
+
+## Docker on Linux
+
+On Linux, `docker` comes from Docker's own apt repository. Before ctdev trusts
+the repository key, it checks that the key's fingerprint is Docker's
+(`9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`). If the key is different,
+or the file carries anything besides that one public key, the install stops and
+nothing gets added to `/etc/apt/keyrings`. If there is no
+`/etc/docker/daemon.json`, the install writes one that caps each container's
+json-file log at three 10 MB files. Without that cap the logs grow until the
+disk is full. An existing `daemon.json` is never changed. The cap applies only
+to containers created after the file is written.
+
+The file is written only when Docker is actually installed. If Docker is
+already there, `ctdev install docker` stops at "Docker already installed", so
+an existing machine gets the cap through `ctdev install docker --force`. On a
+machine where Docker is running and has no `daemon.json`, `--force` restarts
+Docker, which stops running containers unless `live-restore` is on. On macOS,
+Docker Desktop comes from Homebrew.
 
 ## Adding one
 

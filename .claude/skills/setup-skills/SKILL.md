@@ -10,15 +10,15 @@ Take a repo fresh from `thomasconner/repo-template` to the state where the engin
 and `.claude/settings.json` names every plugin and skill on this machine. The repo's ADRs 0001–0007
 explain the shape; read them before step 1.
 
-This is a prompt-driven skill, not a script. Each step ends on its **done when** line. Ask Thomas
-one question at a time, lead with the recommended answer, and write nothing that Thomas hasn't seen.
+This is a prompt-driven skill, not a script. Each step ends on its **done when** line. Ask the human
+one question at a time, lead with the recommended answer, and write nothing that the human hasn't seen.
 
 ## 1. Explore
 
 Before writing anything:
 
 - **Set up before?** If `docs/agents/issue-tracker.md` exists, this repo was set up already. Say so,
-  and offer to redo only the step Thomas names.
+  and offer to redo only the step the human names.
 - **Slots**: list every `<!-- setup-skills: ... -->` in `AGENTS.md` and `README.md`.
 - **Remote**: `git remote -v` gives the GitHub URL that step 5 links to the Linear project.
 
@@ -36,25 +36,25 @@ claude mcp get linear
 Read the `Scope` and `Status` lines, and fix the first that applies:
 
 - **`Scope: User config`, or `⏸ Pending approval`**: the repo's `.mcp.json` entry isn't approved
-  yet, because the folder hasn't been trusted. Give Thomas these steps, then rerun the check:
+  yet, because the folder hasn't been trusted. Give the human these steps, then rerun the check:
   1. Exit this session
   2. Run `claude` in the repo root
   3. Accept the workspace trust dialog, and approve `linear` if asked
   4. Run `/setup-skills` again
-- **`! Needs authentication`**: give Thomas these steps, then rerun the check:
+- **`! Needs authentication`**: give the human these steps, then rerun the check:
   1. In a separate terminal, in the repo root, run `claude mcp login linear`
   2. Sign in to Linear in the browser tab it opens and approve access to the right workspace
   3. Back in this session, run `/mcp`, select `linear`, and choose **Reconnect**
-- **`✘ Failed to connect`, or no `linear` at all**: show Thomas the `Issue:` line. Check that
+- **`✘ Failed to connect`, or no `linear` at all**: show the human the `Issue:` line. Check that
   `.mcp.json` has the `linear` entry, that `allowedMcpServers` in `.claude/settings.json` includes
   `https://mcp.linear.app/*`, and that no `deniedMcpServers` or `disabledMcpjsonServers` entry names
   it. Fix and rerun.
 
 Once it reads `Scope: Project config` and `✔ Connected`, call `get_workspace` (load the Linear
-tools first if they're deferred) and ask Thomas to confirm that it's the right workspace. If it
+tools first if they're deferred) and ask the human to confirm that it's the right workspace. If it
 isn't: `claude mcp logout linear`, then the login steps above, choosing the right one.
 
-**Done when** `claude mcp get linear` shows the project scope, connected, and Thomas has confirmed
+**Done when** `claude mcp get linear` shows the project scope, connected, and the human has confirmed
 the workspace `get_workspace` returns.
 
 ## 3. Install the skills
@@ -72,10 +72,10 @@ distributed under this license.`
 
 ## 4. Fill AGENTS.md
 
-Interview Thomas for each slot, one question per message:
+Interview the human for each slot, one question per message:
 
 1. **Repo name**, defaulting to the GitHub repo name.
-2. **Purpose**: one paragraph on what the repo is for and who it serves. Draft it from what Thomas
+2. **Purpose**: one paragraph on what the repo is for and who it serves. Draft it from what the human
    has said so far and ask for corrections.
 3. **Guardrails**: the hard limits for this repo. Write each as the behavior to follow. A repo can
    have none yet; then the section says so in one line.
@@ -90,8 +90,8 @@ slot, which step 5 fills, and the Agent skills slot, which step 6 fills.
 List the teams (`list_teams`) and ask which team this repo belongs to, recommending a new team when
 the repo's work doesn't fit an existing one.
 
-For a new team, the API can't create it. Give Thomas these steps (checked against Linear's UI on
-2026-09-23; if a label differs, ask Thomas to describe the screen and restate every step):
+For a new team, the API can't create it. Give the human these steps (checked against Linear's UI on
+2026-09-23; if a label differs, ask the human to describe the screen and restate every step):
 
 1. Open `https://linear.app/<workspace>/settings/teams`
 2. Click **Create team**
@@ -103,9 +103,9 @@ For a new team, the API can't create it. Give Thomas these steps (checked agains
 7. Leave **Timezone** and **Copy from team** as they are
 8. Click **Create team**
 
-Wait for Thomas to say it's done, then confirm with `get_team`.
+Wait for the human to say it's done, then confirm with `get_team`.
 
-Then pick the project. List the team's projects (`list_projects` with the team) and ask Thomas
+Then pick the project. List the team's projects (`list_projects` with the team) and ask the human
 whether this repo uses one of them or gets a new one. Recommend an existing project when its name
 matches the repo, or `get_project` shows this repo's GitHub URL among its resources; otherwise
 recommend a new one. A new team has no projects, so skip the question.
@@ -126,7 +126,7 @@ the team and project filled in, and fill the tracker slot in `AGENTS.md`.
 
 - **Triage labels**: one question, "keep the default triage labels?" (recommended: yes). Write
   [triage-labels.md](./triage-labels.md) to `docs/agents/triage-labels.md`, with overrides if
-  Thomas gave any.
+  the human gave any.
 - **Domain docs**: single-context. Write [domain.md](./domain.md) to `docs/agents/domain.md`
   without asking, unless the repo shows monorepo signals (`pnpm-workspace.yaml`, a `workspaces`
   field, populated `packages/*`), in which case ask.
@@ -158,10 +158,10 @@ Read what's installed here: the plugin keys under `plugins` in
 skill (`~/.claude/skills/*/SKILL.md`) and synced skill (`~/.claude/skills/synced/*/*/SKILL.md`),
 and whether `~/.claude/CLAUDE.md` is a symlink (`readlink -f`). Then edit `.claude/settings.json`:
 
-- **Plugins**: an `enabledPlugins` entry of `false` for every installed plugin. Ask Thomas which, if
+- **Plugins**: an `enabledPlugins` entry of `false` for every installed plugin. Ask the human which, if
   any, this repo keeps (recommended: none), and set those to `true`.
 - **Skills**: a `skillOverrides` entry for every personal and synced skill: `"off"` by default,
-  `"on"` for any Thomas keeps. Every one gets an explicit value, so `check-plugins` can tell a kept
+  `"on"` for any the human keeps. Every one gets an explicit value, so `check-plugins` can tell a kept
   skill from a new one.
 - **Global instructions**: if `~/.claude/CLAUDE.md` is a symlink, add its resolved target to
   `claudeMdExcludes` as `**/` followed by the target's path relative to the home directory.
@@ -183,7 +183,7 @@ check.
 
 ## 9. Land it
 
-Show Thomas the diff. After approval: commit on a branch `chore/setup-skills`, merge into `main`
+Show the human the diff. After approval: commit on a branch `chore/setup-skills`, merge into `main`
 with `git merge --no-ff`, push, and post the project's first status update with `save_status_update`
 (`type: "project"`) covering what was set up and what's next.
 

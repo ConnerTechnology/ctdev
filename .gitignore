@@ -35,7 +35,7 @@ ctdev/dist/
 .superpowers/
 
 # Secrets are never committed. They're entered at `ctdev configure <svc>` time and
-# stored only on the host (e.g. /etc/restic/restic.env, ~/<svc>/.env).
+# stored only on the host (e.g. ~/<svc>/.env).
 .env
 .env.*
 *.env

@@ -59,6 +59,10 @@ type Detection struct {
 // changes anything, and there deliberately never will be: ctdev will not
 // restart an access point or alter a setting on infrastructure it was merely
 // pointed at, from a command called "doctor".
+//
+// Providers live in package diagnose rather than a subpackage: they take Facts
+// and checks such as checkNetworkGear call them, so a subpackage would both
+// import diagnose and be imported by it.
 type Provider interface {
 	// Name is the product family, e.g. "UniFi".
 	Name() string

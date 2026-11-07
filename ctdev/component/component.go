@@ -44,9 +44,8 @@ const (
 	// config files under $HOME.
 	RootWhenMissing RootNeed = iota
 	// RootAlways marks components that do privileged work on every run,
-	// installed or not: restic redeploys its /etc units, caddy brings its stack
-	// up through sudo, nomachine re-applies its ufw rule, smartmontools
-	// re-enables smartd.
+	// installed or not: caddy brings its stack up through sudo, nomachine
+	// re-applies its ufw rule, smartmontools re-enables smartd.
 	RootAlways
 	// RootNever marks components that install and uninstall entirely inside
 	// $HOME — via Homebrew, an upstream user-scope installer, or the docker
@@ -82,6 +81,9 @@ type Component struct {
 	// DetectApps lists macOS .app bundle paths to check (e.g. "/Applications/Foo.app").
 	// If any exists, the component is considered installed.
 	DetectApps []string
+	// Detect, when set, replaces every other check: for a component where a
+	// command on PATH isn't enough (aws, where apt's v1 doesn't count).
+	Detect func() bool
 
 	GoInstall   func(ctx context.Context, opts ExecOpts) error
 	GoUninstall func(ctx context.Context, opts ExecOpts) error
@@ -100,6 +102,9 @@ type ExecOpts struct {
 }
 
 func (inst *Component) IsInstalled() bool {
+	if inst.Detect != nil {
+		return inst.Detect()
+	}
 	// DetectPath is exclusive — if set, only check the filesystem path.
 	if inst.DetectPath != "" {
 		_, err := os.Stat(os.ExpandEnv(inst.DetectPath))

@@ -13,13 +13,12 @@ them is plain Markdown with relative links, readable on GitHub as it stands.
 - [Components](components/README.md) — everything `ctdev install` can put on a machine
 - [Configure](configure.md) — system settings, by category
 - [Update](update.md) — packages, components and stacks
-- [Backups](backups.md) — restic snapshots, and what gets backed up
+- [Backups](backups.md) — per-folder backup with restic
 - [Doctor](doctor.md) — diagnosing a machine and the network it sits on
 
 ## Node recipes
 
 - [Pi-hole / homelab node](node-recipes/pihole-node.md) — Pi-hole behind Caddy, with a wildcard cert
-- [AI / MCP node](node-recipes/ai-node.md) — tailnet-only MCP servers
 
 ## Trust
 
@@ -35,7 +34,6 @@ them is plain Markdown with relative links, readable on GitHub as it stands.
 - [Architecture](architecture.md) — the directory map of the Go module
 - [Adding a component](adding-a-component.md) — the template, and the rules a new component follows
 
-At the repository root: [RECOVERY.md](../RECOVERY.md) for disaster recovery,
-[TROUBLESHOOTING.md](../TROUBLESHOOTING.md) for symptoms on a live machine,
-[CHANGELOG.md](../CHANGELOG.md) for what shipped when, and [CONTEXT.md](../CONTEXT.md)
-for the words this documentation uses.
+At the repository root: [TROUBLESHOOTING.md](../TROUBLESHOOTING.md) for symptoms
+on a live machine, [CHANGELOG.md](../CHANGELOG.md) for what shipped when, and
+[CONTEXT.md](../CONTEXT.md) for the words this documentation uses.

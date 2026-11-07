@@ -66,8 +66,8 @@ func runSettingsBrowser(ctx context.Context) error {
 	for _, idx := range changed {
 		s := &states[idx]
 		fmt.Printf("    %s: %s → %s\n", s.Setting.Name,
-			styles.Dimmed.Render(s.CurrentValue),
-			styles.Value.Render(s.DesiredValue))
+			styles.Dimmed.Render(setup.DisplayValue(s.Setting, s.CurrentValue)),
+			styles.Value.Render(setup.DisplayValue(s.Setting, s.DesiredValue)))
 	}
 	fmt.Println()
 

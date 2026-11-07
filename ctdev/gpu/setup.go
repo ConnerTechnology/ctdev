@@ -18,6 +18,9 @@ type Opts struct {
 	DryRun  bool
 	Force   bool
 	Verbose bool
+	// SecureBootConfirmed skips the "Secure Boot is off, continue anyway?"
+	// question for a caller that already asked it.
+	SecureBootConfirmed bool
 }
 
 // CreateMOKKeypair generates a new MOK key pair (MOK.priv + MOK.der).
@@ -272,14 +275,21 @@ func RunSetup(ctx context.Context, opts Opts) error {
 	fmt.Fprintln(opts.Stdout, "GPU Signing Setup")
 	fmt.Fprintln(opts.Stdout)
 
-	// Pre-flight: Secure Boot check
-	if !IsSecureBootEnabled() {
-		fmt.Fprintln(opts.Stdout, "Warning: Secure Boot is disabled. Driver signing is not required.")
-		fmt.Fprintln(opts.Stdout)
-		if !promptYesNo(opts, "Continue anyway? [y/N] ", false) {
-			fmt.Fprintln(opts.Stdout, "Setup cancelled.")
-			return nil
+	// Pre-flight: Secure Boot check. When its state can't be read, signing
+	// may be needed, so setup goes ahead.
+	switch SecureBootState(ctx) {
+	case SecureBootOff:
+		if !opts.SecureBootConfirmed {
+			fmt.Fprintln(opts.Stdout, "Warning: Secure Boot is disabled. Driver signing is not required.")
+			fmt.Fprintln(opts.Stdout)
+			if !promptYesNo(opts, "Continue anyway? [y/N] ", false) {
+				fmt.Fprintln(opts.Stdout, "Setup cancelled.")
+				return nil
+			}
 		}
+	case SecureBootUnknown:
+		fmt.Fprintln(opts.Stdout, "Couldn't tell whether Secure Boot is on; setting up signing in case it is.")
+		fmt.Fprintln(opts.Stdout)
 	}
 
 	// Check for NVIDIA DKMS

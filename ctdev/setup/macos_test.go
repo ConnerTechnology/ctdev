@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,9 +16,10 @@ import (
 // holds "domain key" → the text `defaults read` prints; a missing entry exits
 // non-zero the way macOS does for an unknown key.
 type fakeDefaults struct {
-	values    map[string]string
-	failWrite map[string]bool // "domain key" whose write fails
-	calls     [][]string
+	values     map[string]string
+	failWrite  map[string]bool // "domain key" whose write fails
+	failDelete map[string]bool // "domain key" whose delete fails
+	calls      [][]string
 }
 
 // exec stands in for macExec. Dry-run goes to the real sysutil.Run, which
@@ -54,6 +56,15 @@ func (f *fakeDefaults) run(_ context.Context, name string, args ...string) ([]by
 			f.values[id] = readBack(args[3], args[4])
 		}
 		return nil, nil
+	case "delete":
+		if f.failDelete[id] {
+			return nil, errors.New("exit status 1")
+		}
+		if _, ok := f.values[id]; !ok {
+			return nil, errors.New("exit status 1")
+		}
+		delete(f.values, id)
+		return nil, nil
 	}
 	return nil, nil
 }
@@ -85,215 +96,6 @@ func useFake(t *testing.T, f *fakeDefaults) {
 	origRead, origExec := macRead, macExec
 	macRead, macExec = f.run, f.exec
 	t.Cleanup(func() { macRead, macExec = origRead, origExec })
-}
-
-// allApplied returns a fake whose every table entry reads back at its value.
-func allApplied() *fakeDefaults {
-	f := &fakeDefaults{values: map[string]string{}}
-	for _, d := range macOSDefaults {
-		f.values[d.Domain+" "+d.Key] = readBack(d.Type.flag(), d.Value)
-	}
-	return f
-}
-
-func TestApplyMacOSDefaultsDryRun(t *testing.T) {
-	f := &fakeDefaults{}
-	useFake(t, f)
-	var buf bytes.Buffer
-	err := ApplyMacOSDefaults(context.Background(), sysutil.Opts{Stdout: &buf, DryRun: true})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	output := buf.String()
-	if len(f.calls) != 0 {
-		t.Errorf("dry-run ran commands: %v", f.calls)
-	}
-
-	// One line per section, in table order, then the restart line.
-	var sections []string
-	for _, d := range macOSDefaults {
-		if len(sections) == 0 || sections[len(sections)-1] != d.Section {
-			sections = append(sections, d.Section)
-		}
-	}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != len(sections)+1 {
-		t.Fatalf("expected %d dry-run lines, got %d:\n%s", len(sections)+1, len(lines), output)
-	}
-	for i, sec := range sections {
-		if want := "[dry-run] Would configure " + sec + ":"; !strings.HasPrefix(lines[i], want) {
-			t.Errorf("line %d = %q, want prefix %q", i, lines[i], want)
-		}
-	}
-	if lines[len(lines)-1] != "[dry-run] Would restart Dock and Finder" {
-		t.Errorf("last line = %q", lines[len(lines)-1])
-	}
-	// Every entry is named with its value.
-	for _, d := range macOSDefaults {
-		if !strings.Contains(output, " "+d.Key+"="+d.Value) {
-			t.Errorf("dry-run output missing %s=%s", d.Key, d.Value)
-		}
-	}
-	if !strings.Contains(lines[0], "com.apple.dock autohide=true, launchanim=false") {
-		t.Errorf("Dock line = %q", lines[0])
-	}
-}
-
-func TestMacOSDefaultsTable_RequiredEntries(t *testing.T) {
-	want := map[string]macDefault{
-		"NSGlobalDomain ApplePressAndHoldEnabled":           {Type: defBool, Value: "false"},
-		"NSGlobalDomain NSAutomaticWindowAnimationsEnabled": {Type: defBool, Value: "false"},
-		"com.apple.dock autohide-delay":                     {Type: defFloat, Value: "0"},
-		"com.apple.dock autohide-time-modifier":             {Type: defFloat, Value: "0.15"},
-		"com.apple.dock mineffect":                          {Type: defString, Value: "scale"},
-		"com.apple.dock expose-animation-duration":          {Type: defFloat, Value: "0.1"},
-		"com.apple.dock autohide":                           {Type: defBool, Value: "true"},
-		"com.apple.screensaver askForPasswordDelay":         {Type: defInt, Value: "0"},
-	}
-	got := map[string]macDefault{}
-	for _, d := range macOSDefaults {
-		id := d.Domain + " " + d.Key
-		if _, dup := got[id]; dup {
-			t.Errorf("duplicate entry %s", id)
-		}
-		got[id] = d
-	}
-	for id, w := range want {
-		g, ok := got[id]
-		if !ok {
-			t.Errorf("missing entry %s", id)
-			continue
-		}
-		if g.Type != w.Type || g.Value != w.Value {
-			t.Errorf("%s = (%v, %q), want (%v, %q)", id, g.Type, g.Value, w.Type, w.Value)
-		}
-	}
-	// Key repeat moved to the keyboard category; reduceMotion is left alone.
-	for _, id := range []string{"NSGlobalDomain KeyRepeat", "NSGlobalDomain InitialKeyRepeat", "com.apple.universalaccess reduceMotion"} {
-		if _, ok := got[id]; ok {
-			t.Errorf("%s should not be in the macOS defaults table", id)
-		}
-	}
-}
-
-func TestApplyMacOSDefaults_WritesEveryEntryWithTypedArgs(t *testing.T) {
-	f := &fakeDefaults{}
-	useFake(t, f)
-	var buf bytes.Buffer
-	if err := ApplyMacOSDefaults(context.Background(), sysutil.Opts{Stdout: &buf}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	var want [][]string
-	for _, d := range macOSDefaults {
-		want = append(want, []string{"write", d.Domain, d.Key, d.Type.flag(), d.Value})
-	}
-	if got := f.writes(); !reflect.DeepEqual(got, want) {
-		t.Errorf("writes mismatch:\ngot  %v\nwant %v", got, want)
-	}
-	// Spot-check one of each type flag.
-	flags := map[string]bool{}
-	for _, w := range f.writes() {
-		flags[w[3]] = true
-	}
-	for _, fl := range []string{"-bool", "-int", "-float", "-string"} {
-		if !flags[fl] {
-			t.Errorf("no write used %s", fl)
-		}
-	}
-	last := f.calls[len(f.calls)-2:]
-	if !reflect.DeepEqual(last, [][]string{{"killall", "Dock"}, {"killall", "Finder"}}) {
-		t.Errorf("expected Dock and Finder restart last; got %v", last)
-	}
-	// After a successful apply, detect agrees.
-	if got := detectMacOSDefaults(context.Background()); got != "applied" {
-		t.Errorf("detect after apply = %q, want applied", got)
-	}
-}
-
-func TestApplyMacOSDefaults_AccumulatesErrorsAndContinues(t *testing.T) {
-	f := &fakeDefaults{failWrite: map[string]bool{
-		"com.apple.dock autohide":      true,
-		"com.apple.finder ShowPathbar": true,
-	}}
-	useFake(t, f)
-	var buf bytes.Buffer
-	err := ApplyMacOSDefaults(context.Background(), sysutil.Opts{Stdout: &buf})
-	if err == nil {
-		t.Fatal("expected error when writes fail")
-	}
-	if !strings.Contains(err.Error(), "defaults write com.apple.dock autohide") ||
-		!strings.Contains(err.Error(), "defaults write com.apple.finder ShowPathbar") {
-		t.Errorf("expected both failures in error chain; got %v", err)
-	}
-	if got := len(f.writes()); got != len(macOSDefaults) {
-		t.Errorf("expected every entry attempted (%d), got %d", len(macOSDefaults), got)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "warning: defaults write com.apple.dock autohide") {
-		t.Errorf("expected warning for autohide; got:\n%s", out)
-	}
-	if !strings.Contains(out, "applied with 2 warning(s)") {
-		t.Errorf("expected summary count of warnings; got:\n%s", out)
-	}
-}
-
-func TestDetectMacOSDefaults(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("all entries match", func(t *testing.T) {
-		useFake(t, allApplied())
-		if got := detectMacOSDefaults(ctx); got != "applied" {
-			t.Errorf("got %q, want applied", got)
-		}
-	})
-
-	t.Run("autohide on and everything else missing (original bug)", func(t *testing.T) {
-		useFake(t, &fakeDefaults{values: map[string]string{"com.apple.dock autohide": "1"}})
-		if got := detectMacOSDefaults(ctx); got != "not applied" {
-			t.Errorf("got %q, want not applied", got)
-		}
-		st := SettingState{CurrentValue: detectMacOSDefaults(ctx), DesiredValue: "applied", Enabled: true}
-		if !st.NeedsApply(false) {
-			t.Error("batch apply should run when only autohide is set")
-		}
-	})
-
-	t.Run("one entry differs", func(t *testing.T) {
-		f := allApplied()
-		f.values["com.apple.finder FXPreferredViewStyle"] = "icnv"
-		useFake(t, f)
-		if got := detectMacOSDefaults(ctx); got != "not applied" {
-			t.Errorf("got %q, want not applied", got)
-		}
-	})
-
-	t.Run("one key missing", func(t *testing.T) {
-		f := allApplied()
-		delete(f.values, "com.apple.dock mineffect")
-		useFake(t, f)
-		if got := detectMacOSDefaults(ctx); got != "not applied" {
-			t.Errorf("got %q, want not applied", got)
-		}
-	})
-
-	t.Run("bool reads back wrong", func(t *testing.T) {
-		f := allApplied()
-		f.values["NSGlobalDomain ApplePressAndHoldEnabled"] = "1"
-		useFake(t, f)
-		if got := detectMacOSDefaults(ctx); got != "not applied" {
-			t.Errorf("got %q, want not applied", got)
-		}
-	})
-
-	t.Run("floats compare numerically", func(t *testing.T) {
-		f := allApplied()
-		f.values["com.apple.dock autohide-time-modifier"] = "0.1500"
-		f.values["com.apple.dock autohide-delay"] = "0.0"
-		useFake(t, f)
-		if got := detectMacOSDefaults(ctx); got != "applied" {
-			t.Errorf("got %q, want applied", got)
-		}
-	})
 }
 
 func TestMacDefaultMatches(t *testing.T) {
@@ -444,36 +246,43 @@ func TestRegistryKeyRepeatSettings(t *testing.T) {
 		}
 	}
 
-	delay, ok := found[key{"Key repeat delay", "macos"}]
+	s, ok := found[key{"Key repeat delay", "macos"}]
 	if !ok {
 		t.Fatal("no macOS-gated Key repeat delay")
 	}
-	interval, ok := found[key{"Key repeat interval", "macos"}]
-	if !ok {
-		t.Fatal("no macOS-gated Key repeat interval")
+	if s.Category != "Keyboard" || s.Control != ControlSlider {
+		t.Errorf("%s: category %q control %v", s.Name, s.Category, s.Control)
+	}
+	if s.Default != macKeyRepeatDelayDefaultMs {
+		t.Errorf("%s: default %q, want %q", s.Name, s.Default, macKeyRepeatDelayDefaultMs)
+	}
+	if s.Slider == nil || s.Slider.Min != 120 || s.Slider.Max != 1800 || s.Slider.Step != 15 || s.Slider.Unit != "ms" {
+		t.Errorf("%s: slider %+v", s.Name, s.Slider)
 	}
 
-	checks := []struct {
-		s       Setting
-		def     string
-		min     float64
-		max     float64
-		storage string
-	}{
-		{delay, macKeyRepeatDelayDefaultMs, 120, 1800, "InitialKeyRepeat"},
-		{interval, macKeyRepeatIntervalDefaultMs, 15, 120, "KeyRepeat"},
+	rate, ok := found[key{"Key repeat rate", "macos"}]
+	if !ok {
+		t.Fatal("no macOS-gated Key repeat rate")
 	}
-	for _, c := range checks {
+	if rate.Category != "Keyboard" || rate.Control != ControlPicker {
+		t.Errorf("%s: category %q control %v", rate.Name, rate.Category, rate.Control)
+	}
+	if rate.Default != macKeyRepeatRateDefaultCps {
+		t.Errorf("%s: default %q, want %q", rate.Name, rate.Default, macKeyRepeatRateDefaultCps)
+	}
+	inChoices := false
+	for _, c := range rate.Choices {
+		inChoices = inChoices || c.Value == rate.Default
+	}
+	if !inChoices {
+		t.Errorf("%s: default %q is not one of its choices %v", rate.Name, rate.Default, rate.Choices)
+	}
+
+	for _, c := range []struct {
+		s       Setting
+		storage string
+	}{{s, "InitialKeyRepeat"}, {rate, "KeyRepeat"}} {
 		s := c.s
-		if s.Category != "Keyboard" || s.Control != ControlSlider {
-			t.Errorf("%s: category %q control %v", s.Name, s.Category, s.Control)
-		}
-		if s.Default != c.def {
-			t.Errorf("%s: default %q, want %q", s.Name, s.Default, c.def)
-		}
-		if s.Slider == nil || s.Slider.Min != c.min || s.Slider.Max != c.max || s.Slider.Step != 15 || s.Slider.Unit != "ms" {
-			t.Errorf("%s: slider %+v", s.Name, s.Slider)
-		}
 		if s.ApplyGroup != macKeyRepeatGroup {
 			t.Errorf("%s: ApplyGroup %q, want %q", s.Name, s.ApplyGroup, macKeyRepeatGroup)
 		}
@@ -497,5 +306,330 @@ func TestRegistryKeyRepeatSettings(t *testing.T) {
 		if got := s.DetectFunc(context.Background()); got != s.Default {
 			t.Errorf("%s: detect after apply = %q, want %q", s.Name, got, s.Default)
 		}
+	}
+}
+
+func TestMacDesktopTables(t *testing.T) {
+	want := map[string]macDefault{
+		"com.apple.dock autohide":                            {Type: defBool, Value: "true"},
+		"com.apple.dock autohide-delay":                      {Type: defFloat, Value: "0"},
+		"com.apple.dock autohide-time-modifier":              {Type: defFloat, Value: "0.15"},
+		"com.apple.dock show-recents":                        {Type: defBool, Value: "false"},
+		"com.apple.dock launchanim":                          {Type: defBool, Value: "false"},
+		"com.apple.dock mineffect":                           {Type: defString, Value: "scale"},
+		"com.apple.dock expose-animation-duration":           {Type: defFloat, Value: "0.1"},
+		"NSGlobalDomain NSAutomaticWindowAnimationsEnabled":  {Type: defBool, Value: "false"},
+		"com.apple.finder ShowPathbar":                       {Type: defBool, Value: "true"},
+		"com.apple.finder ShowStatusBar":                     {Type: defBool, Value: "true"},
+		"com.apple.finder FXDefaultSearchScope":              {Type: defString, Value: "SCcf"},
+		"com.apple.finder FXPreferredViewStyle":              {Type: defString, Value: "Nlsv"},
+		"com.apple.finder QuitMenuItem":                      {Type: defBool, Value: "true"},
+		"com.apple.desktopservices DSDontWriteNetworkStores": {Type: defBool, Value: "true"},
+		"com.apple.desktopservices DSDontWriteUSBStores":     {Type: defBool, Value: "true"},
+	}
+	got := map[string]macDefault{}
+	for _, table := range [][]macDefault{macDesktopDock, macDesktopAnimations, macDesktopFinder, macDesktopDSStore} {
+		for _, d := range table {
+			id := d.Domain + " " + d.Key
+			if _, dup := got[id]; dup {
+				t.Errorf("duplicate entry %s", id)
+			}
+			got[id] = d
+		}
+	}
+	if !reflect.DeepEqual(keys(got), keys(want)) {
+		t.Errorf("desktop keys = %v, want %v", keys(got), keys(want))
+	}
+	for id, w := range want {
+		if g := got[id]; g.Type != w.Type || g.Value != w.Value {
+			t.Errorf("%s = (%v, %q), want (%v, %q)", id, g.Type, g.Value, w.Type, w.Value)
+		}
+	}
+}
+
+func keys(m map[string]macDefault) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// TestRegistryMacDesktopSettings checks each macOS desktop setting: gated to
+// macOS, on writes its keys and detects "enabled", off deletes exactly those
+// keys and detects "disabled", and the setting is in the group whose hook
+// restarts the right app.
+func TestRegistryMacDesktopSettings(t *testing.T) {
+	cases := map[string]struct {
+		table []macDefault
+		group string
+	}{
+		"Auto-hiding Dock":                             {macDesktopDock, macDockGroup},
+		"Faster animations":                            {macDesktopAnimations, macDockGroup},
+		"Finder list view with path and status bars":   {macDesktopFinder, macFinderGroup},
+		"No .DS_Store files on network and USB drives": {macDesktopDSStore, macFinderGroup},
+	}
+	seen := map[string]bool{}
+	for _, s := range FilterBySlug(Registry, "desktop") {
+		c, ok := cases[s.Name]
+		if !ok {
+			continue
+		}
+		seen[s.Name] = true
+		t.Run(s.Name, func(t *testing.T) {
+			if funcPtr(s.HardwareFn) != funcPtr(gateMacOS) {
+				t.Error("not gated to macOS")
+			}
+			if s.Control != ControlToggle || s.OneWay || s.Default != "enabled" || s.Description == "" {
+				t.Errorf("control %v oneway %v default %q", s.Control, s.OneWay, s.Default)
+			}
+			ctx := context.Background()
+			o := sysutil.Opts{Stdout: &bytes.Buffer{}}
+			f := &fakeDefaults{}
+			useFake(t, f)
+			if got := s.DetectFunc(ctx); got != "disabled" {
+				t.Errorf("detect on a fresh Mac = %q", got)
+			}
+			if err := s.ApplyFunc(ctx, o, "enabled"); err != nil {
+				t.Fatalf("apply on: %v", err)
+			}
+			if len(f.writes()) != len(c.table) {
+				t.Errorf("on wrote %v, want %d writes", f.writes(), len(c.table))
+			}
+			if got := s.DetectFunc(ctx); got != "enabled" {
+				t.Errorf("detect after on = %q", got)
+			}
+			if s.ApplyGroup != c.group {
+				t.Errorf("ApplyGroup = %q, want %q", s.ApplyGroup, c.group)
+			}
+			for _, call := range f.calls {
+				if call[0] == "killall" {
+					t.Errorf("apply restarted an app itself: %v", call)
+				}
+			}
+
+			f.calls = nil
+			if err := s.ApplyFunc(ctx, o, "disabled"); err != nil {
+				t.Fatalf("apply off: %v", err)
+			}
+			var deletes [][]string
+			for _, call := range f.calls {
+				if call[0] == "defaults" && call[1] == "delete" {
+					deletes = append(deletes, call[2:])
+				}
+			}
+			var want [][]string
+			for _, d := range c.table {
+				want = append(want, []string{d.Domain, d.Key})
+			}
+			if !reflect.DeepEqual(deletes, want) {
+				t.Errorf("off deleted %v, want %v", deletes, want)
+			}
+			if len(f.writes()) != 0 {
+				t.Errorf("off wrote %v", f.writes())
+			}
+		})
+	}
+	for name := range cases {
+		if !seen[name] {
+			t.Errorf("%q not in the desktop category", name)
+		}
+	}
+}
+
+func TestMacRestartHooks(t *testing.T) {
+	for group, app := range map[string]string{macDockGroup: "Dock", macFinderGroup: "Finder"} {
+		hook, ok := PostApplyHooks[group]
+		if !ok {
+			t.Fatalf("no post-apply hook for %q", group)
+		}
+		f := &fakeDefaults{}
+		useFake(t, f)
+		if err := hook(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
+			t.Fatalf("%s hook: %v", group, err)
+		}
+		if !reflect.DeepEqual(f.calls, [][]string{{"killall", app}}) {
+			t.Errorf("%s hook ran %v, want one killall %s", group, f.calls, app)
+		}
+	}
+}
+
+// TestMacOnOffTables pins the keys and values of the macOS on/off settings
+// outside desktop's Dock/Finder/animations, and checks no key is in two tables.
+func TestMacOnOffTables(t *testing.T) {
+	want := map[string]macDefault{
+		"NSGlobalDomain com.apple.sound.beep.feedback":        {Type: defBool, Value: "true"},
+		"NSGlobalDomain NSNavPanelExpandedStateForSaveMode":   {Type: defBool, Value: "true"},
+		"NSGlobalDomain NSNavPanelExpandedStateForSaveMode2":  {Type: defBool, Value: "true"},
+		"NSGlobalDomain PMPrintingExpandedStateForPrint":      {Type: defBool, Value: "true"},
+		"NSGlobalDomain PMPrintingExpandedStateForPrint2":     {Type: defBool, Value: "true"},
+		"com.apple.screensaver askForPassword":                {Type: defInt, Value: "1"},
+		"com.apple.screensaver askForPasswordDelay":           {Type: defInt, Value: "0"},
+		"NSGlobalDomain NSAutomaticQuoteSubstitutionEnabled":  {Type: defBool, Value: "false"},
+		"NSGlobalDomain NSAutomaticDashSubstitutionEnabled":   {Type: defBool, Value: "false"},
+		"NSGlobalDomain NSAutomaticSpellingCorrectionEnabled": {Type: defBool, Value: "false"},
+		"NSGlobalDomain NSAutomaticCapitalizationEnabled":     {Type: defBool, Value: "false"},
+		"NSGlobalDomain NSAutomaticPeriodSubstitutionEnabled": {Type: defBool, Value: "false"},
+		"NSGlobalDomain ApplePressAndHoldEnabled":             {Type: defBool, Value: "false"},
+	}
+	got := map[string]macDefault{}
+	for _, table := range [][]macDefault{
+		macAudioVolumeClick, macDesktopDialogs, macPowerScreensaverPassword,
+		macKeyboardTypeAsTyped, macKeyboardHoldToRepeat,
+	} {
+		for _, d := range table {
+			got[d.Domain+" "+d.Key] = d
+		}
+	}
+	if !reflect.DeepEqual(keys(got), keys(want)) {
+		t.Errorf("keys = %v, want %v", keys(got), keys(want))
+	}
+	for id, w := range want {
+		if g := got[id]; g.Type != w.Type || g.Value != w.Value {
+			t.Errorf("%s = (%v, %q), want (%v, %q)", id, g.Type, g.Value, w.Type, w.Value)
+		}
+	}
+
+	// No key belongs to two settings, desktop's included.
+	seen := map[string]bool{}
+	for _, table := range [][]macDefault{
+		macAudioVolumeClick, macDesktopDialogs, macPowerScreensaverPassword,
+		macKeyboardTypeAsTyped, macKeyboardHoldToRepeat,
+		macDesktopDock, macDesktopAnimations, macDesktopFinder, macDesktopDSStore,
+	} {
+		for _, d := range table {
+			id := d.Domain + " " + d.Key
+			if seen[id] {
+				t.Errorf("%s is in two tables", id)
+			}
+			seen[id] = true
+		}
+	}
+}
+
+// TestRegistryMacOnOffSettings checks the macOS settings that moved out of
+// the old `macos` category: each is in its topic's category, gated to
+// macOS, on by default, on writes its keys and detects "enabled", and off
+// deletes exactly those keys and detects "disabled". None restarts an app.
+func TestRegistryMacOnOffSettings(t *testing.T) {
+	cases := []struct {
+		slug, name string
+		table      []macDefault
+	}{
+		{"audio", "Click when changing volume", macAudioVolumeClick},
+		{"desktop", "Expanded save and print dialogs", macDesktopDialogs},
+		{"power", "Ask for the password right after the screensaver", macPowerScreensaverPassword},
+		{"keyboard", "Type exactly what I type", macKeyboardTypeAsTyped},
+		{"keyboard", "Holding a key repeats it", macKeyboardHoldToRepeat},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var s *Setting
+			for _, r := range FilterBySlug(Registry, c.slug) {
+				if r.Name == c.name {
+					s = &r
+				}
+			}
+			if s == nil {
+				t.Fatalf("%q not in the %s category", c.name, c.slug)
+			}
+			if funcPtr(s.HardwareFn) != funcPtr(gateMacOS) {
+				t.Error("not gated to macOS")
+			}
+			if s.Control != ControlToggle || s.OneWay || s.Default != "enabled" || s.Description == "" || s.ApplyGroup != "" {
+				t.Errorf("control %v oneway %v default %q group %q", s.Control, s.OneWay, s.Default, s.ApplyGroup)
+			}
+
+			ctx := context.Background()
+			o := sysutil.Opts{Stdout: &bytes.Buffer{}}
+			f := &fakeDefaults{values: map[string]string{"NSGlobalDomain Unrelated": "1"}}
+			useFake(t, f)
+			if got := s.DetectFunc(ctx); got != "disabled" {
+				t.Errorf("detect on a fresh Mac = %q", got)
+			}
+			if err := s.ApplyFunc(ctx, o, "enabled"); err != nil {
+				t.Fatalf("apply on: %v", err)
+			}
+			var wantWrites [][]string
+			for _, d := range c.table {
+				wantWrites = append(wantWrites, []string{"write", d.Domain, d.Key, d.Type.flag(), d.Value})
+			}
+			if !reflect.DeepEqual(f.writes(), wantWrites) {
+				t.Errorf("on wrote %v, want %v", f.writes(), wantWrites)
+			}
+			if got := s.DetectFunc(ctx); got != "enabled" {
+				t.Errorf("detect after on = %q", got)
+			}
+
+			f.calls = nil
+			if err := s.ApplyFunc(ctx, o, "disabled"); err != nil {
+				t.Fatalf("apply off: %v", err)
+			}
+			if len(f.writes()) != 0 {
+				t.Errorf("off wrote %v", f.writes())
+			}
+			if !reflect.DeepEqual(f.values, map[string]string{"NSGlobalDomain Unrelated": "1"}) {
+				t.Errorf("after off, values = %v; want only the unrelated key", f.values)
+			}
+			if got := s.DetectFunc(ctx); got != "disabled" {
+				t.Errorf("detect after off = %q", got)
+			}
+			for _, call := range f.calls {
+				if call[0] == "killall" {
+					t.Errorf("apply restarted an app: %v", call)
+				}
+			}
+		})
+	}
+}
+
+// TestApplyMacDefaultsOffReportsFailures: off skips keys that aren't set,
+// tries every key, and returns the deletes that still fail, so a failed off
+// switch doesn't look like it worked. Values other than enabled/disabled are
+// rejected without touching anything.
+func TestApplyMacDefaultsOffReportsFailures(t *testing.T) {
+	ctx := context.Background()
+	table := []macDefault{
+		{"NSGlobalDomain", "A", defBool, "false"},
+		{"NSGlobalDomain", "B", defBool, "false"},
+		{"NSGlobalDomain", "C", defBool, "false"},
+	}
+	f := &fakeDefaults{
+		values:     map[string]string{"NSGlobalDomain A": "0", "NSGlobalDomain C": "0"},
+		failDelete: map[string]bool{"NSGlobalDomain A": true},
+	}
+	useFake(t, f)
+	var buf bytes.Buffer
+	err := applyMacDefaults(ctx, sysutil.Opts{Stdout: &buf}, table, "disabled")
+	if err == nil || !strings.Contains(err.Error(), "defaults delete NSGlobalDomain A") {
+		t.Errorf("off with a failing delete: err = %v, want it reported", err)
+	}
+	var deletes []string
+	for _, c := range f.calls {
+		if c[0] == "defaults" && c[1] == "delete" {
+			deletes = append(deletes, c[3])
+		}
+	}
+	if !reflect.DeepEqual(deletes, []string{"A", "C"}) {
+		t.Errorf("deleted %v, want A and C (B is unset)", deletes)
+	}
+	if _, ok := f.values["NSGlobalDomain C"]; ok {
+		t.Error("a failed delete should not stop the next key")
+	}
+
+	f = &fakeDefaults{}
+	useFake(t, f)
+	if err := applyMacDefaults(ctx, sysutil.Opts{Stdout: &buf}, table, "disabled"); err != nil {
+		t.Errorf("off with nothing set: %v", err)
+	}
+	for _, v := range []string{"maybe", "", "not installed"} {
+		if err := applyMacDefaults(ctx, sysutil.Opts{Stdout: &buf}, table, v); err == nil {
+			t.Errorf("value %q: expected an error", v)
+		}
+	}
+	if len(f.calls) != len(table) {
+		// Only the reads from the "nothing set" off; unknown values touch nothing.
+		t.Errorf("calls = %v", f.calls)
 	}
 }

@@ -58,7 +58,33 @@ func setupAskpass() func() {
 		return noop
 	}
 	os.Setenv("SUDO_ASKPASS", path)
+	askpassPath = path
+	ctdevEnv = append(ctdevEnv, "SUDO_ASKPASS")
 	return func() { os.Remove(path) }
+}
+
+// askpassPath and ctdevEnv are the script setupAskpass wrote and the
+// variables this process set for itself, so releaseProcessState can undo them
+// before ctdev hands the terminal to another program.
+var (
+	askpassPath string
+	ctdevEnv    []string
+)
+
+// releaseProcessState removes the askpass script and unsets the variables
+// ctdev set, for a hand-off that never returns (`ctdev repo setup` execs
+// Claude Code): the deferred cleanup in Execute would not run, and the
+// session would inherit an askpass that always refuses and Homebrew pinned
+// to ctdev's settings.
+func releaseProcessState() {
+	if askpassPath != "" {
+		os.Remove(askpassPath)
+		askpassPath = ""
+	}
+	for _, k := range ctdevEnv {
+		os.Unsetenv(k)
+	}
+	ctdevEnv = nil
 }
 
 // setupHomebrewEnv keeps Homebrew from deciding, mid-step, to go download its
@@ -80,6 +106,7 @@ func setupHomebrewEnv() {
 	for _, key := range []string{"HOMEBREW_NO_AUTO_UPDATE", "HOMEBREW_NO_ENV_HINTS", "HOMEBREW_SUDO_CHECKED"} {
 		if _, ok := os.LookupEnv(key); !ok {
 			os.Setenv(key, "1")
+			ctdevEnv = append(ctdevEnv, key)
 		}
 	}
 }

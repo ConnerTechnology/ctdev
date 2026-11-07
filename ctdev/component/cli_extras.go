@@ -249,7 +249,7 @@ func syncthingInstall(ctx context.Context, opts ExecOpts) error {
 		fmt.Fprintln(opts.Stdout, "Start it with: brew services start syncthing")
 	} else {
 		fmt.Fprintln(opts.Stdout, "Start it per user: systemctl --user enable --now syncthing")
-		fmt.Fprintln(opts.Stdout, "  ('ctdev configure linger' keeps user services running without a login)")
+		fmt.Fprintln(opts.Stdout, "  ('Keep my programs running' in 'ctdev configure ssh' keeps user services running without a login)")
 	}
 	fmt.Fprintln(opts.Stdout, "Web UI: http://127.0.0.1:8384 (loopback-only by default — keep it that way)")
 	return nil

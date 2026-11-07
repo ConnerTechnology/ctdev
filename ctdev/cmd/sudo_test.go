@@ -58,7 +58,6 @@ func TestUpdateNeedsRoot(t *testing.T) {
 		{"flatpak uses polkit, not our sudo", []checklist.UpdateItem{{Source: "flatpak", Name: "org.x.Y"}}, false},
 		{"npm globals", []checklist.UpdateItem{{Source: "npm", Name: "typescript"}}, false},
 		{"oh-my-zsh git pull", []checklist.UpdateItem{{Source: "git", Name: "oh-my-zsh"}}, false},
-		{"ctdev self-update targets ~/.local/bin", []checklist.UpdateItem{{Source: "ctdev", Name: "ctdev"}}, false},
 		{
 			"one privileged item among many is enough",
 			[]checklist.UpdateItem{{Source: "brew", Name: "jq"}, {Source: "brew-cask", Name: "tailscale"}},

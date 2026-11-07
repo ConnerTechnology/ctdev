@@ -63,3 +63,36 @@ func TestSetupHomebrewEnvDoesNotOverrideUser(t *testing.T) {
 		t.Errorf("HOMEBREW_SUDO_CHECKED = %q, want 1 so brew keeps the cached sudo credential", got)
 	}
 }
+
+// releaseProcessState undoes what ctdev set for itself and only that: a
+// variable the user had set survives it.
+func TestReleaseProcessStateKeepsTheUsersEnv(t *testing.T) {
+	t.Cleanup(func() { askpassPath, ctdevEnv = "", nil })
+	t.Setenv("HOMEBREW_NO_AUTO_UPDATE", "user-value")
+	t.Setenv("SUDO_ASKPASS", "")
+	os.Unsetenv("SUDO_ASKPASS")
+	for _, k := range []string{"HOMEBREW_NO_ENV_HINTS", "HOMEBREW_SUDO_CHECKED"} {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
+	}
+	cleanup := setupAskpass()
+	defer cleanup()
+	setupHomebrewEnv()
+	script := os.Getenv("SUDO_ASKPASS")
+	if script == "" || os.Getenv("HOMEBREW_NO_ENV_HINTS") != "1" {
+		t.Fatal("setup didn't set its variables")
+	}
+
+	releaseProcessState()
+	for _, k := range []string{"SUDO_ASKPASS", "HOMEBREW_NO_ENV_HINTS", "HOMEBREW_SUDO_CHECKED"} {
+		if _, ok := os.LookupEnv(k); ok {
+			t.Errorf("%s is still set", k)
+		}
+	}
+	if got := os.Getenv("HOMEBREW_NO_AUTO_UPDATE"); got != "user-value" {
+		t.Errorf("the user's HOMEBREW_NO_AUTO_UPDATE became %q", got)
+	}
+	if _, err := os.Stat(script); !os.IsNotExist(err) {
+		t.Error("the askpass script is still there")
+	}
+}

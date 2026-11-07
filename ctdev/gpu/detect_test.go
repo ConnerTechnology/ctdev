@@ -9,18 +9,19 @@ func TestParseSecureBootState(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string
-		expect bool
+		expect SecureBoot
 	}{
-		{"enabled", "SecureBoot enabled\n", true},
-		{"disabled", "SecureBoot disabled\n", false},
-		{"empty", "", false},
-		{"with extra text", "EFI variables are not supported on this system\n", false},
-		{"enabled with prefix", "SecureBoot enabled in shim\n", true},
+		{"enabled", "SecureBoot enabled\n", SecureBootOn},
+		{"enabled with prefix", "SecureBoot enabled in shim\n", SecureBootOn},
+		{"disabled", "SecureBoot disabled\n", SecureBootOff},
+		{"legacy BIOS", "EFI variables are not supported on this system\n", SecureBootOff},
+		{"no Secure Boot in firmware", "This system doesn't support Secure Boot\n", SecureBootOff},
+		{"can't tell", "Cannot determine secure boot state.\n", SecureBootUnknown},
+		{"empty (mokutil missing)", "", SecureBootUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseSecureBootState(tt.input)
-			if got != tt.expect {
+			if got := parseSecureBootState(tt.input); got != tt.expect {
 				t.Errorf("parseSecureBootState(%q) = %v, want %v", tt.input, got, tt.expect)
 			}
 		})

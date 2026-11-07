@@ -1,3 +1,8 @@
+---
+status: accepted
+date: 2026-09-24
+---
+
 # ctdev is tracked in its own Linear team
 
 ctdev's work lives in the Linear team **CTDev** (`CTD`), a sub-team of Conner Technology, rather

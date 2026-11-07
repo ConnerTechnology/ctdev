@@ -99,6 +99,17 @@ jobs:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
 
+      # The backup tests run against a real restic and fail without one in CI.
+      # Ubuntu's apt restic is older than the 0.17 ctdev needs, so take the
+      # pinned official release and check it against its published checksum.
+      - name: Install restic
+        run: |
+          curl -fsSLo /tmp/restic.bz2 https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2
+          echo "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c  /tmp/restic.bz2" | sha256sum -c -
+          bunzip2 /tmp/restic.bz2
+          sudo install -m 0755 /tmp/restic /usr/local/bin/restic
+          restic version
+
       - name: Run tests
         working-directory: ctdev
         run: go test -race ./...
@@ -209,6 +220,12 @@ jobs:
         with:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
+
+      # The backup tests run against a real restic and fail without one in CI.
+      - name: Install restic
+        run: |
+          brew install restic
+          restic version
 
       # The unit tests only ran on Ubuntu, so darwin-only breakage (sudo
       # pre-auth, the brew scanners) shipped unnoticed. Run them here too.

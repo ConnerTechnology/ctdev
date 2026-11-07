@@ -5,12 +5,19 @@ paths:
 ---
 # Install
 
-`install.sh` (repo root) installs just the `ctdev` binary (downloads the latest
-release and verifies it against `SHA256SUMS`; there is no source-build path).
-`install.sh --doctor` instead runs `ctdev doctor` from a temp directory and
-deletes it — nothing installed, no PATH change, no sudo. `install.ps1` is the
-Windows equivalent. There is no all-in-one machine bootstrap — compose a machine from
-individual `ctdev install <component>` and `ctdev configure <category>` calls.
-See README "Fresh Machine Setup".
+`install.sh` installs only the `ctdev` binary, from the latest release or the `vX.Y.Z` tag in
+`CTDEV_VERSION`; there is no source-build path and no all-in-one machine bootstrap, so a machine
+is composed from individual `ctdev install <component>` and `ctdev configure <category>` calls
+(README "Fresh Machine Setup"). `install.ps1` is the Windows equivalent, where ctdev runs `doctor` only.
 
-**Flags:** `--help`, `--verbose`, `--dry-run`, `--force`, `--version`, `--refresh-keys`
+The two installers offer the same modes: install, or a one-off doctor run with its arguments
+passed through. `install.sh` accepts `--doctor [doctor args]` and `-h`/`--help`; `install.ps1`
+accepts `-Doctor` and `-DoctorArgs`.
+
+`install.sh` is also what `ctdev update` runs to update itself (`ctdev/cmd/update_apply.go`): it
+fetches the script from the new release's tag and passes `INSTALL_DIR` (the running binary's
+directory) and `CTDEV_VERSION`. A release's `install.sh` must keep honoring both. Its
+`/usr/local/bin` leftover cleanup must skip that directory when it is `INSTALL_DIR`; the only
+thing it may remove from `INSTALL_DIR` is the old dotfiles bash symlink. Root boot scripts run it
+on every boot, so the "already matches the release checksum, exit 0" check has to stay ahead of
+the binary download, and it compares hashes rather than running the existing binary.
