@@ -2,8 +2,7 @@
 
 `ctdev configure` applies system settings. Where [components](components/README.md)
 put software on a machine, `configure` changes how the machine behaves: the SSH
-server, the firewall, whether it sleeps, what its locale is, which upstreams
-Pi-hole uses.
+server, the firewall, whether it sleeps, which upstreams Pi-hole uses.
 
 ```bash
 ctdev configure                 # full-screen browser over every category

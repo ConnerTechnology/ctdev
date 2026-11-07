@@ -50,7 +50,7 @@ func TestRunScheduledBacksUpOnlyTheDueFolder(t *testing.T) {
 	}
 
 	at(m, noon)
-	results, err := m.RunScheduled(ctx)
+	results, _, err := m.RunScheduled(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestRunScheduledRecordsMissingFolders(t *testing.T) {
 	listed(t, m, otherID, NewConfig("example-backups"))
 	writeConfig(t, otherID, NewConfig("example-backups"))
 
-	results, err := m.RunScheduled(context.Background())
+	results, _, err := m.RunScheduled(context.Background())
 	if err == nil {
 		t.Error("RunScheduled with missing folders returned no error")
 	}
@@ -159,7 +159,7 @@ func TestAFolderThatComesBackIsNoLongerMissing(t *testing.T) {
 	if err := m.recordMissing(root, noon.Add(-time.Minute), "example: gone"); err != nil {
 		t.Fatal(err)
 	}
-	results, err := m.RunScheduled(context.Background())
+	results, _, err := m.RunScheduled(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestNotifiesOnceWhenAFolderStartsFailingAndOnceWhenItRecovers(t *testing.T)
 	}
 
 	// OK -> failing: one notification.
-	if _, err := m.RunScheduled(ctx); err == nil {
+	if _, _, err := m.RunScheduled(ctx); err == nil {
 		t.Fatal("a run with no destination succeeded")
 	}
 	if len(n.sent) != 1 || !strings.Contains(n.sent[0], "failing") || !strings.Contains(n.sent[0], "~/Projects/website") {
@@ -202,7 +202,7 @@ func TestNotifiesOnceWhenAFolderStartsFailingAndOnceWhenItRecovers(t *testing.T)
 	// Still failing, hour after hour: nothing more.
 	for i := 1; i <= 3; i++ {
 		at(m, noon.Add(time.Duration(i)*time.Hour))
-		if _, err := m.RunScheduled(ctx); err == nil {
+		if _, _, err := m.RunScheduled(ctx); err == nil {
 			t.Fatal("a run with no destination succeeded")
 		}
 	}
@@ -216,14 +216,14 @@ func TestNotifiesOnceWhenAFolderStartsFailingAndOnceWhenItRecovers(t *testing.T)
 	if err := m.recordRun(root, noon.Add(4*time.Hour), nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.RunScheduled(ctx); err != nil {
+	if _, _, err := m.RunScheduled(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if len(n.sent) != 2 || !strings.Contains(n.sent[1], "backing up again") {
 		t.Fatalf("after recovering: %q, want a second, recovered, notification", n.sent)
 	}
 	at(m, noon.Add(5*time.Hour))
-	if _, err := m.RunScheduled(ctx); err != nil {
+	if _, _, err := m.RunScheduled(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if len(n.sent) != 2 {
@@ -237,7 +237,7 @@ func TestNotifiesWhenAFolderGoesMissing(t *testing.T) {
 	if err := os.RemoveAll(root); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = m.RunScheduled(context.Background())
+	_, _, _ = m.RunScheduled(context.Background())
 	if len(n.sent) != 1 || !strings.Contains(n.sent[0], "failing") {
 		t.Errorf("notifications = %q, want one failing", n.sent)
 	}
