@@ -108,9 +108,13 @@ func TestDoctorFactsCarryTheDataCheck(t *testing.T) {
 	if err := os.MkdirAll(m.Dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	// Dated relative to now: a check over two weeks old is overdue.
+	finished := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
+	started := finished.Add(-10 * time.Minute)
+	at := `"started":"` + started.Format(time.RFC3339) + `","finished":"` + finished.Format(time.RFC3339) + `"`
 	state := `{"folders":{},"destinations":{` +
-		`"example-backups":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":false,"step":"check","error":"damaged pack 0123abcd"}},` +
-		`"example-unused":{"data_check":{"host":"example-desktop","started":"2026-10-20T03:00:00Z","finished":"2026-10-20T03:10:00Z","slice":3,"ok":true}}}}`
+		`"example-backups":{"data_check":{"host":"example-desktop",` + at + `,"slice":3,"ok":false,"step":"check","error":"damaged pack 0123abcd"}},` +
+		`"example-unused":{"data_check":{"host":"example-desktop",` + at + `,"slice":3,"ok":true}}}}`
 	if err := os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(state), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +127,7 @@ func TestDoctorFactsCarryTheDataCheck(t *testing.T) {
 	}
 	got, errText := doctorDataCheckFacts(m)
 	want := diagnose.BackupDataCheck{
-		Destination: "example-backups", Finished: time.Date(2026, 10, 20, 3, 10, 0, 0, time.UTC),
+		Destination: "example-backups", Finished: finished,
 		Host: "example-desktop", Slice: 3, Slices: 20, Step: "check", Error: "damaged pack 0123abcd",
 	}
 	if errText != "" || len(got) != 1 || !got[0].Finished.Equal(want.Finished) {
