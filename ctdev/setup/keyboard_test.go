@@ -133,7 +133,7 @@ func TestApplyNumlockxOnDryRun(t *testing.T) {
 	if err := applyNumlockx(context.Background(), sysutil.Opts{Stdout: &buf, DryRun: true}, "installed"); err != nil {
 		t.Fatalf("on: %v", err)
 	}
-	if !strings.Contains(buf.String(), "apt-get install -y -qq numlockx") {
+	if !strings.Contains(buf.String(), "install -y -qq numlockx") {
 		t.Errorf("dry-run output = %q", buf.String())
 	}
 }

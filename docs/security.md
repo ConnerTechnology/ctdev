@@ -80,6 +80,10 @@ SSID, MAC addresses and the public IP.
 against it before moving it into place — failing closed if the sums file, the
 entry for this platform, or `sha256sum` itself is missing.
 
+`ctdev update` runs `install.sh` to update itself, and it fetches that script
+from the tag of the release it is installing, never from `main`. What runs is
+the script that shipped with the release, not whatever `main` holds that day.
+
 Be clear about what that does and does not prove. It proves the file you have is
 the file the release page lists, so a truncated or corrupted download is caught.
 It does not prove who built it: anyone who could replace a binary on the release

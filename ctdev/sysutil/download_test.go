@@ -166,6 +166,72 @@ func TestVerifyChecksumFileMissing(t *testing.T) {
 	}
 }
 
+func writeTestArchive(t *testing.T, content string) (path, sum string) {
+	t.Helper()
+	path = filepath.Join(t.TempDir(), "asset.bin")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256([]byte(content))
+	return path, hex.EncodeToString(h[:])
+}
+
+func TestVerifyDownload_ChecksumFuncMatch(t *testing.T) {
+	path, sum := writeTestArchive(t, "binary")
+	var gotVer, gotOS, gotArch string
+	spec := GitHubBinarySpec{Checksum: func(_ context.Context, ver, goos, goarch string) (string, error) {
+		gotVer, gotOS, gotArch = ver, goos, goarch
+		return strings.ToUpper(sum), nil // manifests may publish uppercase hex
+	}}
+	if err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "arm64", path, t.TempDir()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotVer != "1.2.3" || gotOS != "linux" || gotArch != "arm64" {
+		t.Errorf("Checksum called with (%q, %q, %q)", gotVer, gotOS, gotArch)
+	}
+}
+
+func TestVerifyDownload_ChecksumFuncMismatch(t *testing.T) {
+	path, _ := writeTestArchive(t, "binary")
+	spec := GitHubBinarySpec{Checksum: func(context.Context, string, string, string) (string, error) {
+		return strings.Repeat("0", 64), nil
+	}}
+	err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "amd64", path, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("expected checksum mismatch, got %v", err)
+	}
+}
+
+func TestVerifyDownload_ChecksumFuncError(t *testing.T) {
+	path, _ := writeTestArchive(t, "binary")
+	spec := GitHubBinarySpec{Checksum: func(context.Context, string, string, string) (string, error) {
+		return "", fmt.Errorf("no checksum for 1.2.3")
+	}}
+	err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "amd64", path, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "no checksum for 1.2.3") {
+		t.Fatalf("a lookup failure must fail the install, got %v", err)
+	}
+}
+
+func TestVerifyDownload_NoChecksumConfigured(t *testing.T) {
+	path, _ := writeTestArchive(t, "binary")
+	if err := verifyDownload(context.Background(), GitHubBinarySpec{}, "1.2.3", "linux", "amd64", path, t.TempDir()); err != nil {
+		t.Fatalf("specs without a checksum behave as before, got %v", err)
+	}
+}
+
+func TestVerifyDownload_ChecksumURLStillWorks(t *testing.T) {
+	path, sum := writeTestArchive(t, "binary")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s  %s\n", sum, filepath.Base(path))
+	}))
+	defer srv.Close()
+	spec := GitHubBinarySpec{ChecksumURL: func(string, string, string) string { return srv.URL }}
+	if err := verifyDownload(context.Background(), spec, "1.2.3", "linux", "amd64", path, t.TempDir()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // A pinned bz2 release installs into a user-owned directory without sudo, and
 // only after its checksum matches.
 func TestDownloadGitHubBinary_PinnedBz2UserInstall(t *testing.T) {
@@ -234,6 +300,60 @@ func TestDownloadGitHubBinary_PinnedBz2UserInstall(t *testing.T) {
 			}
 			if fi, err := os.Stat(dest); err != nil || fi.Mode().Perm()&0o100 == 0 {
 				t.Errorf("installed binary is not executable: %v", err)
+			}
+		})
+	}
+}
+
+// A release whose hash comes from a Checksum hook installs the raw binary only
+// after the hash matches, and installs nothing when it doesn't or can't be found.
+func TestDownloadGitHubBinary_ChecksumHookGatesInstall(t *testing.T) {
+	body := []byte("fake herdr binary\n")
+	sum := sha256.Sum256(body)
+	for _, tc := range []struct {
+		name    string
+		hash    string
+		hashErr error
+		wantErr string
+	}{
+		{"hash matches", hex.EncodeToString(sum[:]), nil, ""},
+		{"hash mismatch", strings.Repeat("0", 64), nil, "checksum mismatch"},
+		{"hash not published", "", fmt.Errorf("manifest has no checksum for v1.2.3"), "no checksum for v1.2.3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}))
+			defer srv.Close()
+
+			dest := filepath.Join(t.TempDir(), "bin", "tool")
+			_, err := DownloadGitHubBinary(context.Background(), Opts{Stdout: os.Stdout}, GitHubBinarySpec{
+				Repo:    "example/tool",
+				Version: "1.2.3",
+				ArchiveURL: func(ver, goos, goarch string) string {
+					return fmt.Sprintf("%s/v%s/tool-%s-%s", srv.URL, ver, goos, goarch)
+				},
+				Checksum: func(context.Context, string, string, string) (string, error) {
+					return tc.hash, tc.hashErr
+				},
+				InstallDest: dest,
+				UserInstall: true,
+			})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("want an error containing %q, got %v", tc.wantErr, err)
+				}
+				if _, statErr := os.Stat(dest); statErr == nil {
+					t.Error("binary installed despite a failed checksum")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(dest)
+			if err != nil || string(got) != string(body) {
+				t.Errorf("installed contents = %q, %v", got, err)
 			}
 		})
 	}

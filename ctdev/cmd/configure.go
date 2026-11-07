@@ -24,6 +24,9 @@ var (
 	flagConfigShow    bool
 
 	flagAWSProfile string
+
+	// flagSwapfileSize is `configure storage --swapfile-size`, in GiB.
+	flagSwapfileSize int
 )
 
 var configureCmd = &cobra.Command{
@@ -72,6 +75,19 @@ func init() {
 			Use:   slug,
 			Short: fmt.Sprintf("Configure %s settings", slugDescription(slug)),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				var adjust func([]setup.SettingState) error
+				if cmd.Flags().Changed("swapfile-size") {
+					// The wizard asks for the size itself, and --show changes
+					// nothing. It needs --batch itself, not just piped stdin, so
+					// a size applies only when the caller asked for batch.
+					if flagConfigShow || !flagBatch {
+						return fmt.Errorf("--swapfile-size only works with --batch")
+					}
+					gib := flagSwapfileSize
+					adjust = func(states []setup.SettingState) error {
+						return setup.RequestSwapfileSize(states, gib)
+					}
+				}
 				if !flagDryRun && !flagConfigShow {
 					if err := ensureSudo(cmdContext(cmd)); err != nil {
 						return fmt.Errorf("sudo required: %w", err)
@@ -82,10 +98,14 @@ func init() {
 				}
 				// Non-interactive (--batch or piped stdin): apply defaults without prompting.
 				if isBatchMode() {
-					return runCategoryBatch(cmdContext(cmd), slug)
+					return runCategoryBatchAdjusted(cmdContext(cmd), slug, adjust)
 				}
 				return cancelToClean(runCategoryWizard(cmdContext(cmd), slug, false))
 			},
+		}
+		if slug == "storage" {
+			cmd.Flags().IntVar(&flagSwapfileSize, "swapfile-size", 0,
+				"with --batch: the swapfile's size in GiB, which also resizes ctdev's own swapfile")
 		}
 		configureCmd.AddCommand(cmd)
 	}

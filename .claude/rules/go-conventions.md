@@ -14,6 +14,7 @@ paths:
 - Deploy configs with `sysutil.DeployFileFromFS`
 - Components with configs use Phase 1/Phase 2: Phase 1 installs the binary (skip if exists), Phase 2 always deploys configs
 - Exception: `claude-code` owns files the user also edits (`~/.claude/settings.json`, `CLAUDE.md`), so its Phase 2 writes only missing files and the review in `cmd/configure_claude_code.go` shows the diff and asks before replacing (ADR-0009)
-- For `.deb` installs on apt, use `installDebWithDepFix(ctx, o, debPath, pkgName)`
+- For `.deb` installs on apt, use `installDebWithDepFix(ctx, o, debPath, pkgName)`; it installs through `apt-get`, not `dpkg -i`
 - All installers accept `ctx context.Context` as first parameter
+- Change packages through `sysutil.APTGet` (or `InstallPackage` / `RemovePackage` / `APTUpdate`), never `SudoRun` with `apt-get`, `apt` or `dpkg`: it adds the no-prompt, lock-wait and retry options a boot script with no TTY needs. Read-only queries run as the user (`apt-get -s`, `dpkg -s`/`-l`) are the exception. Install gpg with `sysutil.EnsureGPG`
 - Never spell `sudo` in an argv — use `sysutil.SudoRun` (or `sysutil.SudoNoPrompt` for silent probes). They drop the wrapper when we already are root, which is how a container with no sudo installed still works

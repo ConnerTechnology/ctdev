@@ -61,6 +61,13 @@ func runCategoryWizard(ctx context.Context, slug string, showOnly bool) error {
 // recommended defaults. Used by bootstrap (`ctdev configure <slug> --batch`).
 // Idempotent: applySettings skips settings already at their desired value.
 func runCategoryBatch(ctx context.Context, slug string) error {
+	return runCategoryBatchAdjusted(ctx, slug, nil)
+}
+
+// runCategoryBatchAdjusted is runCategoryBatch with adjust, when not nil,
+// changing the desired values before they're applied, for flags that name a
+// value (`configure storage --swapfile-size`).
+func runCategoryBatchAdjusted(ctx context.Context, slug string, adjust func([]setup.SettingState) error) error {
 	settings := setup.FilterBySlug(setup.Registry, slug)
 	settings = setup.FilterByHardware(settings)
 	if len(settings) == 0 {
@@ -69,6 +76,11 @@ func runCategoryBatch(ctx context.Context, slug string) error {
 	}
 	fmt.Println(wizardHeaderStyle.Render(slugDescription(slug) + " (batch — applying recommended values)"))
 	states := setup.InitStates(ctx, settings)
+	if adjust != nil {
+		if err := adjust(states); err != nil {
+			return err
+		}
+	}
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
 }
 

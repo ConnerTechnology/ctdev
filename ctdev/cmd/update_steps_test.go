@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 )
 
@@ -49,5 +53,20 @@ func TestBuildUpdateSteps_UnknownRuntimeAndCLIDropped(t *testing.T) {
 	}
 	if steps := buildUpdateSteps(items); len(steps) != 0 {
 		t.Errorf("expected no steps for unknown runtime/cli items, got %d", len(steps))
+	}
+}
+
+// The apt upgrade step runs from a progress screen with no TTY, so it goes
+// through sysutil.APTGet: no prompts, a wait on the dpkg lock, old conffiles kept.
+func TestBuildUpdateSteps_AptRunsUnattended(t *testing.T) {
+	steps := buildUpdateSteps([]checklist.UpdateItem{{Name: "curl", Source: "apt"}})
+	var buf bytes.Buffer
+	if err := steps[0].run(context.Background(), sysutil.Opts{Stdout: &buf, DryRun: true}); err != nil {
+		t.Fatal(err)
+	}
+	want := "env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 " +
+		"-o Dpkg::Options::=--force-confold install --only-upgrade -y curl\n"
+	if !strings.HasSuffix(buf.String(), want) {
+		t.Errorf("got %q, want it to end with %q", buf.String(), want)
 	}
 }

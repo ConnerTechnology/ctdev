@@ -120,7 +120,7 @@ func TestConfigureBluetoothAloneInstallsBluezThenEnablesService(t *testing.T) {
 	applyCategory(t, "bluetooth", sysutil.Opts{Stdout: &bytes.Buffer{}})
 
 	out := logged()
-	install := strings.Index(out, "apt-get install -y -qq --no-install-recommends bluez blueman")
+	install := strings.Index(out, "install -y -qq --no-install-recommends bluez blueman")
 	enable := strings.Index(out, "systemctl enable bluetooth.service")
 	start := strings.Index(out, "systemctl start bluetooth.service")
 	if install < 0 || enable < 0 || start < 0 {
@@ -243,7 +243,7 @@ func TestPackageSettingsOffRemovesOnlyWhatCtdevAdded(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			want := "apt-get remove -y -qq " + strings.Join(tt.recorded, " ") + "\n"
+			want := " remove -y -qq " + strings.Join(tt.recorded, " ") + "\n"
 			if out := logged(); !strings.HasSuffix(out, want) || strings.Count(out, "apt-get") != 1 {
 				t.Errorf("want only %q removed, ran:\n%s", strings.TrimSpace(want), out)
 			}
@@ -412,7 +412,7 @@ func TestPackageSettingOffRefusesWhenRemovalTakesMore(t *testing.T) {
 	if !strings.Contains(err.Error(), "remove those first, or keep this setting on") {
 		t.Errorf("want a hint on what to do, got %v", err)
 	}
-	if out := logged(); strings.Contains(out, "apt-get remove") {
+	if out := logged(); strings.Contains(out, " remove -y") {
 		t.Errorf("nothing should be removed, ran:\n%s", out)
 	}
 	if got := readAdded("bluetooth-audio"); strings.Join(got, " ") != "libspa-0.2-bluetooth" {
@@ -431,7 +431,7 @@ func TestTurningOffBothBluetoothSettingsInOneRun(t *testing.T) {
 		return "active"
 	}
 	// Removing bluez deletes bluetooth.service.
-	unitExists = func(context.Context, string) bool { return !strings.Contains(logged(), "apt-get remove") }
+	unitExists = func(context.Context, string) bool { return !strings.Contains(logged(), " remove -y") }
 	if err := recordAdded(sysutil.Opts{}, "bluetooth", "bluez", "blueman"); err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +451,7 @@ func TestTurningOffBothBluetoothSettingsInOneRun(t *testing.T) {
 	}
 
 	out := logged()
-	if !strings.Contains(out, "apt-get remove -y -qq bluez blueman") {
+	if !strings.Contains(out, " remove -y -qq bluez blueman") {
 		t.Errorf("want bluez and blueman removed, ran:\n%s", out)
 	}
 	if strings.Contains(out, "systemctl") {
@@ -532,7 +532,7 @@ func TestPackageSettingOffSkipsPackagesAlreadyGone(t *testing.T) {
 		if got := strings.Join(simulated, " "); got != "bluez" {
 			t.Errorf("simulated removing %q, want only the installed %q", got, "bluez")
 		}
-		if out := logged(); !strings.HasSuffix(out, "apt-get remove -y -qq bluez\n") {
+		if out := logged(); !strings.HasSuffix(out, " remove -y -qq bluez\n") {
 			t.Errorf("want only bluez removed, ran:\n%s", out)
 		}
 		if got := readAdded("bluetooth"); len(got) != 0 {

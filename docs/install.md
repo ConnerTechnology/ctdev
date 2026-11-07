@@ -1,11 +1,15 @@
 # Install
 
 `install.sh` installs just the `ctdev` binary: it downloads the latest release
-for this platform, verifies it against the release's `SHA256SUMS`, and moves it
-into place. There is no source-build path and nothing else is installed. It
-never sits on a password prompt: the one privileged thing it does — clearing a
-stale `ctdev` out of `/usr/local/bin` that an older install left there — uses
-`sudo -n` and warns instead of asking if that is not already allowed.
+(or the one `CTDEV_VERSION` names) for this platform, verifies it against the
+release's `SHA256SUMS`, and moves it into place. If the binary already in the
+install directory matches that release's checksum, it stops there and does not
+download it again.
+There is no source-build path and nothing else is installed. It never sits on a
+password prompt: the one privileged thing it does — clearing a stale `ctdev`
+out of `/usr/local/bin` that an older install left there — uses `sudo -n` and
+warns instead of asking if that is not already allowed. That cleanup is skipped
+when `/usr/local/bin` is the install directory.
 
 ## Install (ctdev only)
 
@@ -16,6 +20,25 @@ curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install
 The binary lands in `~/.local/bin/ctdev`. Set `INSTALL_DIR` to put it somewhere
 else. If the install directory is not on your `PATH`, the script says so and
 prints the line to add to your shell profile.
+
+## Pinned, system-wide install
+
+A machine that installs ctdev unattended — a cloud node's boot script, say —
+runs one exact release as root, fetched from that release's tag so the script
+and the binary match:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/v17.1.0/install.sh \
+  | CTDEV_VERSION=v17.1.0 INSTALL_DIR=/usr/local/bin bash
+```
+
+It is safe to run on every boot: once `/usr/local/bin/ctdev` hashes to that
+release's checksum, the script exits 0 after fetching only `SHA256SUMS`. It
+never runs the existing binary to ask its version, so a file that merely claims
+the right version is replaced. With `CTDEV_SKIP_VERIFY=1` there is nothing to
+compare against and it reinstalls every time. `CTDEV_VERSION` takes
+`vX.Y.Z` or `X.Y.Z` (the `v` is optional); anything else is refused. Pinning applies to `install.sh`
+only — `install.ps1` always installs the latest release.
 
 On Windows, `install.ps1` is the equivalent. It installs to
 `%LOCALAPPDATA%\Programs\ctdev` and adds that to the user `PATH`; Windows runs
@@ -63,6 +86,13 @@ description of this repo.
 
 Other package managers (dnf, pacman) are not supported; components on those
 systems report as skipped.
+
+On apt, every `apt-get` ctdev runs is unattended, so it works from a boot script
+with no terminal. It never asks a debconf question, keeps a config file you
+edited when a package ships a new version of it, retries a failed download up
+to 3 times, and waits up to 5 minutes for each apt lock another apt run holds,
+which unattended-upgrades and apt-daily do on a machine that just booted.
+`.deb` downloads install through `apt-get` too, so they get the same.
 
 ## Uninstall
 

@@ -21,12 +21,10 @@ func TestInstallDebWithDepFix_DryRunSkipsVerify(t *testing.T) {
 		t.Fatalf("dry-run returned error: %v", err)
 	}
 	out := buf.String()
-	// Running as root (a container's default) drops the sudo wrapper.
-	want := "[dry-run] sudo dpkg -i /tmp/fake.deb"
-	if sysutil.IsRoot() {
-		want = "[dry-run] dpkg -i /tmp/fake.deb"
-	}
-	if !strings.Contains(out, want) {
+	// Through apt-get, so the .deb install waits on the apt locks like
+	// every other install.
+	want := "apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Dpkg::Options::=--force-confold install -y /tmp/fake.deb\n"
+	if !strings.HasSuffix(out, want) {
 		t.Errorf("expected %q; got:\n%s", want, out)
 	}
 }
