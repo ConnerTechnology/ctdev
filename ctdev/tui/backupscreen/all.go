@@ -12,13 +12,12 @@ import (
 // NewAll builds the `ctdev backup --all` screen for destination name, whose
 // backend is backend and whose backups take stored bytes: a header line with
 // what the destination holds, then
-// List backups · Computers · Emergency Kit and password · Quit. Computers and
-// Emergency Kit and password are dimmed until they're built (CTD-87).
+// List backups · Computers · Emergency Kit and password · Quit (CTD-87).
 func NewAll(name, backend string, o backup.Overview, stored int64) *Model {
 	m := &Model{status: AllHeader(name, backend, o, stored), items: []Item{
 		{Action: ListBackups, Label: "List backups", Dimmed: len(o.Folders) == 0},
-		{Action: Computers, Label: "Computers", Dimmed: true},
-		{Action: EmergencyKit, Label: "Emergency Kit and password", Dimmed: true},
+		{Action: Computers, Label: "Computers"},
+		{Action: EmergencyKit, Label: "Emergency Kit and password"},
 		{Action: Quit, Label: "Quit"},
 	}}
 	m.cursor = m.next(-1, 1)

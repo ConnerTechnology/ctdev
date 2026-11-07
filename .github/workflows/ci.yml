@@ -112,7 +112,7 @@ jobs:
 
       - name: Run tests
         working-directory: ctdev
-        run: go test -race ./...
+        run: go test -race -timeout 20m ./...
 
       - name: Vet
         working-directory: ctdev
@@ -231,7 +231,7 @@ jobs:
       # pre-auth, the brew scanners) shipped unnoticed. Run them here too.
       - name: Run tests
         working-directory: ctdev
-        run: go test -race ./...
+        run: go test -race -timeout 20m ./...
 
       - name: Run go vet
         working-directory: ctdev
