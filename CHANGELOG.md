@@ -4,7 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [17.4.0] - 2026-11-07
+
+### Added
+- **Every backup destination gets weekly maintenance and a data check.** Once a week, one
+  computer that uses the destination applies each of its folders' keep rules again, prunes, runs
+  `restic check --read-data-subset=k/20` (k rotates, so all stored data is read every 20 weeks)
+  and test-downloads one random file from each folder's latest backup. A marker in the
+  destination decides which computer runs it, and records the result so every computer shows
+  it. `ctdev backup` shows a "Data check" line, and `ctdev doctor` a "Data check" row for each
+  destination; a failure is red and notifies, and a check over two weeks old is yellow.
+- **`ctdev backup --all` manages a destination's computers, Emergency Kit and master
+  password.** Computers lists each computer's key, with Remove this computer and a guided I lost
+  this computer flow: remove its key, a new Secret Key, new backend credentials with the
+  provider's steps (Backblaze B2, AWS, other S3, SFTP), and a new kit. Emergency Kit and password
+  has Show Emergency Kit, Change master password, Regenerate Secret Key, Replace backend
+  credentials, Use a Recovery Code and Paste an updated Emergency Kit. Each asks for the master
+  password first, except the Recovery Code and the paste, and a new key is checked before the old
+  one is removed.
+
+### Changed
+- **A backup that finds the destination locked is deferred, not failed.** A scheduled backup
+  that can't get the lock within 30 minutes doesn't notify, shows "waiting: destination busy" and
+  tries again the next hour. Back up now waits a minute, then says the destination is busy. Every
+  restic command ctdev runs now waits up to 30 minutes for a lock.
+- **A keep-rules failure is a yellow "retention failed" warning on the Keeping line**, no longer a
+  failed backup.
+- **charm.land/bubbletea/v2 2.1.1 and github.com/charmbracelet/x/ansi 0.11.9.**
+
 ### Fixed
+- **The docs no longer say `ctdev configure` sets the machine's locale.** It only generates
+  `en_US.UTF-8` for Mosh support.
 - **A pasted Emergency Kit can only set the destination's own credentials.** In v17.0.0,
   connecting with a kit passed every `NAME: value` line in it to restic as an environment
   variable, so a forged kit could add `RESTIC_PASSWORD_COMMAND` or `LD_PRELOAD` and run a
