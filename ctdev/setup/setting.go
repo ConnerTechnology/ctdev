@@ -129,6 +129,11 @@ func InitStates(ctx context.Context, settings []Setting) []SettingState {
 		if settings[i].NotNeededFn != nil {
 			notNeeded = settings[i].NotNeededFn(ctx)
 		}
+		if notNeeded != "" {
+			// Changing it anyway starts from what the machine has, not
+			// from a recommendation made for machines that need it.
+			desired = current
+		}
 		states[i] = SettingState{
 			Setting:      &settings[i],
 			CurrentValue: current,

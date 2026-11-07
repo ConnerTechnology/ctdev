@@ -47,11 +47,12 @@ func TestCommandTreeShape(t *testing.T) {
 		t.Error("ctdev gpu should be removed (folded into configure gpu)")
 	}
 
-	// The whole-machine restic backup is gone: backup is a bare placeholder
-	// for per-folder backup, and restore and the restic wizard no longer exist.
+	// The whole-machine restic backup is gone: backup's only subcommand is
+	// the hidden one the scheduler runs, and restore and the restic wizard no
+	// longer exist.
 	backup := childCommand(t, rootCmd, "backup")
-	if len(backup.Commands()) != 0 {
-		t.Errorf("backup should have no subcommands, got %d", len(backup.Commands()))
+	if len(backup.Commands()) != 1 || !childCommand(t, backup, "run-scheduled").Hidden {
+		t.Errorf("backup should have only the hidden run-scheduled subcommand, got %d", len(backup.Commands()))
 	}
 	if hasSubcommand(rootCmd, "restore") {
 		t.Error("ctdev restore should be removed")
@@ -236,10 +237,14 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	installs := fakeSchedulerInstall(t)
 	var cfgErr error
 	out := captureStdout(t, func() { cfgErr = configureFolder(ctx, m, m.Status(ctx, dir)) })
 	if cfgErr != nil {
 		t.Fatalf("configureFolder: %v\n%s", cfgErr, out)
+	}
+	if *installs != 1 {
+		t.Errorf("Configure installed the scheduler %d times, want once", *installs)
 	}
 	for _, want := range []string{"back the repository up into itself", "Emergency Kit", "Secret Key:", "Recovery Code", "can't be decrypted"} {
 		if !strings.Contains(out, want) {
@@ -294,6 +299,114 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 	}
 }
 
+// fakeSchedulerInstall counts Configure's scheduler installs instead of
+// touching this computer's user timers or launch agents.
+func fakeSchedulerInstall(t *testing.T) *int {
+	t.Helper()
+	n := new(int)
+	saved := installScheduler
+	installScheduler = func(*backup.Machine, context.Context) error { *n++; return nil }
+	t.Cleanup(func() { installScheduler = saved })
+	return n
+}
+
+// The non-terminal check fails for an overdue folder.
+func TestBackupWithoutATerminalFailsWhenOverdue(t *testing.T) {
+	dir := backupFolderForTest(t)
+	t.Setenv("PATH", t.TempDir()) // the destination isn't read: it isn't set up here
+	cfg := backup.NewConfig("example-backups")
+	if err := backup.WriteConfig(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfgDir := filepath.Join(os.Getenv("HOME"), ".config", "ctdev", "backup")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	long := "2020-01-01T00:00:00Z"
+	writeFile := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(cfgDir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile("folders.json", `{"folders":[{"path":"`+dir+`","id":"`+cfg.ID+`","schedule":"daily","added":"`+long+`"}]}`)
+	writeFile("state.json", `{"folders":{"`+dir+`":{"last_attempt":"`+long+`","last_success":"`+long+`"}}}`)
+	// What this computer knows, failed or overdue, is the error, ahead of
+	// the destination not being set up here.
+	out, err := runBackupBatch(t)
+	if err == nil || !strings.Contains(err.Error(), "overdue") {
+		t.Fatalf("want a non-zero exit saying the folder is overdue, got %v; status:\n%s", err, out)
+	}
+	if !strings.Contains(out, "overdue: no backup since") {
+		t.Errorf("status = %q", out)
+	}
+}
+
+// run-scheduled prints each listed folder's outcome and fails when one did.
+func TestRunScheduledReportsEachFolder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	notes := &recordingNotifier{}
+	scheduledNotifier = notes
+	t.Cleanup(func() { scheduledNotifier = nil })
+	var out bytes.Buffer
+	backupRunScheduledCmd.SetOut(&out)
+	t.Cleanup(func() { backupRunScheduledCmd.SetOut(nil) })
+	if err := backupRunScheduledCmd.RunE(backupRunScheduledCmd, nil); err != nil || out.Len() != 0 {
+		t.Errorf("with nothing scheduled: err %v, output %q", err, out.String())
+	}
+
+	dir := filepath.Join(home, ".config", "ctdev", "backup")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(home, "gone")
+	body := `{"folders":[{"path":"` + gone + `","id":"00000000-0000-4000-8000-000000000000","schedule":"daily"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "folders.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := backupRunScheduledCmd.RunE(backupRunScheduledCmd, nil)
+	if err == nil || !strings.HasPrefix(out.String(), "~/gone: missing: the folder isn't there any more") {
+		t.Errorf("err %v, output %q", err, out.String())
+	}
+	if len(notes.titles) != 1 || notes.titles[0] != "Backup failing" {
+		t.Errorf("notifications = %q, want one Backup failing", notes.titles)
+	}
+}
+
+type recordingNotifier struct{ titles []string }
+
+func (n *recordingNotifier) Notify(_ context.Context, title, _ string) error {
+	n.titles = append(n.titles, title)
+	return nil
+}
+
+// The removed commands each fail as unknown commands.
+func TestRemovedBackupCommandsAreUnknown(t *testing.T) {
+	for _, args := range [][]string{
+		{"backup", "now"},
+		{"restore"},
+		{"configure", "restic"},
+	} {
+		var out bytes.Buffer
+		rootCmd.SetArgs(args)
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&out)
+		err := rootCmd.Execute()
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		name := strings.Join(args, " ")
+		if err == nil {
+			t.Errorf("ctdev %s: want an error, got none", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "unknown") {
+			t.Errorf("ctdev %s: want an unknown-command error, got %v", name, err)
+		}
+	}
+}
+
 // Stop backing up offers to delete the folder's backups, so it refuses when
 // it can't see them, rather than stop without that chance. It refuses before
 // asking anything, and the folder stays backed up.
@@ -321,32 +434,6 @@ func TestStopBackingUpRefusesWhenTheBackupsCantBeRead(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(dir, backup.ConfigFileName)); err != nil {
 			t.Errorf("%s: the config file is gone: %v", name, err)
-		}
-	}
-}
-
-// The removed commands each fail as unknown commands.
-func TestRemovedBackupCommandsAreUnknown(t *testing.T) {
-	for _, args := range [][]string{
-		{"backup", "now"},
-		{"restore"},
-		{"configure", "restic"},
-	} {
-		var out bytes.Buffer
-		rootCmd.SetArgs(args)
-		rootCmd.SetOut(&out)
-		rootCmd.SetErr(&out)
-		err := rootCmd.Execute()
-		rootCmd.SetArgs(nil)
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		name := strings.Join(args, " ")
-		if err == nil {
-			t.Errorf("ctdev %s: want an error, got none", name)
-			continue
-		}
-		if !strings.Contains(err.Error(), "unknown") {
-			t.Errorf("ctdev %s: want an unknown-command error, got %v", name, err)
 		}
 	}
 }

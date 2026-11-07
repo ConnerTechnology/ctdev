@@ -157,7 +157,7 @@ func TestStopAndDeleteWhoseForgetFailsChangesNothing(t *testing.T) {
 	root := exampleFolder(t, m)
 	cfg := NewConfig(d.Name)
 	writeConfig(t, root, cfg)
-	if err := m.addFolder(root, cfg.ID); err != nil {
+	if err := m.addFolder(root, cfg.ID, cfg.Schedule); err != nil {
 		t.Fatal(err)
 	}
 

@@ -90,7 +90,7 @@ func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *
 		d.dryRun(r)
 		return Snapshot{}, nil
 	}
-	started := time.Now()
+	started := m.now()
 	out, err := d.restic(ctx, r)
 	partial := errors.Is(err, errPartial)
 	if partial {
@@ -148,6 +148,22 @@ func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error
 	} else {
 		args = append(args, "--tag", tagPath+tagValue(ref.Path), "--host", ref.Host)
 	}
+	all, err := d.snapshots(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	snaps := all[:0]
+	for _, s := range all {
+		if ref.FolderID == "" && s.FolderID != "" {
+			continue
+		}
+		snaps = append(snaps, s)
+	}
+	return snaps, nil
+}
+
+// snapshots runs restic snapshots with args and reads its list, oldest first.
+func (d *Destination) snapshots(ctx context.Context, args ...string) ([]Snapshot, error) {
 	out, err := d.restic(ctx, d.asComputer("", args...))
 	if err != nil {
 		return nil, err
@@ -186,9 +202,6 @@ func (d *Destination) Snapshots(ctx context.Context, ref Ref) ([]Snapshot, error
 			s.Files, s.Size, s.Added = sum.Files, sum.Bytes, sum.Added
 			s.FilesNew, s.FilesChanged = sum.New, sum.Changed
 			s.Duration = sum.End.Sub(sum.Start)
-		}
-		if ref.FolderID == "" && s.FolderID != "" {
-			continue
 		}
 		snaps = append(snaps, s)
 	}
@@ -288,7 +301,7 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	if err := WriteConfig(root, cfg); err != nil {
 		return err
 	}
-	if err := m.addFolder(root, cfg.ID); err != nil {
+	if err := m.addFolder(root, cfg.ID, cfg.Schedule); err != nil {
 		return err
 	}
 	if len(ids) > 0 {

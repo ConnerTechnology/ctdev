@@ -89,6 +89,19 @@ func (m *Machine) CheckNewAddress(address, folder string) (string, error) {
 	return "", fmt.Errorf("%s already holds files and isn't a restic repository: choose a new or empty folder", DisplayPath(m.Home, p))
 }
 
+// CheckNewAddressFromAll is CheckNewAddress for a destination created under
+// `ctdev backup --all`, which works from any directory: a relative local path
+// would quietly resolve against wherever that is, so it's refused. A path
+// named in full may be anywhere CheckNewAddress allows, the current
+// directory included: `~/Backups` from ~ is a fine destination.
+func (m *Machine) CheckNewAddressFromAll(address string) (string, error) {
+	p := strings.TrimSpace(address)
+	if isLocal(p) && p != "~" && !strings.HasPrefix(p, "~/") && !filepath.IsAbs(p) {
+		return "", fmt.Errorf("%q is relative to the current directory: give an absolute path or one starting with ~/", p)
+	}
+	return m.CheckNewAddress(p, "")
+}
+
 // looksLikeRepository reports whether dir has restic's layout: a config file
 // beside keys/ and data/. A lone file named config is just a file.
 func looksLikeRepository(dir string) bool {

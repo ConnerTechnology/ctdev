@@ -21,7 +21,7 @@ func InstallPackage(ctx context.Context, o Opts, names ...string) error {
 	pm := platform.Detect().PackageManager
 	switch pm {
 	case "apt":
-		return SudoRun(ctx, o, "apt-get", append([]string{"install", "-y", "-qq"}, names...)...)
+		return APTGet(ctx, o, append([]string{"install", "-y", "-qq"}, names...)...)
 	case "brew":
 		return Run(ctx, o, "brew", append([]string{"install"}, names...)...)
 	default:
@@ -34,7 +34,7 @@ func RemovePackage(ctx context.Context, o Opts, names ...string) error {
 	pm := platform.Detect().PackageManager
 	switch pm {
 	case "apt":
-		return SudoRun(ctx, o, "apt-get", append([]string{"remove", "-y"}, names...)...)
+		return APTGet(ctx, o, append([]string{"remove", "-y"}, names...)...)
 	case "brew":
 		return Run(ctx, o, "brew", append([]string{"uninstall"}, names...)...)
 	default:

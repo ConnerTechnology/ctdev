@@ -120,10 +120,8 @@ func awsInstall(ctx context.Context, opts ExecOpts) error {
 		return nil
 	}
 
-	if !sysutil.CommandExists("gpg") {
-		if err := sysutil.InstallPackage(ctx, o, "gnupg"); err != nil {
-			return err
-		}
+	if err := sysutil.EnsureGPG(ctx, o); err != nil {
+		return err
 	}
 	if !sysutil.CommandExists("unzip") {
 		if err := sysutil.InstallPackage(ctx, o, "unzip"); err != nil {

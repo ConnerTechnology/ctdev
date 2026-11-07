@@ -29,7 +29,7 @@ func linuxTasks(info platform.Info) []Task {
 					if err := pinRunningKernel(ctx, o); err != nil {
 						return err
 					}
-					return sysutil.SudoRun(ctx, o, "apt-get", "autoremove", "--purge", "-y")
+					return sysutil.APTGet(ctx, o, "autoremove", "--purge", "-y")
 				},
 			},
 			Task{
@@ -39,12 +39,12 @@ func linuxTasks(info platform.Info) []Task {
 					return ScanResult{Bytes: measurePaths(ctx, "/var/cache/apt/archives")}
 				},
 				Run: func(ctx context.Context, o sysutil.Opts) error {
-					return sysutil.SudoRun(ctx, o, "apt-get", "clean")
+					return sysutil.APTGet(ctx, o, "clean")
 				},
 			},
 			Task{
 				ID: "apt-rc-purge", Name: "Config of removed packages", Group: "Packages",
-				Detail: "dpkg --purge (rc state)", Risk: Safe,
+				Detail: "apt-get purge (rc state)", Risk: Safe,
 				Scan: func(ctx context.Context) ScanResult {
 					pkgs := rcPackages(ctx)
 					if len(pkgs) == 0 {
@@ -57,7 +57,7 @@ func linuxTasks(info platform.Info) []Task {
 					if len(pkgs) == 0 {
 						return nil
 					}
-					return sysutil.SudoRun(ctx, o, "dpkg", append([]string{"--purge"}, pkgs...)...)
+					return sysutil.APTGet(ctx, o, append([]string{"purge", "-y"}, pkgs...)...)
 				},
 			},
 		)
