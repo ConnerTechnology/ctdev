@@ -180,6 +180,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	facts := gatherDoctorFacts(ctx, info, diagnose.GatherFacts, component.InstalledSet)
 	if m, err := backup.ThisMachine(sysutil.Opts{}); err == nil {
 		facts.Backups, facts.BackupsErr = doctorBackupFacts(m)
+		if facts.BackupsErr == "" {
+			facts.BackupDataChecks, facts.BackupsErr = doctorDataCheckFacts(m)
+		}
 	}
 
 	// Resolve credentials before the checks run, not after: any prompt belongs
@@ -278,7 +281,29 @@ func doctorBackupFacts(m *backup.Machine) ([]diagnose.BackupFolder, string) {
 			State:       diagnose.BackupState(h.State),
 			LastSuccess: h.Run.LastSuccess,
 			Error:       h.Run.Error,
+
+			RetentionError: h.Run.RetentionError,
 		})
+	}
+	return out, ""
+}
+
+// doctorDataCheckFacts is each destination's last weekly data check, from
+// the copy this machine's hourly runner keeps in state.json: no network and
+// no restic, like doctorBackupFacts.
+func doctorDataCheckFacts(m *backup.Machine) ([]diagnose.BackupDataCheck, string) {
+	checks, err := m.DataChecks()
+	if err != nil {
+		return nil, err.Error()
+	}
+	out := make([]diagnose.BackupDataCheck, 0, len(checks))
+	for _, c := range checks {
+		f := diagnose.BackupDataCheck{Destination: c.Destination, Slices: backup.Slices, Overdue: c.Overdue}
+		if c.Check != nil {
+			f.Finished, f.Host, f.Slice = c.Check.Finished, c.Check.Host, c.Check.Slice
+			f.OK, f.Step, f.Error = c.Check.OK, c.Check.Step, c.Check.Error
+		}
+		out = append(out, f)
 	}
 	return out, ""
 }

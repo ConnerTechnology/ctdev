@@ -199,6 +199,9 @@ func Status(s backup.Status, home string) string {
 		}
 		fmt.Fprintf(&b, "  %s %s\n", label.Render(name), value)
 	}
+	warn := func(name, value string) {
+		fmt.Fprintf(&b, "  %s %s\n", label.Render(name), styles.Warning.Render(value))
+	}
 
 	size := Bytes(s.Size) + " · " + Files(s.Files)
 	if s.Unreadable > 0 {
@@ -238,6 +241,11 @@ func Status(s backup.Status, home string) string {
 	default:
 		row("Last backup", "never", false)
 	}
+	if s.Last != nil && s.Last.Deferred != "" {
+		// A locked destination isn't a failure (coordinator, CTD-122
+		// review): the next hour tries again, so it's only noted.
+		fmt.Fprintf(&b, "  %s %s\n", label.Render(""), styles.Dimmed.Render("waiting: destination busy"))
+	}
 
 	if s.Config != nil {
 		sched, bad := string(s.Config.Schedule), true
@@ -263,7 +271,13 @@ func Status(s backup.Status, home string) string {
 			fmt.Fprintf(&b, "  %s %s\n", label.Render(""), styles.Dimmed.Render("runs only while you're logged in"))
 		}
 		k := s.Config.Keep
-		row("Keeping", fmt.Sprintf("%d hourly, %d daily, %d weekly, %d monthly, %d yearly", k.Hourly, k.Daily, k.Weekly, k.Monthly, k.Yearly), false)
+		keeping := fmt.Sprintf("%d hourly, %d daily, %d weekly, %d monthly, %d yearly", k.Hourly, k.Daily, k.Weekly, k.Monthly, k.Yearly)
+		if s.Last != nil && s.Last.RetentionError != "" {
+			// The backup succeeded, so this is a warning, not a failure.
+			warn("Keeping", keeping+" · retention failed: "+s.Last.RetentionError)
+		} else {
+			row("Keeping", keeping, false)
+		}
 	} else {
 		row("Schedule", "none: this folder isn't configured", false)
 		row("Keeping", "one-off backups, until you delete them", false)
@@ -273,6 +287,21 @@ func Status(s backup.Status, home string) string {
 		row("Backups", "none", false)
 	} else {
 		row("Backups", fmt.Sprintf("%d · oldest %s · %s stored", s.Backups, s.Oldest.Local().Format("Jan 2"), Bytes(s.Stored)), false)
+	}
+	if s.DataCheckRead {
+		// The destination's weekly maintenance, whichever computer ran it.
+		switch c := s.DataCheck; {
+		case c != nil && c.Failed():
+			row("Data check", c.Finished.Local().Format("Jan 2")+" · "+c.Reason(), true)
+		case s.DataCheckOverdue && c == nil:
+			warn("Data check", "overdue (never run)")
+		case s.DataCheckOverdue:
+			warn("Data check", "overdue (last "+c.Finished.Local().Format("Jan 2")+")")
+		case c == nil:
+			row("Data check", "not run yet", false)
+		default:
+			row("Data check", c.Finished.Local().Format("Jan 2")+" · OK", false)
+		}
 	}
 	if s.ReadErr != nil {
 		row("Problem", strings.ReplaceAll(s.ReadErr.Error(), "\n", "; "), true)
