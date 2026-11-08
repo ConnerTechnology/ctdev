@@ -28,10 +28,20 @@ directory as `INSTALL_DIR`, so the binary is replaced where it already lives.
 A system install in `/usr/local/bin` stays there rather than gaining a second
 copy in `~/.local/bin`.
 
+Components installed outside a package manager are checked against their
+vendor's latest stable release: `helm`, `kubectl`, `terraform`, the T3 Code CLI
+(`t3code`) and, on Linux, the T3 Code desktop app (`t3code-desktop`). The T3
+Code CLI updates through its own `t3 update`, which also restarts its background
+service if you installed one. The Linux desktop app updates by installing the
+newer release's `.deb`, checked against its published sha512. On macOS the T3
+Code app updates itself, so it isn't listed.
+
 Root is used only for the updates that need it: the system package manager, the
-Go toolchain (it lives in `/usr/local/go`), rebuilding a Docker stack, and
-replacing a ctdev binary in a directory you cannot write to.
-Bun, nodenv, rbenv and pyenv all stay inside `$HOME` and are updated as you.
+Go toolchain (it lives in `/usr/local/go`), `helm`, `kubectl` and `terraform`
+(they live in `/usr/local/bin`), the T3 Code `.deb`, rebuilding a Docker stack,
+and replacing a ctdev binary in a directory you cannot write to.
+Bun, nodenv, rbenv, pyenv and the T3 Code CLI all stay inside `$HOME` and are
+updated as you.
 
 Python updates stay within the minor version you are on: 3.14.8 is offered
 3.14.9, never 3.15. A new minor breaks every installed package and virtualenv,

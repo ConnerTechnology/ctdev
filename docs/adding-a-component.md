@@ -83,3 +83,26 @@ if err := sysutil.DownloadFile(ctx, debURL, tmp.Name()); err != nil {
 }
 return installDebWithDepFix(ctx, o, tmp.Name(), "name-pkg")
 ```
+
+## Updates
+
+`ctdev update` upgrades whatever a package manager installed (APT, Homebrew,
+Flatpak) without help. A component that bypasses one, such as a downloaded
+`.deb`, an upstream `install.sh`, or a release tarball, is invisible to that scan,
+so it needs its own scanner unless the software updates itself:
+
+1. In `ctdev/component/<name>.go`, export a function that returns the installed
+   version (`""` when absent), and one that performs the update. Prefer the
+   tool's own updater when it has one (`t3 update --yes`). Otherwise, re-run the
+   install over the top.
+2. In `ctdev/cmd/update_scan.go`, add a `scan<Name>` to `scanAll` that compares
+   the installed version with the vendor's latest stable release
+   (`sysutil.GitHubLatestVersion` for GitHub) and returns a `checklist.UpdateItem`
+   with `Source: "cli"` when it's behind.
+3. In `ctdev/cmd/update_apply.go`, add the item's name to `cliUpdateStep`.
+4. `updateNeedsRoot` in `ctdev/cmd/update.go` assumes a `cli` item needs root.
+   Exempt the name there if its update stays inside `$HOME`.
+
+An app that updates itself, such as a cask marked `auto_updates`, gets no
+scanner. `ctdev/component/t3code.go` covers every case: a CLI with its own updater, a Linux
+`.deb` re-installed from the latest release, and a macOS cask left to itself.
