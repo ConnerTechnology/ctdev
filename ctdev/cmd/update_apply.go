@@ -210,14 +210,14 @@ func cliUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 	case "t3code":
 		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
 			if o.DryRun {
-				fmt.Fprintln(o.Stdout, "  [dry-run] t3 update --yes")
+				fmt.Fprintf(o.Stdout, "  [dry-run] t3 update --yes %s\n", item.NewVer)
 				return nil
 			}
-			return component.T3CodeUpdate(ctx, o)
+			return component.T3CodeUpdate(ctx, o, item.NewVer)
 		}}, true
 	case "t3code-desktop":
 		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
-			return component.UpdateT3CodeDesktopDeb(ctx, o)
+			return component.T3CodeDesktopUpdate(ctx, o, item.NewVer)
 		}}, true
 	}
 	return updateStep{}, false

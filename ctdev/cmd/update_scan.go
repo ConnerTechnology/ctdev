@@ -749,7 +749,7 @@ func scanT3Code(ctx context.Context) ([]checklist.UpdateItem, error) {
 	cli := component.T3CodeVersion(ctx)
 	desktop := ""
 	if runtime.GOOS == "linux" {
-		desktop = component.T3CodeDesktopDebVersion(ctx)
+		desktop = component.T3CodeDesktopVersion(ctx)
 	}
 	if cli == "" && desktop == "" {
 		return nil, nil

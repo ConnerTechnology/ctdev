@@ -35,24 +35,15 @@ const (
 var t3codeMacApps = []string{"/Applications/T3 Code (Beta).app", "/Applications/T3 Code.app"}
 
 // t3codeLauncher is where install.sh links `t3` (T3CODE_INSTALL_BIN_DIR's
-// default). It isn't on PATH until the shell config adds ~/.local/bin, so
-// detection checks the file as well as PATH.
+// default). Detection and every command go through this path rather than
+// whatever `t3` is first on PATH: the name is short enough that an unrelated
+// tool could own it, and `t3 uninstall --yes` must never reach that one.
 func t3codeLauncher() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "bin", "t3")
 }
 
-func t3codeCommand() string {
-	if sysutil.CommandExists("t3") {
-		return "t3"
-	}
-	return t3codeLauncher()
-}
-
 func t3codeInstalled() bool {
-	if sysutil.CommandExists("t3") {
-		return true
-	}
 	_, err := os.Stat(t3codeLauncher())
 	return err == nil
 }
@@ -98,7 +89,7 @@ func t3codeUninstall(ctx context.Context, opts ExecOpts) error {
 	if !t3codeInstalled() {
 		return nil
 	}
-	return sysutil.Run(ctx, o, t3codeCommand(), "uninstall", "--yes")
+	return sysutil.Run(ctx, o, t3codeLauncher(), "uninstall", "--yes")
 }
 
 // T3CodeVersion returns the installed CLI's version ("0.1.7"), or "" when it
@@ -107,7 +98,7 @@ func T3CodeVersion(ctx context.Context) string {
 	if !t3codeInstalled() {
 		return ""
 	}
-	out, err := exec.CommandContext(ctx, t3codeCommand(), "--version").Output()
+	out, err := exec.CommandContext(ctx, t3codeLauncher(), "--version").Output()
 	if err != nil {
 		return ""
 	}
@@ -123,11 +114,11 @@ func parseT3CodeVersion(out string) string {
 	return strings.TrimPrefix(fields[len(fields)-1], "v")
 }
 
-// T3CodeUpdate moves the CLI to the newest stable release with `t3 update`,
-// which also restarts the background service when one is installed (--yes
-// lets it do so without a prompt).
-func T3CodeUpdate(ctx context.Context, o sysutil.Opts) error {
-	return sysutil.Run(ctx, o, t3codeCommand(), "update", "--yes")
+// T3CodeUpdate moves the CLI to ver with `t3 update`, which also restarts the
+// background service when one is installed (--yes lets it do so without a
+// prompt). ver is pinned so the update installs the release ctdev listed.
+func T3CodeUpdate(ctx context.Context, o sysutil.Opts, ver string) error {
+	return sysutil.Run(ctx, o, t3codeLauncher(), "update", "--yes", ver)
 }
 
 func t3codeDesktopInstalled() bool {
@@ -147,10 +138,10 @@ func t3codeDesktopInstalled() bool {
 	return false
 }
 
-// T3CodeDesktopDebVersion returns the installed Linux desktop package's
+// T3CodeDesktopVersion returns the installed Linux desktop package's
 // version, or "" when the package isn't installed. The macOS app updates
 // itself, so it has no counterpart.
-func T3CodeDesktopDebVersion(ctx context.Context) string {
+func T3CodeDesktopVersion(ctx context.Context) string {
 	out, err := exec.CommandContext(ctx, "dpkg-query", "-W", "-f=${Version}", t3codeDebPackage).Output()
 	if err != nil {
 		return ""
@@ -197,17 +188,17 @@ func t3codeDesktopInstall(ctx context.Context, opts ExecOpts) error {
 		// The cask is marked auto_updates: the app updates itself.
 		return sysutil.BrewCaskInstallVerified(ctx, o, t3codeCask, t3codeDesktopInstalled)
 	}
-	return installT3CodeDeb(ctx, o, p.Arch)
-}
-
-// installT3CodeDeb installs the latest stable release's .deb, checked against
-// the sha512 electron-builder publishes for it. It is also how `ctdev update`
-// moves the Linux app forward, so it always installs, even over itself.
-func installT3CodeDeb(ctx context.Context, o sysutil.Opts, arch string) error {
 	ver, err := sysutil.GitHubLatestVersion(ctx, T3CodeRepo)
 	if err != nil {
 		return err
 	}
+	return installT3CodeDeb(ctx, o, p.Arch, ver)
+}
+
+// installT3CodeDeb installs release ver's .deb, checked against the sha512
+// electron-builder publishes for it. It is also how `ctdev update` moves the
+// Linux app forward, so it always installs, even over itself.
+func installT3CodeDeb(ctx context.Context, o sysutil.Opts, arch, ver string) error {
 	deb, manifest, err := t3codeDebAsset(arch, ver)
 	if err != nil {
 		return err
@@ -316,15 +307,16 @@ func t3codeDesktopUninstall(ctx context.Context, opts ExecOpts) error {
 	case platform.MacOS:
 		return sysutil.BrewCaskRemove(ctx, o, t3codeCask)
 	case platform.Linux:
-		if p.PackageManager == "apt" {
-			return sysutil.RemovePackage(ctx, o, t3codeDebPackage)
+		if p.PackageManager != "apt" {
+			return unsupportedPMError("T3 Code desktop", p.PackageManager)
 		}
+		return sysutil.RemovePackage(ctx, o, t3codeDebPackage)
 	}
 	return ErrUnsupportedOS
 }
 
-// UpdateT3CodeDesktopDeb installs the latest stable .deb over the installed
-// one, for `ctdev update`.
-func UpdateT3CodeDesktopDeb(ctx context.Context, o sysutil.Opts) error {
-	return installT3CodeDeb(ctx, o, platform.Detect().Arch)
+// T3CodeDesktopUpdate installs release ver's .deb over the installed one,
+// for `ctdev update` on Linux.
+func T3CodeDesktopUpdate(ctx context.Context, o sysutil.Opts, ver string) error {
+	return installT3CodeDeb(ctx, o, platform.Detect().Arch, ver)
 }
