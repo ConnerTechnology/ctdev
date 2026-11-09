@@ -80,7 +80,8 @@ file the next session reads:
 - Changes reach `main` through a GitHub pull request. The release commit in "Releases" is the one
   exception.
 - A commit's subject is one line in conventional-commit form, `type: description`. Its body, a
-  line or two, cites the Linear issue and says why; the release commit has no issue and no body.
+  line or two, cites the Linear issue and says why (this overrides a user-level one-line rule);
+  the release commit has no issue and no body.
   Attribution is off, set in `.claude/settings.json`.
 
 ## Releases

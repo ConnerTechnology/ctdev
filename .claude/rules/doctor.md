@@ -24,9 +24,8 @@ machine beyond the diagnostic probes themselves.
 - **DNSSEC is judged by the bogus name** (`dnssec-failed.org` must SERVFAIL), never
   by the AD bit — stubs in the path (systemd-resolved, MagicDNS) strip AD but pass
   SERVFAIL through. Root reach asks a root server non-recursively because only a
-  real root sets AA; a transparent ISP proxy cannot, and that is the failure mode
-  that broke DNSSEC in the Spencer's Desk Pi-hole write-up pi-01 was compared
-  against on 2026-09-07.
+  real root sets AA; a transparent ISP proxy that answers in its place cannot, and
+  that proxy is what silently breaks DNSSEC.
 - **A vendor integration's credentials** come only from flags, the environment, or
   an in-memory prompt. Nothing is ever written to the machine being diagnosed, a
   credential is sent only to a private address (`IsPrivate`), and none appears in a
