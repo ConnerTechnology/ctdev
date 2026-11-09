@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [17.5.0] - 2026-11-09
+
+### Added
+- **T3 Code installs on macOS (Apple Silicon) and Linux.** `t3code` installs the `t3` CLI with
+  T3 Code's own installer into `~/.t3` and `~/.local/bin/t3`, without sudo, then prints the
+  getting-started link and how to reach it from an iPhone, iPad or another computer (`t3 up`, or
+  `t3 service install`). `t3code-desktop` installs the desktop app: the `t3-code` cask on macOS,
+  which updates itself, and the latest release's `.deb` on Linux (amd64 and arm64), checked
+  against its published sha512.
+- **`ctdev update` keeps T3 Code current.** It lists the CLI, and the desktop app on Linux, when
+  either is behind the latest stable release. The CLI updates through `t3 update`, which also
+  restarts its background service; the Linux app installs the newer `.deb`.
+
+### Changed
+- **The Claude Code baseline `CLAUDE.md` is clearer.** It drops a commit rule that contradicted
+  `type: description`, and two lines of pressure wording. `ctdev configure claude-code` shows the
+  diff before replacing your copy.
+
 ## [17.4.0] - 2026-11-07
 
 ### Added
