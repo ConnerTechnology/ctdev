@@ -5,11 +5,10 @@
 - Use 1-line commit messages only (no body, no footer)
 - No "Co-Authored-By" or "Created with" lines
 - Use conventional commits format: `type: description`
-- No subject line beyond the type prefix
 
 ## Web Searches
 
-- IMPORTANT: Always use the current year from system context when searching
+- Put the current year from the system context in search queries; a year from training data returns stale results
 - Prefer recent/up-to-date sources over older documentation
 
 ## Code Style
@@ -59,7 +58,7 @@
 - I can't be duplicated; agents can. Work that needs me comes one item at a time — "what next"
   names a single item and what it unblocks, the full list only when asked. Work agents can do
   without me runs in parallel and doesn't wait on that queue.
-- Don't be lazy. If you don't know something, look it up or ask me.
+- If you don't know something, look it up or ask me.
 - Before a change, say what it does to the work that comes after it on the board, and shape it so
   that work doesn't have to undo it.
 - Anything I have to do myself comes as numbered steps, one action each: where to go, what to
