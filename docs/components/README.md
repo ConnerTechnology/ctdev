@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-61 components, counted in `ctdev/component/registry.go` on 2026-11-06. A
+63 components, counted in `ctdev/component/registry.go` on 2026-11-08. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -60,6 +60,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `ripgrep` | Fast recursive grep | Linux, macOS |
 | `shellcheck` | Shell script linter | Linux, macOS |
 | `syncthing` | Peer-to-peer file sync between your machines | Linux, macOS |
+| `t3code` | T3 Code CLI: one UI for Claude Code, Codex and other coding agents | Linux, macOS (Apple Silicon) |
 | `tmux` | Terminal multiplexer | Linux, macOS |
 | `zoxide` | Smarter cd that learns your directories | Linux, macOS |
 
@@ -77,6 +78,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `logi-options` | Logitech Options+ | macOS |
 | `nomachine` | NoMachine remote desktop server | Linux |
 | `slack` | Slack messaging | Linux, macOS |
+| `t3code-desktop` | T3 Code desktop app | Linux, macOS (Apple Silicon) |
 | `tradingview` | TradingView desktop charts | Linux, macOS |
 | `vscode` | Visual Studio Code | Linux, macOS |
 

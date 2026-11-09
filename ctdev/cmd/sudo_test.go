@@ -50,6 +50,8 @@ func TestUpdateNeedsRoot(t *testing.T) {
 		{"brew casks escalate internally", []checklist.UpdateItem{{Source: "brew-cask", Name: "docker"}}, true},
 		{"docker stacks can rebuild as root", []checklist.UpdateItem{{Source: "docker", Name: "pihole"}}, true},
 		{"cli tools install into /usr/local/bin", []checklist.UpdateItem{{Source: "cli", Name: "helm"}}, true},
+		{"t3 update stays in $HOME", []checklist.UpdateItem{{Source: "cli", Name: "t3code"}}, false},
+		{"the T3 Code .deb installs through apt", []checklist.UpdateItem{{Source: "cli", Name: "t3code-desktop"}}, true},
 		{"go runtime replaces /usr/local/go", []checklist.UpdateItem{{Source: "runtime", Name: "go"}}, true},
 		{"bun upgrades in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "bun"}}, false},
 		{"nodenv stays in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "node (nodenv)"}}, false},

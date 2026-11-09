@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -42,6 +43,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"helm", scanHelm},
 		{"kubectl", scanKubectl},
 		{"terraform", scanTerraform},
+		{"t3code", scanT3Code},
 	}
 
 	// scanErrs collects failures so one broken source doesn't silently make the
@@ -738,4 +740,34 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 		CurrentVer: current,
 		NewVer:     latest,
 	}}, nil
+}
+
+// scanT3Code offers the T3 Code CLI, and the Linux desktop .deb, when either is
+// behind the latest stable release. Both install outside a package manager's
+// upgrade path; the macOS desktop app updates itself, so it isn't scanned.
+func scanT3Code(ctx context.Context) ([]checklist.UpdateItem, error) {
+	cli := component.T3CodeVersion(ctx)
+	desktop := ""
+	if runtime.GOOS == "linux" {
+		desktop = component.T3CodeDesktopVersion(ctx)
+	}
+	if cli == "" && desktop == "" {
+		return nil, nil
+	}
+	latest, err := sysutil.GitHubLatestVersion(ctx, component.T3CodeRepo)
+	if err != nil {
+		return nil, fmt.Errorf("check latest T3 Code: %w", err)
+	}
+	return t3codeUpdateItems(cli, desktop, latest), nil
+}
+
+func t3codeUpdateItems(cli, desktop, latest string) []checklist.UpdateItem {
+	var items []checklist.UpdateItem
+	if cli != "" && versionNewer(latest, cli) {
+		items = append(items, checklist.UpdateItem{Name: "t3code", Source: "cli", CurrentVer: cli, NewVer: latest})
+	}
+	if desktop != "" && versionNewer(latest, desktop) {
+		items = append(items, checklist.UpdateItem{Name: "t3code-desktop", Source: "cli", CurrentVer: desktop, NewVer: latest})
+	}
+	return items
 }
