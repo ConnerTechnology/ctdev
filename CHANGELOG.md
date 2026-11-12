@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [17.6.0] - 2026-11-12
+
+### Added
+- **Paper installs on macOS (Apple Silicon) and Linux.** `paper` installs the desktop app of the
+  Paper design tool: the `paper-design` cask on macOS, which updates itself, and the `paper`
+  package from Paper's signed APT repository on Linux (amd64 and arm64), so `ctdev update` keeps it
+  current. Uninstalling on Linux removes the repository and its key too.
+
+### Changed
+- **A release no longer needs a person.** The prompt audit runs headless during the release, and
+  its findings become issues instead of holding the release. Every merged change ships the same
+  session.
+
 ## [17.5.0] - 2026-11-09
 
 ### Added
