@@ -13,7 +13,9 @@ import (
 // Linux, ToDesktop serves a signed APT repository, and the package's postinst
 // rewrites /etc/apt/sources.list.d/paper-desktop.sources from the vendor's
 // copy, so ctdev writes the same file and apt sees one repository whichever
-// wrote it last. apt upgrade keeps it current, so it needs no update scanner.
+// wrote it last. The vendor's copy carries the same key inline, so once the
+// package is in, ctdev's keyring goes unused; uninstall removes it anyway.
+// apt upgrade keeps the app current, so it needs no update scanner.
 const (
 	paperCask        = "paper-design"
 	paperPackage     = "paper"
