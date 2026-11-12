@@ -52,7 +52,8 @@ file the next session reads:
 
 - A human says what they want; the lead session takes it the rest of the way on its own. It
   interviews the human (`/grilling`), writes the spec and tickets (`/to-spec`, `/to-tickets`), builds,
-  reviews every diff in a fresh context against the plan, merges, and releases. The human doesn't merge.
+  reviews every diff in a fresh context against the plan, merges, and releases. The human doesn't merge
+  or release: a merge to `main` ships the same session.
 - A bug that reaches a release is fixed with a note on how development missed it and what now
   catches it (`docs/agents/issue-tracker.md`).
 - Wait on CI in the same turn (`gh pr checks <n> --watch`), then merge. A turn that ends on "once
@@ -87,8 +88,8 @@ file the next session reads:
 ## Releases
 
 1. Commit changes
-2. In a terminal, run `claude --settings '{"disableBundledSkills":false}'` in the repo, then
-   `/doctor prompt-audit`; fix each finding or file an issue for it
+2. Run the prompt audit headless (`docs/agents/where-things-go.md`); file an issue for what it
+   finds, which doesn't block the release
 3. Update CHANGELOG.md
 4. Bump VERSION
 5. Commit: `docs: update for vX.Y.Z`

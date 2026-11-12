@@ -42,14 +42,15 @@ If the reason is a lasting decision rather than one change, it is an ADR, and th
 `/doctor prompt-audit` runs on the bundled `/claude-api` skill [1], and this repo's
 `.claude/settings.json` sets `disableBundledSkills`, so in a plain session here it refuses. A key
 passed with `--settings` overrides the same key in the project's settings for that session only
-[10], [11], so start the session in the repo with the skills turned back on:
+[10], [11], so the release runs it headless, in the repo, with the skills turned back on:
 
 ```sh
-claude --settings '{"disableBundledSkills":false}'
+claude -p --settings '{"disableBundledSkills":false}' "/doctor prompt-audit"
 ```
 
-Then run `/doctor prompt-audit`. A session started outside the repo would load the audit too, but
-it would also load the user's `~/.claude/CLAUDE.md`, which ADR-0007 keeps out of sessions here.
+It only reports: it proposes diffs and edits nothing. A session started outside the repo would load
+the audit too, but it would also load the user's `~/.claude/CLAUDE.md`, which ADR-0007 keeps out
+of sessions here.
 
 ## Sources
 
