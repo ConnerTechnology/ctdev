@@ -18,6 +18,7 @@ them is plain Markdown with relative links, readable on GitHub as it stands.
 
 ## Node recipes
 
+- [Dev machine](node-recipes/dev-machine.md) — the base set every development machine gets
 - [Pi-hole / homelab node](node-recipes/pihole-node.md) — Pi-hole behind Caddy, with a wildcard cert
 
 ## Trust
