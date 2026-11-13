@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [17.7.0] - 2026-11-13
+
+### Added
+- **ffmpeg installs as a component.** `ctdev install ffmpeg` installs it with apt on Linux and
+  Homebrew on macOS.
+- **A dev-machine recipe.** `docs/node-recipes/dev-machine.md` lists the base set every
+  development machine gets, by OS and by whether it has a display, before you pick the rest from
+  `ctdev install`. It is a recipe, not a profile, so ADR 0013 still holds.
+
 ## [17.6.0] - 2026-11-12
 
 ### Added
