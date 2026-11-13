@@ -57,6 +57,8 @@ access point to change a setting.
 
 ## Node recipes
 
+- [Dev machine](docs/node-recipes/dev-machine.md) — the base components and
+  settings every development machine gets, before you pick the rest
 - [Pi-hole / homelab node](docs/node-recipes/pihole-node.md) — Pi-hole behind a
   Caddy reverse proxy with a Let's Encrypt wildcard cert, nothing exposed to the
   internet

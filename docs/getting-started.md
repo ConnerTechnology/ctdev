@@ -7,6 +7,8 @@ work on. Both are below; neither needs a clone of this repo.
 
 Install the `ctdev` binary, then choose the components and `configure`
 categories this machine should have.
+For a development machine, the [dev machine recipe](node-recipes/dev-machine.md)
+lists the base set to start from.
 
 ```bash
 # 1. install ctdev
