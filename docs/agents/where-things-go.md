@@ -45,7 +45,7 @@ If the reason is a lasting decision rather than one change, it is an ADR, and th
 passed with `--settings` overrides the same key in the project's settings for that session only
 [10], [11], so the release runs it headless, in the repo, with the skills turned back on:
 `scripts/prompt-audit.sh`. It skips the run when nothing under `CLAUDE.md`, `AGENTS.md` or
-`.claude/` changed since the last release tag, and gives it read-only tools, since a headless run
+`.claude/` changed since the last release tag, and runs it without Bash, since a headless run
 can't answer a permission prompt.
 
 It only reports: it proposes diffs and edits nothing. A session started outside the repo would load
