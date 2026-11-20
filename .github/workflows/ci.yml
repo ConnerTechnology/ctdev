@@ -7,15 +7,19 @@ on:
       - 'v*'
   pull_request:
     branches: [main]
+    # ready_for_review is the run a goal pull request gets: drafts run nothing (each job's `if`),
+    # and scripts/goal.sh land marks the pull request ready once the goal is built.
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 # Group by ref, not SHA: a release pushes main and a tag at the same commit,
 # and with a SHA-keyed group whichever run starts first gets cancelled — when
 # that's the tag run, the release never builds (bit v12.4.0). Per-ref groups
 # keep branch and tag runs independent, while rapid successive pushes to the
-# same branch still supersede each other.
+# same branch still supersede each other. A draft's runs get a group of their own: a draft run
+# GitHub creates late must not cancel the run that marking the pull request ready started.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ github.event.pull_request.draft && '-draft' || '' }}
   cancel-in-progress: true
 
 # Default to read-only; write perms are granted per-job where actually needed.
@@ -25,6 +29,8 @@ permissions:
 jobs:
   shellcheck:
     name: Shell Script Lint
+    # A draft runs nothing (see pull_request above).
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
 
     steps:
@@ -33,7 +39,8 @@ jobs:
 
       - name: Check syntax
         run: |
-          for f in install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh; do
+          for f in install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
+            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh; do
             bash -n "$f" || exit 1
           done
 
@@ -41,7 +48,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Run ShellCheck
-        run: shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh
+        run: |
+          shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
+            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh
+
+      # scripts/goal.sh merges slices and lands goals; its tests run it against a throwaway repo
+      # with a stand-in gh, so nothing here touches GitHub.
+      - name: Goal script tests
+        run: scripts/goal-test.sh
 
       # AGENTS.md, the path-scoped rules and docs/agents/ are claims about the tree that
       # nothing else compiles — this holds them to their byte budgets and to paths that exist,
@@ -51,6 +65,8 @@ jobs:
 
   powershell-lint:
     name: PowerShell Lint
+    # A draft runs nothing (see pull_request above).
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: windows-latest
 
     steps:
@@ -87,6 +103,8 @@ jobs:
 
   go-test:
     name: Go Tests
+    # A draft runs nothing; test-ubuntu and test-macos need go-test, so they skip with it.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
 
     steps:

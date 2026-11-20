@@ -50,21 +50,44 @@ file the next session reads:
 
 ## How we work
 
-- A human says what they want; the lead session takes it the rest of the way on its own. It
-  interviews the human (`/grilling`), writes the spec and tickets (`/to-spec`, `/to-tickets`), builds,
-  reviews every diff in a fresh context against the plan, merges, and releases. The human doesn't merge
-  or release: a merge to `main` ships the same session.
+- A human gives a goal; the lead session takes it to `main` and a release on its own, through
+  "Working on a goal". It records the work in Linear (`/to-spec`, `/to-tickets` for a large goal),
+  has every diff reviewed in a fresh context against the goal, and the human never merges or releases.
 - A bug that reaches a release is fixed with a note on how development missed it and what now
   catches it (`docs/agents/issue-tracker.md`).
-- Wait on CI in the same turn (`gh pr checks <n> --watch`), then merge. A turn that ends on "once
-  CI passes" stalls, because nothing wakes the session.
-- Ask the human when unsure or when the decision is the human's to make.
 - Before a change, say what it does to the work after it on the board, and shape it so that work
   keeps it.
 - Work that needs the human comes one item at a time: "what next" names a single item and what it
   unblocks. Work agents can do alone runs in parallel.
 - Governing files (`AGENTS.md`, `.claude/settings.json`, `.mcp.json`, `.claude/skills/`,
   `.claude/rules/`) change by showing the human the diff first and landing it after approval.
+
+## Who decides what
+
+Ask the human only about architecture: the kind of datastore (document or relational); a new
+service, process boundary or deploy target; a new vendor or anything paid; a change to the security
+or permission model; breaking a public API or a stored data format; deleting data or publishing
+anything. Decide the rest without asking (schema shape, code, libraries in the current stack, file
+layout, tests, how to slice a goal) and record the larger choices in an ADR. Never stop to ask how
+to build something. Ask one question with a proposed default, and keep building what it doesn't block.
+
+## Working on a goal
+
+`scripts/goal.sh`, run from the primary checkout (`docs/agents/goal-loop.md`):
+
+1. `start <slug>`: goal branch `goal/<slug>` from `origin/main`, its worktree, a draft pull request.
+   The slug starts with the Linear ID.
+2. `slice <slug> <name>`: a worktree per slice, cut from the goal's head. One agent per worktree,
+   in parallel; a slice that needs another starts after that one merges.
+3. `merge <slug> <name>`: checks what it touched, merges it into the goal on this machine, pushes the
+   goal, removes the slice. The session resolves conflicts on the goal branch.
+4. A fresh-context reviewer reads the pull request's diff against the goal; fix what it finds.
+5. `land <slug>`: full checks, then the pull request goes ready so GitHub's checks run once; merged
+   when they pass, then released. It waits in the turn: a turn that ends on "once CI passes" stalls.
+   `status <slug>` says what is left.
+
+Never post a commit status by hand, merge around a failing check, or force-push `main`. Leave no
+worktree or branch behind.
 
 ## Talking to the human
 
@@ -94,7 +117,8 @@ file the next session reads:
 4. Bump VERSION
 5. Commit: `docs: update for vX.Y.Z`
 6. Tag: `git tag vX.Y.Z`
-7. Push: `git push && git push --tags`
+7. Push: `git push && git push --tags`, then `git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*'`
+   prints nothing (no session transcript went out)
 8. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
 
 ## Guidance is checked

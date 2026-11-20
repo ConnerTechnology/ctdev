@@ -39,10 +39,12 @@ bytes() { wc -c < "$1" | tr -d ' '; }
 # Measured 2026-09-18, right after CON-37 cut the root file to orientation: 3,121 bytes
 # (it was 34,981). Raised 2026-09-24 by CON-86, which moved the text into AGENTS.md (CLAUDE.md
 # is the one line that imports it) and added the working agreement from repo-template: 5,606
+# bytes. Raised 2026-11-19 by CTD-158, which added "Who decides what" and "Working on a goal"
+# (the human asked for both in AGENTS.md; the detail is in docs/agents/goal-loop.md): 7,746
 # bytes. The ceiling is that plus about 15%. Hitting it means a fact belongs in a path-scoped
 # rule or in docs/ — see the "Where knowledge lives" table. Raising it is allowed, in its own
 # commit, with the new measurement and the reason.
-SESSION_START_CEILING=6400
+SESSION_START_CEILING=8900
 root=$(( $(bytes CLAUDE.md) + $(bytes AGENTS.md) ))
 if [ "$root" -gt "$SESSION_START_CEILING" ]; then
   bad "CLAUDE.md and AGENTS.md are $root bytes; the ceiling is $SESSION_START_CEILING. Move something to the home it belongs in (AGENTS.md, 'Where knowledge lives')"
