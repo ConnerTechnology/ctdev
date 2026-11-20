@@ -113,8 +113,8 @@ worktree or branch behind.
 
 `/retro auto` runs at 06:20 on yesterday's sessions (`scripts/sessions.sh digest` over Entire's
 local checkpoints), fixes what keeps going wrong or costing tokens, code first, and lands it as a
-goal. `/retro` runs one with the human (both in `.claude/commands/retro.md`). Both write to `docs/retros/`, which is public: summarize,
-never quote a prompt. Past sessions: `scripts/sessions.sh search <term>...`.
+goal. `/retro` runs one with the human (both in `.claude/commands/retro.md`). Both write to
+`docs/retros/`, which is public: summarize, never quote a prompt. Past sessions: `scripts/sessions.sh search <term>...`.
 
 ## Releases
 
