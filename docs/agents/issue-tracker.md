@@ -34,9 +34,9 @@ When the Linear connection fails (no credentials, wrong ones, or a rotated secre
   That change lands with the fix, so the same kind of bug can't ship the same way again.
 - **A dispatched ticket is reviewed by the coordinator before merge.** A builder doesn't review
   its own work, so the review judges the diff and the evidence rather than the builder's report.
-  The builder follows `/implement` minus the review and commits on its worktree branch; the
-  coordinator runs `/code-review main` on that branch in a fresh context, with the ticket as the
-  spec. When the human types `/implement` themselves, the skill's own order (review before commit) holds.
+  The builder follows `/implement` minus the review and commits on its slice branch
+  (`goal-loop.md`); before `land`, the coordinator runs `/code-review main` on the goal branch in a
+  fresh context, with the ticket as the spec. When the human types `/implement` themselves, the skill's own order (review before commit) holds.
 - **A builder runs unattended, so it's told not to stop early.** Its prompt ends with the
   instruction under "Keeping implementers working" in `.claude/skills/implement-spec/SKILL.md`.
   If its run ends with acceptance criteria still open and no blocker named, the coordinator sends
@@ -47,8 +47,9 @@ When the Linear connection fails (no credentials, wrong ones, or a rotated secre
   unticked box with a note under it is a finding, and becomes a linked issue. The coordinator
   reads the boxes, not the chat, to know the walk is done.
 - **Who takes it next** is a label: `ready-for-agent` or `ready-for-human` (see `triage-labels.md`).
-- **Branch names**: the one Linear gives the issue (`gitBranchName`), so the GitHub integration
-  can move it.
+- **Branch names**: a goal's branch is `goal/<slug>`, and the slug starts with the issue ID
+  (`ctd-158-goal-loop`). The ID in the branch name is enough for the GitHub integration to link the
+  pull request to the issue.
 - Text is American English, written like a person wrote it.
 
 ## Pull requests as a triage surface
