@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **The Entire CLI installs as a component.** `ctdev install entire` installs `entire` and
+  `git-remote-entire`. On Linux they come from the latest release archive, checked against its
+  `checksums.txt`, into `~/.local/bin`. If GitHub is down, the archive comes from Entire's mirror
+  at install.entire.com. On macOS they come from the `entireio/tap/entire` cask. A hand install
+  already in `~/.local/bin` is taken over and replaced in place. `ctdev update` keeps it current,
+  and ctdev turns off Entire's own update check so updates have one owner. `ctdev doctor` shows
+  its version. Signing in, telemetry and each repo's `entire enable` are left to that repo
+  (ADR-0018).
+
 ## [17.7.0] - 2026-11-13
 
 ### Added
