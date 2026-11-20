@@ -13,7 +13,6 @@ ctdev/                 Go module root
     configs/           Config files deployed by installers (go:embed)
   gitrepo/             Finding the git repo a command runs in, and its .git/info/exclude
   gpu/                 GPU/NVIDIA signing management
-  jira/                Jira API tokens per site, and the Atlassian MCP server entry
   linear/              Linear app credentials per workspace, app tokens, the linear MCP server entry
   platform/            OS/arch detection
   secretfile/          Owner-only KEY=VALUE credential files, written atomically

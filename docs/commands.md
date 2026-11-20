@@ -42,7 +42,6 @@ ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocki
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)
 ctdev configure linear          # this repo's Linear MCP server (local scope), as this computer's Linear app (--show)
-ctdev configure jira            # this repo's Atlassian MCP server (local scope), and your Jira API token for scripts (--show)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev configure storage --batch --swapfile-size 2  # Same, with a 2 GiB swapfile; also resizes ctdev's own
