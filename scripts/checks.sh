@@ -53,11 +53,13 @@ if [ "$mode" = full ]; then
   want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_pwsh=1
 else
   for f in "${files[@]}"; do
-    case "$f" in
+    case "${f#./}" in
       ctdev/*) want_go=1 want_ubuntu=1 ;;
-      .github/workflows/*) want_shell=1 want_go=1 want_goal=1 ;;
+      # ci.yml holds the shellcheck list, the restic pin and the Ubuntu matrix the jobs read, and a
+      # change to this script can break any job it runs: both run every container job.
+      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 ;;
       install.sh|uninstall.sh|devcontainer.sh) want_shell=1 want_ubuntu=1 ;;
-      scripts/goal*|scripts/checks.sh) want_shell=1 want_goal=1 ;;
+      scripts/goal*) want_shell=1 want_goal=1 ;;
       scripts/*|.shellcheckrc) want_shell=1 ;;
       install.ps1) want_pwsh=1 ;;
     esac
@@ -101,27 +103,50 @@ bin_dir=""
 cleanup() { [ -z "$bin_dir" ] || rm -rf "$bin_dir"; }
 trap cleanup EXIT
 
-# The go-test job, plus a static build the Ubuntu jobs reuse.
+# The go-test job, plus a static build the Ubuntu jobs reuse. The golang image has no bunzip2, so
+# a few lines of Go's compress/bzip2 unpack restic. The container scripts use no && lists: under -e
+# a failure before the last && does not stop the script.
 go_job() {
   local pin
   pin=$(restic_pin) || return 1
-  bin_dir=$(mktemp -d)
-  docker run --rm --name "ctdev-checks-go-$$" \
+  bin_dir=$(mktemp -d) || return 1
+  docker run --rm --quiet --name "ctdev-checks-go-$$" \
     -v "$PWD":/src:ro -v "$bin_dir":/out \
     -v ctdev-checks-gomod:/go/pkg/mod -v ctdev-checks-gocache:/root/.cache/go-build \
     -e RESTIC_PIN="$pin" -e HOST_UID="$(id -u)" \
-    "$(go_image)" bash -euc '
+    "$(go_image)" bash -euo pipefail -c '
       read -r url sum <<<"$RESTIC_PIN"
       curl -fsSLo /tmp/restic.bz2 "$url"
       echo "$sum  /tmp/restic.bz2" | sha256sum -c - >/dev/null
-      bunzip2 /tmp/restic.bz2 && install -m 0755 /tmp/restic /usr/local/bin/restic
-      cp -a /src /w && cd /w/ctdev
+      mkdir /tmp/bunzip2
+      cat >/tmp/bunzip2/main.go <<"GO"
+package main
+
+import (
+	"compress/bzip2"
+	"io"
+	"os"
+)
+
+func main() {
+	if _, err := io.Copy(os.Stdout, bzip2.NewReader(os.Stdin)); err != nil {
+		os.Stderr.WriteString("bunzip2: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+}
+GO
+      go run /tmp/bunzip2/main.go </tmp/restic.bz2 >/tmp/restic
+      install -m 0755 /tmp/restic /usr/local/bin/restic
+      restic version
+      cp -a /src /w
+      cd /w/ctdev
       go test -race -timeout 20m ./...
       go vet ./...
       for t in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
         GOOS="${t%/*}" GOARCH="${t#*/}" go vet ./...
       done
-      CGO_ENABLED=0 go build -ldflags "-X main.version=$(cat ../VERSION)" -o ctdev .
+      version=$(cat ../VERSION)
+      CGO_ENABLED=0 go build -ldflags "-X main.version=$version" -o ctdev .
       ./ctdev --help >/dev/null
       ./ctdev --version
       ./ctdev info >/dev/null
@@ -134,13 +159,14 @@ go_job() {
 ubuntu_job() {
   local version=$1
   [ -x "$bin_dir/ctdev" ] || { echo "no ctdev build: the Go job failed" >&2; return 1; }
-  docker run --rm --name "ctdev-checks-ubuntu-$version-$$" -v "$bin_dir":/bin-ctdev:ro \
-    "ubuntu:$version" bash -euc '
+  docker run --rm --quiet --name "ctdev-checks-ubuntu-$version-$$" -v "$bin_dir":/bin-ctdev:ro \
+    "ubuntu:$version" bash -euo pipefail -c '
       apt-get update -qq >/dev/null
       DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git sudo curl >/dev/null
       cp /bin-ctdev/ctdev /usr/local/bin/ctdev
       ctdev --force install zsh >/dev/null
-      command -v zsh >/dev/null && [ -d ~/.oh-my-zsh ]
+      command -v zsh >/dev/null
+      [ -d ~/.oh-my-zsh ]
       ctdev --force install jq >/dev/null
       command -v jq >/dev/null
       ctdev info >/dev/null
@@ -188,7 +214,9 @@ needs_docker() {
 
 [ "$want_shell" = 0 ] || run shellcheck shell_job
 run guidance scripts/check-guidance.sh
-[ "$want_goal" = 0 ] || [ ! -x scripts/goal-test.sh ] || run goal-tests scripts/goal-test.sh
+# Skipped only where the tree has no goal tests yet; one that is there but not executable fails,
+# as it would in ci.yml.
+[ "$want_goal" = 0 ] || [ ! -e scripts/goal-test.sh ] || run goal-tests scripts/goal-test.sh
 [ "$want_pwsh" = 0 ] || run powershell pwsh_job
 if [ "$want_go" = 1 ] || [ "$want_ubuntu" = 1 ]; then
   run go go_job
