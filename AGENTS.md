@@ -59,8 +59,11 @@ file the next session reads:
   keeps it.
 - Work that needs the human comes one item at a time: "what next" names a single item and what it
   unblocks. Work agents can do alone runs in parallel.
-- Governing files (`AGENTS.md`, `.claude/settings.json`, `.mcp.json`, `.claude/skills/`,
-  `.claude/rules/`) change by showing the human the diff first and landing it after approval.
+- Nothing waits for the human's approval, governing files (`AGENTS.md`, `.claude/**`, `.mcp.json`)
+  included: a goal lands when its review is addressed and every check passes.
+- Build the best solution: the simplest one that solves the problem (KISS), shaped by the domain
+  and its words in `CONTEXT.md`, never over-engineered. DRY where it removes real duplication, not
+  for its own sake.
 
 ## Who decides what
 
@@ -82,8 +85,8 @@ to build something. Ask one question with a proposed default, and keep building 
 3. `merge <slug> <name>`: checks what it touched, merges it into the goal on this machine, pushes the
    goal, removes the slice. The session resolves conflicts on the goal branch.
 4. A fresh-context reviewer reads the pull request's diff against the goal; fix what it finds.
-5. `land <slug>`: full checks, then the pull request goes ready so GitHub's checks run once; merged
-   when they pass, then released. It waits in the turn: a turn that ends on "once CI passes" stalls.
+5. `land <slug>`: the full checks on this machine, then the pull request merges at once (ADR-0020),
+   then the release. It finishes in the turn: a turn that ends on "once the checks pass" stalls.
    `status <slug>` says what is left.
 
 Never post a commit status by hand, merge around a failing check, or force-push `main`. Leave no
@@ -107,6 +110,14 @@ worktree or branch behind.
   line or two, cites the Linear issue and says why (this overrides a user-level one-line rule);
   the release commit has no issue and no body.
   Attribution is off, set in `.claude/settings.json`.
+
+## Retros
+
+`/retro auto` runs at 06:20 on yesterday's sessions (`scripts/sessions.sh digest` over Entire's
+local checkpoints), fixes what keeps going wrong or costing tokens, code first, and lands it as a
+goal. `/retro` runs one with the human (both in `.claude/commands/retro.md`). Both write to
+`docs/retros/`, which is public: summarize, never quote a prompt. Past sessions:
+`scripts/sessions.sh search <term>...`.
 
 ## Releases
 

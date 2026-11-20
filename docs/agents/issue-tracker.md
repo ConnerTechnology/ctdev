@@ -26,8 +26,8 @@ When the Linear connection fails (no credentials, wrong ones, or a rotated secre
 - **States**: Backlog → Todo → In Progress → In Review (the pull request is open) → **Done**
   (merged to `main`; comment the merge commit hash). Canceled and Duplicate close without work.
 - **`/implement` and builders never close a ticket.** The coordinator merges the pull request once
-  its review passes and CI is green, then moves the ticket to Done. The human doesn't merge; they
-  approve governing-file diffs before they land.
+  its review passes and CI is green, then moves the ticket to Done. The human neither merges nor
+  approves diffs.
 - **A bug that shipped in a release gets an `escaped` label** on its fix ticket, and a
   **How it escaped** section in the description: what would have caught it, why that didn't exist
   or didn't fire, and the change that catches it now (a test, a CI check, a rule or a skill step).

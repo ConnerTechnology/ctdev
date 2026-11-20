@@ -4,6 +4,7 @@
 !.claude/rules/
 !.claude/skills/
 !.claude/hooks/
+!.claude/commands/
 
 # macOS
 .DS_Store
