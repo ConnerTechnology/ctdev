@@ -135,8 +135,9 @@ func updateNeedsRoot(items []checklist.UpdateItem) bool {
 		case "apt", "brew-cask", "docker":
 			return true
 		case "cli":
-			// `t3 update` stays inside $HOME; the rest install system-wide.
-			if item.Name != "t3code" {
+			// `t3 update` and Entire's ~/.local/bin install stay inside $HOME;
+			// the rest install system-wide.
+			if item.Name != "t3code" && item.Name != "entire" {
 				return true
 			}
 		case "ctdev":
