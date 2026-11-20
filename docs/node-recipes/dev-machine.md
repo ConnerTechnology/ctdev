@@ -28,9 +28,10 @@ ctdev install                    # pick from the list
 
 `claude-code` pulls in `ccstatusline`, which pulls in `node`, so Node.js comes
 with the base. `entire` records agent sessions as checkpoints in the repos that
-turn it on; each repo's own setup runs `entire enable`. Other runtimes (`go`, `python`, `ruby`) and role-specific tools
-(cloud CLIs, Kubernetes, infrastructure stacks) are picked afterward. On Linux,
-`chrome` and `1password` install only on amd64.
+turn it on; each repo's own setup runs `entire enable`. Other runtimes (`go`,
+`python`, `ruby`) and role-specific tools (cloud CLIs, Kubernetes,
+infrastructure stacks) are picked afterward. On Linux, `chrome` and
+`1password` install only on amd64.
 
 **Manual steps**
 

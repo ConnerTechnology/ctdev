@@ -15,12 +15,16 @@ every repo's Entire settings alone. Decided on CTD-159.
   put both binaries, and where ctdev and restic already live. No root is needed, and a hand
   install already there is the same files in the same place. ctdev counts it as installed and
   replaces it in place on update, so no second copy appears. Another `entire` elsewhere on PATH
-  gets a one-line hint and is left alone. On macOS the cask's copy is the install, and a copy that
-  `install.sh` left in `~/.local/bin` is removed once the cask is in place.
+  gets a one-line hint and is left alone. On macOS the cask's copy is the install. Every
+  `ctdev install entire` with the cask in place removes a copy that `install.sh` left in
+  `~/.local/bin`, if it answers as Entire. Otherwise it would shadow the cask, and with Entire's
+  updater off it would never update.
 - **Two origins.** GitHub first, then Entire's mirror at `install.entire.com`, the same order and
   layout (`<base>/v<version>/<file>`) as Entire's `install.sh`. The archive and its checksums
-  always come from the same origin. A checksum mismatch stops the install rather than trying the
-  mirror, because bytes that disagree with their own origin's checksums mean that origin is broken.
+  always come from the same origin. An origin that can't serve the files, or whose `checksums.txt`
+  doesn't list the archive, is skipped. A checksum mismatch stops the install rather than trying
+  the mirror, because bytes that disagree with their own origin's checksums mean that origin is
+  broken.
 - **One updater.** When Entire's update prompt is accepted, Entire runs `install.sh` or
   `brew upgrade` itself. That would be a second updater that ctdev's scan can't see. The
   component sets `"no_auto_update": true` in Entire's `config.json` (`ENTIRE_CONFIG_DIR`, or
@@ -50,5 +54,7 @@ every repo's Entire settings alone. Decided on CTD-159.
 
 - `entire enable`, `entire login` and `entire configure` stay per-repo steps
   (`docs/agents/goal-loop.md`, "Entire").
+- doctor's row reports the `entire` first on PATH, which is the one git hooks run. The update
+  scan reads the copy ctdev manages, and the install's hint names any other copy.
 - Uninstalling removes the two binaries only. Login contexts and credentials in
   `~/.config/entire`, and each repo's `.entire/` and checkpoints, stay.

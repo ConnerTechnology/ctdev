@@ -129,9 +129,6 @@ func entireInstall(ctx context.Context, opts ExecOpts) error {
 			if err := sysutil.BrewCaskInstallVerified(ctx, o, entireCask, entireCaskInstalled); err != nil {
 				return err
 			}
-			if err := removeHandInstalledEntire(ctx, o); err != nil {
-				return err
-			}
 		case platform.Linux:
 			ver, err := EntireLatestVersion(ctx)
 			if err != nil {
@@ -149,6 +146,13 @@ func entireInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	// Phase 2: always, so a hand install ctdev finds is taken over too.
+	if p.OS == platform.MacOS && (o.DryRun || entireCaskInstalled()) {
+		// With the cask in place, an install.sh copy in ~/.local/bin would
+		// shadow it on PATH and, with Entire's updater off, never update.
+		if err := removeHandInstalledEntire(ctx, o); err != nil {
+			return err
+		}
+	}
 	if err := disableEntireAutoUpdate(o); err != nil {
 		return err
 	}
@@ -256,7 +260,9 @@ func entireArchiveName(arch string) (string, error) {
 }
 
 // installEntireRelease downloads release ver, checks it, and replaces both
-// binaries in ~/.local/bin.
+// binaries in ~/.local/bin. It doesn't use sysutil.DownloadGitHubBinary, which
+// installs one binary from one origin; Entire's archive holds two, and the
+// mirror has to be tried when GitHub can't serve it.
 func installEntireRelease(ctx context.Context, o sysutil.Opts, arch, ver string) error {
 	if !entireStableVersion.MatchString(ver) {
 		return fmt.Errorf("unexpected Entire version %q", ver)
@@ -305,6 +311,9 @@ func fetchEntireRelease(ctx context.Context, w io.Writer, origins []entireOrigin
 		path, err := fetchEntireFromOrigin(ctx, origin, ver, archive, tmpDir)
 		if err == nil {
 			return path, nil
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
 		}
 		if !errors.Is(err, errEntireOriginUnavailable) {
 			return "", err
@@ -355,10 +364,12 @@ func entireChecksumFor(sums, name string) string {
 	return ""
 }
 
-// replaceEntireBinaries moves both binaries from src into dir. Each is copied
-// beside its destination and renamed over it, so a git hook that runs `entire`
-// mid-update gets the old binary or the new one, never half of one, and a
-// running entire doesn't make the write fail.
+// replaceEntireBinaries moves both binaries from src into dir. Both are first
+// copied beside their destinations and only then renamed over them, so a full
+// disk fails before either is replaced and the CLI and its helper stay at one
+// version. A rename also means a git hook running `entire` mid-update gets the
+// old binary or the new one, never half of one, and a running entire doesn't
+// make the write fail.
 func replaceEntireBinaries(src, dir string) error {
 	for _, b := range entireBinaries {
 		if !isExecutableFile(filepath.Join(src, b)) {
@@ -368,15 +379,21 @@ func replaceEntireBinaries(src, dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	staged := make([]string, 0, len(entireBinaries))
+	defer func() {
+		for _, tmp := range staged {
+			os.Remove(tmp) // gone already once renamed
+		}
+	}()
 	for _, b := range entireBinaries {
-		dest := filepath.Join(dir, b)
-		tmp := dest + ".ctdev-new"
+		tmp := filepath.Join(dir, b+".ctdev-new")
+		staged = append(staged, tmp)
 		if err := copyFileMode(filepath.Join(src, b), tmp, 0o755); err != nil {
-			os.Remove(tmp)
 			return err
 		}
-		if err := os.Rename(tmp, dest); err != nil {
-			os.Remove(tmp)
+	}
+	for i, b := range entireBinaries {
+		if err := os.Rename(staged[i], filepath.Join(dir, b)); err != nil {
 			return err
 		}
 	}
@@ -475,8 +492,8 @@ func disableEntireAutoUpdate(o sysutil.Opts) error {
 	return nil
 }
 
-// ours is where ctdev puts entire on this OS.
-func entireOurs() []string {
+// entireManagedPaths is where ctdev puts entire on this OS.
+func entireManagedPaths() []string {
 	if platform.Detect().OS == platform.MacOS {
 		var paths []string
 		for _, prefix := range entireBrewPrefixes {
@@ -521,7 +538,7 @@ func otherEntireOnPath(ours []string) string {
 // Linuxbrew cask) is on PATH beside ours. It is left alone: ctdev didn't put it
 // there and can't know what else relies on it.
 func hintOtherEntire(w io.Writer) {
-	if other := otherEntireOnPath(entireOurs()); other != "" {
+	if other := otherEntireOnPath(entireManagedPaths()); other != "" {
 		fmt.Fprintf(w, "Another entire is at %s, outside ctdev; remove it so only one copy is on PATH\n", other)
 	}
 }
