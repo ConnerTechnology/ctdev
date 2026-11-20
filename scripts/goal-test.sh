@@ -24,7 +24,7 @@
 #      exactly the goal's head, and never asks GitHub for a CI run; failing checks touch no pull
 #      request; a refused merge keeps the goal; on success removes the goal and fast-forwards the
 #      primary checkout's main
-#   7. a refs/entire/ ref on origin makes the next push fail loudly
+#   7. a start that fails anywhere removes what it made, and can run again
 #   8. two merges and a slice on one goal at once: the later ones wait for the lock, then run on
 #      what the first left; both slices land in the goal and its worktree stays clean
 #   9. two checks.sh runs at once name every container differently
@@ -61,13 +61,11 @@ export REAL_GIT
 export PATH="$T/bin:$PATH"
 mkdir -p "$T/bin"
 
-# A git that fails on demand, for the failures a real remote has: an unreachable ls-remote, a
-# commit that a hook refuses.
+# A git that fails on demand, for the failures a real remote has: an unreachable fetch, a commit
+# that a hook refuses.
 cat >"$T/bin/git" <<'EOF'
 #!/usr/bin/env bash
 case " $* " in
-  *" ls-remote "*"refs/entire/"*)
-    [ ! -f "${GH_STATE:-/nonexistent}/lsremote.fail" ] || { echo "fatal: unable to access the remote" >&2; exit 128; } ;;
   *" commit "*"chore: start goal"*)
     [ ! -f "${GH_STATE:-/nonexistent}/startcommit.fail" ] || { echo "a hook refused the commit" >&2; exit 1; } ;;
   *" fetch "*)
@@ -366,22 +364,22 @@ git -C "$WT/demo/dirty" checkout -q -- README.md
 succeeds "dropping the clean slice" drop demo dirty
 
 # An ignored file is invisible to git status, and git worktree remove deletes it: what goal.sh
-# removes must not take one with it, except what Entire and the build leave behind.
-printf '*.local\n.entire/\n' >>"$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+# removes must not take one with it, except what Claude Code and the build leave behind.
+printf '*.local\n.playwright-mcp/\n' >>"$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
 succeeds "slice for an ignored file" slice demo ignored
 commit "$WT/demo/ignored" ignored.txt "ignored"
 printf 'notes\n' >"$WT/demo/ignored/notes.local"
-mkdir -p "$WT/demo/ignored/.entire/logs" && printf 'log\n' >"$WT/demo/ignored/.entire/logs/x.log"
+mkdir -p "$WT/demo/ignored/.playwright-mcp" && printf 'log\n' >"$WT/demo/ignored/.playwright-mcp/x.log"
 before=$(rev goal/demo)
 fails "merging a slice with an ignored file" "notes.local" merge demo ignored
 check "a slice with an ignored file is not merged" same "$(rev goal/demo)" "$before"
 check "the ignored file is kept" test -f "$WT/demo/ignored/notes.local"
-check "Entire's files are not named" not_out_has ".entire"
+check "Playwright's files are not named" not_out_has ".playwright-mcp"
 fails "dropping a slice with an ignored file" "notes.local" drop demo ignored --force
 check "a refused drop keeps the ignored file" test -f "$WT/demo/ignored/notes.local"
 rm "$WT/demo/ignored/notes.local"
-succeeds "merging once the ignored file is gone, Entire's logs aside" merge demo ignored
-check "the slice with only Entire's logs is removed" test ! -e "$WT/demo/ignored"
+succeeds "merging once the ignored file is gone, Playwright's logs aside" merge demo ignored
+check "the slice with only Playwright's logs is removed" test ! -e "$WT/demo/ignored"
 
 succeeds "slice for failing checks" slice demo red
 commit "$WT/demo/red" red.txt "red"
@@ -554,39 +552,8 @@ check "the local goal branch is removed" no_branch goal/demo
 check "the primary checkout's main is fast-forwarded" same "$(rev main)" "$(origin_rev main)"
 check "the primary checkout is clean" clean_tree "$PRIMARY"
 
-# 7. refs/entire/ ------------------------------------------------------------------------------
-say "refs/entire/"
-fresh entire
-succeeds "start before a checkpoint ref" start ent
-succeeds "slice" slice ent work
-commit "$WT/ent/work" work.txt "work"
-git --git-dir="$BARE" update-ref refs/entire/checkpoints/v1 "$(origin_rev main)"
-fails "merging with a refs/entire/ ref on origin" "refs/entire/checkpoints/v1" merge ent work
-check "the refusal says why" out_has "session transcripts may be published"
-
-fresh entire-branch
-succeeds "start" start ent
-succeeds "slice" slice ent work
-commit "$WT/ent/work" work.txt "work"
-git --git-dir="$BARE" update-ref refs/heads/entire/checkpoints/v1 "$(origin_rev main)"
-fails "merging with Entire's legacy checkpoint branch on origin" "refs/heads/entire/checkpoints/v1" merge ent work
-
-fresh entire-start
-git --git-dir="$BARE" update-ref refs/entire/checkpoints/v1 "$(origin_rev main)"
-fails "starting with a refs/entire/ ref on origin" "refs/entire/checkpoints/v1" start ent
-check "no pull request is opened" test "$(count gh 'pr create')" = 0
-check "a refused start leaves no goal branch" no_branch goal/ent
-check "a refused start leaves no goal worktree" test ! -e "$WT/ent"
-check "a refused start takes the goal branch off origin" test -z "$(origin_rev goal/ent)"
-
-fresh entire-unreachable
-succeeds "start" start ent
-succeeds "slice" slice ent work
-commit "$WT/ent/work" work.txt "work"
-touch "$E/state/lsremote.fail"
-fails "merging when the remote's refs can't be listed" "could not list the refs on origin" merge ent work
-rm -f "$E/state/lsremote.fail"
-
+# 7. a start that fails ------------------------------------------------------------------------
+say "a start that fails"
 fresh start-commit-fails
 touch "$E/state/startcommit.fail"
 fails "starting when the first commit is refused" "was not started" start ent
