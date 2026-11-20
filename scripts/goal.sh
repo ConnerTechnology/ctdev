@@ -81,7 +81,8 @@ removable() { # removable <dir> <what to do after>: die, naming them, if removal
   kept=$(kept_files "$1")
   [ -z "$kept" ] || die "$1 has ignored files its removal would delete:
 $kept
-Commit them (git add -f, or unignore the path), move them out, or delete them, then $2"
+Move them out of the worktree or delete them, then $2. Never force-add one: .env, keys and the
+like are ignored because they hold secrets, and this repo is public."
 }
 
 need_goal() {
