@@ -28,7 +28,7 @@ Oslados's `infra/sessions/`.
 
 A bad retro, or an instruction injected through content a session read (a web page, a file, a
 command's output), could loosen the rules that guard everything else, and nothing stops it before
-it lands. The human accepted that risk. What remains: every check must pass, locally and on GitHub,
+it lands. The human accepted that risk. What remains: every check must pass on this machine
 before anything lands; the digest is data; and each run is a pull request the human can read and
 revert.
 
