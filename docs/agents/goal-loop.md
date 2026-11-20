@@ -78,7 +78,8 @@ slice, then land.
 
 Entire records a checkpoint (prompt, transcript, files touched) for each commit with agent work,
 linked by an `Entire-Checkpoint` trailer. `entire checkpoint list`, `entire search` and `entire why`
-read them. This repo is public, so checkpoints stay on this machine:
+read them. This repo is public, so checkpoints stay on this machine (ADR-0019), and the daily
+retro reads them here:
 
 - `.entire/settings.json` sets `push_sessions: false` and the `git-refs` backend for every clone and
   worktree. The settings file `entire enable --local` writes is not in a new worktree; this one is.

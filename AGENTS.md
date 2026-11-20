@@ -61,6 +61,7 @@ file the next session reads:
   unblocks. Work agents can do alone runs in parallel.
 - Governing files (`AGENTS.md`, `.claude/settings.json`, `.mcp.json`, `.claude/skills/`,
   `.claude/rules/`) change by showing the human the diff first and landing it after approval.
+  The daily retro is the exception: it lands them when every check passes (ADR-0019).
 
 ## Who decides what
 
@@ -107,6 +108,13 @@ worktree or branch behind.
   line or two, cites the Linear issue and says why (this overrides a user-level one-line rule);
   the release commit has no issue and no body.
   Attribution is off, set in `.claude/settings.json`.
+
+## Retros
+
+`/retro auto` runs at 06:20 on yesterday's sessions (`scripts/sessions.sh digest` over Entire's
+local checkpoints), fixes what keeps going wrong or costing tokens, code first, and lands it as a
+goal. `/retro` runs one with the human. Both write to `docs/retros/`, which is public: summarize,
+never quote a prompt. Past sessions: `scripts/sessions.sh search <term>...`.
 
 ## Releases
 
