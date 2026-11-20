@@ -8,7 +8,7 @@ onto what Linear already has. Both labels exist on the CTDev team (2026-09-24).
 | ------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `needs-triage`            | State **Backlog**, before `/to-tickets`         | Nobody has shaped it into a ticket yet                                                |
 | `needs-info`              | Label `ready-for-human`                         | The missing information is always a question for the human                               |
-| `ready-for-agent`         | Label `ready-for-agent`                         | The plan is on the issue and the human approved it; an agent can take it unattended      |
+| `ready-for-agent`         | Label `ready-for-agent`                         | The plan is on the issue; an agent can take it unattended                               |
 | `ready-for-human`         | Label `ready-for-human`                         | Only the human can do it — the issue says why, and gives them numbered steps              |
 | `wontfix`                 | State **Canceled**                              | Ruled out. There is no `.out-of-scope/` folder and no parked-ideas project here       |
 | `bug`                     | Label `bug`                                     | Something is broken                                                                   |

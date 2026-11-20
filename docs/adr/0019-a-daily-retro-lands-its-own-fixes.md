@@ -14,7 +14,7 @@ prose, and lands the fixes as one goal through `scripts/goal.sh`. Decided on CTD
 | --- | --- |
 | Where checkpoints go | **This machine only.** The repo is public, and a checkpoint is the whole transcript: prompts, commands and their output, files read. Entire's redaction is pattern-based and misses what it doesn't recognize. `.entire/settings.json` sets `push_sessions: false`, the clone's push policy is `manual`, and `scripts/goal.sh` fails after any push that leaves a `refs/entire/` ref or an `entire/` branch on `origin`. Sessions on another computer don't reach this machine's retro; a separate private repo (`entire configure --checkpoint-remote`) would fix that, and can be added later without losing anything |
 | What a retro file may say | Summaries in its own words, with the session ID and time. **Never a quote from a prompt**, and no personal or client detail: `docs/retros/` is published |
-| What it may land without review | **Everything**, `AGENTS.md`, `.claude/**` and the check runner (`scripts/checks.sh`, `ci.yml`, `scripts/check-guidance.sh`) included, once every check passes. This is the one exception to AGENTS.md's rule that governing files land after the human approves the diff |
+| What it may land without review | **Everything**, `AGENTS.md`, `.claude/**` and the check runner (`scripts/checks.sh`, `ci.yml`, `scripts/check-guidance.sh`) included, once every check passes, like any goal (AGENTS.md, "How we work") |
 | What stays the human's | Whatever AGENTS.md, "Who decides what", leaves to them. The retro writes it as a question in its file and as a `ready-for-human` issue, and never makes the change. It never turns off or weakens a check |
 
 The input is `scripts/sessions.sh digest`, code that reads the checkpoints in

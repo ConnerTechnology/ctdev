@@ -21,9 +21,8 @@ detail. Prompts stay on this machine (`entire checkpoint explain`).
    change in `AGENTS.md`, a rule or a doc.
 3. **Write the retro** to `docs/retros/<YYYY-MM-DD>-<topic>.md`: what went well, what didn't, and
    the proposed edits, each with its file and "done when". Zero edits is fine.
-4. **Propose the edits** as a table and ask, as one question with your recommendation, which to
-   make. Make them through the goal loop once the human agrees, and mark each kept, declined or
-   deferred in the retro file.
+4. **Make the edits** through the goal loop and land them. Ask only what AGENTS.md, "Who decides
+   what", leaves to the human.
 
 ## Daily (`/retro auto`)
 

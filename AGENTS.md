@@ -59,9 +59,11 @@ file the next session reads:
   keeps it.
 - Work that needs the human comes one item at a time: "what next" names a single item and what it
   unblocks. Work agents can do alone runs in parallel.
-- Governing files (`AGENTS.md`, `.claude/settings.json`, `.mcp.json`, `.claude/skills/`,
-  `.claude/rules/`) change by showing the human the diff first and landing it after approval.
-  The daily retro is the exception: it lands them when every check passes (ADR-0019).
+- Nothing waits for the human's approval, governing files (`AGENTS.md`, `.claude/**`, `.mcp.json`)
+  included: a goal lands when its review is addressed and every check passes.
+- Build the best solution: the simplest one that solves the problem (KISS), shaped by the domain
+  and its words in `CONTEXT.md`, never over-engineered. DRY where it removes real duplication, not
+  for its own sake.
 
 ## Who decides what
 
@@ -114,7 +116,8 @@ worktree or branch behind.
 `/retro auto` runs at 06:20 on yesterday's sessions (`scripts/sessions.sh digest` over Entire's
 local checkpoints), fixes what keeps going wrong or costing tokens, code first, and lands it as a
 goal. `/retro` runs one with the human (both in `.claude/commands/retro.md`). Both write to
-`docs/retros/`, which is public: summarize, never quote a prompt. Past sessions: `scripts/sessions.sh search <term>...`.
+`docs/retros/`, which is public: summarize, never quote a prompt. Past sessions:
+`scripts/sessions.sh search <term>...`.
 
 ## Releases
 

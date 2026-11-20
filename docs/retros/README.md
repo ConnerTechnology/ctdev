@@ -2,10 +2,10 @@
 
 What went wrong in our sessions and what changed so it doesn't happen again. Two kinds (ADR-0019):
 
-| Kind | File | When | Who approves |
+| Kind | File | When | How it lands |
 | --- | --- | --- | --- |
 | Daily | `<YYYY-MM-DD>-daily.md` | Every day at 06:20 on the human's machine (T3 Code scheduled task, `/retro auto`), on the previous day's sessions | Nobody: it lands through `scripts/goal.sh land` when every check passes |
-| With the human | `<YYYY-MM-DD>-<topic>.md` | When the human runs `/retro` at the end of a session | The human, edit by edit |
+| With the human | `<YYYY-MM-DD>-<topic>.md` | When the human runs `/retro` at the end of a session | Through the goal loop, like any goal |
 
 ## The daily loop
 
