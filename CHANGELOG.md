@@ -14,6 +14,25 @@ All notable changes to this project will be documented in this file.
   its version. Signing in, telemetry and each repo's `entire enable` are left to that repo
   (ADR-0018).
 
+## [18.0.0] - 2026-11-19
+
+### Removed
+- **Jira and Atlassian support is gone: `ctdev configure jira`, `ctdev jira` (with
+  `auth-header`) and the `acli` component.** Engineering v2.0.0 made Linear the only tracker
+  (CON-442), so nothing uses them. `ctdev update --refresh-keys` no longer refreshes acli's APT
+  key. ctdev doesn't clean up what they left on a machine; to remove it:
+  1. Revoke the Atlassian API token at https://id.atlassian.com/manage-profile/security/api-tokens
+     (it is named `ctdev (<hostname>)`).
+  2. Delete the saved tokens: `rm -rf ~/.config/ctdev/jira`.
+  3. In each repo where you ran `ctdev configure jira`: `claude mcp remove atlassian -s local`.
+  4. If you installed acli: `brew uninstall atlassian/acli/acli` on macOS, or on Debian and
+     Ubuntu `sudo apt remove acli`, then
+     `sudo rm /etc/apt/sources.list.d/acli.list /usr/share/keyrings/acli-archive-keyring.gpg`.
+
+### Changed
+- **`ctdev repo setup` installs the engineering plugin at v2.0.0** (was v1.1.0). Run it again
+  in each repo to move that repo to v2.0.0.
+
 ## [17.8.0] - 2026-11-19
 
 ### Changed

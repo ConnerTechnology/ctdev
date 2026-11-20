@@ -154,25 +154,6 @@ the client ID and secret with Linear before it saves them.
 credentials are saved, and who the app connects as. Restart Claude Code in the
 repo after setting it up.
 
-### Jira
-
-`ctdev configure jira` adds Atlassian's Rovo MCP server (`atlassian`) at local
-scope. Claude Code signs in to it as you, with OAuth, the first time you run
-`/mcp` there. Scripts that call Jira's REST API use your Atlassian API token
-instead: the wizard gives the steps to create one, checks it with the site, and
-saves it in `~/.config/ctdev/jira/<site>.env` (owner-only), where `<site>` is the
-name before `.atlassian.net`. A script reads it as a header:
-
-```bash
-curl -H "$(ctdev jira auth-header --site example)" \
-  https://example.atlassian.net/rest/api/3/myself
-```
-
-Atlassian API tokens expire within a year. When one does, the header stops
-working; run `ctdev configure jira` again to save a new one.
-`ctdev configure jira --show` reports the repo's server and whether each saved
-site's token still works.
-
 ## Secrets
 
 Anything secret a wizard asks for is stored on that machine only and is never

@@ -40,7 +40,7 @@ func TestLocalMCPServer(t *testing.T) {
 	if _, ok, _ := claudecli.LocalMCPServer(t.TempDir(), "linear"); ok {
 		t.Error("another project's server leaked")
 	}
-	if _, ok, _ := claudecli.LocalMCPServer(root, "atlassian"); ok {
+	if _, ok, _ := claudecli.LocalMCPServer(root, "github"); ok {
 		t.Error("another server name matched")
 	}
 }
