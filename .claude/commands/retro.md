@@ -63,8 +63,8 @@ Runs unattended: ask the human nothing. Work from the primary checkout, on `main
    for the day's retro, `scripts/goal.sh start <id>-retro-<day>`, the retro file and the fixes in
    slices, a fresh-context reviewer on the pull request's diff against the retro file, then
    `scripts/goal.sh land`, then the release (AGENTS.md, "Releases"). A fix that can't pass the
-   checks is dropped (`scripts/goal.sh drop --force`, or reverted) and listed as open; the rest
-   lands.
+   checks is dropped (`scripts/goal.sh drop <slug> <name> --force`, or reverted) and listed as
+   open; the rest lands.
 6. **The retro file,** `docs/retros/<day>-daily.md`: the day in numbers (sessions, tokens, cache
    read share, API calls); the previous fixes, worked or repeated; each problem with its evidence,
    its fix and "done when"; questions for the human. Tables over prose. Each question also becomes

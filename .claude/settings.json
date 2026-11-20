@@ -55,7 +55,8 @@
   "claudeMdExcludes": [
     "**/.claude/CLAUDE.md",
     "**/Repos/github.com/ConnerTechnology/AI/config/CLAUDE.md",
-    "**/Repos/github.com/ConnerTechnology/CLAUDE.md"
+    "**/Repos/github.com/ConnerTechnology/CLAUDE.md",
+    "**/ctdev/component/configs/claude-code/CLAUDE.md"
   ],
   "disableWorkflows": true,
   "enableArtifact": false,
