@@ -24,12 +24,12 @@ worktree would let a merge rewrite the script while it runs.
 
 | Command | What it does |
 | --- | --- |
-| `start <slug> [title]` | Goal branch and worktree, an empty first commit (GitHub opens no pull request without one), push, draft pull request |
+| `start <slug> [title]` | Goal branch and worktree, an empty first commit (GitHub opens no pull request without one), push, draft pull request. A start that fails after the push removes what it made |
 | `slice <slug> <name>` | Slice branch and worktree from the goal's head; prints the path. Refused while a merge into the goal is running |
-| `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice |
+| `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice; a commit made on the slice during the checks keeps it too |
 | `drop <slug> <name>` | Removes a slice with nothing left to merge |
 | `status <slug>` | The goal, whether it is pushed, its pull request, each open slice, and what is left |
-| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks the pull request ready, waits for that run to pass on that exact commit, merges with `--match-head-commit`, removes the goal's worktree and branch, fast-forwards the primary checkout |
+| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks the pull request ready, waits for that run to pass on that exact commit and for every other check and status on it to be green, merges with `--match-head-commit`, deletes the goal branch here and on GitHub, removes its worktree, fast-forwards the primary checkout. If GitHub's checks fail, the pull request goes back to draft, so the fixes' pushes run nothing |
 | `path <slug> [name]` | Prints a worktree's path |
 
 A conflict stops `merge` or `land` with the merge left in the goal worktree. The session resolves
@@ -74,9 +74,12 @@ read them. This repo is public, so checkpoints stay on this machine:
 - `.entire/settings.json` sets `push_sessions: false` and the `git-refs` backend for every clone and
   worktree. The settings file `entire enable --local` writes is not in a new worktree; this one is.
 - `entire configure --checkpoint-push-policy manual` is set once per clone, as a second lock.
-- `scripts/goal.sh` fails after any push if a `refs/entire/` ref is on `origin`.
-- `entire checkpoint list --outgoing` should always say `git push` sends none of them.
+- `scripts/goal.sh` pushes with `--no-verify`, which skips Entire's pre-push hook (the only thing
+  that pushes checkpoints), and fails after any push if `origin` has a `refs/entire/` ref or an
+  `entire/` branch (the legacy backend's `entire/checkpoints/v1`).
+- After the release push, `git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*'` prints
+  nothing, and `entire checkpoint list --outgoing` says `git push` sends none of them.
 
-On a new clone: install Entire (`docs.entire.com/installation`), run
+On a new clone: install Entire (https://docs.entire.com/installation), run
 `entire configure --checkpoint-push-policy manual`, then `entire enable --agent claude-code`.
 The mirror, `entire/unmirrored/` branches and Trails are not used (ADR-0017).

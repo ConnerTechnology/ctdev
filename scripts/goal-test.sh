@@ -74,6 +74,7 @@ pr() { # pr <number or branch>: the pull request's state dir
 }
 case "$1 $2" in
   "pr create")
+    [ ! -f "$s/prcreate.fail" ] || { echo "pull request create failed" >&2; exit 1; }
     n=$(( $(find "$s/pr" -mindepth 1 -maxdepth 1 | wc -l) + 1 ))
     mkdir -p "$s/pr/$n"
     echo "$head" >"$s/pr/$n/branch"; echo "$base" >"$s/pr/$n/base"; echo OPEN >"$s/pr/$n/state"
@@ -93,13 +94,16 @@ case "$1 $2" in
         [ -n "$want" ] || unhandled "$@"
         if [ "$(git --git-dir="$GH_BARE" rev-parse "refs/heads/$(cat "$d/branch")")" != "$want" ]; then
           echo "the pull request's head moved"
+        elif [ -f "$s/rollup.json" ]; then
+          jq -r "$jq" "$s/rollup.json"   # GitHub's shape, through goal.sh's own filter
         elif [ -f "$s/rollup_bad" ]; then
           cat "$s/rollup_bad"
         fi ;;
       *) unhandled "$@" ;;
     esac ;;
   "pr ready")
-    d=$(pr "$3"); echo false >"$d/draft" ;;
+    d=$(pr "$3")
+    if [[ " $* " == *" --undo "* ]]; then echo true; else echo false; fi >"$d/draft" ;;
   "pr merge")
     d=$(pr "$3"); branch=$(cat "$d/branch")
     [[ " $* " == *" --merge "* ]] || unhandled "$@"
@@ -136,6 +140,7 @@ EOF
 cat >"$T/bin/checks" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_STATE/checks.log"
+[ ! -x "$GH_STATE/checks.hook" ] || "$GH_STATE/checks.hook"
 [ ! -e "$GH_STATE/checks.fail" ]
 EOF
 chmod +x "$T/bin/gh" "$T/bin/checks"
@@ -314,6 +319,31 @@ check "the resolved slice is removed" no_branch slice/demo/right
 check "the resolved slice's worktree is removed" test ! -e "$WT/demo/right"
 check "the checks ran on what the resolution adds" logged checks "-C $gdir --changed README.md"
 
+say "merge: work that changes while the checks run"
+succeeds "slice" slice demo late
+commit "$WT/demo/late" late1.txt "first"
+cat >"$E/state/checks.hook" <<EOF2
+#!/usr/bin/env bash
+printf 'second\n' >"$WT/demo/late/late2.txt"
+git -C "$WT/demo/late" add late2.txt && git -C "$WT/demo/late" commit -q -m "test: late"
+EOF2
+chmod +x "$E/state/checks.hook"
+fails "merging while the slice gains a commit" "commits made after it was merged" merge demo late
+rm -f "$E/state/checks.hook"
+check "a slice that gained a commit keeps its branch" has_branch slice/demo/late
+succeeds "merging the late commit" merge demo late
+check "the goal has the late commit" test -f "$gdir/late2.txt"
+
+succeeds "slice" slice demo addgo
+commit "$WT/demo/addgo" ctdev/a.go "package a"
+succeeds "merging a Go file" merge demo addgo
+succeeds "slice" slice demo mvgo
+git -C "$WT/demo/mvgo" mv ctdev/a.go b.go
+git -C "$WT/demo/mvgo" commit -q -m "test: move a.go out of ctdev"
+: >"$E/state/checks.log"
+succeeds "merging a move out of ctdev/" merge demo mvgo
+check "the checks see the moved file's old path" logged_like checks "ctdev/a.go"
+
 # 4. drop --------------------------------------------------------------------------------------
 say "drop"
 succeeds "slice to keep" slice demo kept
@@ -361,15 +391,33 @@ check "land marks the pull request ready" logged gh "pr ready 1"
 check "land waits for the run on the goal's head" logged_like gh "run list --workflow ci.yml --commit $head --event pull_request"
 check "a failed CI run merges nothing" test "$(count gh 'pr merge')" = 0
 check "a failed CI run keeps the goal worktree" test -d "$gdir"
+check "a failed CI run puts the pull request back to draft" logged gh "pr ready 1 --undo"
+check "the pull request is a draft again" same "$(cat "$E/state/pr/1/draft")" true
 
-# The pull request is ready now, so land takes the run that exists, however old.
+# A pull request someone marked ready by hand: land takes the run that exists, however old.
+echo false >"$E/state/pr/1/draft"
+: >"$E/state/gh.log"
 printf '11 completed success 2000-01-01T00:00:00Z\n' >"$E/state/runs"
 printf 'success\n' >"$E/state/jobs/11"
 printf 'Example Check\n' >"$E/state/rollup_bad"
 fails "landing when a check on the pull request failed" "not every check passed on #1: Example Check" land demo
 rm -f "$E/state/rollup_bad"
-check "an already-ready pull request is not marked ready again" test "$(count gh 'pr ready')" = 1
+check "an already-ready pull request is not marked ready again" test "$(count gh 'pr ready 1')" = "$(count gh 'pr ready 1 --undo')"
 check "a failed check merges nothing" test "$(count gh 'pr merge')" = 0
+check "a failed check puts the pull request back to draft" same "$(cat "$E/state/pr/1/draft")" true
+
+# Rollups shaped like GitHub's, through goal.sh's own jq filter: a commit status has a context and a
+# state but no name, and a check still running has no conclusion yet.
+printf '12 completed success 2099-01-01T00:00:00Z\n' >"$E/state/runs"
+printf 'success\n' >"$E/state/jobs/12"
+printf '{"headRefOid":"%s","statusCheckRollup":[{"name":"Go Tests","conclusion":"SUCCESS"},{"name":"Lint","conclusion":"SKIPPED"},{"context":"example/status","state":"FAILURE"}]}\n' \
+  "$head" >"$E/state/rollup.json"
+fails "landing with a failing commit status" "not every check passed on #1: example/status" land demo
+printf '{"headRefOid":"%s","statusCheckRollup":[{"name":"Go Tests","status":"IN_PROGRESS","conclusion":""}]}\n' \
+  "$head" >"$E/state/rollup.json"
+fails "landing with a check still running" "not every check passed on #1: Go Tests" land demo
+rm -f "$E/state/rollup.json"
+check "a failing status or a running check merges nothing" test "$(count gh 'pr merge')" = 0
 
 : >"$E/state/runs"
 GOAL_CI_TIMEOUT=1 fails "landing when no CI run appears" "no passing CI run on $head after 1s" land demo
@@ -388,8 +436,9 @@ printf 'success\n' >"$E/state/jobs/21"
 touch "$E/state/runlist.fail"
 succeeds "land" land demo
 check "land tries again when gh run list fails once" out_has "gh run list failed; trying again"
-landed=$(origin_rev goal/demo)
-check "land merges the main that moved into the goal" same "$(origin_rev goal/demo^2)" "$moved"
+landed=$(sed -n 's/^pr merge 1 --merge --match-head-commit //p' "$E/state/gh.log")
+check "land merges the main that moved into the goal" same "$(git --git-dir="$BARE" rev-parse "$landed^2")" "$moved"
+check "land deletes the remote goal branch" test -z "$(origin_rev goal/demo)"
 check "land runs the full checks after merging main" logged checks "-C $gdir --full"
 check "land marks the draft ready" logged gh "pr ready 1"
 check "land looks at the draft run and skips it" logged gh "run view 20 --json jobs --jq [.jobs[] | select(.conclusion != \"skipped\")] | length"
@@ -412,10 +461,29 @@ git --git-dir="$BARE" update-ref refs/entire/checkpoints/v1 "$(origin_rev main)"
 fails "merging with a refs/entire/ ref on origin" "refs/entire/checkpoints/v1" merge ent work
 check "the refusal says why" out_has "session transcripts may be published"
 
+fresh entire-branch
+succeeds "start" start ent
+succeeds "slice" slice ent work
+commit "$WT/ent/work" work.txt "work"
+git --git-dir="$BARE" update-ref refs/heads/entire/checkpoints/v1 "$(origin_rev main)"
+fails "merging with Entire's legacy checkpoint branch on origin" "refs/heads/entire/checkpoints/v1" merge ent work
+
 fresh entire-start
 git --git-dir="$BARE" update-ref refs/entire/checkpoints/v1 "$(origin_rev main)"
 fails "starting with a refs/entire/ ref on origin" "refs/entire/checkpoints/v1" start ent
 check "no pull request is opened" test "$(count gh 'pr create')" = 0
+check "a refused start leaves no goal branch" no_branch goal/ent
+check "a refused start leaves no goal worktree" test ! -e "$WT/ent"
+check "a refused start takes the goal branch off origin" test -z "$(origin_rev goal/ent)"
+
+fresh start-fails
+touch "$E/state/prcreate.fail"
+fails "starting when the pull request can't be opened" "was not started" start ent
+check "a failed start leaves no goal branch" no_branch goal/ent
+check "a failed start leaves no goal worktree" test ! -e "$WT/ent"
+check "a failed start takes the goal branch off origin" test -z "$(origin_rev goal/ent)"
+rm -f "$E/state/prcreate.fail"
+succeeds "starting again after a failed start" start ent
 
 say "$passed passed in $(( $(date +%s) - start_time ))s"
 if [ "$fail" -ne 0 ]; then

@@ -16,9 +16,10 @@ on:
 # and with a SHA-keyed group whichever run starts first gets cancelled — when
 # that's the tag run, the release never builds (bit v12.4.0). Per-ref groups
 # keep branch and tag runs independent, while rapid successive pushes to the
-# same branch still supersede each other.
+# same branch still supersede each other. A draft's runs get a group of their own: a draft run
+# GitHub creates late must not cancel the run that marking the pull request ready started.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ github.event.pull_request.draft && '-draft' || '' }}
   cancel-in-progress: true
 
 # Default to read-only; write perms are granted per-job where actually needed.
