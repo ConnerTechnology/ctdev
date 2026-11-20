@@ -81,6 +81,6 @@ read them. This repo is public, so checkpoints stay on this machine:
 - After the release push, `git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*'` prints
   nothing, and `entire checkpoint list --outgoing` says `git push` sends none of them.
 
-On a new clone: install Entire (https://docs.entire.com/installation), run
+On a new clone: `ctdev install entire` (ADR-0018), run
 `entire configure --checkpoint-push-policy manual`, then `entire enable --agent claude-code`.
 The mirror, `entire/unmirrored/` branches and Trails are not used (ADR-0017).
