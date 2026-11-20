@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [18.2.0] - 2026-11-20
+
+### Changed
+- **A goal merges as soon as the full checks pass on this machine.** `scripts/goal.sh land` runs
+  `scripts/checks.sh --full` (now with the PowerShell check in a container), pushes, and merges
+  exactly the checked commit. It refuses if the goal changed or `main` moved during the checks.
+  GitHub runs no CI on pull requests; it checks `main` and each release tag, where the macOS job
+  runs, and the release build needs every job (ADR-0020).
+- **The goal script matches Oslados.** New: `sync` (brings `main` into a goal), `drop --force`,
+  and `status` showing how far `main` is ahead. Commands on one goal wait for each other instead
+  of failing. `land` finds the goal's own pull request even when a slug is reused, and can be run
+  again after an interruption. Removing a worktree that holds ignored files is refused, so nothing
+  gitignored is lost with it.
+
+### Added
+- **A daily retro.** `/retro auto` reads the previous day's sessions with `scripts/sessions.sh
+  digest` (Entire's checkpoints, read on this machine only), fixes what keeps going wrong or
+  costing tokens, code first, and lands it as a goal. `/retro` runs one with the human.
+  `scripts/sessions.sh search` finds where earlier sessions dealt with something. Retro files are
+  public and never quote a prompt (ADR-0019).
+
 ## [18.1.0] - 2026-11-19
 
 ### Added
