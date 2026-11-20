@@ -58,7 +58,7 @@ else
       ctdev/*) want_go=1 want_ubuntu=1 ;;
       # ci.yml holds the shellcheck list, the restic pin and the Ubuntu matrix the jobs read, and a
       # change to this script can break any job it runs: both run every container job.
-      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_sessions=1 ;;
+      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_sessions=1 want_pwsh=1 ;;
       install.sh|uninstall.sh|devcontainer.sh) want_shell=1 want_ubuntu=1 ;;
       scripts/goal*) want_shell=1 want_goal=1 ;;
       scripts/sessions*) want_shell=1 want_sessions=1 ;;

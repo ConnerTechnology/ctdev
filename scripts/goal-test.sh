@@ -193,7 +193,7 @@ cat >"$T/bin/checks" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_STATE/checks.log"
 printf 'checks %s\n' "$*" >>"$GH_STATE/events.log"
-[ ! -x "$GH_STATE/checks.hook" ] || "$GH_STATE/checks.hook"
+[ ! -x "$GH_STATE/checks.hook" ] || "$GH_STATE/checks.hook" "$@"
 [ ! -e "$GH_STATE/checks.fail" ]
 EOF
 chmod +x "$T/bin/gh" "$T/bin/checks"
@@ -508,6 +508,27 @@ check "a refused merge keeps the goal worktree" test -d "$gdir"
 check "a refused merge keeps the goal branch" has_branch goal/demo
 check "a refused merge leaves the pull request open" same "$(cat "$E/state/pr/1/state")" OPEN
 check "a refused merge releases the goal lock" lock_free demo
+
+# What the full checks didn't see must not merge: a commit in the goal worktree, or main moving.
+cat >"$E/state/checks.hook" <<EOF2
+#!/usr/bin/env bash
+case " \$* " in *" --full "*) git -C "$gdir" commit -q --allow-empty -m "test: unchecked"; rm -f "\$0" ;; esac
+EOF2
+chmod +x "$E/state/checks.hook"
+: >"$E/state/gh.log"
+fails "landing when the goal gains a commit during the checks" "changed during the full checks" land demo
+check "a commit made during the checks merges nothing" test "$(count gh 'pr merge')" = 0
+cat >"$E/state/checks.hook" <<EOF2
+#!/usr/bin/env bash
+case " \$* " in *" --full "*)
+  git clone -q "$BARE" "$E/during" && printf 'x\n' >"$E/during/during.txt" &&
+    git -C "$E/during" add during.txt && git -C "$E/during" commit -q -m "test: during" &&
+    git -C "$E/during" push -q origin main; rm -rf "$E/during" "\$0" ;;
+esac
+EOF2
+chmod +x "$E/state/checks.hook"
+fails "landing when main moves during the checks" "moved during the full checks" land demo
+check "main moving during the checks merges nothing" test "$(count gh 'pr merge')" = 0
 
 # Success: main moved meanwhile, and the pull request is a draft.
 git clone -q "$BARE" "$E/elsewhere"

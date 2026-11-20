@@ -8,7 +8,8 @@ date: 2026-11-19
 The human gives a goal and the session takes it to `main`, asking only about architecture. Each goal
 gets one goal branch and one pull request. The work is split into slices, local branches in their own
 worktrees that merge into the goal branch on this machine. GitHub's checks run once, when the goal is
-landed (replaced by ADR-0020: a goal merges on the local checks, and GitHub checks `main` after). `scripts/goal.sh` runs the loop (`docs/agents/goal-loop.md`). This was decided on CTD-158,
+landed (replaced by ADR-0020: a goal merges on the local checks, and GitHub checks `main`
+after; the options below that mention GitHub's run predate it). `scripts/goal.sh` runs the loop (`docs/agents/goal-loop.md`). This was decided on CTD-158,
 which was the first goal built this way.
 
 Measured on 2026-11-19, before deciding: a full GitHub run takes about 25 minutes. The Linux jobs

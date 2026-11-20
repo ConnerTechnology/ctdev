@@ -418,14 +418,23 @@ $slices"
         -m "Goal $slug: brings in what reached $base, so the checks run on what lands." "$remote/$base" ||
         die "$base conflicts with the goal. Resolve it in $gdir and commit, then land again"
     fi
+    head=$(git -C "$gdir" rev-parse HEAD)
     say "full checks on $(git -C "$gdir" rev-parse --short HEAD)"
     checks "$slug" -C "$gdir" --full || die "the full checks failed: fix them on the goal branch and land again"
+    # The checks read the worktree, not a commit: an edit or commit made meanwhile went unchecked.
+    if [ "$(git -C "$gdir" rev-parse HEAD)" != "$head" ] || ! clean "$gdir"; then
+      die "the goal worktree changed during the full checks; land again to check what changed"
+    fi
     push_goal "$slug"
-    head=$(git -C "$gdir" rev-parse HEAD)
     # The full checks above are the pull request's checks: GitHub runs none on it. It refuses to merge
     # a draft, and --match-head-commit merges only the commit that was checked.
     [ "$draft" = false ] || gh pr ready "$number" >&2 ||
       die "could not mark pull request #$number ready; land again"
+    # Nothing on GitHub requires the branch to be up to date, so a base that moved during the checks
+    # would merge into a combination nobody checked.
+    g fetch --quiet "$remote" "$base" || die "could not fetch $base from $remote; land again"
+    g merge-base --is-ancestor "$remote/$base" "$head" ||
+      die "$base moved during the full checks; land again to merge it in and check again"
     gh pr merge "$number" --merge --match-head-commit "$head" >&2 ||
       die "GitHub refused to merge pull request #$number; it stays open. Fix what it says and land again"
     state=$(gh pr view "$number" --json state --jq .state) || state=unknown
