@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-65 components, counted in `ctdev/component/registry.go` on 2026-11-19. A
+64 components, counted in `ctdev/component/registry.go` on 2026-11-20. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -45,7 +45,6 @@ component unsupported on this OS reports as skipped rather than failing.
 | `direnv` | Per-directory environment variables | Linux, macOS |
 | `docker` | Docker container runtime | Linux, macOS |
 | `doctl` | DigitalOcean CLI | Linux, macOS |
-| `entire` | Entire CLI: records agent sessions as git checkpoints | Linux, macOS |
 | `fd` | Fast, friendly find alternative | Linux, macOS |
 | `ffmpeg` | Audio and video converter and recorder | Linux, macOS |
 | `fzf` | Fuzzy finder for the shell | Linux, macOS |

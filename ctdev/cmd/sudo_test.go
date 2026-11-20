@@ -51,7 +51,6 @@ func TestUpdateNeedsRoot(t *testing.T) {
 		{"docker stacks can rebuild as root", []checklist.UpdateItem{{Source: "docker", Name: "pihole"}}, true},
 		{"cli tools install into /usr/local/bin", []checklist.UpdateItem{{Source: "cli", Name: "helm"}}, true},
 		{"t3 update stays in $HOME", []checklist.UpdateItem{{Source: "cli", Name: "t3code"}}, false},
-		{"entire replaces its ~/.local/bin install", []checklist.UpdateItem{{Source: "cli", Name: "entire"}}, false},
 		{"the T3 Code .deb installs through apt", []checklist.UpdateItem{{Source: "cli", Name: "t3code-desktop"}}, true},
 		{"go runtime replaces /usr/local/go", []checklist.UpdateItem{{Source: "runtime", Name: "go"}}, true},
 		{"bun upgrades in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "bun"}}, false},

@@ -63,8 +63,8 @@ clean() { [ -z "$(git -C "$1" status --porcelain)" ]; }
 
 # git worktree remove deletes ignored files without a word, and status doesn't show them, so a file
 # written under a .gitignore pattern (a new .claude/ path, say) would vanish with its worktree. What
-# Entire, Claude Code and a build leave behind is disposable; anything else stops the removal.
-disposable='^(\.entire/|\.claude/scheduled_tasks\.lock$|\.playwright-mcp/|ctdev/ctdev$|ctdev/dist/)'
+# Claude Code and a build leave behind is disposable; anything else stops the removal.
+disposable='^(\.claude/scheduled_tasks\.lock$|\.playwright-mcp/|ctdev/ctdev$|ctdev/dist/)'
 kept_files() { # kept_files <dir>: the ignored files in a worktree that removing it would lose
   git -C "$1" ls-files --others --ignored --exclude-standard --directory | grep -Ev "$disposable" || true
 }
@@ -82,29 +82,9 @@ need_goal() {
   [ -d "$(goal_dir "$1")" ] || die "goal '$1' has no worktree at $(goal_dir "$1")"
 }
 
-# Checkpoints hold session transcripts and the repo may be public, so they stay on this machine.
-# Entire is set not to push them, and its pre-push hook is the only thing that would: the script's
-# pushes skip it (--no-verify) and name only the goal branch. This then makes sure, after every push,
-# that no checkpoint is on the remote under either of Entire's backends (refs/entire/ refs, or the
-# legacy entire/checkpoints/v1 branch).
-entire_refs_absent() {
-  local refs
-  # Called under || and !, where set -e is off: an unreachable remote must not read as clean.
-  refs=$(g ls-remote "$remote" 'refs/entire/*' 'refs/heads/entire/*') || {
-    printf 'goal: could not list the refs on %s, so it is unknown whether transcripts are there\n' "$remote" >&2
-    return 1
-  }
-  [ -z "$refs" ] && return 0
-  printf 'goal: Entire refs are on %s, so session transcripts may be published:\n%s\n' "$remote" "$refs" >&2
-  printf 'Delete them (git push %s --delete <ref>) and find what pushed them before going on.\n' "$remote" >&2
-  return 1
-}
-no_entire_refs() { entire_refs_absent || exit 1; }
-
 push_goal() { # push_goal <slug>: push the goal branch, and only it
   git -C "$(goal_dir "$1")" push --quiet --no-verify "$remote" \
     "refs/heads/$(goal_branch "$1"):refs/heads/$(goal_branch "$1")"
-  no_entire_refs
 }
 
 checks_cmd() { # checks_cmd <slug>: the checks command, or die before anything has changed
@@ -136,7 +116,6 @@ cmd_start() {
      ! git -C "$dir" commit --quiet --allow-empty -m "chore: start goal $slug" \
        -m "Goal $slug: the first commit, so its pull request can open." ||
      ! git -C "$dir" push --quiet --no-verify "$remote" "refs/heads/$branch:refs/heads/$branch" ||
-     ! entire_refs_absent ||
      ! gh pr create --draft --base "$base" --head "$branch" --title "${title:-goal: $slug}" \
        --body "Goal \`$slug\`. Built in slices with \`scripts/goal.sh\`; the description is written before it lands." >&2; then
     say "start failed: removing goal $slug"
@@ -458,7 +437,6 @@ $slices"
   if [ "$(g rev-parse --abbrev-ref HEAD)" = "$base" ] && clean "$primary"; then
     g merge --quiet --ff-only "$remote/$base" || true
   fi
-  no_entire_refs
   say "goal $slug landed on $base: pull request #$number"
 }
 

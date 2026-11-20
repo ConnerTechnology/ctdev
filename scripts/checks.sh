@@ -49,19 +49,18 @@ run() { # run <name> <command...>: time a job and keep going on failure, so one 
 
 # --changed decides which jobs the files can break. Guidance always runs: it takes a second, and a
 # rename anywhere can break a link it checks.
-want_shell=0 want_go=0 want_goal=0 want_ubuntu=0 want_pwsh=0 want_sessions=0
+want_shell=0 want_go=0 want_goal=0 want_ubuntu=0 want_pwsh=0
 if [ "$mode" = full ]; then
-  want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_pwsh=1 want_sessions=1
+  want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_pwsh=1
 else
   for f in "${files[@]}"; do
     case "${f#./}" in
       ctdev/*) want_go=1 want_ubuntu=1 ;;
       # ci.yml holds the shellcheck list, the restic pin and the Ubuntu matrix the jobs read, and a
       # change to this script can break any job it runs: both run every container job.
-      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_sessions=1 want_pwsh=1 ;;
+      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_pwsh=1 ;;
       install.sh|uninstall.sh|devcontainer.sh) want_shell=1 want_ubuntu=1 ;;
       scripts/goal*) want_shell=1 want_goal=1 ;;
-      scripts/sessions*) want_shell=1 want_sessions=1 ;;
       scripts/*|.shellcheckrc) want_shell=1 ;;
       install.ps1) want_pwsh=1 ;;
     esac
@@ -70,7 +69,7 @@ fi
 
 # The shell scripts ci.yml lints. Keep in step with its shellcheck job.
 shell_files=(install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh scripts/checks.sh
-  scripts/goal.sh scripts/goal-test.sh scripts/sessions.sh scripts/prompt-audit.sh)
+  scripts/goal.sh scripts/goal-test.sh scripts/prompt-audit.sh)
 
 shell_job() {
   local f present=()
@@ -157,19 +156,6 @@ GO
     '
 }
 
-# The sessions tool's tests and vet, the go-test job's last step. Its own module, so the ctdev build
-# never sees it; same image and caches as the Go job.
-sessions_job() {
-  docker run --rm --quiet --name "ctdev-checks-sessions-$$" -v "$PWD":/src:ro \
-    -v ctdev-checks-gomod:/go/pkg/mod -v ctdev-checks-gocache:/root/.cache/go-build \
-    "$(go_image)" bash -euo pipefail -c '
-      cp -a /src/scripts/sessions /w
-      cd /w
-      go test ./...
-      go vet ./...
-    '
-}
-
 # The test-ubuntu jobs: install two components into a stock Ubuntu container.
 ubuntu_job() {
   local version=$1
@@ -234,11 +220,11 @@ pwsh_job() {
 
 needs_docker() {
   command -v docker >/dev/null && docker info >/dev/null 2>&1 && return 0
-  echo "docker is required: the Go, sessions and Ubuntu jobs never run on the host, nor the PowerShell job without pwsh" >&2
+  echo "docker is required: the Go and Ubuntu jobs never run on the host, nor the PowerShell job without pwsh" >&2
   exit 1
 }
 
-[ "$want_go$want_ubuntu$want_sessions" = "000" ] || needs_docker
+[ "$want_go$want_ubuntu" = "00" ] || needs_docker
 [ "$want_pwsh" = 0 ] || command -v pwsh >/dev/null || needs_docker
 
 [ "$want_shell" = 0 ] || run shellcheck shell_job
@@ -250,7 +236,6 @@ run guidance scripts/check-guidance.sh
 if [ "$want_go" = 1 ] || [ "$want_ubuntu" = 1 ]; then
   run go go_job
 fi
-[ "$want_sessions" = 0 ] || run sessions sessions_job
 if [ "$want_ubuntu" = 1 ]; then
   # The two releases ci.yml's test-ubuntu matrix covers, run side by side.
   run ubuntu ubuntu_both

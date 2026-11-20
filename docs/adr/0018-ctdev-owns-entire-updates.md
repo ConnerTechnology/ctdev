@@ -1,6 +1,6 @@
 ---
-status: accepted
-date: 2026-11-19
+status: superseded by ADR-0021
+date: 2026-11-20
 ---
 
 # ctdev installs Entire and owns its updates; telemetry stays with each repo

@@ -23,8 +23,6 @@ type managedTool struct {
 	args      []string
 	// fallback is where the binary lives when PATH doesn't have it yet.
 	fallback string
-	// env is added to the version probe's environment.
-	env []string
 }
 
 var managedTools = []managedTool{
@@ -40,10 +38,6 @@ var managedTools = []managedTool{
 	{component: "claude-code", binary: "claude", args: []string{"--version"}},
 	{component: "gh", binary: "gh", args: []string{"--version"}},
 	{component: "devcontainer", binary: "devcontainer", args: []string{"--version"}},
-	// Asking for the version must send nothing anywhere: run inside a repo
-	// that opted into Entire's telemetry it would report the command, and
-	// Entire's own update check would reach out.
-	{component: "entire", binary: "entire", args: []string{"version"}, env: []string{"ENTIRE_TELEMETRY_OPTOUT=1", "ENTIRE_NO_AUTO_UPDATE=1"}},
 	// The official tarball installs to /usr/local/go/bin, which a shell
 	// started before the install doesn't have on PATH.
 	{component: "go", binary: "go", args: []string{"version"}, fallback: "/usr/local/go/bin/go"},
@@ -68,8 +62,7 @@ var managedServices = []managedService{
 type managedProbe interface {
 	LookPath(name string) (string, error)
 	// Version returns a tool's raw version output, stdout and stderr together.
-	// env is added to the command's environment.
-	Version(ctx context.Context, env []string, path string, args ...string) string
+	Version(ctx context.Context, path string, args ...string) string
 	// UnitState returns `systemctl is-active` output: one state per unit.
 	UnitState(ctx context.Context, units ...string) string
 }
@@ -134,7 +127,7 @@ func toolCheck(t managedTool, p managedProbe) Check {
 				return failf("Run 'ctdev install "+t.component+"' to put it back, then open a new shell.",
 					"%s is installed but %s is not on PATH", t.component, t.binary)
 			}
-			version := firstLine(p.Version(ctx, t.env, path, t.args...))
+			version := firstLine(p.Version(ctx, path, t.args...))
 			if version == "" {
 				// Not the path: it can carry the username, and reports get shared.
 				return okf("installed")
@@ -170,8 +163,8 @@ type systemProbe struct{}
 func (systemProbe) LookPath(name string) (string, error) { return exec.LookPath(name) }
 
 // Version keeps stderr, unlike capture: some tools print their version there.
-func (systemProbe) Version(ctx context.Context, env []string, path string, args ...string) string {
-	return captureCombinedEnv(ctx, env, path, args...)
+func (systemProbe) Version(ctx context.Context, path string, args ...string) string {
+	return captureCombined(ctx, path, args...)
 }
 
 func (systemProbe) UnitState(ctx context.Context, units ...string) string {
