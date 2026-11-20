@@ -5,8 +5,8 @@
 # branch and pushed with a draft pull request. The work is done in slices: local branches,
 # slice/<slug>/<name>, each in its own worktree, cut from the goal branch's head. A slice is merged
 # into the goal branch here, never through GitHub, so slices never leave this machine. When the goal
-# is done, land runs the full checks, marks the pull request ready so GitHub's checks run once, and
-# merges it when they pass. See docs/agents/goal-loop.md.
+# is done, land runs the full checks here and merges the pull request when they pass; GitHub runs no
+# checks on it. See docs/agents/goal-loop.md.
 #
 # Every worktree lives under one root, ../.worktrees/<repo>/<slug>/, next to the primary checkout:
 # the goal in goal/, each slice in <name>/. The script removes what it creates.
@@ -22,14 +22,12 @@
 #                                           remove a slice; --force discards its unmerged commits
 #   scripts/goal.sh sync  <slug>            merge the base into the goal, check what it brings, push
 #   scripts/goal.sh status <slug>           ahead and behind the base, the slices, what is left
-#   scripts/goal.sh land <slug>             full checks, then GitHub's checks, then merge and clean
-#                                           up; run again after an interruption, it finishes
+#   scripts/goal.sh land <slug>             full checks, then merge and clean up; run again after
+#                                           an interruption, it finishes
 #   scripts/goal.sh path <slug> [name]      print a worktree's path
 #
 # Settings (environment): GOAL_REMOTE (origin), GOAL_BASE (main), GOAL_WORKTREES (the root above),
-# GOAL_CHECKS (the goal worktree's scripts/checks.sh), GOAL_POLL (30 seconds between CI polls),
-# GOAL_CI_TIMEOUT (5400 seconds), GOAL_SETTLE (10 seconds between land's push and marking the
-# pull request ready).
+# GOAL_CHECKS (the goal worktree's scripts/checks.sh).
 set -eEuo pipefail
 # set -e alone exits without a word; name the command that stopped the script.
 trap 'printf "goal: stopped at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
@@ -40,12 +38,6 @@ say() { printf '==> %s\n' "$*" >&2; }
 
 remote=${GOAL_REMOTE:-origin}
 base=${GOAL_BASE:-main}
-poll=${GOAL_POLL:-30}
-ci_timeout=${GOAL_CI_TIMEOUT:-5400}
-settle=${GOAL_SETTLE:-10}
-for n in "$poll" "$ci_timeout" "$settle"; do
-  [[ $n =~ ^[0-9]+$ ]] || { printf 'goal: GOAL_POLL, GOAL_CI_TIMEOUT and GOAL_SETTLE are whole seconds\n' >&2; exit 2; }
-done
 
 # The primary checkout, found from any worktree of the repo, including a goal's or a slice's.
 primary=$(git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
@@ -385,52 +377,8 @@ cmd_status() {
   fi
 }
 
-# Wait for the CI run GitHub starts when the pull request is marked ready, on exactly this commit.
-# Draft pull requests run nothing (ci.yml skips every job), so a run whose jobs were all skipped is
-# a draft run and does not count. Returns 1, having said why, when the run fails or never comes.
-wait_ci() { # wait_ci <sha> <since>
-  local sha=$1 since=$2 deadline runs id status conclusion real
-  deadline=$(( $(date +%s) + ci_timeout ))
-  while :; do
-    runs=$(gh run list --workflow ci.yml --commit "$sha" --event pull_request --limit 20 \
-      --json databaseId,status,conclusion,createdAt \
-      --jq "[.[] | select(.createdAt >= \"$since\")] | sort_by(.databaseId) | reverse | .[] | \"\(.databaseId) \(.status) \(.conclusion)\"") ||
-      { say "gh run list failed; trying again"; runs=""; }
-    while read -r id status conclusion; do
-      [ -n "$id" ] || continue
-      if [ "$status" != completed ]; then
-        break
-      fi
-      real=$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.conclusion != "skipped")] | length') ||
-        { say "gh run view $id failed; trying again"; break; }
-      [ "$real" -gt 0 ] || continue
-      if [ "$conclusion" = success ]; then
-        say "CI run $id passed on $sha"
-        return 0
-      fi
-      say "CI run $id on $sha ended '$conclusion'"
-      return 1
-    done <<<"$runs"
-    if [ "$(date +%s)" -ge "$deadline" ]; then
-      say "no passing CI run on $sha after ${ci_timeout}s"
-      # A run still going would keep spending runner time on a goal that is going back to draft.
-      while read -r id status conclusion; do
-        [ -z "$id" ] || [ "$status" = completed ] || gh run cancel "$id" >&2 || true
-      done <<<"$runs"
-      return 1
-    fi
-    sleep "$poll"
-  done
-}
-
-# A goal that failed to land goes back to draft, so the pushes that fix it run no checks.
-not_landed() { # not_landed <number> <why>
-  gh pr ready "$1" --undo >&2 || true
-  die "$2. Pull request #$1 is a draft again: fix it on the goal branch and land again"
-}
-
 cmd_land() {
-  local slug=$1 branch gdir head since slices number merged draft url state rollup_bad ci_name pr
+  local slug=$1 branch gdir head slices number merged draft url state pr
   valid slug "$slug"
   branch=$(goal_branch "$slug"); gdir=$(goal_dir "$slug")
   has_branch "$branch" || [ -d "$gdir" ] || on_remote "$branch" ||
@@ -474,40 +422,14 @@ $slices"
     checks "$slug" -C "$gdir" --full || die "the full checks failed: fix them on the goal branch and land again"
     push_goal "$slug"
     head=$(git -C "$gdir" rev-parse HEAD)
-    # A push to the draft starts a run that skips everything. Let it be created first, so the run
-    # marking the pull request ready starts can be told apart by its start time.
-    sleep "$settle"
-    since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    if [ "$draft" = true ]; then
-      gh pr ready "$number" >&2
-    elif [ "$draft" = false ]; then
-      # Already ready: nothing new will start, so the run for this commit is whichever exists.
-      since=1970-01-01T00:00:00Z
-    else
-      die "could not tell whether pull request #$number is a draft (isDraft: '$draft')"
-    fi
-    say "waiting for GitHub's checks on pull request #$number"
-    wait_ci "$head" "$since" || not_landed "$number" "GitHub's checks did not pass"
-    # Every other check on the head: a check run has a name and a conclusion, a commit status a
-    # context and a state, and anything not finished and green blocks the merge. ci.yml's own jobs
-    # are left out: wait_ci judged exactly the run this land started, and an earlier run's failed
-    # jobs on the same commit stay in the rollup and would block a retried land for good. None of
-    # these fields is a boolean, so // falls through only on a missing one.
-    ci_name=""
-    if [ -f "$gdir/.github/workflows/ci.yml" ]; then
-      ci_name=$(sed -n 's/^name: *//p' "$gdir/.github/workflows/ci.yml" | head -n1 | tr -d "\"'")
-    fi
-    rollup_bad=$(gh pr view "$number" --json headRefOid,statusCheckRollup --jq \
-      "if .headRefOid != \"$head\" then \"the pull request's head moved\" else
-       ([.statusCheckRollup[] | select(\"$ci_name\" == \"\" or .workflowName != \"$ci_name\") |
-         select((.conclusion // .state // \"PENDING\") as \$c |
-         [\"SUCCESS\",\"SKIPPED\",\"NEUTRAL\"] | index(\$c) | not) |
-         (.name // .context // \"a check with no name\")] | join(\", \")) end") ||
-      not_landed "$number" "could not read the checks"
-    [ -z "$rollup_bad" ] || not_landed "$number" "not every check passed on #$number: $rollup_bad"
-    gh pr merge "$number" --merge --match-head-commit "$head" >&2 || not_landed "$number" "GitHub refused the merge"
+    # The full checks above are the pull request's checks: GitHub runs none on it. It refuses to merge
+    # a draft, and --match-head-commit merges only the commit that was checked.
+    [ "$draft" = false ] || gh pr ready "$number" >&2 ||
+      die "could not mark pull request #$number ready; land again"
+    gh pr merge "$number" --merge --match-head-commit "$head" >&2 ||
+      die "GitHub refused to merge pull request #$number; it stays open. Fix what it says and land again"
     state=$(gh pr view "$number" --json state --jq .state) || state=unknown
-    [ "$state" = MERGED ] || not_landed "$number" "pull request #$number is $state, not merged"
+    [ "$state" = MERGED ] || die "pull request #$number is $state, not merged; land again"
   fi
   # Each step skips what an interrupted land already did. The local branch goes last: while it is
   # there, a land run again finds the goal's head without the remote.
