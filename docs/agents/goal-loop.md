@@ -62,9 +62,9 @@ merger is `merge`, and "mark the PR ready" plus the cleanup is `land`.
 ## Checks
 
 `scripts/checks.sh` runs every Linux job in `ci.yml`: shellcheck, the guidance check, the goal
-tests, and in containers the Go tests (with the restic `ci.yml` pins), vet, the cross-compile, and
-the Ubuntu install jobs. It never runs ctdev on the host, because ctdev configures the machine it
-runs on. `--changed` runs only the jobs the files can break; `--full` runs them all. The first run
+tests, and in containers the Go tests (with the restic `ci.yml` pins), vet, the cross-compile, the
+tests of `scripts/sessions/` (the tool behind `scripts/sessions.sh`), and the Ubuntu install jobs.
+It never runs ctdev on the host, because ctdev configures the machine it runs on. `--changed` runs only the jobs the files can break; `--full` runs them all. The first run
 takes about 10 minutes, nearly all of it the backup tests; the Go build and test caches are shared
 volumes, so a run whose Go code is unchanged takes about a minute.
 
