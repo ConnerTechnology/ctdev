@@ -85,8 +85,8 @@ to build something. Ask one question with a proposed default, and keep building 
 3. `merge <slug> <name>`: checks what it touched, merges it into the goal on this machine, pushes the
    goal, removes the slice. The session resolves conflicts on the goal branch.
 4. A fresh-context reviewer reads the pull request's diff against the goal; fix what it finds.
-5. `land <slug>`: full checks, then the pull request goes ready so GitHub's checks run once; merged
-   when they pass, then released. It waits in the turn: a turn that ends on "once CI passes" stalls.
+5. `land <slug>`: the full checks on this machine, then the pull request merges at once (ADR-0020),
+   then the release. It finishes in the turn: a turn that ends on "once the checks pass" stalls.
    `status <slug>` says what is left.
 
 Never post a commit status by hand, merge around a failing check, or force-push `main`. Leave no
