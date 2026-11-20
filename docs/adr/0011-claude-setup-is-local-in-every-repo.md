@@ -9,10 +9,10 @@ Nothing ctdev does to set up Claude Code in a repo lands in a file the repo comm
 or anyone else's. `ctdev repo setup` installs git, gh and Claude Code, adds the `connertechnology`
 marketplace and installs its plugin at local scope (the repo's `.claude/settings.local.json`, kept
 out of git through `.git/info/exclude`), then starts Claude Code on `/connertechnology:setup`.
-`ctdev configure linear` and `ctdev configure jira` add their MCP servers with
-`claude mcp add-json --scope local`. Decided with Thomas on 2026-10-22 in CTD-109, alongside
-CON-146, so the engineering library works in a repo Thomas doesn't own (a job on Jira), and works
-the same when others contribute to ours: each contributor runs `ctdev repo setup` themselves.
+`ctdev configure linear` adds its MCP server with `claude mcp add-json --scope local`. Decided with
+Thomas on 2026-10-22 in CTD-109, alongside CON-146, so the engineering library works in a repo
+Thomas doesn't own (a client's job), and works the same when others contribute to ours: each
+contributor runs `ctdev repo setup` themselves.
 
 ctdev does only what has one right answer: a tool is installed or not, a credential works or not, a
 server is there or not. Which skills, plugins, MCP servers and settings a repo uses are
