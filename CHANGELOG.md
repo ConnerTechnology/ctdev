@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [18.2.1] - 2026-11-20
+
+### Changed
+- **The release prompt audit runs only when the guidance changed.** `scripts/prompt-audit.sh`
+  skips it when `CLAUDE.md`, `AGENTS.md` and `.claude/` are unchanged since the last release tag,
+  and runs it without Bash, kept to this repo. On 2026-11-19 three releases ran it three times, a
+  third of the day's tokens. Found by the first daily retro (`docs/retros/2026-11-19-daily.md`).
+
+### Fixed
+- **`/retro auto` drops a failing fix with the right command**,
+  `scripts/goal.sh drop <slug> <name> --force`.
+- **ctdev's deployed user `CLAUDE.md` no longer loads as instructions in sessions in this repo**
+  (`claudeMdExcludes`). What ctdev installs is unchanged.
+
 ## [18.2.0] - 2026-11-20
 
 ### Changed
