@@ -117,7 +117,8 @@ worktree or branch behind.
 4. Bump VERSION
 5. Commit: `docs: update for vX.Y.Z`
 6. Tag: `git tag vX.Y.Z`
-7. Push: `git push && git push --tags`
+7. Push: `git push && git push --tags`, then `git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*'`
+   prints nothing (no session transcript went out)
 8. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
 
 ## Guidance is checked

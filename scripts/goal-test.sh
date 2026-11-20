@@ -40,8 +40,24 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OB
 unset GOAL_REMOTE GOAL_BASE
 export GOAL_POLL=0 GOAL_SETTLE=0 GOAL_CI_TIMEOUT=5
 export GOAL_CHECKS=$T/bin/checks
+REAL_GIT=$(command -v git)
+export REAL_GIT
 export PATH="$T/bin:$PATH"
 mkdir -p "$T/bin"
+
+# A git that fails on demand, for the failures a real remote has: an unreachable ls-remote, a
+# commit that a hook refuses.
+cat >"$T/bin/git" <<'EOF'
+#!/usr/bin/env bash
+case " $* " in
+  *" ls-remote "*"refs/entire/"*)
+    [ ! -f "${GH_STATE:-/nonexistent}/lsremote.fail" ] || { echo "fatal: unable to access the remote" >&2; exit 128; } ;;
+  *" commit "*"chore: start goal"*)
+    [ ! -f "${GH_STATE:-/nonexistent}/startcommit.fail" ] || { echo "a hook refused the commit" >&2; exit 1; } ;;
+esac
+exec "$REAL_GIT" "$@"
+EOF
+chmod +x "$T/bin/git"
 
 # The stand-in gh. Every call is logged; a form goal.sh does not use is an error, so a new gh call
 # in goal.sh needs a stub answer here too.
@@ -95,7 +111,8 @@ case "$1 $2" in
         if [ "$(git --git-dir="$GH_BARE" rev-parse "refs/heads/$(cat "$d/branch")")" != "$want" ]; then
           echo "the pull request's head moved"
         elif [ -f "$s/rollup.json" ]; then
-          jq -r "$jq" "$s/rollup.json"   # GitHub's shape, through goal.sh's own filter
+          # GitHub's shape, through goal.sh's own filter; HEAD_SHA stands for the pull request's head
+          sed "s/HEAD_SHA/$want/" "$s/rollup.json" | jq -r "$jq"
         elif [ -f "$s/rollup_bad" ]; then
           cat "$s/rollup_bad"
         fi ;;
@@ -105,6 +122,7 @@ case "$1 $2" in
     d=$(pr "$3")
     if [[ " $* " == *" --undo "* ]]; then echo true; else echo false; fi >"$d/draft" ;;
   "pr merge")
+    [ ! -f "$s/merge.fail" ] || { echo "merge refused: a review is required" >&2; exit 1; }
     d=$(pr "$3"); branch=$(cat "$d/branch")
     [[ " $* " == *" --merge "* ]] || unhandled "$@"
     tip=$(git --git-dir="$GH_BARE" rev-parse "refs/heads/$branch")
@@ -129,6 +147,8 @@ case "$1 $2" in
       done <"$s/runs" | sort -k1,1nr
     fi
     [ ! -f "$s/runs.next" ] || mv "$s/runs.next" "$s/runs" ;;
+  "run cancel")
+    [ -n "${3:-}" ] || unhandled "$@" ;;
   "run view")
     [ "$json" = jobs ] || unhandled "$@"
     [ -f "$s/jobs/$3" ] || { echo "no run $3" >&2; exit 1; }
@@ -423,10 +443,31 @@ check "a failing status or a running check merges nothing" test "$(count gh 'pr 
 GOAL_CI_TIMEOUT=1 fails "landing when no CI run appears" "no passing CI run on $head after 1s" land demo
 check "a CI timeout merges nothing" test "$(count gh 'pr merge')" = 0
 
+printf '30 in_progress none 2099-01-01T00:00:00Z\n' >"$E/state/runs"
+GOAL_CI_TIMEOUT=0 fails "landing when the run is still going at the deadline" "no passing CI run on $head" land demo
+check "a timed-out land cancels the run still going" logged gh "run cancel 30"
+check "a timed-out land puts the pull request back to draft" same "$(cat "$E/state/pr/1/draft")" true
+
+printf '31 completed success 2099-01-01T00:00:00Z\n' >"$E/state/runs"
+printf 'success\n' >"$E/state/jobs/31"
+touch "$E/state/merge.fail"
+fails "landing when GitHub refuses the merge" "GitHub refused the merge" land demo
+rm -f "$E/state/merge.fail"
+check "a refused merge puts the pull request back to draft" same "$(cat "$E/state/pr/1/draft")" true
+check "a refused merge keeps the goal worktree" test -d "$gdir"
+
+GOAL_POLL=soon fails "a GOAL_POLL that is not whole seconds" "whole seconds" status demo
+
 # Success: main moved meanwhile, the pull request is a draft again, the first poll sees only the
 # draft run (all jobs skipped) and an old failure from before land, the next sees the real run.
-advance_main moved.txt
+git clone -q "$BARE" "$E/elsewhere"
+commit "$E/elsewhere" .github/workflows/ci.yml "name: CI"
+git -C "$E/elsewhere" push -q origin main
+rm -rf "$E/elsewhere"
 moved=$(origin_rev main)
+# What a retried land sees: the failed job of an earlier run on this commit is still in the rollup.
+printf '{"headRefOid":"HEAD_SHA","statusCheckRollup":[{"name":"Go Tests","workflowName":"CI","conclusion":"FAILURE"},{"name":"Go Tests","workflowName":"CI","conclusion":"SUCCESS"},{"context":"example/status","state":"SUCCESS"}]}\n' \
+  >"$E/state/rollup.json"
 echo true >"$E/state/pr/1/draft"
 printf '20 completed skipped 2099-01-01T00:00:00Z\n5 completed failure 2000-01-01T00:00:00Z\n' >"$E/state/runs"
 printf '20 completed skipped 2099-01-01T00:00:00Z\n21 completed success 2099-01-01T00:00:01Z\n' >"$E/state/runs.next"
@@ -436,6 +477,7 @@ printf 'success\n' >"$E/state/jobs/21"
 touch "$E/state/runlist.fail"
 succeeds "land" land demo
 check "land tries again when gh run list fails once" out_has "gh run list failed; trying again"
+rm -f "$E/state/rollup.json"
 landed=$(sed -n 's/^pr merge 1 --merge --match-head-commit //p' "$E/state/gh.log")
 check "land merges the main that moved into the goal" same "$(git --git-dir="$BARE" rev-parse "$landed^2")" "$moved"
 check "land deletes the remote goal branch" test -z "$(origin_rev goal/demo)"
@@ -475,6 +517,22 @@ check "no pull request is opened" test "$(count gh 'pr create')" = 0
 check "a refused start leaves no goal branch" no_branch goal/ent
 check "a refused start leaves no goal worktree" test ! -e "$WT/ent"
 check "a refused start takes the goal branch off origin" test -z "$(origin_rev goal/ent)"
+
+fresh entire-unreachable
+succeeds "start" start ent
+succeeds "slice" slice ent work
+commit "$WT/ent/work" work.txt "work"
+touch "$E/state/lsremote.fail"
+fails "merging when the remote's refs can't be listed" "could not list the refs on origin" merge ent work
+rm -f "$E/state/lsremote.fail"
+
+fresh start-commit-fails
+touch "$E/state/startcommit.fail"
+fails "starting when the first commit is refused" "was not started" start ent
+check "a start refused before the push leaves no goal branch" no_branch goal/ent
+check "a start refused before the push leaves no goal worktree" test ! -e "$WT/ent"
+rm -f "$E/state/startcommit.fail"
+succeeds "starting again after a refused first commit" start ent
 
 fresh start-fails
 touch "$E/state/prcreate.fail"

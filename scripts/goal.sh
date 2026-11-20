@@ -36,6 +36,10 @@ remote=${GOAL_REMOTE:-origin}
 base=${GOAL_BASE:-main}
 poll=${GOAL_POLL:-30}
 ci_timeout=${GOAL_CI_TIMEOUT:-5400}
+settle=${GOAL_SETTLE:-10}
+for n in "$poll" "$ci_timeout" "$settle"; do
+  [[ $n =~ ^[0-9]+$ ]] || { printf 'goal: GOAL_POLL, GOAL_CI_TIMEOUT and GOAL_SETTLE are whole seconds\n' >&2; exit 2; }
+done
 
 # The primary checkout, found from any worktree of the repo, including a goal's or a slice's.
 primary=$(git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
@@ -70,7 +74,11 @@ need_goal() {
 # legacy entire/checkpoints/v1 branch).
 entire_refs_absent() {
   local refs
-  refs=$(g ls-remote "$remote" 'refs/entire/*' 'refs/heads/entire/*')
+  # Called under || and !, where set -e is off: an unreachable remote must not read as clean.
+  refs=$(g ls-remote "$remote" 'refs/entire/*' 'refs/heads/entire/*') || {
+    printf 'goal: could not list the refs on %s, so it is unknown whether transcripts are there\n' "$remote" >&2
+    return 1
+  }
   [ -z "$refs" ] && return 0
   printf 'goal: Entire refs are on %s, so session transcripts may be published:\n%s\n' "$remote" "$refs" >&2
   printf 'Delete them (git push %s --delete <ref>) and find what pushed them before going on.\n' "$remote" >&2
@@ -106,19 +114,22 @@ cmd_start() {
   g fetch --quiet "$remote" "$base"
   [ -z "$(g ls-remote --heads "$remote" "$branch")" ] || die "$branch already exists on $remote"
   mkdir -p "$(dirname "$dir")"
-  g worktree add --quiet --no-track -b "$branch" "$dir" "$remote/$base"
-  # GitHub opens no pull request for a branch with no commits beyond its base.
-  git -C "$dir" commit --quiet --allow-empty -m "chore: start goal $slug" -m "Goal $slug: the first commit, so its pull request can open."
-  # A goal without its pull request can't be landed or started again, so a start that fails after
-  # the push takes the branch and worktree back down.
-  if ! git -C "$dir" push --quiet --no-verify "$remote" "refs/heads/$branch:refs/heads/$branch" ||
+  # A goal without its pull request can't be landed or started again, so a start that fails takes
+  # down what it made. The branch was checked absent here and on the remote above, so it is ours.
+  # GitHub opens no pull request for a branch with no commits beyond its base: hence the commit.
+  if ! g worktree add --quiet --no-track -b "$branch" "$dir" "$remote/$base" ||
+     ! git -C "$dir" commit --quiet --allow-empty -m "chore: start goal $slug" \
+       -m "Goal $slug: the first commit, so its pull request can open." ||
+     ! git -C "$dir" push --quiet --no-verify "$remote" "refs/heads/$branch:refs/heads/$branch" ||
      ! entire_refs_absent ||
      ! gh pr create --draft --base "$base" --head "$branch" --title "${title:-goal: $slug}" \
        --body "Goal \`$slug\`. Built in slices with \`scripts/goal.sh\`; the description is written before it lands." >&2; then
     say "start failed: removing goal $slug"
-    g push --quiet --no-verify "$remote" --delete "$branch" 2>/dev/null || true
-    g worktree remove --force "$dir"
-    g branch --quiet -D "$branch"
+    [ -z "$(g ls-remote --heads "$remote" "$branch" 2>/dev/null)" ] ||
+      g push --quiet --no-verify "$remote" --delete "$branch" || true
+    [ ! -d "$dir" ] || g worktree remove --force "$dir" || true
+    ! has_branch "$branch" || g branch --quiet -D "$branch" || true
+    g worktree prune
     rmdir "$root/$slug" 2>/dev/null || true
     die "goal $slug was not started"
   fi
@@ -280,6 +291,10 @@ wait_ci() { # wait_ci <sha> <since>
     done <<<"$runs"
     if [ "$(date +%s)" -ge "$deadline" ]; then
       say "no passing CI run on $sha after ${ci_timeout}s"
+      # A run still going would keep spending runner time on a goal that is going back to draft.
+      while read -r id status conclusion; do
+        [ -z "$id" ] || [ "$status" = completed ] || gh run cancel "$id" >&2 || true
+      done <<<"$runs"
       return 1
     fi
     sleep "$poll"
@@ -318,7 +333,7 @@ $slices"
   number=$(gh pr view "$branch" --json number --jq .number) || die "no pull request for $branch"
   # A push to the draft starts a run that skips everything. Let it be created first, so the run
   # marking the pull request ready starts can be told apart by its start time.
-  sleep "${GOAL_SETTLE:-10}"
+  sleep "$settle"
   since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   if [ "$(gh pr view "$number" --json isDraft --jq .isDraft)" = true ]; then
     gh pr ready "$number" >&2
@@ -328,18 +343,25 @@ $slices"
   fi
   say "waiting for GitHub's checks on pull request #$number"
   wait_ci "$head" "$since" || not_landed "$number" "GitHub's checks did not pass"
-  # Every check on the head, not only ci.yml's: a check run has a name and a conclusion, a commit
-  # status a context and a state, and anything not finished and green blocks the merge.
+  # Every other check on the head: a check run has a name and a conclusion, a commit status a
+  # context and a state, and anything not finished and green blocks the merge. ci.yml's own jobs
+  # are left out: wait_ci judged exactly the run this land started, and an earlier run's failed
+  # jobs on the same commit stay in the rollup and would block a retried land for good.
+  ci_name=""
+  if [ -f "$gdir/.github/workflows/ci.yml" ]; then
+    ci_name=$(sed -n 's/^name: *//p' "$gdir/.github/workflows/ci.yml" | head -n1 | tr -d "\"'")
+  fi
   rollup_bad=$(gh pr view "$number" --json headRefOid,statusCheckRollup --jq \
     "if .headRefOid != \"$head\" then \"the pull request's head moved\" else
-     ([.statusCheckRollup[] | select((.conclusion // .state // \"PENDING\") as \$c |
+     ([.statusCheckRollup[] | select(\"$ci_name\" == \"\" or .workflowName != \"$ci_name\") |
+       select((.conclusion // .state // \"PENDING\") as \$c |
        [\"SUCCESS\",\"SKIPPED\",\"NEUTRAL\"] | index(\$c) | not) |
        (.name // .context // \"a check with no name\")] | join(\", \")) end") ||
     not_landed "$number" "could not read the checks"
   [ -z "$rollup_bad" ] || not_landed "$number" "not every check passed on #$number: $rollup_bad"
-  gh pr merge "$number" --merge --match-head-commit "$head" >&2
-  state=$(gh pr view "$number" --json state --jq .state)
-  [ "$state" = MERGED ] || die "pull request #$number is $state, not merged"
+  gh pr merge "$number" --merge --match-head-commit "$head" >&2 || not_landed "$number" "GitHub refused the merge"
+  state=$(gh pr view "$number" --json state --jq .state) || state=unknown
+  [ "$state" = MERGED ] || not_landed "$number" "pull request #$number is $state, not merged"
   # GitHub deletes a merged branch only when the repository is set to; don't rely on it.
   if [ -n "$(g ls-remote --heads "$remote" "$branch")" ]; then
     g push --quiet --no-verify "$remote" --delete "$branch" || true
