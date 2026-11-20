@@ -64,8 +64,7 @@ merger is `merge`, and "mark the PR ready" plus the cleanup is `land`.
 
 `scripts/checks.sh` runs every job in `ci.yml` but the macOS one: shellcheck, the guidance check,
 the goal tests, and in containers the Go tests (with the restic `ci.yml` pins), vet, the
-cross-compile, and the
-Ubuntu install jobs. The PowerShell job parses `install.ps1` with `pwsh`, or, where `pwsh` is not
+cross-compile, and the Ubuntu install jobs. The PowerShell job parses `install.ps1` with `pwsh`, or, where `pwsh` is not
 installed, in the official PowerShell image. It never runs ctdev on the host, because ctdev
 configures the machine it runs on. `--changed` runs only the jobs the files can break; `--full`
 runs them all, and is what `land` runs before it merges. The first run
