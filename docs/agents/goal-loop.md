@@ -24,12 +24,12 @@ worktree would let a merge rewrite the script while it runs.
 
 | Command | What it does |
 | --- | --- |
-| `start <slug> [title]` | Goal branch and worktree, an empty first commit (GitHub opens no pull request without one), push, draft pull request. A start that fails after the push removes what it made |
+| `start <slug> [title]` | Goal branch and worktree, an empty first commit (GitHub opens no pull request without one), push, draft pull request. A start that fails anywhere removes what it made, so it can run again |
 | `slice <slug> <name>` | Slice branch and worktree from the goal's head; prints the path. Refused while a merge into the goal is running |
 | `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice; a commit made on the slice during the checks keeps it too |
 | `drop <slug> <name>` | Removes a slice with nothing left to merge |
 | `status <slug>` | The goal, whether it is pushed, its pull request, each open slice, and what is left |
-| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks the pull request ready, waits for that run to pass on that exact commit and for every other check and status on it to be green, merges with `--match-head-commit`, deletes the goal branch here and on GitHub, removes its worktree, fast-forwards the primary checkout. If GitHub's checks fail, the pull request goes back to draft, so the fixes' pushes run nothing |
+| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks the pull request ready, waits for that run to pass on that exact commit and for every other check and status on it to be green, merges with `--match-head-commit`, deletes the goal branch here and on GitHub, removes its worktree, fast-forwards the primary checkout. If GitHub's checks fail or never finish (the run still going is cancelled), or GitHub refuses the merge, the pull request goes back to draft, so the fixes' pushes run nothing |
 | `path <slug> [name]` | Prints a worktree's path |
 
 A conflict stops `merge` or `land` with the merge left in the goal worktree. The session resolves
@@ -56,8 +56,9 @@ merger is `merge`, and "mark the PR ready" plus the cleanup is `land`.
 `scripts/checks.sh` runs every Linux job in `ci.yml`: shellcheck, the guidance check, the goal
 tests, and in containers the Go tests (with the restic `ci.yml` pins), vet, the cross-compile, and
 the Ubuntu install jobs. It never runs ctdev on the host, because ctdev configures the machine it
-runs on. `--changed` runs only the jobs the files can break; `--full` runs them all (about 10
-minutes, nearly all of it the backup tests).
+runs on. `--changed` runs only the jobs the files can break; `--full` runs them all. The first run
+takes about 10 minutes, nearly all of it the backup tests; the Go build and test caches are shared
+volumes, so a run whose Go code is unchanged takes about a minute.
 
 ## Before landing
 
@@ -76,7 +77,7 @@ read them. This repo is public, so checkpoints stay on this machine:
 - `entire configure --checkpoint-push-policy manual` is set once per clone, as a second lock.
 - `scripts/goal.sh` pushes with `--no-verify`, which skips Entire's pre-push hook (the only thing
   that pushes checkpoints), and fails after any push if `origin` has a `refs/entire/` ref or an
-  `entire/` branch (the legacy backend's `entire/checkpoints/v1`).
+  `entire/` branch (the legacy backend's `entire/checkpoints/v1`), or if it can't tell.
 - After the release push, `git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*'` prints
   nothing, and `entire checkpoint list --outgoing` says `git push` sends none of them.
 
