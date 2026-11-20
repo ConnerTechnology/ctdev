@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [19.0.0] - 2026-11-20
+
+### Removed
+- **The `entire` component is gone.** ctdev no longer installs, updates or reports the Entire
+  CLI, and `ctdev doctor` drops its row (ADR-0021, replacing ADR-0018). A machine that has Entire
+  keeps it; ctdev just stops managing it. To remove it yourself:
+  1. In each repo where you ran `entire enable`: `entire disable --uninstall`, which removes its
+     git hooks and `.entire/`.
+  2. On Linux: `rm ~/.local/bin/entire ~/.local/bin/git-remote-entire`. On macOS:
+     `brew uninstall --cask entireio/tap/entire`.
+- **The daily retro is gone**, along with `/retro`, `scripts/sessions.sh` and `docs/retros/`.
+  This repo no longer records its sessions with Entire, and `scripts/goal.sh` no longer checks
+  `origin` for checkpoint refs (ADR-0021, replacing ADR-0019).
+
 ## [18.2.1] - 2026-11-20
 
 ### Changed
