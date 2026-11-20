@@ -14,6 +14,20 @@ All notable changes to this project will be documented in this file.
   its version. Signing in, telemetry and each repo's `entire enable` are left to that repo
   (ADR-0018).
 
+## [17.8.0] - 2026-11-19
+
+### Changed
+- **Changes reach `main` as goals.** Each goal is one pull request. Its slices are built in
+  parallel worktrees, checked and merged into the goal branch locally by `scripts/goal.sh`, and
+  never pushed on their own. `land` runs the full checks, marks the pull request ready, waits for
+  GitHub's run on that exact commit, and merges. Draft pull requests run no CI jobs, so GitHub's
+  checks run once per goal. See `docs/agents/goal-loop.md` and ADR-0017.
+- **CI's Linux jobs run locally in containers.** `scripts/checks.sh` runs the Go tests (with the
+  pinned restic), vet, the cross-compile, the Ubuntu install jobs, shellcheck and the guidance
+  check without running ctdev on the host.
+- **Agent sessions are recorded with Entire, on this machine only.** Each commit with agent work
+  links to a local checkpoint. Checkpoints are never pushed: this repo is public.
+
 ## [17.7.0] - 2026-11-13
 
 ### Added
