@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [18.1.0] - 2026-11-19
+
 ### Added
 - **The Entire CLI installs as a component.** `ctdev install entire` installs `entire` and
   `git-remote-entire`. On Linux they come from the latest release archive, checked against its
