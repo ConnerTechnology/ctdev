@@ -112,6 +112,8 @@ case "$1 $2" in
     rm -rf "$w"
     echo MERGED >"$d/state" ;;
   "run list")
+    # $s/runlist.fail makes this one call fail, as a dropped connection would.
+    if [ -f "$s/runlist.fail" ]; then rm -f "$s/runlist.fail"; echo "connection reset" >&2; exit 1; fi
     # $s/runs: one "id status conclusion createdAt" per line. After answering, runs.next (if any)
     # becomes the answer to the next poll.
     since=$(printf '%s' "$jq" | sed -n 's/.*\.createdAt >= "\([^"]*\)".*/\1/p')
@@ -247,6 +249,11 @@ check "path prints the goal worktree" same "$(cat "$E/out")" "$gdir"
 succeeds "path of a slice" path demo one
 check "path prints the slice worktree" same "$(cat "$E/out")" "$WT/demo/one"
 
+mkdir "$WT/demo/.merge.lock"
+fails "slicing while a merge into the goal runs" "a merge into goal 'demo' is running" slice demo late
+rmdir "$WT/demo/.merge.lock"
+check "a slice refused during a merge makes no branch" no_branch slice/demo/late
+
 # 3. merge -------------------------------------------------------------------------------------
 say "merge"
 commit "$WT/demo/one" one.txt "one"
@@ -378,7 +385,9 @@ printf '20 completed skipped 2099-01-01T00:00:00Z\n21 completed success 2099-01-
 printf 'skipped\nskipped\n' >"$E/state/jobs/20"
 printf 'success\n' >"$E/state/jobs/21"
 : >"$E/state/gh.log"; : >"$E/state/checks.log"
+touch "$E/state/runlist.fail"
 succeeds "land" land demo
+check "land tries again when gh run list fails once" out_has "gh run list failed; trying again"
 landed=$(origin_rev goal/demo)
 check "land merges the main that moved into the goal" same "$(origin_rev goal/demo^2)" "$moved"
 check "land runs the full checks after merging main" logged checks "-C $gdir --full"
