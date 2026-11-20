@@ -61,6 +61,8 @@ file the next session reads:
   unblocks. Work agents can do alone runs in parallel.
 - Nothing waits for the human's approval, governing files (`AGENTS.md`, `.claude/**`, `.mcp.json`)
   included: a goal lands when its review is addressed and every check passes.
+- The Bash tool runs zsh here: quote globs in arguments (`--include='*.go'`), or an unmatched one
+  fails the whole command.
 - Build the best solution: the simplest one that solves the problem (KISS), shaped by the domain
   and its words in `CONTEXT.md`, never over-engineered. DRY where it removes real duplication, not
   for its own sake.
@@ -122,8 +124,8 @@ goal. `/retro` runs one with the human (both in `.claude/commands/retro.md`). Bo
 ## Releases
 
 1. Commit changes
-2. Run the prompt audit headless (`docs/agents/where-things-go.md`); file an issue for what it
-   finds, which doesn't block the release
+2. Run the prompt audit, `scripts/prompt-audit.sh` (`docs/agents/where-things-go.md`); file an
+   issue for what it finds, which doesn't block the release
 3. Update CHANGELOG.md
 4. Bump VERSION
 5. Commit: `docs: update for vX.Y.Z`
