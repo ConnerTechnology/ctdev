@@ -9,7 +9,7 @@ else this machine needs from `ctdev install`.
 
 # every machine (installing git asks for your name, email and signing key)
 ctdev install zsh git gh fonts tmux mosh jq ripgrep fd fzf bat btop direnv \
-  zoxide shellcheck ffmpeg docker tailscale claude-code
+  zoxide shellcheck ffmpeg docker tailscale claude-code entire
 
 # a machine with a display
 ctdev install 1password chrome vscode
@@ -27,9 +27,11 @@ ctdev install                    # pick from the list
 ```
 
 `claude-code` pulls in `ccstatusline`, which pulls in `node`, so Node.js comes
-with the base. Other runtimes (`go`, `python`, `ruby`) and role-specific tools
-(cloud CLIs, Kubernetes, infrastructure stacks) are picked afterward. On Linux,
-`chrome` and `1password` install only on amd64.
+with the base. `entire` records agent sessions as checkpoints in the repos that
+turn it on; each repo's own setup runs `entire enable`. Other runtimes (`go`,
+`python`, `ruby`) and role-specific tools (cloud CLIs, Kubernetes,
+infrastructure stacks) are picked afterward. On Linux, `chrome` and
+`1password` install only on amd64.
 
 **Manual steps**
 

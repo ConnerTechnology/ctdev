@@ -28,7 +28,7 @@ func (p fakeProbe) LookPath(name string) (string, error) {
 	return "", errors.New("not found")
 }
 
-func (p fakeProbe) Version(_ context.Context, path string, _ ...string) string {
+func (p fakeProbe) Version(_ context.Context, _ []string, path string, _ ...string) string {
 	return p.versions[path]
 }
 
@@ -302,5 +302,29 @@ func TestCaptureCombinedKeepsStderr(t *testing.T) {
 	got := captureCombined(context.Background(), sh, "-c", "echo out; echo err 1>&2")
 	if !strings.Contains(got, "out") || !strings.Contains(got, "err") {
 		t.Errorf("captureCombined = %q, want stdout and stderr", got)
+	}
+}
+
+func TestEntireRowShowsVersionAndSendsNothing(t *testing.T) {
+	p := fakeProbe{
+		paths:    map[string]string{"entire": "/home/example/.local/bin/entire"},
+		versions: map[string]string{"/home/example/.local/bin/entire": "Entire CLI 0.13.4\nGo version: go1.27.4\nOS/Arch: linux/amd64"},
+	}
+	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("entire"), p), "tool.entire").Run(context.Background(), Facts{})
+	if res.Severity != OK || res.Detail != "Entire CLI 0.13.4" {
+		t.Errorf("got %v %q, want OK \"Entire CLI 0.13.4\"", res.Severity, res.Detail)
+	}
+	i := slices.IndexFunc(managedTools, func(m managedTool) bool { return m.component == "entire" })
+	if i < 0 {
+		t.Fatal("entire has no managed tool row")
+	}
+	m := managedTools[i]
+	if !slices.Equal(m.args, []string{"version"}) {
+		t.Errorf("args = %v, want [version]", m.args)
+	}
+	for _, want := range []string{"ENTIRE_TELEMETRY_OPTOUT=1", "ENTIRE_NO_AUTO_UPDATE=1"} {
+		if !slices.Contains(m.env, want) {
+			t.Errorf("env %v lacks %s: doctor must not report to Entire or check for updates", m.env, want)
+		}
 	}
 }

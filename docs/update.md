@@ -30,7 +30,11 @@ copy in `~/.local/bin`.
 
 Components installed outside a package manager are checked against their
 vendor's latest stable release: `helm`, `kubectl`, `terraform`, the T3 Code CLI
-(`t3code`) and, on Linux, the T3 Code desktop app (`t3code-desktop`). The T3
+(`t3code`) and, on Linux, the T3 Code desktop app (`t3code-desktop`) and the
+Entire CLI (`entire`). Entire updates by installing the newer release over
+both binaries in `~/.local/bin`, checked against its `checksums.txt`; on macOS
+its cask is upgraded with the other casks. ctdev turns off Entire's own update
+check, so `ctdev update` is the only thing that updates it (ADR-0018). The T3
 Code CLI updates through its own `t3 update`, which also restarts its background
 service if you installed one. The Linux desktop app updates by installing the
 newer release's `.deb`, checked against its published sha512. On macOS the T3
@@ -40,7 +44,7 @@ Root is used only for the updates that need it: the system package manager, the
 Go toolchain (it lives in `/usr/local/go`), `helm`, `kubectl` and `terraform`
 (they live in `/usr/local/bin`), the T3 Code `.deb`, rebuilding a Docker stack,
 and replacing a ctdev binary in a directory you cannot write to.
-Bun, nodenv, rbenv, pyenv and the T3 Code CLI all stay inside `$HOME` and are
+Bun, nodenv, rbenv, pyenv, the T3 Code CLI and Entire all stay inside `$HOME` and are
 updated as you.
 
 Python updates stay within the minor version you are on: 3.14.8 is offered
