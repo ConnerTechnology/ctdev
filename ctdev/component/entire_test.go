@@ -58,7 +58,7 @@ func TestEntireChecksumFor(t *testing.T) {
 	}
 }
 
-func serve(t *testing.T, status int, body string) string {
+func entireServe(t *testing.T, status int, body string) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
@@ -86,7 +86,7 @@ func TestEntireChannelVersion(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := entireChannelVersion(context.Background(), serve(t, c.status, c.body))
+			got, err := entireChannelVersion(context.Background(), entireServe(t, c.status, c.body))
 			if (err != nil) != c.wantErr || got != c.want {
 				t.Errorf("got %q, %v; want %q (error %v)", got, err, c.want, c.wantErr)
 			}
@@ -106,14 +106,20 @@ func entireTestArchive(t *testing.T, names ...string) []byte {
 		if err := tw.WriteHeader(&tar.Header{Name: n, Mode: 0o755, Size: int64(len(body))}); err != nil {
 			t.Fatal(err)
 		}
-		tw.Write(body)
+		if _, err := tw.Write(body); err != nil {
+			t.Fatal(err)
+		}
 	}
-	tw.Close()
-	gz.Close()
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return buf.Bytes()
 }
 
-func sha(b []byte) string {
+func entireSHA(b []byte) string {
 	s := sha256.Sum256(b)
 	return hex.EncodeToString(s[:])
 }
@@ -142,7 +148,7 @@ func TestFetchEntireRelease_FallsBackWhenAnOriginIsDown(t *testing.T) {
 	down, _ := entireReleaseServer(t, nil)
 	mirror, _ := entireReleaseServer(t, map[string][]byte{
 		"/v0.13.4/" + entireTestArchiveName: archive,
-		"/v0.13.4/checksums.txt":            []byte(sha(archive) + "  " + entireTestArchiveName + "\n"),
+		"/v0.13.4/checksums.txt":            []byte(entireSHA(archive) + "  " + entireTestArchiveName + "\n"),
 	})
 	origins := []entireOrigin{{"GitHub", down}, {"install.entire.com", mirror}}
 
@@ -167,7 +173,7 @@ func TestFetchEntireRelease_MismatchStopsWithoutTryingTheMirror(t *testing.T) {
 	})
 	mirror, mirrorHits := entireReleaseServer(t, map[string][]byte{
 		"/v0.13.4/" + entireTestArchiveName: archive,
-		"/v0.13.4/checksums.txt":            []byte(sha(archive) + "  " + entireTestArchiveName + "\n"),
+		"/v0.13.4/checksums.txt":            []byte(entireSHA(archive) + "  " + entireTestArchiveName + "\n"),
 	})
 	origins := []entireOrigin{{"GitHub", bad}, {"install.entire.com", mirror}}
 
@@ -200,15 +206,15 @@ func TestFetchEntireRelease_UnlistedArchiveAdvancesAndAllDownFails(t *testing.T)
 	}
 }
 
-// linuxOnly skips on macOS, where the cask is the install.
-func linuxOnly(t *testing.T) {
+// entireLinuxOnly skips on macOS, where the cask is the install.
+func entireLinuxOnly(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS != "linux" {
 		t.Skip("the ~/.local/bin install is Linux's")
 	}
 }
 
-func writeExec(t *testing.T, path, body string) {
+func entireWriteExec(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -219,7 +225,7 @@ func writeExec(t *testing.T, path, body string) {
 }
 
 func TestEntireInstalled_RecognizesAHandInstall(t *testing.T) {
-	linuxOnly(t)
+	entireLinuxOnly(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	bin := filepath.Join(home, ".local", "bin")
@@ -227,11 +233,11 @@ func TestEntireInstalled_RecognizesAHandInstall(t *testing.T) {
 	if entireInstalled() {
 		t.Fatal("nothing is installed yet")
 	}
-	writeExec(t, filepath.Join(bin, "entire"), "x")
+	entireWriteExec(t, filepath.Join(bin, "entire"), "x")
 	if entireInstalled() {
 		t.Error("entire without git-remote-entire isn't a whole install")
 	}
-	writeExec(t, filepath.Join(bin, "git-remote-entire"), "x")
+	entireWriteExec(t, filepath.Join(bin, "git-remote-entire"), "x")
 	if !entireInstalled() {
 		t.Error("both binaries in ~/.local/bin, from a hand install or ctdev, count as installed")
 	}
@@ -240,17 +246,17 @@ func TestEntireInstalled_RecognizesAHandInstall(t *testing.T) {
 // The whole Linux install path against a fake origin: a hand install already
 // in ~/.local/bin is replaced in place, and no second copy is left behind.
 func TestInstallEntireRelease_ReplacesAHandInstallInPlace(t *testing.T) {
-	linuxOnly(t)
+	entireLinuxOnly(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	bin := filepath.Join(home, ".local", "bin")
-	writeExec(t, filepath.Join(bin, "entire"), "old")
-	writeExec(t, filepath.Join(bin, "git-remote-entire"), "old")
+	entireWriteExec(t, filepath.Join(bin, "entire"), "old")
+	entireWriteExec(t, filepath.Join(bin, "git-remote-entire"), "old")
 
 	archive := entireTestArchive(t, "entire", "git-remote-entire")
 	url, _ := entireReleaseServer(t, map[string][]byte{
 		"/v0.13.4/" + entireTestArchiveName: archive,
-		"/v0.13.4/checksums.txt":            []byte(sha(archive) + "  " + entireTestArchiveName + "\n"),
+		"/v0.13.4/checksums.txt":            []byte(entireSHA(archive) + "  " + entireTestArchiveName + "\n"),
 	})
 	saved := entireOrigins
 	entireOrigins = []entireOrigin{{"GitHub", url}}
@@ -277,16 +283,16 @@ func TestInstallEntireRelease_ReplacesAHandInstallInPlace(t *testing.T) {
 }
 
 func TestInstallEntireRelease_RefusesAnArchiveMissingTheHelper(t *testing.T) {
-	linuxOnly(t)
+	entireLinuxOnly(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	bin := filepath.Join(home, ".local", "bin")
-	writeExec(t, filepath.Join(bin, "entire"), "old")
+	entireWriteExec(t, filepath.Join(bin, "entire"), "old")
 
 	archive := entireTestArchive(t, "entire")
 	url, _ := entireReleaseServer(t, map[string][]byte{
 		"/v0.13.4/" + entireTestArchiveName: archive,
-		"/v0.13.4/checksums.txt":            []byte(sha(archive) + "  " + entireTestArchiveName + "\n"),
+		"/v0.13.4/checksums.txt":            []byte(entireSHA(archive) + "  " + entireTestArchiveName + "\n"),
 	})
 	saved := entireOrigins
 	entireOrigins = []entireOrigin{{"GitHub", url}}
@@ -343,7 +349,9 @@ func TestDisableEntireAutoUpdate(t *testing.T) {
 		dir := t.TempDir()
 		t.Setenv("ENTIRE_CONFIG_DIR", dir)
 		path := filepath.Join(dir, "config.json")
-		os.WriteFile(path, []byte(`{"no_auto_update": false, "example_key": {"nested": 1}}`), 0o644)
+		if err := os.WriteFile(path, []byte(`{"no_auto_update": false, "example_key": {"nested": 1}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		if err := disableEntireAutoUpdate(sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
 			t.Fatal(err)
 		}
@@ -361,7 +369,9 @@ func TestDisableEntireAutoUpdate(t *testing.T) {
 		t.Setenv("ENTIRE_CONFIG_DIR", dir)
 		path := filepath.Join(dir, "config.json")
 		orig := []byte(`{"no_auto_update":true}`)
-		os.WriteFile(path, orig, 0o600)
+		if err := os.WriteFile(path, orig, 0o600); err != nil {
+			t.Fatal(err)
+		}
 		var out bytes.Buffer
 		if err := disableEntireAutoUpdate(sysutil.Opts{Stdout: &out}); err != nil {
 			t.Fatal(err)
@@ -376,7 +386,9 @@ func TestDisableEntireAutoUpdate(t *testing.T) {
 		t.Setenv("ENTIRE_CONFIG_DIR", dir)
 		path := filepath.Join(dir, "config.json")
 		orig := []byte(`{"no_auto_update": tru`)
-		os.WriteFile(path, orig, 0o600)
+		if err := os.WriteFile(path, orig, 0o600); err != nil {
+			t.Fatal(err)
+		}
 		var out bytes.Buffer
 		if err := disableEntireAutoUpdate(sysutil.Opts{Stdout: &out}); err != nil {
 			t.Fatal(err)
@@ -407,9 +419,9 @@ func TestDisableEntireAutoUpdate(t *testing.T) {
 
 func TestOtherEntireOnPath(t *testing.T) {
 	ours := filepath.Join(t.TempDir(), "entire")
-	writeExec(t, ours, "x")
+	entireWriteExec(t, ours, "x")
 	other := filepath.Join(t.TempDir(), "entire")
-	writeExec(t, other, "x")
+	entireWriteExec(t, other, "x")
 
 	t.Setenv("PATH", filepath.Dir(ours))
 	if got := otherEntireOnPath([]string{ours}); got != "" {
@@ -471,5 +483,38 @@ func TestEntireNeverSignsInOrTouchesARepo(t *testing.T) {
 		if strings.Contains(string(src), `"`+sub+`"`) {
 			t.Errorf("entire.go passes %q as an argument; the component must not run `entire %s`", sub, sub)
 		}
+	}
+}
+
+// On a Mac the cask is the install, so a copy Entire's install.sh left in
+// ~/.local/bin goes once the cask is in place. Only a binary that answers as
+// Entire is removed.
+func TestRemoveHandInstalledEntire(t *testing.T) {
+	entireLinuxOnly(t) // the fake binaries are shell scripts; the logic isn't OS-specific
+	cases := map[string]struct {
+		versionOut  string
+		wantRemoved bool
+	}{
+		"an Entire install.sh copy":   {"Entire CLI 0.13.3", true},
+		"something else named entire": {"entire 2.0 (an unrelated tool)", false},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			bin := filepath.Join(home, ".local", "bin")
+			entireWriteExec(t, filepath.Join(bin, "entire"), "#!/bin/sh\necho '"+c.versionOut+"'\n")
+			entireWriteExec(t, filepath.Join(bin, "git-remote-entire"), "x")
+
+			if err := removeHandInstalledEntire(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}}); err != nil {
+				t.Fatal(err)
+			}
+			for _, b := range entireBinaries {
+				_, err := os.Stat(filepath.Join(bin, b))
+				if removed := errors.Is(err, os.ErrNotExist); removed != c.wantRemoved {
+					t.Errorf("%s removed = %v, want %v", b, removed, c.wantRemoved)
+				}
+			}
+		})
 	}
 }
