@@ -44,6 +44,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"kubectl", scanKubectl},
 		{"terraform", scanTerraform},
 		{"t3code", scanT3Code},
+		{"entire", scanEntire},
 	}
 
 	// scanErrs collects failures so one broken source doesn't silently make the
@@ -309,6 +310,7 @@ var managedCasks = map[string]string{
 	"1password":                     "1password",
 	"cleanmymac":                    "cleanmymac",
 	"claude":                        "claude-desktop",
+	"entire":                        "entire",
 	"dbeaver-community":             "dbeaver",
 	"docker":                        "docker",
 	"google-chrome":                 "chrome",
@@ -770,4 +772,28 @@ func t3codeUpdateItems(cli, desktop, latest string) []checklist.UpdateItem {
 		items = append(items, checklist.UpdateItem{Name: "t3code-desktop", Source: "cli", CurrentVer: desktop, NewVer: latest})
 	}
 	return items
+}
+
+// scanEntire covers the Linux install in ~/.local/bin. On macOS the cask is
+// upgraded through scanBrew, so this stays quiet there.
+func scanEntire(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if runtime.GOOS != "linux" {
+		return nil, nil
+	}
+	current := component.EntireVersion(ctx)
+	if current == "" {
+		return nil, nil
+	}
+	latest, err := component.EntireLatestVersion(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check latest Entire: %w", err)
+	}
+	return entireUpdateItems(current, latest), nil
+}
+
+func entireUpdateItems(current, latest string) []checklist.UpdateItem {
+	if current == "" || !versionNewer(latest, current) {
+		return nil
+	}
+	return []checklist.UpdateItem{{Name: "entire", Source: "cli", CurrentVer: current, NewVer: latest}}
 }
