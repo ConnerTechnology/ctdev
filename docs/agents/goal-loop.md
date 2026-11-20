@@ -13,9 +13,10 @@ about architecture (AGENTS.md, "Who decides what"). `scripts/goal.sh` runs the l
   A slice that needs another slice's work starts after that one merges.
 - **One place for worktrees.** `../.worktrees/<repo>/<slug>/`, beside the primary checkout: the
   goal in `goal/`, each slice in `<name>/`. The script removes each one when it merges or lands.
-- **GitHub's checks run once.** `ci.yml` skips every job on a draft, so the goal's pushes cost
-  nothing. `land` marks the pull request ready, and that is the one full run (about 25 minutes,
-  with the Windows and macOS jobs only GitHub can run).
+- **Checks run here, not on GitHub.** `ci.yml` has no `pull_request` trigger, so the goal's pushes
+  run nothing there. `land` runs the full checks on this machine and merges as soon as they pass.
+  GitHub runs `ci.yml` on each push to `main` and each release tag, for the macOS job only it can
+  run; `build-release` needs every job, so a macOS failure blocks the release and is fixed forward.
 
 ## The commands
 
@@ -32,7 +33,7 @@ each goal: one started while another holds it says so and waits, then looks agai
 | `drop <slug> <name> [--force]` | Removes a slice with nothing left to merge. `--force` discards its unmerged commits too; a slice with uncommitted changes is refused either way |
 | `sync <slug>` | Merges `origin/main` into the goal, runs `scripts/checks.sh --changed` on what that brings in, pushes the goal. Failing checks undo the merge. Use it when `status` says the goal is behind, so slices cut next start from today's `main` |
 | `status <slug>` | The goal's commits ahead of and behind `origin/main` (behind points at `sync`; a failed fetch says the counts are from the last one), whether it is pushed, its open pull request, each open slice, and what is left |
-| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks the pull request ready, waits for that run to pass on that exact commit and for every other check and status on it to be green, merges with `--match-head-commit`, deletes the goal branch here and on GitHub, removes its worktree, fast-forwards the primary checkout. If GitHub's checks fail or never finish (the run still going is cancelled), or GitHub refuses the merge, the pull request goes back to draft, so the fixes' pushes run nothing. If it is interrupted after GitHub merged, running it again only finishes the cleanup |
+| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks a draft pull request ready (GitHub won't merge a draft), merges it with `--match-head-commit` so only the checked commit lands, deletes the goal branch here and on GitHub, removes its worktree, fast-forwards the primary checkout. Failing checks touch no pull request. If GitHub refuses the merge, the pull request stays open and the goal stays as it was: fix what it says and land again. If it is interrupted after GitHub merged, running it again only finishes the cleanup |
 | `path <slug> [name]` | Prints a worktree's path |
 
 A conflict stops `merge`, `sync` or `land` with the merge left in the goal worktree. The session
@@ -61,10 +62,13 @@ merger is `merge`, and "mark the PR ready" plus the cleanup is `land`.
 
 ## Checks
 
-`scripts/checks.sh` runs every Linux job in `ci.yml`: shellcheck, the guidance check, the goal
-tests, and in containers the Go tests (with the restic `ci.yml` pins), vet, the cross-compile, the
-tests of `scripts/sessions/` (the tool behind `scripts/sessions.sh`), and the Ubuntu install jobs.
-It never runs ctdev on the host, because ctdev configures the machine it runs on. `--changed` runs only the jobs the files can break; `--full` runs them all. The first run
+`scripts/checks.sh` runs every job in `ci.yml` but the macOS one: shellcheck, the guidance check,
+the goal tests, and in containers the Go tests (with the restic `ci.yml` pins), vet, the
+cross-compile, the tests of `scripts/sessions/` (the tool behind `scripts/sessions.sh`), and the
+Ubuntu install jobs. The PowerShell job parses `install.ps1` with `pwsh`, or, where `pwsh` is not
+installed, in the official PowerShell image. It never runs ctdev on the host, because ctdev
+configures the machine it runs on. `--changed` runs only the jobs the files can break; `--full`
+runs them all, and is what `land` runs before it merges. The first run
 takes about 10 minutes, nearly all of it the backup tests; the Go build and test caches are shared
 volumes, so a run whose Go code is unchanged takes about a minute.
 

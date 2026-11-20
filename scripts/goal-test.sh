@@ -7,7 +7,7 @@
 # PATH, logs its arguments and answers from state files the tests write, through goal.sh's own jq
 # filters; it merges a pull request by merging into the bare repo, so landing and its cleanup run
 # for real. A stand-in checks command logs its arguments, fails on demand and can be held, so two
-# commands run at once for real. A stand-in docker fails any call. Nothing touches GitHub, Docker,
+# commands run at once for real. Both also log to one events log, so the order of land's steps shows. A stand-in docker fails any call. Nothing touches GitHub, Docker,
 # the host or the real checks.
 #
 # Checks:
@@ -20,16 +20,18 @@
 #   4. drop: refuses a slice with commits not in the goal, removes a clean one; --force discards
 #      commits but never uncommitted work
 #   5. status: lists open slices and what is left, or says the goal is ready to land
-#   6. land: refuses open slices, runs the full checks, marks the pull request ready, ignores an
-#      all-skipped draft run, stops on a failed run or check, and on success merges exactly the
-#      goal's head, removes the goal and fast-forwards the primary checkout's main
+#   6. land: refuses open slices; runs the full checks, then marks a draft ready, then merges
+#      exactly the goal's head, and never asks GitHub for a CI run; failing checks touch no pull
+#      request; a refused merge keeps the goal; on success removes the goal and fast-forwards the
+#      primary checkout's main
 #   7. a refs/entire/ ref on origin makes the next push fail loudly
 #   8. two merges and a slice on one goal at once: the later ones wait for the lock, then run on
 #      what the first left; both slices land in the goal and its worktree stays clean
 #   9. two checks.sh runs at once name every container differently
 #  10. a slug used again: the second goal lands through its own pull request, with the full
-#      checks and GitHub's run, and the first goal's merged one is never used
-#  11. jq's // reads false as missing: a ready pull request (isDraft false) is read as ready
+#      checks, and the first goal's merged one is never used
+#  11. jq's // reads false as missing: a ready pull request (isDraft false) is read as ready and
+#      not marked ready again
 #  12. main moving under a goal: status counts how far behind it is and points at sync; sync
 #      merges main, checks what it brings, undoes it when they fail, pushes; a conflict is left
 #      to resolve and a re-run finishes it
@@ -53,7 +55,6 @@ export GIT_AUTHOR_NAME="Example Tester" GIT_AUTHOR_EMAIL=test@example.invalid
 export GIT_COMMITTER_NAME="Example Tester" GIT_COMMITTER_EMAIL=test@example.invalid
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 unset GOAL_REMOTE GOAL_BASE
-export GOAL_POLL=0 GOAL_SETTLE=0 GOAL_CI_TIMEOUT=5
 export GOAL_CHECKS=$T/bin/checks
 REAL_GIT=$(command -v git)
 export REAL_GIT
@@ -96,6 +97,7 @@ cat >"$T/bin/gh" <<'EOF'
 set -uo pipefail
 s=$GH_STATE
 printf '%s\n' "$*" >>"$s/gh.log"
+printf 'gh %s\n' "$*" >>"$s/events.log"
 json="" jq=""
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
@@ -141,17 +143,6 @@ case "$1 $2" in
     d=$(pr "$3"); n=$(basename "$d")
     case "$json" in
       state) cat "$d/state" ;;
-      headRefOid,statusCheckRollup)
-        want=$(printf '%s' "$jq" | sed -n 's/.*\.headRefOid != "\([0-9a-f]*\)".*/\1/p')
-        [ -n "$want" ] || unhandled "$@"
-        if [ "$(git --git-dir="$GH_BARE" rev-parse "refs/heads/$(cat "$d/branch")")" != "$want" ]; then
-          echo "the pull request's head moved"
-        elif [ -f "$s/rollup.json" ]; then
-          # GitHub's shape, through goal.sh's own filter; HEAD_SHA stands for the pull request's head
-          sed "s/HEAD_SHA/$want/" "$s/rollup.json" | jq -r "$jq"
-        elif [ -f "$s/rollup_bad" ]; then
-          cat "$s/rollup_bad"
-        fi ;;
       *) unhandled "$@" ;;
     esac ;;
   "pr list")
@@ -175,12 +166,14 @@ case "$1 $2" in
         '{number: $number, state: $state, isDraft: $isDraft, url: $url, headRefOid: $headRefOid, headRefName: $headRefName}'
     done | jq -s . | jq -r "$jq" ;;
   "pr ready")
+    [ $# -eq 3 ] || unhandled "$@"
     d=$(pr "$3")
-    if [[ " $* " == *" --undo "* ]]; then echo true; else echo false; fi >"$d/draft" ;;
+    echo false >"$d/draft" ;;
   "pr merge")
     [ ! -f "$s/merge.fail" ] || { echo "merge refused: a review is required" >&2; exit 1; }
     d=$(pr "$3"); branch=$(cat "$d/branch")
     [[ " $* " == *" --merge "* ]] || unhandled "$@"
+    [ "$(cat "$d/draft")" = false ] || { echo "a draft pull request can't be merged" >&2; exit 1; }
     tip=$(git --git-dir="$GH_BARE" rev-parse "refs/heads/$branch")
     [ "${match:-}" = "$tip" ] || { echo "head is $tip, not ${match:-unset}" >&2; exit 1; }
     w=$s/merge-work
@@ -192,26 +185,6 @@ case "$1 $2" in
     echo MERGED >"$d/state"
     # $s/merge.interrupt: GitHub merged, then goal.sh is killed before its cleanup, once.
     if [ -f "$s/merge.interrupt" ]; then rm -f "$s/merge.interrupt"; kill -TERM "$PPID"; fi ;;
-  "run list")
-    # $s/runlist.fail makes this one call fail, as a dropped connection would.
-    if [ -f "$s/runlist.fail" ]; then rm -f "$s/runlist.fail"; echo "connection reset" >&2; exit 1; fi
-    # $s/runs: one "id status conclusion createdAt" per line. After answering, runs.next (if any)
-    # becomes the answer to the next poll.
-    since=$(printf '%s' "$jq" | sed -n 's/.*\.createdAt >= "\([^"]*\)".*/\1/p')
-    [ -n "$since" ] || unhandled "$@"
-    if [ -f "$s/runs" ]; then
-      while read -r id status conclusion created; do
-        [ -n "$id" ] || continue
-        [[ $created < $since ]] || printf '%s %s %s\n' "$id" "$status" "$conclusion"
-      done <"$s/runs" | sort -k1,1nr
-    fi
-    [ ! -f "$s/runs.next" ] || mv "$s/runs.next" "$s/runs" ;;
-  "run cancel")
-    [ -n "${3:-}" ] || unhandled "$@" ;;
-  "run view")
-    [ "$json" = jobs ] || unhandled "$@"
-    [ -f "$s/jobs/$3" ] || { echo "no run $3" >&2; exit 1; }
-    grep -cvx skipped "$s/jobs/$3" || true ;;
   *) unhandled "$@" ;;
 esac
 EOF
@@ -219,6 +192,7 @@ EOF
 cat >"$T/bin/checks" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_STATE/checks.log"
+printf 'checks %s\n' "$*" >>"$GH_STATE/events.log"
 [ ! -x "$GH_STATE/checks.hook" ] || "$GH_STATE/checks.hook"
 [ ! -e "$GH_STATE/checks.fail" ]
 EOF
@@ -255,8 +229,8 @@ check() { # check <description> <command...>: the command must succeed
 fresh() {
   E=$T/$1
   BARE=$E/origin.git PRIMARY=$E/primary WT=$E/worktrees
-  mkdir -p "$E/state/pr" "$E/state/jobs"
-  : >"$E/out"; : >"$E/state/gh.log"; : >"$E/state/checks.log"
+  mkdir -p "$E/state/pr"
+  : >"$E/out"; : >"$E/state/gh.log"; : >"$E/state/checks.log"; : >"$E/state/events.log"
   export GH_STATE=$E/state GH_BARE=$BARE GOAL_WORKTREES=$WT
   git init -q --bare "$BARE"
   git --git-dir="$BARE" symbolic-ref HEAD refs/heads/main
@@ -303,6 +277,9 @@ has_branch() { git -C "$PRIMARY" show-ref --verify --quiet "refs/heads/$1"; }
 logged() { grep -qxF -- "$2" "$E/state/$1.log"; }        # logged <gh|checks> <exact line>
 logged_like() { grep -qF -- "$2" "$E/state/$1.log"; }    # logged_like <gh|checks> <text>
 not_logged_like() { ! logged_like "$@"; }
+no_gh_run() { ! grep -q '^run ' "$E/state/gh.log"; }   # no_gh_run: goal.sh asked GitHub for no CI run
+# land_steps: the steps land took, in order, from the events log: checks --full, pr ready, pr merge.
+land_steps() { grep -E '^(checks .*--full|gh pr ready|gh pr merge)' "$E/state/events.log" | cut -d' ' -f1-3; }
 count() { grep -cF -- "$2" "$E/state/$1.log"; }          # count <gh|checks> <text>
 out_has() { grep -qF -- "$1" "$E/out"; }
 not_out_has() { ! grep -qF -- "$1" "$E/out"; }
@@ -515,95 +492,40 @@ check "an open slice stops land before the checks" test ! -s "$E/state/checks.lo
 check "an open slice stops land before the pull request is touched" test ! -s "$E/state/gh.log"
 succeeds "dropping the open slice" drop demo open
 
+: >"$E/state/gh.log"; : >"$E/state/events.log"
 touch "$E/state/checks.fail"
 fails "landing when the full checks fail" "full checks failed" land demo
 rm -f "$E/state/checks.fail"
 check "the full checks ran on the goal worktree" logged checks "-C $gdir --full"
-check "failing full checks leave the pull request a draft" test "$(count gh 'pr ready')" = 0
+check "failing full checks mark nothing ready" test "$(count gh 'pr ready')" = 0
+check "failing full checks merge nothing" test "$(count gh 'pr merge')" = 0
+check "failing full checks leave the pull request a draft" same "$(cat "$E/state/pr/1/draft")" true
 
-head=$(rev goal/demo)
-printf '10 completed failure 2099-01-01T00:00:00Z\n' >"$E/state/runs"
-printf 'success\nfailure\n' >"$E/state/jobs/10"
-fails "landing when CI fails" "CI run 10 on $head ended 'failure'" land demo
-check "land marks the pull request ready" logged gh "pr ready 1"
-check "land waits for the run on the goal's head" logged_like gh "run list --workflow ci.yml --commit $head --event pull_request"
-check "a failed CI run merges nothing" test "$(count gh 'pr merge')" = 0
-check "a failed CI run keeps the goal worktree" test -d "$gdir"
-check "a failed CI run puts the pull request back to draft" logged gh "pr ready 1 --undo"
-check "the pull request is a draft again" same "$(cat "$E/state/pr/1/draft")" true
-
-# A pull request someone marked ready by hand: land takes the run that exists, however old.
-echo false >"$E/state/pr/1/draft"
-: >"$E/state/gh.log"
-printf '11 completed success 2000-01-01T00:00:00Z\n' >"$E/state/runs"
-printf 'success\n' >"$E/state/jobs/11"
-printf 'Example Check\n' >"$E/state/rollup_bad"
-fails "landing when a check on the pull request failed" "not every check passed on #1: Example Check" land demo
-rm -f "$E/state/rollup_bad"
-check "an already-ready pull request is not marked ready again" test "$(count gh 'pr ready 1')" = "$(count gh 'pr ready 1 --undo')"
-check "a failed check merges nothing" test "$(count gh 'pr merge')" = 0
-check "a failed check puts the pull request back to draft" same "$(cat "$E/state/pr/1/draft")" true
-
-# Rollups shaped like GitHub's, through goal.sh's own jq filter: a commit status has a context and a
-# state but no name, and a check still running has no conclusion yet.
-printf '12 completed success 2099-01-01T00:00:00Z\n' >"$E/state/runs"
-printf 'success\n' >"$E/state/jobs/12"
-printf '{"headRefOid":"%s","statusCheckRollup":[{"name":"Go Tests","conclusion":"SUCCESS"},{"name":"Lint","conclusion":"SKIPPED"},{"context":"example/status","state":"FAILURE"}]}\n' \
-  "$head" >"$E/state/rollup.json"
-fails "landing with a failing commit status" "not every check passed on #1: example/status" land demo
-printf '{"headRefOid":"%s","statusCheckRollup":[{"name":"Go Tests","status":"IN_PROGRESS","conclusion":""}]}\n' \
-  "$head" >"$E/state/rollup.json"
-fails "landing with a check still running" "not every check passed on #1: Go Tests" land demo
-rm -f "$E/state/rollup.json"
-check "a failing status or a running check merges nothing" test "$(count gh 'pr merge')" = 0
-
-: >"$E/state/runs"
-GOAL_CI_TIMEOUT=1 fails "landing when no CI run appears" "no passing CI run on $head after 1s" land demo
-check "a CI timeout merges nothing" test "$(count gh 'pr merge')" = 0
-
-printf '30 in_progress none 2099-01-01T00:00:00Z\n' >"$E/state/runs"
-GOAL_CI_TIMEOUT=0 fails "landing when the run is still going at the deadline" "no passing CI run on $head" land demo
-check "a timed-out land cancels the run still going" logged gh "run cancel 30"
-check "a timed-out land puts the pull request back to draft" same "$(cat "$E/state/pr/1/draft")" true
-
-printf '31 completed success 2099-01-01T00:00:00Z\n' >"$E/state/runs"
-printf 'success\n' >"$E/state/jobs/31"
 touch "$E/state/merge.fail"
-fails "landing when GitHub refuses the merge" "GitHub refused the merge" land demo
+fails "landing when GitHub refuses the merge" "GitHub refused to merge pull request #1; it stays open" land demo
 rm -f "$E/state/merge.fail"
-check "a refused merge puts the pull request back to draft" same "$(cat "$E/state/pr/1/draft")" true
 check "a refused merge keeps the goal worktree" test -d "$gdir"
+check "a refused merge keeps the goal branch" has_branch goal/demo
+check "a refused merge leaves the pull request open" same "$(cat "$E/state/pr/1/state")" OPEN
+check "a refused merge releases the goal lock" lock_free demo
 
-GOAL_POLL=soon fails "a GOAL_POLL that is not whole seconds" "whole seconds" status demo
-
-# Success: main moved meanwhile, the pull request is a draft again, the first poll sees only the
-# draft run (all jobs skipped) and an old failure from before land, the next sees the real run.
+# Success: main moved meanwhile, and the pull request is a draft.
 git clone -q "$BARE" "$E/elsewhere"
 commit "$E/elsewhere" .github/workflows/ci.yml "name: CI"
 git -C "$E/elsewhere" push -q origin main
 rm -rf "$E/elsewhere"
 moved=$(origin_rev main)
-# What a retried land sees: the failed job of an earlier run on this commit is still in the rollup.
-printf '{"headRefOid":"HEAD_SHA","statusCheckRollup":[{"name":"Go Tests","workflowName":"CI","conclusion":"FAILURE"},{"name":"Go Tests","workflowName":"CI","conclusion":"SUCCESS"},{"context":"example/status","state":"SUCCESS"}]}\n' \
-  >"$E/state/rollup.json"
 echo true >"$E/state/pr/1/draft"
-printf '20 completed skipped 2099-01-01T00:00:00Z\n5 completed failure 2000-01-01T00:00:00Z\n' >"$E/state/runs"
-printf '20 completed skipped 2099-01-01T00:00:00Z\n21 completed success 2099-01-01T00:00:01Z\n' >"$E/state/runs.next"
-printf 'skipped\nskipped\n' >"$E/state/jobs/20"
-printf 'success\n' >"$E/state/jobs/21"
-: >"$E/state/gh.log"; : >"$E/state/checks.log"
-touch "$E/state/runlist.fail"
+: >"$E/state/gh.log"; : >"$E/state/checks.log"; : >"$E/state/events.log"
 succeeds "land" land demo
-check "land tries again when gh run list fails once" out_has "gh run list failed; trying again"
-rm -f "$E/state/rollup.json"
 landed=$(sed -n 's/^pr merge 1 --merge --match-head-commit //p' "$E/state/gh.log")
 check "land merges the main that moved into the goal" same "$(git --git-dir="$BARE" rev-parse "$landed^2")" "$moved"
 check "land deletes the remote goal branch" test -z "$(origin_rev goal/demo)"
 check "land runs the full checks after merging main" logged checks "-C $gdir --full"
-check "land marks the draft ready" logged gh "pr ready 1"
-check "land looks at the draft run and skips it" logged gh "run view 20 --json jobs --jq [.jobs[] | select(.conclusion != \"skipped\")] | length"
-check "land ignores runs from before it marked the pull request ready" not_logged_like gh "run view 5 "
+check "land runs the full checks, then marks the draft ready, then merges" \
+  same "$(land_steps | tr '\n' ' ')" "checks -C $gdir gh pr ready gh pr merge "
 check "land merges exactly the goal's head" logged gh "pr merge 1 --merge --match-head-commit $landed"
+check "land never asks GitHub for a CI run" no_gh_run
 check "origin's main has the goal" git --git-dir="$BARE" merge-base --is-ancestor "$landed" main
 check "the goal worktree is removed" test ! -e "$gdir"
 check "the goal's directory is removed" test ! -e "$WT/demo"
@@ -757,8 +679,6 @@ check "no two containers share a name" test -z "$(sort "$CHECKS_DOCKER_LOG" | un
 say "a slug used again"
 fresh reuse
 gdir=$WT/demo/goal
-printf '40 completed success 2099-01-01T00:00:00Z\n' >"$E/state/runs"
-printf 'success\n' >"$E/state/jobs/40"
 succeeds "start the first goal" start demo
 succeeds "slice" slice demo one
 commit "$WT/demo/one" one.txt "one"
@@ -776,7 +696,7 @@ check "status shows the open pull request, not the merged one" out_has "pr      
 succeeds "land the second goal" land demo
 head=$(cat "$E/state/pr/2/head")
 check "the full checks run for the second goal" logged checks "-C $gdir --full"
-check "GitHub's checks are waited for" logged_like gh "run list --workflow ci.yml --commit $head"
+check "no CI run is asked for" no_gh_run
 check "the second pull request is marked ready" logged gh "pr ready 2"
 check "the second pull request is merged at the goal's head" logged gh "pr merge 2 --merge --match-head-commit $head"
 check "the second pull request is merged" same "$(cat "$E/state/pr/2/state")" MERGED
@@ -787,8 +707,7 @@ check "the second goal's work is on main" git --git-dir="$BARE" cat-file -e main
 
 # 11. jq and false -------------------------------------------------------------------------------
 # jq's // takes false for missing, so .isDraft // true reads a ready pull request as a draft. Here
-# isDraft is false and only an old run exists: a land that misreads it marks the pull request ready
-# and waits for a new run that never comes.
+# isDraft is false: a land that misreads it marks the pull request ready again.
 say "jq and false"
 check "goal.sh puts no // after isDraft" eval "! grep -nE 'isDraft[)]?[[:space:]]*//' '$GOAL'"
 fresh ready
@@ -798,12 +717,10 @@ echo false >"$E/state/pr/1/draft"
 succeeds "status of a ready pull request" status demo
 check "status reads isDraft false as ready" out_has "pr       https://example.invalid/pull/1  OPEN"
 check "status does not call a ready pull request a draft" eval "! out_has 'OPEN draft'"
-printf '50 completed success 2000-01-01T00:00:00Z\n' >"$E/state/runs"
-printf 'success\n' >"$E/state/jobs/50"
+printf 'false\n' >"$E/state/pr/1/draft"
 : >"$E/state/gh.log"
-GOAL_CI_TIMEOUT=1 succeeds "land a pull request already ready" land demo
-check "a ready pull request is not marked ready" eval "! grep -qE '^pr ready 1\$' '$E/state/gh.log'"
-check "the run that exists is the one taken" logged gh "run view 50 --json jobs --jq [.jobs[] | select(.conclusion != \"skipped\")] | length"
+succeeds "land a pull request already ready" land demo
+check "a ready pull request is not marked ready" not_logged_like gh "pr ready"
 check "the ready pull request is merged" same "$(cat "$E/state/pr/1/state")" MERGED
 
 # 12. main moves under a goal --------------------------------------------------------------------
@@ -869,8 +786,6 @@ check "status reports nothing behind after the resolved sync" out_has ", 0 behin
 say "land run again after an interruption"
 fresh resume
 gdir=$WT/demo/goal
-printf '60 completed success 2099-01-01T00:00:00Z\n' >"$E/state/runs"
-printf 'success\n' >"$E/state/jobs/60"
 succeeds "start" start demo
 succeeds "slice" slice demo one
 commit "$WT/demo/one" one.txt "one"
@@ -885,7 +800,6 @@ succeeds "land again" land demo
 check "land again says it only cleans up" out_has "pull request #1 already merged goal/demo"
 check "land again runs no checks" test ! -s "$E/state/checks.log"
 check "land again marks nothing ready" not_logged_like gh "pr ready"
-check "land again waits for no run" not_logged_like gh "run list"
 check "land again merges nothing" not_logged_like gh "pr merge"
 check "land again removes the goal worktree" test ! -e "$WT/demo"
 check "land again removes the local goal branch" no_branch goal/demo

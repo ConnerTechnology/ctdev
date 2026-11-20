@@ -3,11 +3,12 @@
 #
 # ctdev configures the machine it runs on, so nothing here runs ctdev, its installer or its Go
 # tests on the host: the Go jobs and the Ubuntu install jobs run in throwaway containers that copy
-# the tree in. Each run gets its own containers, so parallel worktrees never share one; only the
-# Go module and build caches are shared, and Go makes those safe to share.
+# the tree in, and so does the PowerShell job where pwsh is not installed. Each run gets its own
+# containers, so parallel worktrees never share one; only the Go module and build caches are shared,
+# and Go makes those safe to share.
 #
-# The PowerShell and macOS jobs need their own runners and run only on GitHub, when the goal
-# pull request is marked ready (scripts/goal.sh land).
+# Only the macOS job needs a runner of its own: it runs on GitHub, on pushes to main and release
+# tags, and a failure there blocks the release.
 #
 # Usage:
 #   scripts/checks.sh --full                 every Linux job in ci.yml
@@ -208,23 +209,37 @@ ubuntu_both() {
   return "$rc"
 }
 
+# The powershell-lint job: install.ps1 parses, and declares the -Doctor and -DoctorArgs parameters
+# the documented `& ([scriptblock]::Create((irm ...))) -Doctor` needs. Parsing runs none of it. Where
+# pwsh is not installed, the official PowerShell image runs it, with install.ps1 mounted read-only.
+pwsh_image=mcr.microsoft.com/powershell:7.5-ubuntu-24.04
+# shellcheck disable=SC2016 # PowerShell expands these, not bash
+pwsh_check='$e = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+  (Resolve-Path ./install.ps1), [ref]$null, [ref]$e)
+if ($e) { $e | ForEach-Object { Write-Error $_.Message }; exit 1 }
+if (-not $ast.ParamBlock) { throw "install.ps1 must declare a param() block" }
+$names = $ast.ParamBlock.Parameters.Name.VariablePath.UserPath
+foreach ($required in @("Doctor", "DoctorArgs")) {
+  if ($names -notcontains $required) { throw "install.ps1 is missing the -$required parameter" }
+}'
 pwsh_job() {
-  if ! command -v pwsh >/dev/null; then
-    say "pwsh is not installed: install.ps1 is checked only on GitHub, when the goal is landed"
-    return 0
+  if command -v pwsh >/dev/null; then
+    pwsh -NoProfile -Command "$pwsh_check"
+  else
+    docker run --rm --quiet --name "ctdev-checks-pwsh-$$" -v "$PWD/install.ps1":/w/install.ps1:ro -w /w \
+      "$pwsh_image" pwsh -NoProfile -Command "$pwsh_check"
   fi
-  # shellcheck disable=SC2016 # PowerShell expands these, not bash
-  pwsh -NoProfile -Command '$e = $null; [System.Management.Automation.Language.Parser]::ParseFile(
-    (Resolve-Path ./install.ps1), [ref]$null, [ref]$e) | Out-Null; if ($e) { $e; exit 1 }'
 }
 
 needs_docker() {
   command -v docker >/dev/null && docker info >/dev/null 2>&1 && return 0
-  echo "docker is required: the Go, sessions and Ubuntu jobs never run on the host" >&2
+  echo "docker is required: the Go, sessions and Ubuntu jobs never run on the host, nor the PowerShell job without pwsh" >&2
   exit 1
 }
 
 [ "$want_go$want_ubuntu$want_sessions" = "000" ] || needs_docker
+[ "$want_pwsh" = 0 ] || command -v pwsh >/dev/null || needs_docker
 
 [ "$want_shell" = 0 ] || run shellcheck shell_job
 run guidance scripts/check-guidance.sh
