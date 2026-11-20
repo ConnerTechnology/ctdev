@@ -113,14 +113,6 @@ worktree or branch behind.
   the release commit has no issue and no body.
   Attribution is off, set in `.claude/settings.json`.
 
-## Retros
-
-`/retro auto` runs at 06:20 on yesterday's sessions (`scripts/sessions.sh digest` over Entire's
-local checkpoints), fixes what keeps going wrong or costing tokens, code first, and lands it as a
-goal. `/retro` runs one with the human (both in `.claude/commands/retro.md`). Both write to
-`docs/retros/`, which is public: summarize, never quote a prompt. Past sessions:
-`scripts/sessions.sh search <term>...`.
-
 ## Releases
 
 1. Commit changes
@@ -130,8 +122,7 @@ goal. `/retro` runs one with the human (both in `.claude/commands/retro.md`). Bo
 4. Bump VERSION
 5. Commit: `docs: update for vX.Y.Z`
 6. Tag: `git tag vX.Y.Z`
-7. Push: `git push && git push --tags`, then `git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*'`
-   prints nothing (no session transcript went out)
+7. Push: `git push && git push --tags`
 8. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
 
 ## Guidance is checked

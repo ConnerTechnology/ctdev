@@ -3,7 +3,6 @@ package diagnose
 import (
 	"bytes"
 	"context"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -39,15 +38,7 @@ func captureErr(ctx context.Context, name string, args ...string) (string, error
 // non-zero. WaitDelay bounds the wait for the pipes once the command exits or
 // ctx ends, so a grandchild that inherited them can't hold the check open.
 func captureCombined(ctx context.Context, name string, args ...string) string {
-	return captureCombinedEnv(ctx, nil, name, args...)
-}
-
-// captureCombinedEnv is captureCombined with env added to the environment.
-func captureCombinedEnv(ctx context.Context, env []string, name string, args ...string) string {
 	cmd := exec.CommandContext(ctx, name, args...)
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
-	}
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

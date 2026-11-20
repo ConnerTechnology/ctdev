@@ -29,7 +29,7 @@ each goal: one started while another holds it says so and waits, then looks agai
 | --- | --- |
 | `start <slug> [title]` | Goal branch and worktree, an empty first commit (GitHub opens no pull request without one), push, draft pull request. A start that fails anywhere removes what it made, so it can run again |
 | `slice <slug> <name>` | Slice branch and worktree from the goal's head; prints the path. Waits for a merge into the goal that is running, so it starts from what that merge leaves |
-| `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice; a commit made on the slice during the checks keeps it too. A slice (or goal) with an ignored file outside what Entire and the build leave is never removed: `git worktree remove` would delete it unseen |
+| `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice; a commit made on the slice during the checks keeps it too. A slice (or goal) with an ignored file outside what Claude Code and the build leave is never removed: `git worktree remove` would delete it unseen |
 | `drop <slug> <name> [--force]` | Removes a slice with nothing left to merge. `--force` discards its unmerged commits too; a slice with uncommitted changes is refused either way |
 | `sync <slug>` | Merges `origin/main` into the goal, runs `scripts/checks.sh --changed` on what that brings in, pushes the goal. Failing checks undo the merge. Use it when `status` says the goal is behind, so slices cut next start from today's `main` |
 | `status <slug>` | The goal's commits ahead of and behind `origin/main` (behind points at `sync`; a failed fetch says the counts are from the last one), whether it is pushed, its open pull request, each open slice, and what is left |
@@ -64,7 +64,7 @@ merger is `merge`, and "mark the PR ready" plus the cleanup is `land`.
 
 `scripts/checks.sh` runs every job in `ci.yml` but the macOS one: shellcheck, the guidance check,
 the goal tests, and in containers the Go tests (with the restic `ci.yml` pins), vet, the
-cross-compile, the tests of `scripts/sessions/` (the tool behind `scripts/sessions.sh`), and the
+cross-compile, and the
 Ubuntu install jobs. The PowerShell job parses `install.ps1` with `pwsh`, or, where `pwsh` is not
 installed, in the official PowerShell image. It never runs ctdev on the host, because ctdev
 configures the machine it runs on. `--changed` runs only the jobs the files can break; `--full`
@@ -77,24 +77,3 @@ volumes, so a run whose Go code is unchanged takes about a minute.
 A fresh-context reviewer reads the goal pull request's diff (`gh pr diff`) against the goal's Linear
 issue, not the author's summary: `/code-review main` on the goal branch. Fix what it finds in a
 slice, then land.
-
-## Entire
-
-Entire records a checkpoint (prompt, transcript, files touched) for each commit with agent work,
-linked by an `Entire-Checkpoint` trailer. `entire checkpoint list`, `entire why` and
-`scripts/sessions.sh search` read them on this machine (`entire search` sends data to Entire).
-This repo is public, so checkpoints stay on this machine (ADR-0019), and the daily retro reads
-them here:
-
-- `.entire/settings.json` sets `push_sessions: false` and the `git-refs` backend for every clone and
-  worktree. The settings file `entire enable --local` writes is not in a new worktree; this one is.
-- `entire configure --checkpoint-push-policy manual` is set once per clone, as a second lock.
-- `scripts/goal.sh` pushes with `--no-verify`, which skips Entire's pre-push hook (the only thing
-  that pushes checkpoints), and fails after any push if `origin` has a `refs/entire/` ref or an
-  `entire/` branch (the legacy backend's `entire/checkpoints/v1`), or if it can't tell.
-- After the release push, `git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*'` prints
-  nothing, and `entire checkpoint list --outgoing` says `git push` sends none of them.
-
-On a new clone: `ctdev install entire` (ADR-0018), run
-`entire configure --checkpoint-push-policy manual`, then `entire enable --agent claude-code`.
-The mirror, `entire/unmirrored/` branches and Trails are not used (ADR-0017).
