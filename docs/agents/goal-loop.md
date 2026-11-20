@@ -20,20 +20,28 @@ about architecture (AGENTS.md, "Who decides what"). `scripts/goal.sh` runs the l
 ## The commands
 
 Run them from the primary checkout, which stays on `main`. Running the copy inside the goal
-worktree would let a merge rewrite the script while it runs.
+worktree would let a merge rewrite the script while it runs. The commands that change a goal
+(`slice`, `merge`, `drop`, `sync`, `land`) take its lock (`flock`), so they run one at a time on
+each goal: one started while another holds it says so and waits, then looks again at what it left.
 
 | Command | What it does |
 | --- | --- |
 | `start <slug> [title]` | Goal branch and worktree, an empty first commit (GitHub opens no pull request without one), push, draft pull request. A start that fails anywhere removes what it made, so it can run again |
-| `slice <slug> <name>` | Slice branch and worktree from the goal's head; prints the path. Refused while a merge into the goal is running |
+| `slice <slug> <name>` | Slice branch and worktree from the goal's head; prints the path. Waits for a merge into the goal that is running, so it starts from what that merge leaves |
 | `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice; a commit made on the slice during the checks keeps it too |
-| `drop <slug> <name>` | Removes a slice with nothing left to merge |
-| `status <slug>` | The goal, whether it is pushed, its pull request, each open slice, and what is left |
-| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks the pull request ready, waits for that run to pass on that exact commit and for every other check and status on it to be green, merges with `--match-head-commit`, deletes the goal branch here and on GitHub, removes its worktree, fast-forwards the primary checkout. If GitHub's checks fail or never finish (the run still going is cancelled), or GitHub refuses the merge, the pull request goes back to draft, so the fixes' pushes run nothing |
+| `drop <slug> <name> [--force]` | Removes a slice with nothing left to merge. `--force` discards its unmerged commits too; a slice with uncommitted changes is refused either way |
+| `sync <slug>` | Merges `origin/main` into the goal, runs `scripts/checks.sh --changed` on what that brings in, pushes the goal. Failing checks undo the merge. Use it when `status` says the goal is behind, so slices cut next start from today's `main` |
+| `status <slug>` | The goal's commits ahead of and behind `origin/main` (behind points at `sync`; a failed fetch says the counts are from the last one), whether it is pushed, its open pull request, each open slice, and what is left |
+| `land <slug>` | Merges a moved `main` in, runs `scripts/checks.sh --full`, pushes, marks the pull request ready, waits for that run to pass on that exact commit and for every other check and status on it to be green, merges with `--match-head-commit`, deletes the goal branch here and on GitHub, removes its worktree, fast-forwards the primary checkout. If GitHub's checks fail or never finish (the run still going is cancelled), or GitHub refuses the merge, the pull request goes back to draft, so the fixes' pushes run nothing. If it is interrupted after GitHub merged, running it again only finishes the cleanup |
 | `path <slug> [name]` | Prints a worktree's path |
 
-A conflict stops `merge` or `land` with the merge left in the goal worktree. The session resolves
-it there, commits, and runs the same command again.
+A conflict stops `merge`, `sync` or `land` with the merge left in the goal worktree. The session
+resolves it there, commits, and runs the same command again.
+
+A slug can be used again once its goal has landed. The script finds the goal's pull request by its
+head branch and state, never `gh pr view <branch>`, which can answer with the earlier goal's merged
+one: the open pull request is the goal's, and a merged one counts only when its head is the goal's
+head.
 
 ## Who builds a slice
 

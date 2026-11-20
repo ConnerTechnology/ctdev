@@ -11,14 +11,20 @@
 # Every worktree lives under one root, ../.worktrees/<repo>/<slug>/, next to the primary checkout:
 # the goal in goal/, each slice in <name>/. The script removes what it creates.
 #
+# Commands that change a goal (slice, merge, drop, sync, land) take its lock (flock), so they run
+# one at a time on each goal; one that finds the lock held says so and waits for it.
+#
 # Usage:
-#   scripts/goal.sh start <slug> [title]   goal branch, its worktree, and a draft pull request
-#   scripts/goal.sh slice <slug> <name>    a slice worktree, cut from the goal branch's head
-#   scripts/goal.sh merge <slug> <name>    check the slice, merge it into the goal, push, clean up
-#   scripts/goal.sh drop  <slug> <name>    remove a slice that has nothing left to merge
-#   scripts/goal.sh status <slug>          the goal's slices, their state, and what is left
-#   scripts/goal.sh land <slug>            full checks, then GitHub's checks, then merge and clean up
-#   scripts/goal.sh path <slug> [name]     print a worktree's path
+#   scripts/goal.sh start <slug> [title]    goal branch, its worktree, and a draft pull request
+#   scripts/goal.sh slice <slug> <name>     a slice worktree, cut from the goal branch's head
+#   scripts/goal.sh merge <slug> <name>     check the slice, merge it into the goal, push, clean up
+#   scripts/goal.sh drop  <slug> <name> [--force]
+#                                           remove a slice; --force discards its unmerged commits
+#   scripts/goal.sh sync  <slug>            merge the base into the goal, check what it brings, push
+#   scripts/goal.sh status <slug>           ahead and behind the base, the slices, what is left
+#   scripts/goal.sh land <slug>             full checks, then GitHub's checks, then merge and clean
+#                                           up; run again after an interruption, it finishes
+#   scripts/goal.sh path <slug> [name]      print a worktree's path
 #
 # Settings (environment): GOAL_REMOTE (origin), GOAL_BASE (main), GOAL_WORKTREES (the root above),
 # GOAL_CHECKS (the goal worktree's scripts/checks.sh), GOAL_POLL (30 seconds between CI polls),
@@ -60,6 +66,7 @@ slice_branch() { printf 'slice/%s/%s' "$1" "$2"; }
 goal_dir() { printf '%s/%s/goal' "$root" "$1"; }
 slice_dir() { printf '%s/%s/%s' "$root" "$1" "$2"; }
 has_branch() { g show-ref --verify --quiet "refs/heads/$1"; }
+on_remote() { [ -n "$(g ls-remote "$remote" "refs/heads/$1")" ]; }
 clean() { [ -z "$(git -C "$1" status --porcelain)" ]; }
 
 need_goal() {
@@ -137,13 +144,42 @@ cmd_start() {
   printf '%s\n' "$dir"
 }
 
+# One command that changes a goal at a time: two would race on the goal worktree or its slices. The
+# lock is held on fd 9 until the script exits; a second command waits for it and then looks again at
+# what the first left. ERR is not raised inside the || below, so waiting is not an error.
+lock() { # lock <slug>
+  local f="$root/$1/.lock"
+  command -v flock >/dev/null || die "flock is needed for the goal lock (util-linux; on macOS: brew install flock)"
+  mkdir -p "$root/$1"
+  exec 9>"$f"
+  if ! flock -n 9; then
+    say "waiting for another command on goal '$1' to finish ($f)"
+    flock 9
+  fi
+}
+# unlock <slug>: land's last step. The lock file goes with the goal's directory; a command that was
+# waiting on it finds the goal gone.
+unlock() { rm -f "$root/$1/.lock"; exec 9>&-; }
+
+# A merge or sync that stopped on a conflict leaves it in the goal worktree for the session.
+goal_worktree_ready() { # goal_worktree_ready <slug> <command to run again>
+  local gdir
+  gdir=$(goal_dir "$1")
+  if [ -f "$(git -C "$gdir" rev-parse --git-path MERGE_HEAD)" ]; then
+    die "the goal worktree has a merge in progress: resolve it in $gdir, commit, then run $2 again"
+  fi
+  clean "$gdir" || die "the goal worktree $gdir has uncommitted changes"
+}
+
 cmd_slice() {
   local slug=$1 name=$2 branch dir
   valid slug "$slug"; valid slice "$name"
   [ "$name" != goal ] || die "a slice can't be named 'goal': that is the goal's own worktree"
   need_goal "$slug"
-  # A merge commits before its checks run, so a slice cut now could start from a merge they undo.
-  [ ! -d "$root/$slug/.merge.lock" ] || die "a merge into goal '$slug' is running: cut the slice when it is done"
+  # A merge commits before its checks run, so a slice cut during one could start from a merge they
+  # undo: wait for it.
+  lock "$slug"
+  need_goal "$slug"
   branch=$(slice_branch "$slug" "$name"); dir=$(slice_dir "$slug" "$name")
   has_branch "$branch" && die "slice $branch already exists"
   [ -e "$dir" ] && die "$dir already exists"
@@ -152,24 +188,39 @@ cmd_slice() {
   printf '%s\n' "$dir"
 }
 
-remove_slice() { # remove_slice <slug> <name>: the worktree, then the branch
+remove_slice() { # remove_slice <slug> <name> <tip>: the worktree, then the branch if it is still at <tip>
   local dir branch
   dir=$(slice_dir "$1" "$2"); branch=$(slice_branch "$1" "$2")
   [ ! -d "$dir" ] || g worktree remove "$dir"
-  has_branch "$branch" && g branch --quiet -D "$branch"
   g worktree prune
+  # Only at the tip that was checked: a commit made since is not lost with the branch.
+  g update-ref -d "refs/heads/$branch" "$3" ||
+    die "slice $2 gained a commit while it was being removed: its branch is kept, run this again"
 }
 
-# One merge or land into a goal at a time: two would race on the goal worktree.
-lock() {
-  lock_dir="$root/$1/.merge.lock"
-  mkdir "$lock_dir" 2>/dev/null || die "another merge into goal '$1' is running (or left $lock_dir behind)"
-  trap unlock EXIT
+# check_push <slug> <1 if a merge was just made> <why, undoing it> <why, otherwise>: run the checks on
+# what the goal worktree's head adds to the pushed goal, then push. Failing checks undo a merge just
+# made, so the goal is as it was.
+check_push() {
+  local gdir files f
+  gdir=$(goal_dir "$1")
+  g fetch --quiet "$remote" "$(goal_branch "$1")"
+  files=()
+  # --no-renames lists a moved file under its old path too, so moving it out of ctdev/ still runs Go.
+  while IFS= read -r f; do files+=("$f"); done < <(git -C "$gdir" diff --name-only --no-renames \
+    "$remote/$(goal_branch "$1")" HEAD)
+  if [ ${#files[@]} -gt 0 ] && ! checks "$1" -C "$gdir" --changed "${files[@]}"; then
+    if [ "$2" = 1 ]; then
+      git -C "$gdir" reset --quiet --hard ORIG_HEAD
+      die "$3"
+    fi
+    die "$4"
+  fi
+  push_goal "$1"
 }
-unlock() { [ -z "${lock_dir:-}" ] || rmdir "$lock_dir" 2>/dev/null || true; lock_dir=""; }
 
 cmd_merge() {
-  local slug=$1 name=$2 branch dir gdir merged_now=0 files f
+  local slug=$1 name=$2 branch dir gdir merged_now=0 tip
   valid slug "$slug"; valid slice "$name"
   need_goal "$slug"
   branch=$(slice_branch "$slug" "$name"); dir=$(slice_dir "$slug" "$name"); gdir=$(goal_dir "$slug")
@@ -177,10 +228,9 @@ cmd_merge() {
   [ ! -d "$dir" ] || clean "$dir" || die "slice $name has uncommitted changes in $dir: commit or drop them"
   checks_cmd "$slug" >/dev/null
   lock "$slug"
-  if [ -f "$(git -C "$gdir" rev-parse --git-path MERGE_HEAD)" ]; then
-    die "the goal worktree has a merge in progress: resolve it in $gdir, commit, then run this again"
-  fi
-  clean "$gdir" || die "the goal worktree $gdir has uncommitted changes"
+  need_goal "$slug"
+  has_branch "$branch" || die "no slice '$name' in goal '$slug'"
+  goal_worktree_ready "$slug" merge
   if ! git -C "$gdir" merge-base --is-ancestor "$branch" HEAD; then
     say "merging slice $name into $(goal_branch "$slug")"
     if ! git -C "$gdir" merge --quiet --no-ff -m "chore: merge slice $name" \
@@ -190,56 +240,108 @@ cmd_merge() {
     merged_now=1
   fi
   # What this push will add to the goal: the slice, plus any conflict resolution.
-  g fetch --quiet "$remote" "$(goal_branch "$slug")"
-  files=()
-  # --no-renames lists a moved file under its old path too, so moving it out of ctdev/ still runs Go.
-  while IFS= read -r f; do files+=("$f"); done < <(git -C "$gdir" diff --name-only --no-renames \
-    "$remote/$(goal_branch "$slug")" HEAD)
-  if [ ${#files[@]} -gt 0 ] && ! checks "$slug" -C "$gdir" --changed "${files[@]}"; then
-    if [ "$merged_now" = 1 ]; then
-      git -C "$gdir" reset --quiet --hard ORIG_HEAD
-      die "checks failed, so the merge was undone. Fix slice $name in $dir and run this again"
-    fi
-    die "checks failed on the goal branch. Fix it in $gdir and run this again"
-  fi
-  push_goal "$slug"
+  check_push "$slug" "$merged_now" \
+    "checks failed, so the merge was undone. Fix slice $name in $dir and run this again" \
+    "checks failed on the goal branch. Fix it in $gdir and run this again"
   # The checks can take minutes; a commit made on the slice meanwhile is not in the goal, and
   # deleting the branch would lose it.
-  git -C "$gdir" merge-base --is-ancestor "$branch" HEAD ||
+  tip=$(g rev-parse "$branch")
+  git -C "$gdir" merge-base --is-ancestor "$tip" HEAD ||
     die "slice $name has commits made after it was merged: run this again to merge them"
-  remove_slice "$slug" "$name"
+  remove_slice "$slug" "$name" "$tip"
   say "slice $name merged into $(goal_branch "$slug") and pushed; its worktree and branch are gone"
 }
 
+# --force discards the slice's commits, never uncommitted work: a worktree with changes is refused
+# either way, so what was never committed can't be lost by a flag.
 cmd_drop() {
-  local slug=$1 name=$2 branch dir ahead
+  local slug=$1 name=$2 force=${3:-} branch dir ahead tip
   valid slug "$slug"; valid slice "$name"
+  need_goal "$slug"
   branch=$(slice_branch "$slug" "$name"); dir=$(slice_dir "$slug" "$name")
   has_branch "$branch" || die "no slice '$name' in goal '$slug'"
-  [ ! -d "$dir" ] || clean "$dir" || die "slice $name has uncommitted changes in $dir"
-  ahead=$(g rev-list --count "$(goal_branch "$slug")..$branch")
-  [ "$ahead" = 0 ] || die "slice $name has $ahead commit(s) not in the goal: merge it, or delete it by hand"
-  remove_slice "$slug" "$name"
-  say "slice $name dropped"
+  lock "$slug"
+  has_branch "$branch" || die "no slice '$name' in goal '$slug'"
+  [ ! -d "$dir" ] || clean "$dir" ||
+    die "slice $name has uncommitted changes in $dir: commit or discard them first (--force drops only commits)"
+  tip=$(g rev-parse "$branch")
+  ahead=$(g rev-list --count "$(goal_branch "$slug")..$tip")
+  [ "$ahead" = 0 ] || [ "$force" = --force ] ||
+    die "slice $name has $ahead commit(s) not in the goal: merge it, or drop it with --force to discard them"
+  remove_slice "$slug" "$name" "$tip"
+  if [ "$ahead" = 0 ]; then say "slice $name dropped"; else say "slice $name dropped; its $ahead unmerged commit(s) are discarded"; fi
+}
+
+# Brings what reached the base into the goal between merges, so the slices cut next start from it
+# and a conflict with it comes up now rather than at land.
+cmd_sync() {
+  local slug=$1 gdir merged_now=0
+  valid slug "$slug"
+  need_goal "$slug"
+  gdir=$(goal_dir "$slug")
+  checks_cmd "$slug" >/dev/null
+  lock "$slug"
+  need_goal "$slug"
+  goal_worktree_ready "$slug" sync
+  g fetch --quiet "$remote" "$base" || die "could not fetch $base from $remote"
+  if git -C "$gdir" merge-base --is-ancestor "$remote/$base" HEAD; then
+    say "the goal already has $remote/$base"
+  else
+    say "merging $remote/$base into $(goal_branch "$slug")"
+    git -C "$gdir" merge --quiet --no-ff -m "chore: merge $base into goal $slug" \
+      -m "Goal $slug: brings in what reached $base, checked by scripts/goal.sh sync." "$remote/$base" ||
+      die "$base conflicts with the goal. Resolve it in $gdir and commit, then run sync again"
+    merged_now=1
+  fi
+  check_push "$slug" "$merged_now" \
+    "checks failed on what $base brings in, so the merge was undone. Merge $remote/$base in $gdir by hand, fix what breaks, commit, then run sync again" \
+    "checks failed on the goal branch. Fix it in $gdir and run sync again"
+  say "goal $slug has $remote/$base and is pushed"
+}
+
+# The goal's pull requests, found by head branch and state. A slug used before has an old merged
+# pull request with the same head branch, and gh pr view <branch> may pick that one, so the goal's
+# own is the open one, or a merged one only when its head is the goal's head.
+open_pr() { # open_pr <branch>: "<number> <isDraft> <url>", or nothing; fails when gh does
+  gh pr list --head "$1" --state open --json number,isDraft,headRefOid,url,state \
+    --jq '.[:1][] | "\(.number) \(.isDraft) \(.url)"'
+}
+merged_pr() { # merged_pr <branch> <sha>: "<number> <url>" of the merged pull request whose head is <sha>
+  gh pr list --head "$1" --state merged --json number,headRefOid,url,state \
+    --jq "[.[] | select(.headRefOid == \"$2\")][:1][] | \"\(.number) \(.url)\""
 }
 
 cmd_status() {
-  local slug=$1 branch gdir ref name ahead dirty state left=0 local_head remote_head pr
+  local slug=$1 branch gdir ref name ahead behind counts stale dirty state left=0 local_head remote_head pr
+  local number draft url
   valid slug "$slug"
   need_goal "$slug"
   branch=$(goal_branch "$slug"); gdir=$(goal_dir "$slug")
-  g fetch --quiet "$remote" "$branch" "$base" 2>/dev/null || true
   local_head=$(g rev-parse "$branch")
-  remote_head=$(g rev-parse --verify --quiet "$remote/$branch" || true)
-  printf 'goal     %s  (%s commits beyond %s/%s)\n' "$branch" \
-    "$(g rev-list --count "$remote/$base..$branch")" "$remote" "$base"
+  stale=""
+  g fetch --quiet "$remote" "$branch" "$base" 2>/dev/null ||
+    stale=", as of the last fetch: fetching from $remote failed"
+  counts=$(g rev-list --left-right --count "$remote/$base...$branch")
+  read -r behind ahead <<<"$counts"
+  printf 'goal     %s  (%s ahead of %s/%s, %s behind%s)\n' "$branch" "$ahead" "$remote" "$base" "$behind" "$stale"
+  if [ "$behind" -gt 0 ]; then
+    printf 'behind   %s/%s has moved on: scripts/goal.sh sync %s brings %s in\n' "$remote" "$base" "$slug" "$base"
+  fi
   printf 'worktree %s%s\n' "$gdir" "$(clean "$gdir" || printf '  (uncommitted changes)')"
+  remote_head=$(g rev-parse --verify --quiet "$remote/$branch" || true)
   if [ "$local_head" = "$remote_head" ]; then
     printf 'pushed   yes\n'
   else
     printf 'pushed   no: the goal has commits not on %s\n' "$remote"; left=1
   fi
-  pr=$(gh pr view "$branch" --json url,isDraft,state --jq '"\(.url)  \(.state)\(if .isDraft then " draft" else "" end)"' 2>/dev/null || echo "none found")
+  if ! pr=$(open_pr "$branch" 2>/dev/null); then
+    pr="unknown: could not list $branch's pull requests"
+  elif [ -z "$pr" ]; then
+    pr="none open for $branch"
+  else
+    read -r number draft url <<<"$pr"
+    pr="$url  OPEN$([ "$draft" != true ] || printf ' draft')"
+  fi
   printf 'pr       %s\n' "$pr"
   printf 'slices\n'
   while read -r ref; do
@@ -308,68 +410,92 @@ not_landed() { # not_landed <number> <why>
 }
 
 cmd_land() {
-  local slug=$1 branch gdir head since slices number state rollup_bad
+  local slug=$1 branch gdir head since slices number merged draft url state rollup_bad ci_name pr
   valid slug "$slug"
-  need_goal "$slug"
   branch=$(goal_branch "$slug"); gdir=$(goal_dir "$slug")
+  has_branch "$branch" || [ -d "$gdir" ] || on_remote "$branch" ||
+    die "no goal '$slug' (start it with: scripts/goal.sh start $slug)"
+  [ ! -d "$gdir" ] || clean "$gdir" || die "the goal worktree $gdir has uncommitted changes"
+  lock "$slug"
   slices=$(g for-each-ref --format='%(refname:short)' "refs/heads/slice/$slug/")
   [ -z "$slices" ] || die "slices are still open, merge or drop them first:
 $slices"
-  clean "$gdir" || die "the goal worktree $gdir has uncommitted changes"
-  checks_cmd "$slug" >/dev/null
-  lock "$slug"
-  # The checks have to pass on what lands, so bring in whatever reached the base meanwhile.
-  g fetch --quiet "$remote" "$base"
-  if ! git -C "$gdir" merge-base --is-ancestor "$remote/$base" HEAD; then
-    say "merging $remote/$base into the goal"
-    git -C "$gdir" merge --quiet --no-ff -m "chore: merge $base into goal $slug" \
-      -m "Goal $slug: brings in what reached $base, so the checks run on what lands." "$remote/$base" ||
-      die "$base conflicts with the goal. Resolve it in $gdir and commit, then land again"
-  fi
-  say "full checks on $(git -C "$gdir" rev-parse --short HEAD)"
-  checks "$slug" -C "$gdir" --full || die "the full checks failed: fix them on the goal branch and land again"
-  push_goal "$slug"
-  head=$(git -C "$gdir" rev-parse HEAD)
-  number=$(gh pr view "$branch" --json number --jq .number) || die "no pull request for $branch"
-  # A push to the draft starts a run that skips everything. Let it be created first, so the run
-  # marking the pull request ready starts can be told apart by its start time.
-  sleep "$settle"
-  since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  if [ "$(gh pr view "$number" --json isDraft --jq .isDraft)" = true ]; then
-    gh pr ready "$number" >&2
+  # The goal's head: the local branch, or what an interrupted land left of it on the remote.
+  if has_branch "$branch"; then
+    head=$(g rev-parse "$branch")
   else
-    # Already ready: nothing new will start, so the run for this commit is whichever exists.
-    since=1970-01-01T00:00:00Z
+    head=$(g ls-remote "$remote" "refs/heads/$branch" | cut -f1)
   fi
-  say "waiting for GitHub's checks on pull request #$number"
-  wait_ci "$head" "$since" || not_landed "$number" "GitHub's checks did not pass"
-  # Every other check on the head: a check run has a name and a conclusion, a commit status a
-  # context and a state, and anything not finished and green blocks the merge. ci.yml's own jobs
-  # are left out: wait_ci judged exactly the run this land started, and an earlier run's failed
-  # jobs on the same commit stay in the rollup and would block a retried land for good.
-  ci_name=""
-  if [ -f "$gdir/.github/workflows/ci.yml" ]; then
-    ci_name=$(sed -n 's/^name: *//p' "$gdir/.github/workflows/ci.yml" | head -n1 | tr -d "\"'")
+  [ -n "$head" ] || die "goal '$slug' has no branch here or on $remote"
+  # A land interrupted after GitHub merged only has its cleanup left. The merged pull request has to
+  # have the goal's own head: one from an earlier goal with this slug has another.
+  merged=$(merged_pr "$branch" "$head") || die "could not list the pull requests for $branch"
+  if [ -n "$merged" ]; then
+    read -r number url <<<"$merged"
+    say "pull request #$number already merged $branch at $(g rev-parse --short "$head"): finishing the cleanup"
+  else
+    need_goal "$slug"
+    checks_cmd "$slug" >/dev/null
+    pr=$(open_pr "$branch") || die "could not list the pull requests for $branch"
+    [ -n "$pr" ] || die "no open pull request for $branch (a merged or closed one from an earlier goal doesn't count)"
+    read -r number draft url <<<"$pr"
+    # The checks have to pass on what lands, so bring in whatever reached the base meanwhile.
+    g fetch --quiet "$remote" "$base"
+    if ! git -C "$gdir" merge-base --is-ancestor "$remote/$base" HEAD; then
+      say "merging $remote/$base into the goal"
+      git -C "$gdir" merge --quiet --no-ff -m "chore: merge $base into goal $slug" \
+        -m "Goal $slug: brings in what reached $base, so the checks run on what lands." "$remote/$base" ||
+        die "$base conflicts with the goal. Resolve it in $gdir and commit, then land again"
+    fi
+    say "full checks on $(git -C "$gdir" rev-parse --short HEAD)"
+    checks "$slug" -C "$gdir" --full || die "the full checks failed: fix them on the goal branch and land again"
+    push_goal "$slug"
+    head=$(git -C "$gdir" rev-parse HEAD)
+    # A push to the draft starts a run that skips everything. Let it be created first, so the run
+    # marking the pull request ready starts can be told apart by its start time.
+    sleep "$settle"
+    since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [ "$draft" = true ]; then
+      gh pr ready "$number" >&2
+    elif [ "$draft" = false ]; then
+      # Already ready: nothing new will start, so the run for this commit is whichever exists.
+      since=1970-01-01T00:00:00Z
+    else
+      die "could not tell whether pull request #$number is a draft (isDraft: '$draft')"
+    fi
+    say "waiting for GitHub's checks on pull request #$number"
+    wait_ci "$head" "$since" || not_landed "$number" "GitHub's checks did not pass"
+    # Every other check on the head: a check run has a name and a conclusion, a commit status a
+    # context and a state, and anything not finished and green blocks the merge. ci.yml's own jobs
+    # are left out: wait_ci judged exactly the run this land started, and an earlier run's failed
+    # jobs on the same commit stay in the rollup and would block a retried land for good. None of
+    # these fields is a boolean, so // falls through only on a missing one.
+    ci_name=""
+    if [ -f "$gdir/.github/workflows/ci.yml" ]; then
+      ci_name=$(sed -n 's/^name: *//p' "$gdir/.github/workflows/ci.yml" | head -n1 | tr -d "\"'")
+    fi
+    rollup_bad=$(gh pr view "$number" --json headRefOid,statusCheckRollup --jq \
+      "if .headRefOid != \"$head\" then \"the pull request's head moved\" else
+       ([.statusCheckRollup[] | select(\"$ci_name\" == \"\" or .workflowName != \"$ci_name\") |
+         select((.conclusion // .state // \"PENDING\") as \$c |
+         [\"SUCCESS\",\"SKIPPED\",\"NEUTRAL\"] | index(\$c) | not) |
+         (.name // .context // \"a check with no name\")] | join(\", \")) end") ||
+      not_landed "$number" "could not read the checks"
+    [ -z "$rollup_bad" ] || not_landed "$number" "not every check passed on #$number: $rollup_bad"
+    gh pr merge "$number" --merge --match-head-commit "$head" >&2 || not_landed "$number" "GitHub refused the merge"
+    state=$(gh pr view "$number" --json state --jq .state) || state=unknown
+    [ "$state" = MERGED ] || not_landed "$number" "pull request #$number is $state, not merged"
   fi
-  rollup_bad=$(gh pr view "$number" --json headRefOid,statusCheckRollup --jq \
-    "if .headRefOid != \"$head\" then \"the pull request's head moved\" else
-     ([.statusCheckRollup[] | select(\"$ci_name\" == \"\" or .workflowName != \"$ci_name\") |
-       select((.conclusion // .state // \"PENDING\") as \$c |
-       [\"SUCCESS\",\"SKIPPED\",\"NEUTRAL\"] | index(\$c) | not) |
-       (.name // .context // \"a check with no name\")] | join(\", \")) end") ||
-    not_landed "$number" "could not read the checks"
-  [ -z "$rollup_bad" ] || not_landed "$number" "not every check passed on #$number: $rollup_bad"
-  gh pr merge "$number" --merge --match-head-commit "$head" >&2 || not_landed "$number" "GitHub refused the merge"
-  state=$(gh pr view "$number" --json state --jq .state) || state=unknown
-  [ "$state" = MERGED ] || not_landed "$number" "pull request #$number is $state, not merged"
+  # Each step skips what an interrupted land already did. The local branch goes last: while it is
+  # there, a land run again finds the goal's head without the remote.
+  [ ! -d "$gdir" ] || g worktree remove "$gdir"
+  g worktree prune
   # GitHub deletes a merged branch only when the repository is set to; don't rely on it.
-  if [ -n "$(g ls-remote --heads "$remote" "$branch")" ]; then
+  if on_remote "$branch"; then
     g push --quiet --no-verify "$remote" --delete "$branch" || true
   fi
-  g worktree remove "$gdir"
-  g branch --quiet -D "$branch"
-  g worktree prune
-  unlock
+  ! has_branch "$branch" || g branch --quiet -D "$branch"
+  unlock "$slug"
   rmdir "$root/$slug" 2>/dev/null || true
   rmdir "$root" 2>/dev/null || true
   g fetch --quiet --prune "$remote"
@@ -394,7 +520,8 @@ main() {
     start) [ $# -le 2 ] || usage; cmd_start "$@" ;;
     slice) [ $# -eq 2 ] || usage; cmd_slice "$@" ;;
     merge) [ $# -eq 2 ] || usage; cmd_merge "$@" ;;
-    drop) [ $# -eq 2 ] || usage; cmd_drop "$@" ;;
+    drop) [ $# -eq 2 ] || { [ $# -eq 3 ] && [ "$3" = --force ]; } || usage; cmd_drop "$@" ;;
+    sync) [ $# -eq 1 ] || usage; cmd_sync "$@" ;;
     status) [ $# -eq 1 ] || usage; cmd_status "$@" ;;
     land) [ $# -eq 1 ] || usage; cmd_land "$@" ;;
     path) [ $# -le 2 ] || usage; cmd_path "$@" ;;
