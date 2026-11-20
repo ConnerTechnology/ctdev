@@ -23,7 +23,9 @@
 # Settings (environment): GOAL_REMOTE (origin), GOAL_BASE (main), GOAL_WORKTREES (the root above),
 # GOAL_CHECKS (the goal worktree's scripts/checks.sh), GOAL_POLL (30 seconds between CI polls),
 # GOAL_CI_TIMEOUT (5400 seconds).
-set -euo pipefail
+set -eEuo pipefail
+# set -e alone exits without a word; name the command that stopped the script.
+trap 'printf "goal: stopped at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 usage() { sed -n '/^# Usage:/,/^# Settings/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2; }
 die() { printf 'goal: %s\n' "$*" >&2; exit 1; }
@@ -112,6 +114,8 @@ cmd_slice() {
   valid slug "$slug"; valid slice "$name"
   [ "$name" != goal ] || die "a slice can't be named 'goal': that is the goal's own worktree"
   need_goal "$slug"
+  # A merge commits before its checks run, so a slice cut now could start from a merge they undo.
+  [ ! -d "$root/$slug/.merge.lock" ] || die "a merge into goal '$slug' is running: cut the slice when it is done"
   branch=$(slice_branch "$slug" "$name"); dir=$(slice_dir "$slug" "$name")
   has_branch "$branch" && die "slice $branch already exists"
   [ -e "$dir" ] && die "$dir already exists"
@@ -128,13 +132,13 @@ remove_slice() { # remove_slice <slug> <name>: the worktree, then the branch
   g worktree prune
 }
 
-# Only one merge into a goal at a time: two would race on the goal worktree.
+# One merge or land into a goal at a time: two would race on the goal worktree.
 lock() {
-  local l
-  l="$root/$1/.merge.lock"
-  mkdir "$l" 2>/dev/null || die "another merge into goal '$1' is running (or left $l behind)"
-  trap 'rmdir "'"$l"'" 2>/dev/null || true' EXIT
+  lock_dir="$root/$1/.merge.lock"
+  mkdir "$lock_dir" 2>/dev/null || die "another merge into goal '$1' is running (or left $lock_dir behind)"
+  trap unlock EXIT
 }
+unlock() { [ -z "${lock_dir:-}" ] || rmdir "$lock_dir" 2>/dev/null || true; lock_dir=""; }
 
 cmd_merge() {
   local slug=$1 name=$2 branch dir gdir merged_now=0 files f
@@ -233,13 +237,15 @@ wait_ci() { # wait_ci <sha> <since>
   while :; do
     runs=$(gh run list --workflow ci.yml --commit "$sha" --event pull_request --limit 20 \
       --json databaseId,status,conclusion,createdAt \
-      --jq "[.[] | select(.createdAt >= \"$since\")] | sort_by(.databaseId) | reverse | .[] | \"\(.databaseId) \(.status) \(.conclusion)\"")
+      --jq "[.[] | select(.createdAt >= \"$since\")] | sort_by(.databaseId) | reverse | .[] | \"\(.databaseId) \(.status) \(.conclusion)\"") ||
+      { say "gh run list failed; trying again"; runs=""; }
     while read -r id status conclusion; do
       [ -n "$id" ] || continue
       if [ "$status" != completed ]; then
         break
       fi
-      real=$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.conclusion != "skipped")] | length')
+      real=$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.conclusion != "skipped")] | length') ||
+        { say "gh run view $id failed; trying again"; break; }
       [ "$real" -gt 0 ] || continue
       if [ "$conclusion" = success ]; then
         say "CI run $id passed on $sha"
@@ -262,6 +268,7 @@ cmd_land() {
 $slices"
   clean "$gdir" || die "the goal worktree $gdir has uncommitted changes"
   checks_cmd "$slug" >/dev/null
+  lock "$slug"
   # The checks have to pass on what lands, so bring in whatever reached the base meanwhile.
   g fetch --quiet "$remote" "$base"
   if ! git -C "$gdir" merge-base --is-ancestor "$remote/$base" HEAD; then
@@ -297,6 +304,7 @@ $slices"
   g worktree remove "$gdir"
   g branch --quiet -D "$branch"
   g worktree prune
+  unlock
   rmdir "$root/$slug" 2>/dev/null || true
   rmdir "$root" 2>/dev/null || true
   g fetch --quiet --prune "$remote"
@@ -314,12 +322,21 @@ cmd_path() {
   echo
 }
 
-[ $# -ge 2 ] || usage
-cmd=$1; shift
-case "$cmd" in
-  start) [ $# -le 2 ] || usage; cmd_start "$@" ;;
-  slice|merge|drop) [ $# -eq 2 ] || usage; "cmd_$cmd" "$@" ;;
-  status|land) [ $# -eq 1 ] || usage; "cmd_$cmd" "$@" ;;
-  path) [ $# -le 2 ] || usage; cmd_path "$@" ;;
-  *) usage ;;
-esac
+main() {
+  [ $# -ge 2 ] || usage
+  local cmd=$1; shift
+  case "$cmd" in
+    start) [ $# -le 2 ] || usage; cmd_start "$@" ;;
+    slice) [ $# -eq 2 ] || usage; cmd_slice "$@" ;;
+    merge) [ $# -eq 2 ] || usage; cmd_merge "$@" ;;
+    drop) [ $# -eq 2 ] || usage; cmd_drop "$@" ;;
+    status) [ $# -eq 1 ] || usage; cmd_status "$@" ;;
+    land) [ $# -eq 1 ] || usage; cmd_land "$@" ;;
+    path) [ $# -le 2 ] || usage; cmd_path "$@" ;;
+    *) usage ;;
+  esac
+}
+
+# Bash reads a script as it runs it. With every line above a definition, the file is read whole
+# before main runs, so a merge that rewrites this file mid-run can't change what runs.
+main "$@"; exit
