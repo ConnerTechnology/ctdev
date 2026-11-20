@@ -69,6 +69,21 @@ has_branch() { g show-ref --verify --quiet "refs/heads/$1"; }
 on_remote() { [ -n "$(g ls-remote "$remote" "refs/heads/$1")" ]; }
 clean() { [ -z "$(git -C "$1" status --porcelain)" ]; }
 
+# git worktree remove deletes ignored files without a word, and status doesn't show them, so a file
+# written under a .gitignore pattern (a new .claude/ path, say) would vanish with its worktree. What
+# Entire, Claude Code and a build leave behind is disposable; anything else stops the removal.
+disposable='^(\.entire/|\.claude/scheduled_tasks\.lock$|\.playwright-mcp/|ctdev/ctdev$|ctdev/dist/)'
+kept_files() { # kept_files <dir>: the ignored files in a worktree that removing it would lose
+  git -C "$1" ls-files --others --ignored --exclude-standard --directory | grep -Ev "$disposable" || true
+}
+removable() { # removable <dir> <what to do after>: die, naming them, if removal would lose ignored files
+  local kept
+  kept=$(kept_files "$1")
+  [ -z "$kept" ] || die "$1 has ignored files its removal would delete:
+$kept
+Commit them (git add -f, or unignore the path), move them out, or delete them, then $2"
+}
+
 need_goal() {
   has_branch "$(goal_branch "$1")" || die "no goal '$1' (start it with: scripts/goal.sh start $1)"
   [ -d "$(goal_dir "$1")" ] || die "goal '$1' has no worktree at $(goal_dir "$1")"
@@ -191,6 +206,7 @@ cmd_slice() {
 remove_slice() { # remove_slice <slug> <name> <tip>: the worktree, then the branch if it is still at <tip>
   local dir branch
   dir=$(slice_dir "$1" "$2"); branch=$(slice_branch "$1" "$2")
+  [ ! -d "$dir" ] || removable "$dir" "run this again"
   [ ! -d "$dir" ] || g worktree remove "$dir"
   g worktree prune
   # Only at the tip that was checked: a commit made since is not lost with the branch.
@@ -204,7 +220,7 @@ remove_slice() { # remove_slice <slug> <name> <tip>: the worktree, then the bran
 check_push() {
   local gdir files f
   gdir=$(goal_dir "$1")
-  g fetch --quiet "$remote" "$(goal_branch "$1")"
+  # The caller fetched the goal branch before merging, so a failed fetch never strands a merge.
   files=()
   # --no-renames lists a moved file under its old path too, so moving it out of ctdev/ still runs Go.
   while IFS= read -r f; do files+=("$f"); done < <(git -C "$gdir" diff --name-only --no-renames \
@@ -226,11 +242,14 @@ cmd_merge() {
   branch=$(slice_branch "$slug" "$name"); dir=$(slice_dir "$slug" "$name"); gdir=$(goal_dir "$slug")
   has_branch "$branch" || die "no slice '$name' in goal '$slug'"
   [ ! -d "$dir" ] || clean "$dir" || die "slice $name has uncommitted changes in $dir: commit or drop them"
+  [ ! -d "$dir" ] || removable "$dir" "merge again"
   checks_cmd "$slug" >/dev/null
   lock "$slug"
   need_goal "$slug"
   has_branch "$branch" || die "no slice '$name' in goal '$slug'"
   goal_worktree_ready "$slug" merge
+  # Fetched before merging: a fetch that fails after it would leave an unchecked merge in the goal.
+  g fetch --quiet "$remote" "$(goal_branch "$slug")" || die "could not fetch $(goal_branch "$slug") from $remote"
   if ! git -C "$gdir" merge-base --is-ancestor "$branch" HEAD; then
     say "merging slice $name into $(goal_branch "$slug")"
     if ! git -C "$gdir" merge --quiet --no-ff -m "chore: merge slice $name" \
@@ -283,7 +302,7 @@ cmd_sync() {
   lock "$slug"
   need_goal "$slug"
   goal_worktree_ready "$slug" sync
-  g fetch --quiet "$remote" "$base" || die "could not fetch $base from $remote"
+  g fetch --quiet "$remote" "$base" "$(goal_branch "$slug")" || die "could not fetch from $remote"
   if git -C "$gdir" merge-base --is-ancestor "$remote/$base" HEAD; then
     say "the goal already has $remote/$base"
   else
@@ -435,6 +454,9 @@ $slices"
     say "pull request #$number already merged $branch at $(g rev-parse --short "$head"): finishing the cleanup"
   else
     need_goal "$slug"
+    # Again under the lock: what changed while land waited would be checked but not pushed.
+    goal_worktree_ready "$slug" land
+    removable "$gdir" "land again"
     checks_cmd "$slug" >/dev/null
     pr=$(open_pr "$branch") || die "could not list the pull requests for $branch"
     [ -n "$pr" ] || die "no open pull request for $branch (a merged or closed one from an earlier goal doesn't count)"
@@ -488,6 +510,7 @@ $slices"
   fi
   # Each step skips what an interrupted land already did. The local branch goes last: while it is
   # there, a land run again finds the goal's head without the remote.
+  [ ! -d "$gdir" ] || removable "$gdir" "land again to finish the cleanup"
   [ ! -d "$gdir" ] || g worktree remove "$gdir"
   g worktree prune
   # GitHub deletes a merged branch only when the repository is set to; don't rely on it.

@@ -305,6 +305,7 @@ logged_like() { grep -qF -- "$2" "$E/state/$1.log"; }    # logged_like <gh|check
 not_logged_like() { ! logged_like "$@"; }
 count() { grep -cF -- "$2" "$E/state/$1.log"; }          # count <gh|checks> <text>
 out_has() { grep -qF -- "$1" "$E/out"; }
+not_out_has() { ! grep -qF -- "$1" "$E/out"; }
 clean_tree() { [ -z "$(git -C "$1" status --porcelain)" ]; }
 lock_free() { flock -n "$WT/$1/.lock" true; }            # lock_free <slug>: no goal command holds it
 in_goal() { git -C "$PRIMARY" cat-file -e "goal/$1:$2" 2>/dev/null; }   # in_goal <slug> <file>
@@ -386,6 +387,24 @@ check "an uncommitted slice is not merged" same "$(rev goal/demo)" "$before"
 check "an uncommitted slice is kept" test -d "$WT/demo/dirty"
 git -C "$WT/demo/dirty" checkout -q -- README.md
 succeeds "dropping the clean slice" drop demo dirty
+
+# An ignored file is invisible to git status, and git worktree remove deletes it: what goal.sh
+# removes must not take one with it, except what Entire and the build leave behind.
+printf '*.local\n.entire/\n' >>"$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+succeeds "slice for an ignored file" slice demo ignored
+commit "$WT/demo/ignored" ignored.txt "ignored"
+printf 'notes\n' >"$WT/demo/ignored/notes.local"
+mkdir -p "$WT/demo/ignored/.entire/logs" && printf 'log\n' >"$WT/demo/ignored/.entire/logs/x.log"
+before=$(rev goal/demo)
+fails "merging a slice with an ignored file" "notes.local" merge demo ignored
+check "a slice with an ignored file is not merged" same "$(rev goal/demo)" "$before"
+check "the ignored file is kept" test -f "$WT/demo/ignored/notes.local"
+check "Entire's files are not named" not_out_has ".entire"
+fails "dropping a slice with an ignored file" "notes.local" drop demo ignored --force
+check "a refused drop keeps the ignored file" test -f "$WT/demo/ignored/notes.local"
+rm "$WT/demo/ignored/notes.local"
+succeeds "merging once the ignored file is gone, Entire's logs aside" merge demo ignored
+check "the slice with only Entire's logs is removed" test ! -e "$WT/demo/ignored"
 
 succeeds "slice for failing checks" slice demo red
 commit "$WT/demo/red" red.txt "red"

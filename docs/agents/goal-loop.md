@@ -28,7 +28,7 @@ each goal: one started while another holds it says so and waits, then looks agai
 | --- | --- |
 | `start <slug> [title]` | Goal branch and worktree, an empty first commit (GitHub opens no pull request without one), push, draft pull request. A start that fails anywhere removes what it made, so it can run again |
 | `slice <slug> <name>` | Slice branch and worktree from the goal's head; prints the path. Waits for a merge into the goal that is running, so it starts from what that merge leaves |
-| `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice; a commit made on the slice during the checks keeps it too |
+| `merge <slug> <name>` | Merges the slice into the goal worktree, runs `scripts/checks.sh --changed` on what the push adds, pushes the goal, removes the slice. Failing checks undo the merge and keep the slice; a commit made on the slice during the checks keeps it too. A slice (or goal) with an ignored file outside what Entire and the build leave is never removed: `git worktree remove` would delete it unseen |
 | `drop <slug> <name> [--force]` | Removes a slice with nothing left to merge. `--force` discards its unmerged commits too; a slice with uncommitted changes is refused either way |
 | `sync <slug>` | Merges `origin/main` into the goal, runs `scripts/checks.sh --changed` on what that brings in, pushes the goal. Failing checks undo the merge. Use it when `status` says the goal is behind, so slices cut next start from today's `main` |
 | `status <slug>` | The goal's commits ahead of and behind `origin/main` (behind points at `sync`; a failed fetch says the counts are from the last one), whether it is pushed, its open pull request, each open slice, and what is left |
@@ -77,8 +77,8 @@ slice, then land.
 ## Entire
 
 Entire records a checkpoint (prompt, transcript, files touched) for each commit with agent work,
-linked by an `Entire-Checkpoint` trailer. `entire checkpoint list`, `entire search` and `entire why`
-read them. This repo is public, so checkpoints stay on this machine (ADR-0019), and the daily
+linked by an `Entire-Checkpoint` trailer. `entire checkpoint list`, `entire why` and `scripts/sessions.sh search`
+read them, on this machine (`entire search` sends data to Entire). This repo is public, so checkpoints stay on this machine (ADR-0019), and the daily
 retro reads them here:
 
 - `.entire/settings.json` sets `push_sessions: false` and the `git-refs` backend for every clone and
