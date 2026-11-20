@@ -35,7 +35,8 @@ jobs:
       - name: Check syntax
         run: |
           for f in install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh scripts/sessions.sh; do
+            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh scripts/sessions.sh \
+            scripts/prompt-audit.sh; do
             bash -n "$f" || exit 1
           done
 
@@ -45,7 +46,8 @@ jobs:
       - name: Run ShellCheck
         run: |
           shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh scripts/sessions.sh
+            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh scripts/sessions.sh \
+            scripts/prompt-audit.sh
 
       # scripts/goal.sh merges slices and lands goals; its tests run it against a throwaway repo
       # with a stand-in gh, so nothing here touches GitHub.
