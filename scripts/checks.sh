@@ -70,7 +70,7 @@ fi
 
 # The shell scripts ci.yml lints. Keep in step with its shellcheck job.
 shell_files=(install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh scripts/checks.sh
-  scripts/goal.sh scripts/goal-test.sh scripts/sessions.sh)
+  scripts/goal.sh scripts/goal-test.sh scripts/sessions.sh scripts/prompt-audit.sh)
 
 shell_job() {
   local f present=()
