@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -75,6 +77,7 @@ func TestBuildUpdateSteps_AptRunsUnattended(t *testing.T) {
 // node-build are two clones, one inside the other.
 func TestBuildUpdateSteps_GitClonesPullTheirOwnFolder(t *testing.T) {
 	t.Setenv("HOME", "/home/example")
+	t.Setenv("NODENV_ROOT", "")
 	steps := buildUpdateSteps([]checklist.UpdateItem{
 		{Name: "oh-my-zsh", Source: "git"},
 		{Name: "nodenv", Source: "git"},
@@ -91,5 +94,48 @@ func TestBuildUpdateSteps_GitClonesPullTheirOwnFolder(t *testing.T) {
 		"[dry-run] git -C /home/example/.nodenv/plugins/node-build pull --rebase --quiet\n"
 	if out.String() != want {
 		t.Errorf("git steps ran:\n%s\nwant:\n%s", out.String(), want)
+	}
+}
+
+// nodenv's clone is wherever NODENV_ROOT puts it, as the nodenv package reads
+// it, not always ~/.nodenv.
+func TestBuildUpdateSteps_NodenvClonesFollowNodenvRoot(t *testing.T) {
+	t.Setenv("HOME", "/home/example")
+	t.Setenv("NODENV_ROOT", "/opt/example/nodenv")
+	steps := buildUpdateSteps([]checklist.UpdateItem{
+		{Name: "nodenv", Source: "git"},
+		{Name: "node-build", Source: "git"},
+	})
+	var out bytes.Buffer
+	for _, s := range steps {
+		if err := s.run(context.Background(), sysutil.Opts{DryRun: true, Stdout: &out}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := "[dry-run] git -C /opt/example/nodenv pull --rebase --quiet\n" +
+		"[dry-run] git -C /opt/example/nodenv/plugins/node-build pull --rebase --quiet\n"
+	if out.String() != want {
+		t.Errorf("git steps ran:\n%s\nwant:\n%s", out.String(), want)
+	}
+}
+
+// npm components live in the global Node, so updating npm globals targets it
+// even when the current folder's .node-version pins another version.
+func TestBuildUpdateSteps_NpmGlobalsUseGlobalNode(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("NODENV_ROOT", root)
+	if err := os.WriteFile(filepath.Join(root, "version"), []byte("24.1.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	steps := buildUpdateSteps([]checklist.UpdateItem{{Name: "ccusage", Source: "npm"}})
+	var out bytes.Buffer
+	for _, s := range steps {
+		if err := s.run(context.Background(), sysutil.Opts{DryRun: true, Stdout: &out}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if want := "NODENV_VERSION=24.1.0"; !strings.Contains(out.String(), want) || !strings.Contains(out.String(), "exec npm update -g ccusage") {
+		t.Errorf("npm update ran as:\n%s\nwant it under %s through nodenv exec", out.String(), want)
 	}
 }

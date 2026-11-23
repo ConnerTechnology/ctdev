@@ -21,15 +21,21 @@ from April until it enters LTS in October.
   `lts: false` or its codename. ctdev picks the highest major whose newest release is LTS, then
   installs node-build's newest release of that major, since nodenv can only install what
   node-build defines.
-- **Node on demand.** An npm-based component with no Node version set (no global, no project pin)
-  installs that LTS and makes it global. An existing global version is never changed.
+- **npm components use the global Node.** They are machine-wide tools, so they install, uninstall
+  and rehash under `nodenv global`, whatever `.node-version` or `NODENV_VERSION` says where ctdev
+  runs. With no global version, the first one installs that LTS and makes it global. An existing
+  global version is never changed, and a global of `system` is the user's choice: the install
+  fails and says how to pick a nodenv Node.
 - **Update moves packages and deletes the old version.** `configure node update` goes to the newest
   release of the same major. It reinstalls the old version's global npm packages at the same
   versions, then deletes the old version, unless it is still the global version or this folder's
-  `.node-version` pins it. Other folders are not scanned, so a project elsewhere pinned to the old
-  version needs `configure node install` there.
-- **Installed means the current Node has the package.** A nodenv shim stays on PATH after the
-  Node it came from stops being current, so an npm component checks the current version's
+  `.node-version` pins it. Packages linked with `npm link`, and any without a version in their
+  `package.json`, can't be reinstalled from the registry: the plan names them as not moved. A pin
+  that is not an exact version (`22`, `lts`, an alias) is nodenv's to resolve, so update leaves
+  it. Other folders are not scanned, so a project elsewhere pinned to the old version needs
+  `configure node install` there.
+- **Installed means the global Node has the package.** A nodenv shim stays on PATH after the
+  Node it came from stops being global, so an npm component checks the global version's
   `lib/node_modules`, not PATH.
 
 ## Considered options

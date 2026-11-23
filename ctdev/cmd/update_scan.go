@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/nodenv"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
@@ -45,9 +47,9 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"orca", scanOrca},
 	}
 
-	for _, r := range gitRepos {
+	for _, r := range gitRepos() {
 		scanners = append(scanners, namedScanner{r.name, func(ctx context.Context) ([]checklist.UpdateItem, error) {
-			return scanGitRepo(ctx, r.name, os.ExpandEnv(r.dir))
+			return scanGitRepo(ctx, r.name, r.dir)
 		}})
 	}
 
@@ -328,16 +330,19 @@ var managedCasks = map[string]string{
 
 // gitRepos are the tools ctdev installs as a git clone, which only a pull
 // updates. Homebrew's nodenv has no clone, and brew updates it instead.
-var gitRepos = []struct{ name, dir string }{
-	{"oh-my-zsh", "$HOME/.oh-my-zsh"},
-	{"nodenv", "$HOME/.nodenv"},
-	{"node-build", "$HOME/.nodenv/plugins/node-build"},
+func gitRepos() []struct{ name, dir string } {
+	home, _ := os.UserHomeDir()
+	return []struct{ name, dir string }{
+		{"oh-my-zsh", filepath.Join(home, ".oh-my-zsh")},
+		{"nodenv", nodenv.Root()},
+		{"node-build", filepath.Join(nodenv.Root(), "plugins", "node-build")},
+	}
 }
 
 func gitRepoDir(name string) string {
-	for _, r := range gitRepos {
+	for _, r := range gitRepos() {
 		if r.name == name {
-			return os.ExpandEnv(r.dir)
+			return r.dir
 		}
 	}
 	return ""
@@ -432,14 +437,28 @@ func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}}, nil
 }
 
+// globalNpm is how to run npm against the global Node: through nodenv with
+// NODENV_VERSION set when nodenv has a global version, so a project's
+// .node-version in the current folder can't redirect it (npm components
+// install into the global Node), else the npm on PATH.
+func globalNpm() (env []string, name string, prefix []string) {
+	if v := nodenv.Global(); v != "" {
+		return []string{"NODENV_VERSION=" + v}, nodenv.Bin(), []string{"exec", "npm"}
+	}
+	return nil, "npm", nil
+}
+
 func scanNPMGlobals(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("npm"); err != nil {
+	env, name, prefix := globalNpm()
+	if _, err := exec.LookPath(name); err != nil {
 		return nil, nil
 	}
 	// `npm outdated` exits non-zero precisely when there ARE outdated packages,
 	// so a non-zero exit WITH output is the normal case. Only an error with no
 	// output at all is a genuine failure worth surfacing.
-	out, err := exec.CommandContext(ctx, "npm", "outdated", "-g", "--json").Output()
+	c := exec.CommandContext(ctx, name, append(prefix, "outdated", "-g", "--json")...)
+	c.Env = append(os.Environ(), env...)
+	out, err := c.Output()
 	if err != nil && len(out) == 0 {
 		return nil, fmt.Errorf("npm outdated -g: %w", err)
 	}

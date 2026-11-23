@@ -106,9 +106,23 @@ func writeFakeCmd(t *testing.T, path, body string) {
 
 func writeGlobal(t *testing.T, home, v string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Join(home, ".nodenv"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(home, ".nodenv", "version"), []byte(v+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// recordCalls makes fake nodenv and npm-shim commands that log each call,
+// with the NODENV_VERSION it ran under, to the returned file.
+func recordCalls(t *testing.T, home string) (log string) {
+	t.Helper()
+	log = filepath.Join(home, "calls")
+	record := "echo \"${NODENV_VERSION:+NODENV_VERSION=$NODENV_VERSION }${0##*/} $*\" >> " + log
+	writeFakeCmd(t, filepath.Join(home, ".nodenv", "shims", "npm"), record)
+	writeFakeCmd(t, filepath.Join(home, ".nodenv", "bin", "nodenv"), record)
+	return log
 }
 
 func readCalls(t *testing.T, log string) string {
@@ -125,10 +139,7 @@ func readCalls(t *testing.T, log string) string {
 func TestNpmGlobalInstaller_RehashesNodenv(t *testing.T) {
 	home, _ := useHome(t)
 	noLTSLookup(t)
-	log := filepath.Join(home, "calls")
-	record := "echo \"${0##*/} $*\" >> " + log
-	writeFakeCmd(t, filepath.Join(home, ".nodenv", "shims", "npm"), record)
-	writeFakeCmd(t, filepath.Join(home, ".nodenv", "bin", "nodenv"), record)
+	log := recordCalls(t, home)
 	writeGlobal(t, home, "24.1.0")
 
 	ctx := context.Background()
@@ -139,7 +150,8 @@ func TestNpmGlobalInstaller_RehashesNodenv(t *testing.T) {
 	if err := FindByName("gemini-cli").GoUninstall(ctx, opts); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
-	want := "npm install -g @google/gemini-cli\nnodenv rehash\nnpm uninstall -g @google/gemini-cli\nnodenv rehash\n"
+	want := "NODENV_VERSION=24.1.0 nodenv exec npm install -g @google/gemini-cli\nnodenv rehash\n" +
+		"NODENV_VERSION=24.1.0 nodenv exec npm uninstall -g @google/gemini-cli\nnodenv rehash\n"
 	if got := readCalls(t, log); got != want {
 		t.Errorf("calls:\n%s\nwant:\n%s", got, want)
 	}
@@ -165,8 +177,7 @@ func TestNpmGlobalInstaller_NoRehashWithoutNodenv(t *testing.T) {
 func TestNpmGlobalInstaller_FailedRehashWarns(t *testing.T) {
 	home, bin := useHome(t)
 	noLTSLookup(t)
-	writeFakeCmd(t, filepath.Join(home, ".nodenv", "shims", "npm"), "exit 0")
-	writeFakeCmd(t, filepath.Join(bin, "nodenv"), "exit 1")
+	writeFakeCmd(t, filepath.Join(bin, "nodenv"), `[ "$1" = rehash ] && exit 1; exit 0`)
 	writeGlobal(t, home, "24.1.0")
 
 	var out bytes.Buffer
@@ -185,10 +196,7 @@ func TestNpmInstall_InstallsLTSWhenNoNodeIsSet(t *testing.T) {
 	for _, name := range []string{"codex", "ccstatusline", "devcontainer"} {
 		t.Run(name, func(t *testing.T) {
 			home, _ := useHome(t)
-			log := filepath.Join(home, "calls")
-			record := "echo \"${0##*/} $*\" >> " + log
-			writeFakeCmd(t, filepath.Join(home, ".nodenv", "shims", "npm"), record)
-			writeFakeCmd(t, filepath.Join(home, ".nodenv", "bin", "nodenv"), record)
+			log := recordCalls(t, home)
 			orig := latestLTS
 			latestLTS = func(context.Context) (nodenv.LTS, error) {
 				return nodenv.LTS{Version: "26.13.1", LTSLine: nodenv.LTSLine{Major: 26, Codename: "Lithium"}}, nil
@@ -199,10 +207,10 @@ func TestNpmInstall_InstallsLTSWhenNoNodeIsSet(t *testing.T) {
 			if err := FindByName(name).GoInstall(context.Background(), ExecOpts{Stdout: &out}); err != nil {
 				t.Fatalf("install: %v", err)
 			}
-			if want := `No Node version is set. Installing the latest LTS, Node 26.13.1 (v26 "Lithium")...`; !strings.Contains(out.String(), want) {
+			if want := `No global Node version is set. Installing the latest LTS, Node 26.13.1 (v26 "Lithium")...`; !strings.Contains(out.String(), want) {
 				t.Errorf("expected %q; got:\n%s", want, out.String())
 			}
-			want := "nodenv install --skip-existing 26.13.1\nnodenv global 26.13.1\nnodenv rehash\nnpm install -g "
+			want := "nodenv install --skip-existing 26.13.1\nnodenv global 26.13.1\nNODENV_VERSION=26.13.1 nodenv exec npm install -g "
 			if got := readCalls(t, log); !strings.HasPrefix(got, want) {
 				t.Errorf("calls:\n%s\nwant them to start:\n%s", got, want)
 			}
@@ -210,26 +218,91 @@ func TestNpmInstall_InstallsLTSWhenNoNodeIsSet(t *testing.T) {
 	}
 }
 
-// A project pin is a Node version set for this folder, so nothing is
-// installed or made global.
-func TestNpmInstall_ProjectPinNeedsNoLTS(t *testing.T) {
+// npm components are machine-wide tools, so inside a project pinned to
+// another Node they still install, uninstall and rehash under the global one.
+func TestNpmInstall_UsesGlobalInsideProjectPin(t *testing.T) {
 	home, _ := useHome(t)
 	noLTSLookup(t)
-	log := filepath.Join(home, "calls")
-	record := "echo \"${0##*/} $*\" >> " + log
-	writeFakeCmd(t, filepath.Join(home, ".nodenv", "shims", "npm"), record)
-	writeFakeCmd(t, filepath.Join(home, ".nodenv", "bin", "nodenv"), record)
+	log := recordCalls(t, home)
+	writeGlobal(t, home, "24.1.0")
 	project := t.TempDir()
 	if err := os.WriteFile(filepath.Join(project, ".node-version"), []byte("22.23.5\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(project)
 
-	if err := FindByName("ccusage").GoInstall(context.Background(), ExecOpts{Stdout: io.Discard}); err != nil {
+	ctx := context.Background()
+	if err := FindByName("ccusage").GoInstall(ctx, ExecOpts{Stdout: io.Discard}); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if got, want := readCalls(t, log), "npm install -g ccusage\nnodenv rehash\n"; got != want {
+	if err := FindByName("ccusage").GoUninstall(ctx, ExecOpts{Stdout: io.Discard}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	want := "NODENV_VERSION=24.1.0 nodenv exec npm install -g ccusage\nnodenv rehash\n" +
+		"NODENV_VERSION=24.1.0 nodenv exec npm uninstall -g ccusage\nnodenv rehash\n"
+	if got := readCalls(t, log); got != want {
 		t.Errorf("calls:\n%s\nwant:\n%s", got, want)
+	}
+
+	var out bytes.Buffer
+	if err := FindByName("ccusage").GoInstall(ctx, ExecOpts{DryRun: true, Force: true, Stdout: &out}); err != nil {
+		t.Fatalf("dry-run install: %v", err)
+	}
+	nodenvBin := filepath.Join(home, ".nodenv", "bin", "nodenv")
+	if want := "[dry-run] NODENV_VERSION=24.1.0 " + nodenvBin + " exec npm install -g ccusage\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("dry run:\n%s\nwant it to contain:\n%s", out.String(), want)
+	}
+}
+
+// With a global version set, nothing that hides it here (NODENV_VERSION=system,
+// a .node-version that is empty or says system) makes an npm component
+// install a Node or change the global one.
+func TestNpmInstall_NeverChangesAnExistingGlobal(t *testing.T) {
+	cases := map[string]func(t *testing.T, project string){
+		"NODENV_VERSION=system": func(t *testing.T, _ string) { t.Setenv("NODENV_VERSION", "system") },
+		"pin says system": func(t *testing.T, project string) {
+			_ = os.WriteFile(filepath.Join(project, ".node-version"), []byte("system\n"), 0o644)
+		},
+		"empty pin": func(t *testing.T, project string) {
+			_ = os.WriteFile(filepath.Join(project, ".node-version"), nil, 0o644)
+		},
+	}
+	for name, hide := range cases {
+		t.Run(name, func(t *testing.T) {
+			home, _ := useHome(t)
+			noLTSLookup(t)
+			log := recordCalls(t, home)
+			writeGlobal(t, home, "24.1.0")
+			project := t.TempDir()
+			t.Chdir(project)
+			hide(t, project)
+
+			if err := FindByName("ccusage").GoInstall(context.Background(), ExecOpts{Stdout: io.Discard}); err != nil {
+				t.Fatalf("install: %v", err)
+			}
+			got := readCalls(t, log)
+			if !strings.HasPrefix(got, "NODENV_VERSION=24.1.0 nodenv exec npm install -g ccusage\n") ||
+				strings.Contains(got, "nodenv global") || strings.Contains(got, "nodenv install") {
+				t.Errorf("calls:\n%s\nwant only npm under the global 24.1.0", got)
+			}
+		})
+	}
+}
+
+// A global set to "system" is the user's choice of a Node outside nodenv:
+// ctdev doesn't override it, and says how to pick a nodenv one.
+func TestNpmInstall_GlobalSystemFailsClearly(t *testing.T) {
+	home, _ := useHome(t)
+	noLTSLookup(t)
+	log := recordCalls(t, home)
+	writeGlobal(t, home, "system")
+
+	err := FindByName("ccusage").GoInstall(context.Background(), ExecOpts{Stdout: io.Discard})
+	if err == nil || !strings.Contains(err.Error(), `"system"`) || !strings.Contains(err.Error(), "ctdev configure node install --global") {
+		t.Errorf("err = %v, want it to name system and how to pick a nodenv Node", err)
+	}
+	if got := readCalls(t, log); got != "" {
+		t.Errorf("ran with a system global:\n%s", got)
 	}
 }
 
@@ -260,6 +333,14 @@ func TestNpmPackageDetect(t *testing.T) {
 	}
 	if !codex.IsInstalled() {
 		t.Error("26.13.1 has @openai/codex but codex did not count as installed")
+	}
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, ".node-version"), []byte("22.23.5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+	if !codex.IsInstalled() {
+		t.Error("inside a project pinned to 22.23.5, codex under the global 26.13.1 did not count as installed")
 	}
 
 	t.Setenv("HOME", t.TempDir())

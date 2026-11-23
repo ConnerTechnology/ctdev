@@ -73,9 +73,12 @@ func IsInstalled(v string) bool {
 	return v != "" && err == nil && info.IsDir()
 }
 
-// readVersionFile is the first word of a nodenv version file. "system" means
-// no nodenv-managed Node, so it reads as "".
-func readVersionFile(path string) string {
+// System is the version name for a Node outside nodenv.
+const System = "system"
+
+// readVersionWord is the first word of a nodenv version file, without a
+// leading "v". "" means the file is missing or empty.
+func readVersionWord(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
 		return ""
@@ -83,16 +86,33 @@ func readVersionFile(path string) string {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Split(bufio.ScanWords)
-	if !sc.Scan() || sc.Text() == "system" {
+	if !sc.Scan() {
 		return ""
 	}
 	return strings.TrimPrefix(sc.Text(), "v")
 }
 
+// readVersionFile is readVersionWord with "system" read as "": it names no
+// nodenv-managed Node.
+func readVersionFile(path string) string {
+	if v := readVersionWord(path); v != System {
+		return v
+	}
+	return ""
+}
+
 // Global is `nodenv global`, "" when it is unset or "system".
 func Global() string {
-	return readVersionFile(filepath.Join(Root(), "version"))
+	return readVersionFile(globalFile())
 }
+
+// GlobalIsSystem reports whether the global version is set to "system", the
+// user's choice of a Node outside nodenv.
+func GlobalIsSystem() bool {
+	return readVersionWord(globalFile()) == System
+}
+
+func globalFile() string { return filepath.Join(Root(), "version") }
 
 // ProjectPin finds the .node-version that governs dir, searching upward as
 // nodenv does. It returns the file and its version, or "" for both.
@@ -111,21 +131,6 @@ func ProjectPin(dir string) (file, version string) {
 	return "", ""
 }
 
-// Current is the version nodenv runs in dir: $NODENV_VERSION, else the
-// nearest .node-version, else the global version. "" means none.
-func Current(dir string) string {
-	if v := os.Getenv("NODENV_VERSION"); v != "" {
-		if v == "system" {
-			return ""
-		}
-		return v
-	}
-	if file, v := ProjectPin(dir); file != "" {
-		return v
-	}
-	return Global()
-}
-
 func nodeModules(v string) string {
 	return filepath.Join(Root(), "versions", v, "lib", "node_modules")
 }
@@ -139,42 +144,53 @@ func HasPackage(v, pkg string) bool {
 // bundled ship with Node itself, so every version already has them.
 var bundled = map[string]bool{"npm": true, "corepack": true}
 
-// GlobalPackages lists the global npm packages version v has, read from its
-// node_modules as `npm ls -g` would. Linked packages (`npm link`) are left
-// out: reinstalling one from the registry would replace the user's checkout.
-func GlobalPackages(v string) []Package {
-	var ps []Package
+// Globals is what a version's global node_modules holds, read as `npm ls -g`
+// would. Only Packages can move to another version: Linked ones are `npm link`
+// checkouts, which a registry install would replace, and Unreadable ones have
+// no version to reinstall at.
+type Globals struct {
+	Packages   []Package
+	Linked     []string
+	Unreadable []string
+}
+
+// GlobalPackages reads the global npm packages version v has.
+func GlobalPackages(v string) Globals {
+	var g Globals
 	var walk func(dir, scope string)
 	walk = func(dir, scope string) {
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
 			name := e.Name()
+			full := scope + name
 			switch {
-			case strings.HasPrefix(name, "."), !e.IsDir():
+			case strings.HasPrefix(name, "."), bundled[full]:
+				continue
+			case e.Type()&os.ModeSymlink != 0:
+				g.Linked = append(g.Linked, full)
+				continue
+			case !e.IsDir():
 				continue
 			case scope == "" && strings.HasPrefix(name, "@"):
 				walk(filepath.Join(dir, name), name+"/")
 				continue
 			}
-			full := scope + name
-			if bundled[full] {
-				continue
-			}
-			data, err := os.ReadFile(filepath.Join(dir, name, "package.json"))
-			if err != nil {
-				continue
-			}
 			var meta struct {
 				Version string `json:"version"`
 			}
-			if json.Unmarshal(data, &meta) == nil && meta.Version != "" {
-				ps = append(ps, Package{Name: full, Version: meta.Version})
+			data, err := os.ReadFile(filepath.Join(dir, name, "package.json"))
+			if err != nil || json.Unmarshal(data, &meta) != nil || meta.Version == "" {
+				g.Unreadable = append(g.Unreadable, full)
+				continue
 			}
+			g.Packages = append(g.Packages, Package{Name: full, Version: meta.Version})
 		}
 	}
 	walk(nodeModules(v), "")
-	slices.SortFunc(ps, func(a, b Package) int { return strings.Compare(a.Name, b.Name) })
-	return ps
+	slices.SortFunc(g.Packages, func(a, b Package) int { return strings.Compare(a.Name, b.Name) })
+	slices.Sort(g.Linked)
+	slices.Sort(g.Unreadable)
+	return g
 }
 
 // List is `nodenv install --list`: node-build's newest release of each major

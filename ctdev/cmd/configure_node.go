@@ -156,19 +156,28 @@ func runNodeInstall(ctx context.Context, arg string, batch bool) error {
 	if projectDir == "" {
 		projectDir = cwd
 	}
+	pin := projectPinFile(cwd, projectDir)
 
 	scope, set := scopeFlag()
 	if !set {
+		// With no global version, nothing outside this project has a Node,
+		// npm components included, so the first one goes global.
 		def := scopeGlobal
-		if toplevel != "" {
+		if toplevel != "" && nodenv.Global() != "" {
 			def = scopeProject
 		}
 		scope = def
 		if !batch {
-			if scope, err = promptNodeScope(ctx, projectDir, def); err != nil {
+			if scope, err = promptNodeScope(ctx, projectDir, pin, def); err != nil {
 				return err
 			}
 		}
+	}
+
+	if flagDryRun && !nodenv.Available() {
+		fmt.Printf("  [dry-run] nodenv isn't installed yet, so there is no version list to read. "+
+			"A real run then installs %s and %s.\n", dryRunVersion(arg), dryRunScope(scope, pin))
+		return nil
 	}
 
 	list, err := nodenv.List(ctx)
@@ -188,11 +197,10 @@ func runNodeInstall(ctx context.Context, arg string, batch bool) error {
 		return err
 	}
 	if scope == scopeProject {
-		pin := filepath.Join(projectDir, nodenv.VersionFile)
 		if err := nodenv.WritePin(o, pin, v); err != nil {
 			return err
 		}
-		fmt.Printf("  %s now uses Node %s (%s).\n", tildePath(projectDir), v, tildePath(pin))
+		fmt.Printf("  %s now uses Node %s (%s).\n", tildePath(filepath.Dir(pin)), v, tildePath(pin))
 		return nil
 	}
 
@@ -204,7 +212,11 @@ func runNodeInstall(ctx context.Context, arg string, batch bool) error {
 	if old == "" || old == v {
 		return nil
 	}
-	pkgs := missingPackages(nodenv.GlobalPackages(old), v)
+	globals := nodenv.GlobalPackages(old)
+	for _, line := range notMoved(globals, v) {
+		fmt.Println("\n  " + line)
+	}
+	pkgs := missingPackages(globals.Packages, v)
 	if len(pkgs) == 0 {
 		return nil
 	}
@@ -229,15 +241,63 @@ func runNodeInstall(ctx context.Context, arg string, batch bool) error {
 	return nil
 }
 
+// projectPinFile is the .node-version a project install writes: the one that
+// governs cwd when it sits inside projectDir, else a new one at projectDir.
+func projectPinFile(cwd, projectDir string) string {
+	if f, _ := nodenv.ProjectPin(cwd); f != "" {
+		top, _ := filepath.EvalSymlinks(projectDir)
+		dir, _ := filepath.EvalSymlinks(filepath.Dir(f))
+		if rel, err := filepath.Rel(top, dir); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return f
+		}
+	}
+	return filepath.Join(projectDir, nodenv.VersionFile)
+}
+
+func dryRunVersion(arg string) string {
+	switch {
+	case arg == "":
+		return "the Node version you pick"
+	case !strings.Contains(arg, "."):
+		return "the latest release of Node " + strings.TrimPrefix(arg, "v")
+	}
+	return "Node " + strings.TrimPrefix(arg, "v")
+}
+
+func dryRunScope(scope nodeScope, pin string) string {
+	if scope == scopeProject {
+		return "writes it to " + tildePath(pin)
+	}
+	return "makes it the global version"
+}
+
+// notMoved says which of g's packages a move to version to leaves behind.
+func notMoved(g nodenv.Globals, to string) []string {
+	var lines []string
+	if len(g.Linked) > 0 {
+		lines = append(lines, fmt.Sprintf("Not moved (linked with npm link): %s. Re-run npm link in each checkout under %s.",
+			strings.Join(g.Linked, ", "), to))
+	}
+	if len(g.Unreadable) > 0 {
+		lines = append(lines, fmt.Sprintf("Not moved (no version in its package.json): %s. Reinstall it under %s with npm install -g.",
+			strings.Join(g.Unreadable, ", "), to))
+	}
+	return lines
+}
+
 // missingPackages drops the packages version v already has.
 func missingPackages(ps []nodenv.Package, v string) []nodenv.Package {
 	return slices.DeleteFunc(ps, func(p nodenv.Package) bool { return nodenv.HasPackage(v, p.Name) })
 }
 
-func promptNodeScope(ctx context.Context, projectDir string, def nodeScope) (nodeScope, error) {
+func promptNodeScope(ctx context.Context, projectDir, pin string, def nodeScope) (nodeScope, error) {
+	writes := nodenv.VersionFile
+	if filepath.Dir(pin) != projectDir {
+		writes = tildePath(pin)
+	}
 	fmt.Println("\n  Use it for:")
 	fmt.Println("    1) Global (every folder without its own version)")
-	fmt.Printf("    2) This project (%s, writes %s)\n", tildePath(projectDir), nodenv.VersionFile)
+	fmt.Printf("    2) This project (%s, writes %s)\n", tildePath(projectDir), writes)
 	fmt.Printf("  %s ", styles.Dimmed.Render(fmt.Sprintf("Choice [%d]:", def+1)))
 	choice, err := promptChoiceCtx(ctx, int(def)+1)
 	if err != nil {
@@ -320,7 +380,8 @@ type nodeUpdatePlan struct {
 	from, to string
 	retired  bool // from's major is gone from node-build's list
 	packages []nodenv.Package
-	keep     string // why from stays installed; "" deletes it
+	notMoved []string // what of from's the move leaves behind
+	keep     string   // why from stays installed; "" deletes it
 }
 
 // planNodeUpdate moves from's global packages to to and deletes from, unless
@@ -332,7 +393,9 @@ func planNodeUpdate(scope nodeScope, pinFile, from, to, global, pinned string) n
 	if !nodenv.IsInstalled(from) {
 		return p
 	}
-	p.packages = missingPackages(nodenv.GlobalPackages(from), to)
+	globals := nodenv.GlobalPackages(from)
+	p.packages = missingPackages(globals.Packages, to)
+	p.notMoved = notMoved(globals, to)
 	switch {
 	case scope == scopeProject && from == global:
 		p.keep = "it is still the global version"
@@ -374,6 +437,9 @@ func (p nodeUpdatePlan) String() string {
 	}
 	for i, s := range steps {
 		fmt.Fprintf(&b, "    %d. %s\n", i+1, s)
+	}
+	for _, line := range p.notMoved {
+		fmt.Fprintf(&b, "\n  %s\n", line)
 	}
 	return b.String()
 }
@@ -421,10 +487,26 @@ func runNodeUpdate(ctx context.Context, batch bool) error {
 		if pinFile == "" {
 			return fmt.Errorf("no %s governs this folder. Pin one with: ctdev configure node install --project", nodenv.VersionFile)
 		}
+		if pinned == "" {
+			return fmt.Errorf("%s is empty or says system, so no nodenv Node runs here. "+
+				"Pin one with: ctdev configure node install --project", tildePath(pinFile))
+		}
 		from, label = pinned, "Project"
+	}
+	if from == "" && nodenv.GlobalIsSystem() {
+		return errors.New(`the global Node is "system", which nodenv doesn't manage. ` +
+			"Pick a nodenv one with: ctdev configure node install --global")
 	}
 	if from == "" {
 		return errors.New("no global Node version is set. Pick one with: ctdev configure node install")
+	}
+	if !nodenv.IsExact(from) {
+		where := "The global Node version"
+		if scope == scopeProject {
+			where = tildePath(pinFile)
+		}
+		fmt.Printf("  %s says %q, which is not an exact version: nodenv resolves it itself. Nothing changed.\n", where, from)
+		return nil
 	}
 
 	list, err := nodenv.List(ctx)
@@ -495,7 +577,7 @@ func runNodeUninstall(ctx context.Context, arg string, batch bool) error {
 			note := ""
 			if iv == global {
 				note = "global"
-			} else if n := len(nodenv.GlobalPackages(iv)); n > 0 {
+			} else if n := len(nodenv.GlobalPackages(iv).Packages); n > 0 {
 				note = npmPackages(n)
 			}
 			fmt.Printf("    %d) %-10s %s\n", i+1, iv, styles.Dimmed.Render(note))
@@ -516,8 +598,15 @@ func runNodeUninstall(ctx context.Context, arg string, batch bool) error {
 		return errors.New(why)
 	}
 
-	if pkgs := nodenv.GlobalPackages(v); len(pkgs) > 0 {
+	globals := nodenv.GlobalPackages(v)
+	if pkgs := globals.Packages; len(pkgs) > 0 {
 		fmt.Printf("  Its %s go with it: %s\n", npmPackages(len(pkgs)), nodenv.Specs(pkgs))
+	}
+	if len(globals.Linked) > 0 {
+		fmt.Printf("  Its npm links go with it too (the checkouts stay): %s\n", strings.Join(globals.Linked, ", "))
+	}
+	if len(globals.Unreadable) > 0 {
+		fmt.Printf("  So do the packages with no version in their package.json: %s\n", strings.Join(globals.Unreadable, ", "))
 	}
 	cwd, _ := os.Getwd()
 	if pinFile, pinned := nodenv.ProjectPin(cwd); pinned == v {

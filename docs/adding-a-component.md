@@ -51,10 +51,11 @@ GoInstall: SimplePackageInstaller("name"), GoUninstall: SimplePackageUninstaller
 ```
 
 For a CLI published as an npm package, install it globally with the npm helper,
-depend on `nodenv`, and declare `RootNever`. The helper installs the latest Node
-LTS first when no Node version is set. Detect it with `npmPackageDetect`, which
-checks the current Node's packages: a nodenv shim on PATH outlives the version
-it came from. `ctdev update` already upgrades npm globals, so it needs no
+depend on `nodenv`, and declare `RootNever`. The helper runs npm under nodenv's
+global Node whatever the folder pins, and installs the latest LTS as the global
+version first when none is set. Detect it with `npmPackageDetect`, which checks
+the global Node's packages: a nodenv shim on PATH outlives the version it came
+from. `ctdev update` already upgrades npm globals, so it needs no
 scanner (`codex` and `gemini-cli` in the registry):
 ```go
 Dependencies: []string{"nodenv"}, Detect: npmPackageDetect("name", "@scope/pkg"), Root: RootNever,
