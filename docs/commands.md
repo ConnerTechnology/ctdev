@@ -41,11 +41,9 @@ ctdev configure storage         # Weekly SSD TRIM (fstrim.timer, only with an SS
 ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)
-ctdev configure linear          # this repo's Linear MCP server (local scope), as this computer's Linear app (--show)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev configure storage --batch --swapfile-size 2  # Same, with a 2 GiB swapfile; also resizes ctdev's own
-ctdev repo setup                # install git, gh, Claude Code and the connertechnology plugin for this repo, then start /connertechnology:setup
 ctdev backup                    # The folder you're in: its backup status, then a menu: Back up now, List backups
                                 #   (details, Download as zip, Delete this backup), Configure, Stop backing up, Delete all backups
 ctdev backup --batch            # Status only (also when piped); exits non-zero if not backed up, or the last backup failed or is overdue

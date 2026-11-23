@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"os"
 	"path/filepath"
@@ -9,6 +10,14 @@ import (
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
 )
+
+// feedStdin makes the next prompts read input, as if typed.
+func feedStdin(t *testing.T, input string) {
+	t.Helper()
+	orig := stdinScanner
+	stdinScanner = bufio.NewScanner(strings.NewReader(input))
+	t.Cleanup(func() { stdinScanner = orig })
+}
 
 const driftedSettings = `{"model": "sonnet"}` + "\n"
 

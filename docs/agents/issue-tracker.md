@@ -4,16 +4,11 @@ Issues, specs and design docs for this repo live in **Linear**, team **CTDev** (
 sub-team of Conner Technology. Use the Linear MCP tools (`mcp__linear__*`) for every operation;
 GitHub Issues are not used. Issues moved from `CON` on 2026-09-24; their old IDs still resolve.
 
-Sessions reach Linear as the **Claude Code app**, not as the human: `.mcp.json` gives the `linear`
-server a `headersHelper`, `ctdev linear mcp-headers --workspace connertechnology`, which trades
-this computer's app client ID and secret for a token. Each computer has its own Linear app, and its
-credentials live only on that computer, in `~/.config/ctdev/linear/connertechnology.env`. The
-app's comments and status changes notify the human the way a teammate's would. The app sees only
-teams it can reach. `ctdev linear graphql --workspace connertechnology QUERY [VARIABLES_JSON]`
-sends one request as the app, for what the MCP has no tool for.
-
-When the Linear connection fails (no credentials, wrong ones, or a rotated secret), run
-`ctdev configure linear` in the repo: it reports what is wrong and takes a new client ID and secret.
+Sessions reach Linear through the `linear` server in `.mcp.json`, signed in with Linear's own
+OAuth as the person running Claude Code. When it says it needs authentication, run
+`claude mcp login linear` in the repo root, then `/mcp` and **Reconnect** in the session. If
+`claude mcp get linear` shows `Scope: Local config`, that is a server an earlier ctdev added,
+whose helper no longer exists: run `claude mcp remove linear --scope local` first (ADR-0022).
 
 ## Conventions
 
