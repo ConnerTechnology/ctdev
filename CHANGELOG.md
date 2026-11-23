@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.1.0] - 2026-11-23
+
+### Added
+- **`ctdev install gemini-cli`** and **`ctdev install codex`** install Google's
+  [Gemini CLI](https://geminicli.com/docs/get-started/) and OpenAI's
+  [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) as global npm packages
+  (`@google/gemini-cli`, `@openai/codex`), on Linux and macOS. Both need the `node` component,
+  which ctdev installs first, and neither asks for sudo. `ctdev update` keeps them current with the
+  other npm globals.
+
+### Fixed
+- **A command installed from npm works in the same shell.** After a global npm install or
+  uninstall through nodenv, ctdev now runs `nodenv rehash`, so `gemini`, `codex` and `ccusage` are
+  found without opening a new shell. If the rehash fails, ctdev warns and the install still counts.
+
 ## [20.0.0] - 2026-11-23
 
 ### Added
