@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -114,5 +116,26 @@ func TestBuildUpdateSteps_NodenvClonesFollowNodenvRoot(t *testing.T) {
 		"[dry-run] git -C /opt/example/nodenv/plugins/node-build pull --rebase --quiet\n"
 	if out.String() != want {
 		t.Errorf("git steps ran:\n%s\nwant:\n%s", out.String(), want)
+	}
+}
+
+// npm components live in the global Node, so updating npm globals targets it
+// even when the current folder's .node-version pins another version.
+func TestBuildUpdateSteps_NpmGlobalsUseGlobalNode(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("NODENV_ROOT", root)
+	if err := os.WriteFile(filepath.Join(root, "version"), []byte("24.1.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	steps := buildUpdateSteps([]checklist.UpdateItem{{Name: "ccusage", Source: "npm"}})
+	var out bytes.Buffer
+	for _, s := range steps {
+		if err := s.run(context.Background(), sysutil.Opts{DryRun: true, Stdout: &out}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if want := "NODENV_VERSION=24.1.0"; !strings.Contains(out.String(), want) || !strings.Contains(out.String(), "exec npm update -g ccusage") {
+		t.Errorf("npm update ran as:\n%s\nwant it under %s through nodenv exec", out.String(), want)
 	}
 }

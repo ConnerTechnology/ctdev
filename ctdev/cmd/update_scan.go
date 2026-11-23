@@ -437,14 +437,28 @@ func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}}, nil
 }
 
+// globalNpm is how to run npm against the global Node: through nodenv with
+// NODENV_VERSION set when nodenv has a global version, so a project's
+// .node-version in the current folder can't redirect it (npm components
+// install into the global Node), else the npm on PATH.
+func globalNpm() (env []string, name string, prefix []string) {
+	if v := nodenv.Global(); v != "" {
+		return []string{"NODENV_VERSION=" + v}, nodenv.Bin(), []string{"exec", "npm"}
+	}
+	return nil, "npm", nil
+}
+
 func scanNPMGlobals(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("npm"); err != nil {
+	env, name, prefix := globalNpm()
+	if _, err := exec.LookPath(name); err != nil {
 		return nil, nil
 	}
 	// `npm outdated` exits non-zero precisely when there ARE outdated packages,
 	// so a non-zero exit WITH output is the normal case. Only an error with no
 	// output at all is a genuine failure worth surfacing.
-	out, err := exec.CommandContext(ctx, "npm", "outdated", "-g", "--json").Output()
+	c := exec.CommandContext(ctx, name, append(prefix, "outdated", "-g", "--json")...)
+	c.Env = append(os.Environ(), env...)
+	out, err := c.Output()
 	if err != nil && len(out) == 0 {
 		return nil, fmt.Errorf("npm outdated -g: %w", err)
 	}
