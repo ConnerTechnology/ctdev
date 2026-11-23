@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
   1. In each repo where you ran `ctdev configure linear`: `claude mcp remove linear --scope local`,
      then `claude mcp login linear` if the repo's `.mcp.json` has a `linear` server.
   2. `rm -r ~/.config/ctdev/linear ~/.cache/ctdev/linear`.
-  3. Delete this computer's app in Linear under Settings → API → OAuth applications.
+  3. Delete this computer's app from the list at https://linear.app/settings/api/applications.
 
 ## [19.1.0] - 2026-11-23
 
