@@ -123,6 +123,14 @@ func TestAForgetFailureIsTheFoldersNotTheDataChecks(t *testing.T) {
 // command.
 func lockedStandin(t *testing.T, m *Machine) (log string) {
 	t.Helper()
+	return standinDestination(t, m, `*) echo "Fatal: unable to create lock in backend: repository is already locked exclusively" >&2; exit 11 ;;`)
+}
+
+// standinDestination gives the failingMachine's destination a stand-in
+// restic that answers version, runs cases (more arms of a sh case on the
+// command) for the rest, and logs each command.
+func standinDestination(t *testing.T, m *Machine, cases string) (log string) {
+	t.Helper()
 	dir := t.TempDir()
 	log = filepath.Join(dir, "restic.log")
 	m.Restic = filepath.Join(dir, "restic")
@@ -130,7 +138,7 @@ func lockedStandin(t *testing.T, m *Machine) (log string) {
 echo "$*" >> "` + log + `"
 case "$1" in
 version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
-*) echo "Fatal: unable to create lock in backend: repository is already locked exclusively" >&2; exit 11 ;;
+` + cases + `
 esac
 `
 	if err := os.WriteFile(m.Restic, []byte(script), 0o755); err != nil {
@@ -207,7 +215,7 @@ func TestBackupNowWaitsAMinuteForALockedDestination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.BackupNow(context.Background(), d, root, &cfg); !errors.Is(err, ErrDestinationBusy) {
+	if _, err := m.BackupNow(context.Background(), d, root, &cfg, nil); !errors.Is(err, ErrDestinationBusy) {
 		t.Errorf("err = %v, want ErrDestinationBusy", err)
 	}
 	data, _ := os.ReadFile(log)

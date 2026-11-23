@@ -456,7 +456,7 @@ func (m *Machine) jitter() time.Duration {
 func checkFailure(stderr []byte, err error) error {
 	var packs []string
 	sc := bufio.NewScanner(bytes.NewReader(stderr))
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLine)
 	for sc.Scan() {
 		rest, ok := strings.CutPrefix(sc.Text(), "pack ")
 		if id, _, found := strings.Cut(rest, " contains "); ok && found {
@@ -564,7 +564,7 @@ func (d *Destination) fileSizes(ctx context.Context, id string) ([]fileSize, err
 	}
 	var files []fileSize
 	sc := bufio.NewScanner(bytes.NewReader(out))
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLine)
 	for sc.Scan() {
 		var n struct {
 			Type     string `json:"message_type"`
