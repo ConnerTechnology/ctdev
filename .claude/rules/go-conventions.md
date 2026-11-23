@@ -13,7 +13,7 @@ paths:
 - Config files are embedded via `all:configs` in `go:embed` (the `all:` prefix is required to include dot-files like `.zshrc`)
 - Deploy configs with `sysutil.DeployFileFromFS`
 - Components with configs use Phase 1/Phase 2: Phase 1 installs the binary (skip if exists), Phase 2 always deploys configs
-- Exception: `claude-code` owns files the user also edits (`~/.claude/settings.json`, `CLAUDE.md`), so its Phase 2 writes only missing files and the review in `cmd/configure_claude_code.go` shows the diff and asks before replacing (ADR-0009)
+- Exception: `claude-code` owns files the user also edits (`~/.claude/settings.json`, `CLAUDE.md`), so its Phase 2 writes only missing files and the review in `cmd/claude_code_review.go` shows the diff and asks before replacing (ADR-0009)
 - For `.deb` installs on apt, use `installDebWithDepFix(ctx, o, debPath, pkgName)`; it installs through `apt-get`, not `dpkg -i`
 - A component whose install bypasses a package manager and doesn't update itself (a downloaded `.deb`, an upstream `install.sh`, a release tarball) gets a scanner in `cmd/update_scan.go`: it compares the installed version with the vendor's latest stable release, and applying the update uses the tool's own updater when it has one, otherwise re-runs the install. An app that updates itself (a cask marked `auto_updates`) gets no scanner. See "Updates" in `docs/adding-a-component.md`
 - All installers accept `ctx context.Context` as first parameter
