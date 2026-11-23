@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
 - **`ctdev configure claude-code` is gone.** The review of `~/.claude/settings.json` and
   `CLAUDE.md` against ctdev's baseline still runs after `ctdev install claude-code`, with the
   same diff, prompt, `--force` and `--dry-run`.
+- **`ctdev configure pihole` is gone.** Pi-hole's settings (upstreams, listening mode, blocking,
+  host resolver) still run after `ctdev install pihole`, and again whenever it runs on a node that
+  has Pi-hole; a bare `ctdev configure` lists them too.
 
 ## [19.1.0] - 2026-11-23
 
