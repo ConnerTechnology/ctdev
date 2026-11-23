@@ -26,8 +26,8 @@ ctdev configure ssh --batch      # SSH server, key-only login, Mosh, keep progra
 ctdev install                    # pick from the list
 ```
 
-`claude-code` pulls in `ccstatusline`, which pulls in `nodenv`. When no Node
-version is set yet, the first npm-based component installs the latest LTS and
+`claude-code` pulls in `ccstatusline`, which pulls in `nodenv`. When no global
+Node version is set yet, the first npm-based component installs the latest LTS and
 makes it global, so Node comes with the base. `ctdev configure node` picks
 other versions, globally or per project. Other runtimes (`go`,
 `python`, `ruby`) and role-specific tools (cloud CLIs, Kubernetes,

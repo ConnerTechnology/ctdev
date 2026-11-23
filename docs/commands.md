@@ -31,7 +31,7 @@ ctdev configure git             # Configure git user and SSH signing key (instal
 ctdev configure aws             # Pick the AWS profile; offers `aws configure sso` when there is none (installs the AWS CLI first if missing)
 ctdev configure node install [major|version] [--global|--project]
                                 # Install a Node version (22 means its latest release) and use it for every folder or
-                                #   this project (.node-version at the git top); making it global offers to copy the old
+                                #   this project (the .node-version here, else one at the git top); making it global offers to copy the old
                                 #   global's npm packages. --batch needs the version
 ctdev configure node update [--global|--project]
                                 # Update the Node in use here (a .node-version, else global) to the latest of its major,
