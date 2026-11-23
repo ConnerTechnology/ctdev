@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/ConnerTechnology/ctdev/main/install
 
 # 2. install the components you want (each runs its configure step afterward)
 ctdev install                    # pick them from a list
-ctdev install zsh git gh node go docker tailscale vscode claude-code tmux   # or name them
+ctdev install zsh git gh nodenv go docker tailscale vscode claude-code tmux   # or name them
 
 # 3. apply the system settings you want
 ctdev configure ssh --batch      # SSH server, key-only login, Mosh, keep programs running,
