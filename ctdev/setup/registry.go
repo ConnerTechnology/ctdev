@@ -704,51 +704,6 @@ var Registry = []Setting{
 		// installs openssh-server in the same run.
 		HardwareFn: gateLinux,
 	},
-	{
-		Name:        "Keep my programs running after I disconnect",
-		Slug:        "ssh",
-		Category:    "SSH & Remote Access",
-		Description: "Lets tmux sessions and background services (like the VS Code tunnel) keep running after you log out or your connection drops.",
-		Control:     ControlToggle,
-		Default:     "enabled",
-		DetectFunc:  detectLinger,
-		ApplyFunc:   applyLinger,
-		HardwareFn:  gateLinux,
-	},
-	{
-		Name:        "Mosh support",
-		Slug:        "ssh",
-		Category:    "SSH & Remote Access",
-		Description: "Generates the en_US.UTF-8 locale. Mosh, the SSH that survives sleep and roaming, refuses to start without it.",
-		Control:     ControlToggle,
-		Default:     "enabled",
-		DetectFunc:  detectMoshLocale,
-		ApplyFunc:   applyMoshLocale,
-		HardwareFn:  gateMosh,
-	},
-	{
-		Name:        "Open this machine from vscode.dev",
-		Slug:        "ssh",
-		Category:    "SSH & Remote Access",
-		Description: "Runs the VS Code tunnel in the background so you can open this machine from vscode.dev in any browser (an iPad, say). Also turns on \"Keep my programs running\", which it needs. Run 'code tunnel user login' once to sign in.",
-		Control:     ControlToggle,
-		Default:     "enabled",
-		DetectFunc:  detectCodeTunnel,
-		ApplyFunc:   applyCodeTunnel,
-		// The tunnel is a systemd user service installed by VS Code's CLI.
-		HardwareFn: gateVSCode,
-	},
-	{
-		Name:        "Only allow SSH and Mosh from my local network (firewall)",
-		Slug:        "ssh",
-		Category:    "SSH & Remote Access",
-		Description: "Turns on the UFW firewall and allows SSH and Mosh only from private LAN ranges. Heads up: it blocks every other incoming service (Pi-hole, a web server) unless you open that service's ports first.",
-		Control:     ControlToggle,
-		Default:     "enabled",
-		DetectFunc:  detectUFW,
-		ApplyFunc:   applyUFW,
-		HardwareFn:  gateLinux,
-	},
 
 	// ── Pi-hole DNS ──────────────────────────────────────────────────────
 	// Shown only on nodes where Pi-hole is installed (HardwareFn).

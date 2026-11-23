@@ -2,7 +2,7 @@
 
 `ctdev configure` applies system settings. Where [components](components/README.md)
 put software on a machine, `configure` changes how the machine behaves: the SSH
-server, the firewall, whether it sleeps, which upstreams Pi-hole uses.
+server, whether it sleeps, which upstreams Pi-hole uses.
 
 ```bash
 ctdev configure                 # full-screen browser over every category
@@ -70,15 +70,17 @@ that depends on them), it refuses and names it. Off leaves the dependencies thos
 packages pulled in; `sudo apt autoremove` cleans them up.
 
 `ssh` is the one place for remote access. Its settings are the SSH server
-(started on demand by `ssh.socket`, always running, or off), key-only login,
-keep my programs running after I disconnect (systemd lingering), Mosh support
-(the `en_US.UTF-8` locale), open this machine from vscode.dev (the VS Code
-tunnel, which also turns on lingering), and only allow SSH and Mosh from my
-local network (UFW). Each one can be turned off, which removes what ctdev
-added. The firewall blocks every other incoming service unless you open its
-ports first, so on a DNS or proxy host run `ctdev configure ssh` without
-`--batch` and leave it off. `ctdev install ssh` installs the SSH server and
-then opens this category, like every install that has one.
+(started on demand by `ssh.socket`, always running, or off) and key-only login.
+Earlier versions also offered lingering, Mosh support (the `en_US.UTF-8`
+locale), the VS Code tunnel and a LAN-only UFW firewall. The first `ctdev
+configure ssh` or bare `ctdev configure` run, except with `--show`, turns off
+whichever of those ctdev turned on, once. A locale that was already there stays, and so does a
+firewall without ctdev's rules; a firewall with other rules stays on once
+ctdev's are deleted. Lingering and the tunnel record no owner, so they are
+turned off wherever they are on; turned back on by hand, they stay on
+([ADR-0023](adr/0023-configure-ssh-is-the-ssh-server-and-key-only-login.md)).
+`ctdev install ssh` installs the SSH server and then opens this category, like
+every install that has one.
 
 `desktop` holds how the desktop looks and behaves, on whichever platform you run
 it. On macOS: an auto-hiding Dock, faster animations, Finder's

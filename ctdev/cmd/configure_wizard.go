@@ -81,7 +81,21 @@ func runCategoryBatchAdjusted(ctx context.Context, slug string, adjust func([]se
 			return err
 		}
 	}
+	retireRemovedSettings(ctx, slug)
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
+}
+
+// retireRemovedSettings turns off the settings slug's category no longer
+// offers wherever ctdev turned them on (ADR-0023). Every run of a category
+// that can change the machine calls it, whether or not a setting changes.
+func retireRemovedSettings(ctx context.Context, slug string) {
+	if slug != "ssh" {
+		return
+	}
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	if err := setup.RetireRemovedSSHSettings(ctx, o); err != nil {
+		fmt.Printf("  ✗ %v\n", err)
+	}
 }
 
 // runCategoryWizardOn is the testable core of runCategoryWizard — it takes an
@@ -112,6 +126,8 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 		fmt.Println()
 		return nil
 	}
+
+	retireRemovedSettings(ctx, slug)
 
 	var changed []int
 	for i := range states {

@@ -16,11 +16,10 @@ ctdev install 1password chrome vscode
 ctdev configure keyboard --batch
 ctdev configure desktop --batch  # Dock and Finder on macOS, Nemo on Cinnamon
 
-# Linux (after vscode, so the ssh step can set up the VS Code tunnel)
+# Linux
 ctdev install earlyoom smartmontools
 ctdev configure storage --batch  # weekly TRIM, a swapfile only where there is no swap
-ctdev configure ssh --batch      # SSH server, key-only login, Mosh, keep programs
-                                 # running, VS Code tunnel, LAN-only firewall
+ctdev configure ssh --batch      # SSH server, key-only login
 
 # everything else
 ctdev install                    # pick from the list
@@ -39,7 +38,6 @@ infrastructure stacks) are picked afterward. On Linux, `chrome` and
   Tailscale menu bar app
 - Linux: add your client's SSH public key to `~/.ssh/authorized_keys`, then
   re-run `ctdev configure ssh --batch` (password login turns off only once a
-  key is present), and authenticate the VS Code tunnel once with
-  `code tunnel user login`
+  key is present)
 - If the install ran with `--batch`, run `ctdev configure git` for your name,
   email and signing key
