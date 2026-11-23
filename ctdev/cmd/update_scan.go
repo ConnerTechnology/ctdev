@@ -31,9 +31,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"apt", scanAPT},
 		{"flatpak", scanFlatpak},
 		{"brew", scanBrew},
-		{"oh-my-zsh", scanOhMyZsh},
 		{"bun", scanBun},
-		{"nodenv", scanNodeEnv},
 		{"npm", scanNPMGlobals},
 		{"ctdev", scanCtdev},
 		{"docker", scanDocker},
@@ -45,6 +43,12 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"terraform", scanTerraform},
 		{"t3code", scanT3Code},
 		{"orca", scanOrca},
+	}
+
+	for _, r := range gitRepos {
+		scanners = append(scanners, namedScanner{r.name, func(ctx context.Context) ([]checklist.UpdateItem, error) {
+			return scanGitRepo(ctx, r.name, os.ExpandEnv(r.dir))
+		}})
 	}
 
 	// scanErrs collects failures so one broken source doesn't silently make the
@@ -208,11 +212,11 @@ func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
 // brewManages reports whether Homebrew owns this formula on this machine.
 //
 // The runtime updaters install upstream tarballs into /usr/local (go) or drive
-// nodenv/rbenv, which is right on Linux but actively harmful on a Mac where the
+// rbenv, which is right on Linux but actively harmful on a Mac where the
 // same tool came from brew: `updateGo` would `sudo rm -rf /usr/local/go` on top
 // of a Homebrew install, and the tool would show up twice in the same update
 // list. The installers already defer to brew here (see component/go.go,
-// component/ruby.go, component/node.go); the scanners have to as well.
+// component/ruby.go); the scanners have to as well.
 //
 // `brew list --versions` exits non-zero when the formula isn't installed, which
 // is exactly the question being asked.
@@ -322,30 +326,43 @@ var managedCasks = map[string]string{
 	"font-jetbrains-mono-nerd-font": "fonts",
 }
 
-func scanOhMyZsh(ctx context.Context) ([]checklist.UpdateItem, error) {
-	omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
-	if _, err := os.Stat(omzDir + "/.git"); err != nil {
+// gitRepos are the tools ctdev installs as a git clone, which only a pull
+// updates. Homebrew's nodenv has no clone, and brew updates it instead.
+var gitRepos = []struct{ name, dir string }{
+	{"oh-my-zsh", "$HOME/.oh-my-zsh"},
+	{"nodenv", "$HOME/.nodenv"},
+	{"node-build", "$HOME/.nodenv/plugins/node-build"},
+}
+
+func gitRepoDir(name string) string {
+	for _, r := range gitRepos {
+		if r.name == name {
+			return os.ExpandEnv(r.dir)
+		}
+	}
+	return ""
+}
+
+// scanGitRepo reports the clone at dir when it is behind its upstream.
+func scanGitRepo(ctx context.Context, name, dir string) ([]checklist.UpdateItem, error) {
+	if _, err := os.Stat(dir + "/.git"); err != nil {
 		return nil, nil
 	}
-	// Fetch latest from remote
-	fetch := exec.CommandContext(ctx, "git", "-C", omzDir, "fetch", "--quiet")
-	if err := fetch.Run(); err != nil {
-		return nil, fmt.Errorf("git fetch oh-my-zsh: %w", err)
+	if err := exec.CommandContext(ctx, "git", "-C", dir, "fetch", "--quiet").Run(); err != nil {
+		return nil, fmt.Errorf("git fetch %s: %w", name, err)
 	}
-	// Check if behind
-	out, err := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-list", "--count", "HEAD..@{u}").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-list", "--count", "HEAD..@{u}").Output()
 	if err != nil {
-		return nil, fmt.Errorf("oh-my-zsh rev-list: %w", err)
+		return nil, fmt.Errorf("%s rev-list: %w", name, err)
 	}
 	behind := strings.TrimSpace(string(out))
 	if behind == "" || behind == "0" {
 		return nil, nil
 	}
-	// Get current and remote short SHAs
-	currentSHA, _ := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-parse", "--short", "HEAD").Output()
-	remoteSHA, _ := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-parse", "--short", "@{u}").Output()
+	currentSHA, _ := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--short", "HEAD").Output()
+	remoteSHA, _ := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--short", "@{u}").Output()
 	return []checklist.UpdateItem{{
-		Name:       "oh-my-zsh",
+		Name:       name,
 		Source:     "git",
 		CurrentVer: strings.TrimSpace(string(currentSHA)),
 		NewVer:     strings.TrimSpace(string(remoteSHA)) + " (" + behind + " commits)",
@@ -382,43 +399,12 @@ func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}}, nil
 }
 
-func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("nodenv"); err != nil {
-		return nil, nil
-	}
-	// Compare against the global version — that's what the update step sets.
-	// `nodenv version` resolves the cwd's .node-version, so a project pin would
-	// make an already-applied update reappear forever.
-	currentOut, err := exec.CommandContext(ctx, "nodenv", "global").Output()
-	if err != nil {
-		return nil, fmt.Errorf("nodenv global: %w", err)
-	}
-	current := strings.TrimSpace(string(currentOut))
-	if current == "" || current[0] < '0' || current[0] > '9' {
-		// "system" or unset — not nodenv-managed, nothing for us to update
-		return nil, nil
-	}
-
-	// fetchLatestNodeLTS returns "" when nodenv has no usable definition list,
-	// which is a "can't determine", not a failure — stay silent in that case.
-	latest := fetchLatestNodeLTS(ctx)
-	if latest == "" || !versionNewer(latest, current) {
-		return nil, nil
-	}
-	return []checklist.UpdateItem{{
-		Name:       "node (nodenv)",
-		Source:     "runtime",
-		CurrentVer: current,
-		NewVer:     latest,
-	}}, nil
-}
-
 func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("pyenv"); err != nil {
 		return nil, nil
 	}
-	// Compare against the global version, as scanNodeEnv does: `pyenv version`
-	// resolves the cwd's .python-version. `pyenv global` can list several
+	// Compare against the global version: `pyenv version` resolves the cwd's
+	// .python-version, so a project pin would make an applied update reappear. `pyenv global` can list several
 	// versions, one per line; the first is the one `python` runs.
 	currentOut, err := exec.CommandContext(ctx, "pyenv", "global").Output()
 	if err != nil {
