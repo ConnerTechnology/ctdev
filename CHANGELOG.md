@@ -14,6 +14,9 @@ All notable changes to this project will be documented in this file.
      then `claude mcp login linear` if the repo's `.mcp.json` has a `linear` server.
   2. `rm -r ~/.config/ctdev/linear ~/.cache/ctdev/linear`.
   3. Delete this computer's app from the list at https://linear.app/settings/api/applications.
+- **`ctdev configure claude-code` is gone.** The review of `~/.claude/settings.json` and
+  `CLAUDE.md` against ctdev's baseline still runs after `ctdev install claude-code`, with the
+  same diff, prompt, `--force` and `--dry-run`.
 
 ## [19.1.0] - 2026-11-23
 
