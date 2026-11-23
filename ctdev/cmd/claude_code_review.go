@@ -48,8 +48,9 @@ func claudeCodeReviewFromFlags() claudeCodeReview {
 }
 
 // reviewClaudeCode brings ~/.claude in line with ctdev's baseline. It runs
-// after the install's progress screen, which can't show a diff or ask. Every question is asked before anything is
-// written, so cancelling a prompt really does change nothing.
+// after the install's progress screen, which can't show a diff or ask. Every
+// question is asked before anything is written, so cancelling a prompt really
+// does change nothing.
 func reviewClaudeCode(ctx context.Context, r claudeCodeReview) error {
 	drifts, err := component.ClaudeCodeDrift()
 	if err != nil {
