@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [19.1.0] - 2026-11-23
+
 ### Added
 - **Orca installs on macOS and Linux.** `orca` installs [Orca](https://orca.dev), Stably AI's
   desktop app for running coding agents in parallel worktrees. On macOS it uses the `orca` cask
