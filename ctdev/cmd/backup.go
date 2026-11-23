@@ -245,7 +245,7 @@ func backupNow(ctx context.Context, m *backup.Machine, s backup.Status) error {
 	fmt.Printf("  Backing up %s to %s…\n", where, d.Name)
 	// Someone is waiting, so a locked destination gets a minute, not the
 	// half hour a scheduled backup waits (coordinator, CTD-122 review).
-	snap, err := m.BackupNow(ctx, d, s.Target, s.Config)
+	snap, err := m.BackupNow(ctx, d, s.Target, s.Config, nil)
 	if errors.Is(err, backup.ErrDestinationBusy) {
 		return errDestinationBusy
 	}
