@@ -120,7 +120,6 @@ func useRoot(t *testing.T) string {
 	root := t.TempDir()
 	t.Setenv("NODENV_ROOT", root)
 	t.Setenv("NODENV_VERSION", "")
-	os.Unsetenv("NODENV_VERSION")
 	return root
 }
 

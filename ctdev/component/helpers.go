@@ -178,3 +178,25 @@ func primaryKeyFingerprints(colons string) ([]string, error) {
 	}
 	return fprs, nil
 }
+
+// ensureGitClone clones a repo if the destination doesn't exist, or pulls if it does.
+func ensureGitClone(ctx context.Context, o sysutil.Opts, url, dest string) error {
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "[dry-run] git clone %s %s\n", url, dest)
+		return nil
+	}
+
+	if dirExists(dest) {
+		return sysutil.Run(ctx, o, "git", "-C", dest, "pull", "--ff-only")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
+	return sysutil.Run(ctx, o, "git", "clone", url, dest)
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}

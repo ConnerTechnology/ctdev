@@ -114,7 +114,7 @@ func ProjectPin(dir string) (file, version string) {
 // Current is the version nodenv runs in dir: $NODENV_VERSION, else the
 // nearest .node-version, else the global version. "" means none.
 func Current(dir string) string {
-	if v, ok := os.LookupEnv("NODENV_VERSION"); ok {
+	if v := os.Getenv("NODENV_VERSION"); v != "" {
 		if v == "system" {
 			return ""
 		}
