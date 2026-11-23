@@ -13,8 +13,8 @@ ctdev configure ssh                      # SSH server, key-only login, Mosh, kee
                                          # running; leave the firewall off (see below)
 ctdev configure power --batch            # never suspend
 sudo tailscale up                        # join the tailnet
-ctdev install pihole                     # network-wide DNS ad blocker
-ctdev configure pihole                   # upstreams, listening mode, blocking, host resolver
+ctdev install pihole                     # network-wide DNS ad blocker, then its settings:
+                                         # upstreams, listening mode, blocking, host resolver
 ctdev install docker                     # caddy needs docker
 ctdev configure caddy --domain example.com --acme-email you@example.com
                                          # prompts for the Cloudflare token (masked); or pass it
@@ -48,7 +48,7 @@ present, frees port 443 and points `*.<domain>` at this node's Tailscale IP. The
 set that Tailscale IP as a Global Nameserver (Override on) in the Tailscale admin
 console, and `docker exec -it pihole pihole setpassword` for the admin UI.
 
-**Say yes to "Pi-hole host resolver" in `ctdev configure pihole`.** A node that
+**Say yes to "Pi-hole host resolver" when `ctdev install pihole` asks.** A node that
 accepts Tailscale DNS resolves through MagicDNS, whose nameserver is its own
 Pi-hole — so while the container is down the host can't pull the image to fix
 it or reach its backups. The setting points the host at Pi-hole on loopback

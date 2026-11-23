@@ -98,12 +98,16 @@ component's own install check, so an AWS CLI v1 counts as missing. When
 `aws configure sso` to create one. `ctdev install git` and `ctdev install aws` run
 these wizards afterward.
 
-**Component wizards** — `pihole`, `caddy`. These belong to a component and
-mostly run for you when you install it; running `configure` directly
-reconfigures without reinstalling. `caddy --batch` skips its prompts and takes
-the domain, email and token from `--domain`, `--acme-email`, `CF_API_TOKEN` or
-the existing `~/caddy/.env`. `pihole --batch` applies the category's defaults, which also set
-the upstream to Cloudflare, so run it interactively.
+**Component wizards** — `caddy` belongs to a component and mostly runs for you
+when you install it; running `configure caddy` reconfigures without
+reinstalling. `caddy --batch` skips its prompts and takes the domain, email and
+token from `--domain`, `--acme-email`, `CF_API_TOKEN` or the existing
+`~/caddy/.env`.
+
+**Pi-hole** has no `configure` subcommand. `ctdev install pihole` asks its
+settings after installing, and again whenever it runs on a node that has
+Pi-hole; a bare `ctdev configure` lists them too. Nothing applies them without
+asking: `ctdev install pihole --batch` installs Pi-hole and skips its settings.
 
 Every category, with what each one does, is listed in [Commands](commands.md).
 

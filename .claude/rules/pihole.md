@@ -7,7 +7,7 @@ paths:
 ---
 # Pi-hole
 
-- The **host resolver** setting in `ctdev configure pihole` exists because a node that accepts
-  Tailscale DNS resolves through MagicDNS, whose global nameserver is this same Pi-hole: with
-  FTL down the host cannot pull the image or reach B2. The mechanics are in
+- The **host resolver** setting in the `pihole` category (`ctdev/setup/registry.go`) exists
+  because a node that accepts Tailscale DNS resolves through MagicDNS, whose global nameserver is
+  this same Pi-hole: with FTL down the host cannot pull the image or reach B2. The mechanics are in
   `ctdev/setup/pihole.go`.

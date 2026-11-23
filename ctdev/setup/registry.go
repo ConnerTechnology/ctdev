@@ -759,8 +759,9 @@ var Registry = []Setting{
 		Category:    "Pi-hole DNS",
 		Description: "Upstream resolvers Pi-hole forwards cache misses to.",
 		Control:     ControlPicker,
-		// `configure pihole --batch` applies every default, so batch-applying the
-		// category moves a node on Unbound back to Cloudflare.
+		// Nothing applies this category's defaults unasked (CTD-171 removed
+		// `configure pihole --batch`); one that did would move a node on
+		// Unbound back to Cloudflare.
 		Default: "cloudflare",
 		Choices: []PickerChoice{
 			{Value: "cloudflare", Description: "Cloudflare (1.1.1.1, 1.0.0.1)"},
