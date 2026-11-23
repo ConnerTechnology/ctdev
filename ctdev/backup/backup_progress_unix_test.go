@@ -168,3 +168,24 @@ func TestCancelledBackupIsNotRecordedAsFailed(t *testing.T) {
 		t.Errorf("last run = %+v, want the earlier success untouched", r)
 	}
 }
+
+// Cancelling the keep rules after a Back up now isn't a retention failure.
+func TestCancelledRetainIsNotRecorded(t *testing.T) {
+	m, root, _ := failingMachine(t)
+	if err := m.recordRun(root, noon.Add(-time.Hour), nil); err != nil {
+		t.Fatal(err)
+	}
+	standinDestination(t, m, `forget) echo "Fatal: example failure" >&2; exit 1 ;;`)
+	d, err := m.Destination("example-backups")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := m.Retain(ctx, d, root, NewConfig("example-backups")); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if r, _, _ := m.lastRun(root); r.RetentionError != "" || r.RetentionDeferred {
+		t.Errorf("last run = %+v, want no retention outcome recorded", r)
+	}
+}

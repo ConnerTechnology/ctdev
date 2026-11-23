@@ -135,6 +135,10 @@ func (m *Machine) Retain(ctx context.Context, d *Destination, root string, cfg C
 	if m.Opts.DryRun {
 		return err
 	}
+	if err != nil && ctx.Err() != nil {
+		// Cancelled, as a cancelled backup is: nothing to record.
+		return ctx.Err()
+	}
 	change := func(r *Run) {
 		r.RetentionDeferred, r.RetentionError = false, ""
 		if err != nil {
