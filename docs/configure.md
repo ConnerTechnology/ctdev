@@ -77,7 +77,8 @@ tunnel, which also turns on lingering), and only allow SSH and Mosh from my
 local network (UFW). Each one can be turned off, which removes what ctdev
 added. The firewall blocks every other incoming service unless you open its
 ports first, so on a DNS or proxy host run `ctdev configure ssh` without
-`--batch` and leave it off.
+`--batch` and leave it off. `ctdev install ssh` sets up the SSH server alone,
+on Linux and macOS.
 
 `desktop` holds how the desktop looks and behaves, on whichever platform you run
 it. On macOS: an auto-hiding Dock, faster animations, Finder's
