@@ -20,6 +20,10 @@ var (
 	sshRemoteLoginOn = remoteLoginOn
 )
 
+// remoteLoginHint is the way round systemsetup, which macOS refuses from a
+// terminal without Full Disk Access.
+const remoteLoginHint = "if macOS asked for Full Disk Access, use the Remote Login switch in System Settings > General > Sharing instead"
+
 // remoteLoginOn reports whether macOS Remote Login is on: launchd has the
 // sshd job loaded only while it is, and asking needs no root.
 func remoteLoginOn(ctx context.Context) bool {
@@ -49,8 +53,13 @@ func sshInstallWith(ctx context.Context, opts ExecOpts, pm string) error {
 		fmt.Fprintln(opts.Stdout, "Turning on Remote Login...")
 		// macOS keeps the setting across restarts. Since Ventura, systemsetup
 		// refuses unless the terminal has Full Disk Access.
+		// systemsetup can print its refusal and still exit 0, so the state
+		// launchd reports afterwards is the answer.
 		if err := sshSudo(ctx, o, "systemsetup", "-setremotelogin", "on"); err != nil {
-			return fmt.Errorf("turn on Remote Login: %w (if macOS asked for Full Disk Access, turn it on in System Settings > General > Sharing > Remote Login instead)", err)
+			return fmt.Errorf("turn on Remote Login: %w; %s", err, remoteLoginHint)
+		}
+		if !opts.DryRun && !sshRemoteLoginOn(ctx) {
+			return fmt.Errorf("turn on Remote Login: still off after systemsetup; %s", remoteLoginHint)
 		}
 		return nil
 	case "apt":
@@ -71,7 +80,10 @@ func sshUninstallWith(ctx context.Context, opts ExecOpts, pm string) error {
 	case "brew":
 		fmt.Fprintln(opts.Stdout, "Turning off Remote Login...")
 		// -f skips the prompt that warns about cutting off remote sessions.
-		return sshSudo(ctx, o, "systemsetup", "-f", "-setremotelogin", "off")
+		if err := sshSudo(ctx, o, "systemsetup", "-f", "-setremotelogin", "off"); err != nil {
+			return fmt.Errorf("turn off Remote Login: %w; %s", err, remoteLoginHint)
+		}
+		return nil
 	case "apt":
 		fmt.Fprintln(opts.Stdout, "Removing the SSH server...")
 		if err := sshDisableLinux(ctx, o); err != nil {

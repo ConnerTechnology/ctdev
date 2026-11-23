@@ -236,6 +236,17 @@ func TestEnsureSSHServer(t *testing.T) {
 	}
 }
 
+func TestDisableSSHServerWithoutOpenSSHDoesNothing(t *testing.T) {
+	f := useFakeRemote(t)
+	sshdPath = filepath.Join(t.TempDir(), "missing")
+	if err := DisableSSHServer(context.Background(), quietOpts); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("calls = %q, want none", f.calls)
+	}
+}
+
 func TestSSHServerStartsAtBoot(t *testing.T) {
 	tests := []struct {
 		name      string
