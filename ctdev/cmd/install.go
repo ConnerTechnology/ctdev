@@ -142,9 +142,10 @@ func ensureSudoForInstall(ctx context.Context, names []string, force bool) error
 // componentWizards are the components whose configuration step is a dedicated
 // wizard rather than a setup.Registry category from setup.Registry.
 var componentWizards = map[string]func(context.Context) error{
-	"aws":   configureAWS,
-	"caddy": configureCaddy,
-	"git":   configureGit,
+	"aws":    configureAWS,
+	"caddy":  configureCaddy,
+	"git":    configureGit,
+	"nodenv": configureNodeAfterInstall,
 }
 
 // componentHasConfigure reports whether a component has a configuration step —
