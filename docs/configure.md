@@ -106,8 +106,8 @@ token from `--domain`, `--acme-email`, `CF_API_TOKEN` or the existing
 
 **Pi-hole** has no `configure` subcommand. `ctdev install pihole` asks its
 settings after installing, and again whenever it runs on a node that has
-Pi-hole; a bare `ctdev configure` lists them too. `ctdev configure --batch`
-applies their defaults, which also set the upstream to Cloudflare.
+Pi-hole; a bare `ctdev configure` lists them too. Nothing applies them without
+asking: `ctdev install pihole --batch` installs Pi-hole and skips its settings.
 
 Every category, with what each one does, is listed in [Commands](commands.md).
 

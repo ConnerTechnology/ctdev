@@ -43,7 +43,7 @@ func piholeInstall(ctx context.Context, opts ExecOpts) error {
 
 	fmt.Fprintln(opts.Stdout, "Pi-hole container up.")
 	fmt.Fprintln(opts.Stdout, "  Set an admin password: docker exec -it pihole pihole setpassword")
-	fmt.Fprintln(opts.Stdout, "  Tune DNS settings:     ctdev install pihole")
+	fmt.Fprintln(opts.Stdout, "  Change DNS settings:   re-run ctdev install pihole")
 	return nil
 }
 

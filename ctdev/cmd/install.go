@@ -101,8 +101,9 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	// install = install + configure: after installing, run each requested
 	// component's configuration step when it has one. `ctdev configure <x>`
-	// alone still configures without installing. Skipped in batch/dry-run
-	// because the wizards are interactive.
+	// alone still configures without installing, except pihole, which has no
+	// subcommand (CTD-171) and is reached by re-running install. Skipped in
+	// batch/dry-run because the wizards are interactive.
 	if flagDryRun || isBatchMode() {
 		return nil
 	}
@@ -139,7 +140,7 @@ func ensureSudoForInstall(ctx context.Context, names []string, force bool) error
 }
 
 // componentWizards are the components whose configuration step is a dedicated
-// wizard rather than a `configure <name>` category from setup.Registry.
+// wizard rather than a setup.Registry category from setup.Registry.
 var componentWizards = map[string]func(context.Context) error{
 	"aws":   configureAWS,
 	"caddy": configureCaddy,
@@ -147,7 +148,7 @@ var componentWizards = map[string]func(context.Context) error{
 }
 
 // componentHasConfigure reports whether a component has a configuration step —
-// a dedicated wizard or a `configure <name>` category sharing its name.
+// a dedicated wizard or a setup.Registry category sharing its name.
 func componentHasConfigure(name string) bool {
 	if componentWizards[name] != nil {
 		return true
@@ -161,7 +162,7 @@ func componentHasConfigure(name string) bool {
 }
 
 // runComponentConfigure runs a component's configuration step — its dedicated
-// wizard or its `configure <name>` category.
+// wizard or its setup.Registry category.
 func runComponentConfigure(ctx context.Context, name string) error {
 	if wizard := componentWizards[name]; wizard != nil {
 		return wizard(ctx)
