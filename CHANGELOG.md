@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`ctdev install herdr-desktop`** installs [Herdr's desktop app](https://github.com/herdrdev/herdr-app),
+  a window for terminals and coding agents that keep running when you close it. On Apple Silicon
+  Macs it uses the `herdr-app` cask; Intel Macs aren't supported. On Linux it runs herdr's own
+  installer, which checks the download against its published SHA-256, installs under `$HOME` with
+  a launcher entry, and adds herdr-core if it's missing. Neither asks for sudo. The app updates
+  itself, so `ctdev update` leaves it alone. `ctdev uninstall herdr-desktop` removes the app and
+  leaves `~/.config/herdr-app` and herdr-core in place.
+
 ### Removed
 - **`ctdev configure linear`, `ctdev linear` and `ctdev repo setup` are gone** (ADR-0022,
   replacing ADR-0008 and ADR-0011). ctdev no longer stores Linear app credentials or connects a
