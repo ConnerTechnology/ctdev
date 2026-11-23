@@ -11,6 +11,12 @@ All notable changes to this project will be documented in this file.
   On apt-based Linux it installs the release's `.deb`, checked against its published sha512, and
   `ctdev update` offers newer releases. The macOS app updates itself.
 
+### Fixed
+- **A removed apt package no longer reads as installed.** `apt-get remove` leaves a package in
+  dpkg's database with its config files, and ctdev's `dpkg -s` check counted that as installed,
+  so `ctdev status` and `ctdev update` kept seeing software you had uninstalled. ctdev now counts
+  a package only when dpkg says it is installed.
+
 ## [19.0.0] - 2026-11-20
 
 ### Removed

@@ -128,7 +128,7 @@ func t3codeDesktopInstalled() bool {
 	case "linux":
 		// The .deb puts nothing on PATH and installs under "/opt/T3 Code (Beta)",
 		// so the package database is the stable signal.
-		return exec.Command("dpkg", "-s", t3codeDebPackage).Run() == nil
+		return sysutil.DebInstalled(context.Background(), t3codeDebPackage)
 	}
 	return false
 }
@@ -137,11 +137,7 @@ func t3codeDesktopInstalled() bool {
 // version, or "" when the package isn't installed. The macOS app updates
 // itself, so it has no counterpart.
 func T3CodeDesktopVersion(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "dpkg-query", "-W", "-f=${Version}", t3codeDebPackage).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return sysutil.DebVersion(ctx, t3codeDebPackage)
 }
 
 // t3codeDebAsset names the release's .deb and the electron-builder manifest
