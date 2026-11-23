@@ -100,7 +100,7 @@ func IsPackageInstalled(name string) bool {
 	pm := platform.Detect().PackageManager
 	switch pm {
 	case "apt":
-		return exec.Command("dpkg", "-s", name).Run() == nil
+		return DebInstalled(context.Background(), name)
 	case "brew":
 		return exec.Command("brew", "list", name).Run() == nil
 	default:

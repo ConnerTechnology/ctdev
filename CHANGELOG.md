@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Orca installs on macOS and Linux.** `orca` installs [Orca](https://orca.dev), Stably AI's
+  desktop app for running coding agents in parallel worktrees. On macOS it uses the `orca` cask
+  from Stably's tap (`stablyai/orca/orca`); the core Homebrew `orca` cask is an unrelated tool.
+  On apt-based Linux it installs the release's `.deb`, checked against its published sha512, and
+  `ctdev update` offers newer releases. The macOS app updates itself.
+
+### Fixed
+- **A removed apt package no longer reads as installed.** `apt-get remove` leaves a package in
+  dpkg's database with its config files, and ctdev's `dpkg -s` check counted that as installed,
+  so after an uninstall `ctdev install` skipped it as already installed. ctdev now counts a
+  package only when dpkg says it is installed.
+
 ## [19.0.0] - 2026-11-20
 
 ### Removed

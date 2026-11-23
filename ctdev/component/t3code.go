@@ -1,13 +1,8 @@
 package component
 
 import (
-	"bufio"
 	"context"
-	"crypto/sha512"
-	"encoding/base64"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,7 +128,7 @@ func t3codeDesktopInstalled() bool {
 	case "linux":
 		// The .deb puts nothing on PATH and installs under "/opt/T3 Code (Beta)",
 		// so the package database is the stable signal.
-		return exec.Command("dpkg", "-s", t3codeDebPackage).Run() == nil
+		return sysutil.DebInstalled(context.Background(), t3codeDebPackage)
 	}
 	return false
 }
@@ -142,11 +137,7 @@ func t3codeDesktopInstalled() bool {
 // version, or "" when the package isn't installed. The macOS app updates
 // itself, so it has no counterpart.
 func T3CodeDesktopVersion(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "dpkg-query", "-W", "-f=${Version}", t3codeDebPackage).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return sysutil.DebVersion(ctx, t3codeDebPackage)
 }
 
 // t3codeDebAsset names the release's .deb and the electron-builder manifest
@@ -195,107 +186,15 @@ func t3codeDesktopInstall(ctx context.Context, opts ExecOpts) error {
 	return installT3CodeDeb(ctx, o, p.Arch, ver)
 }
 
-// installT3CodeDeb installs release ver's .deb, checked against the sha512
-// electron-builder publishes for it. It is also how `ctdev update` moves the
-// Linux app forward, so it always installs, even over itself.
+// installT3CodeDeb installs release ver's .deb. It is also how `ctdev update`
+// moves the Linux app forward, so it always installs, even over itself.
 func installT3CodeDeb(ctx context.Context, o sysutil.Opts, arch, ver string) error {
 	deb, manifest, err := t3codeDebAsset(arch, ver)
 	if err != nil {
 		return err
 	}
 	base := fmt.Sprintf("%s/v%s/", t3codeReleaseBase, ver)
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] download %s, verify it against %s, and install it\n", base+deb, manifest)
-		return nil
-	}
-
-	want, err := t3codeManifestSHA512(ctx, base+manifest, deb)
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp("", "t3code-*.deb")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	tmp.Close()
-	if err := sysutil.DownloadFile(ctx, base+deb, tmp.Name()); err != nil {
-		return fmt.Errorf("download %s: %w", deb, err)
-	}
-	if err := verifySHA512Base64(tmp.Name(), want); err != nil {
-		return fmt.Errorf("%s: %w", deb, err)
-	}
-	return installDebWithDepFix(ctx, o, tmp.Name(), t3codeDebPackage)
-}
-
-// t3codeManifestSHA512 fetches an electron-builder latest-*.yml and returns
-// the sha512 of the named file.
-func t3codeManifestSHA512(ctx context.Context, url, file string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := sysutil.HTTPClient().Do(req)
-	if err != nil {
-		return "", fmt.Errorf("fetch %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("fetch %s: HTTP %d", url, resp.StatusCode)
-	}
-	return parseElectronManifestSHA512(resp.Body, file)
-}
-
-// parseElectronManifestSHA512 reads the files list of an electron-builder
-// update manifest:
-//
-//	files:
-//	  - url: T3-Code-0.1.7-amd64.deb
-//	    sha512: <base64>
-//
-// It fails closed: a file that isn't listed, or has no hash, is an error.
-func parseElectronManifestSHA512(r io.Reader, file string) (string, error) {
-	sc := bufio.NewScanner(r)
-	inEntry := false
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if v, ok := strings.CutPrefix(line, "- url:"); ok {
-			inEntry = strings.TrimSpace(v) == file
-			continue
-		}
-		if !inEntry {
-			continue
-		}
-		if v, ok := strings.CutPrefix(line, "sha512:"); ok {
-			if sum := strings.TrimSpace(v); sum != "" {
-				return sum, nil
-			}
-			break
-		}
-		if strings.HasPrefix(line, "- ") || !strings.HasPrefix(sc.Text(), " ") {
-			inEntry = false // the next entry, or a top-level key
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return "", err
-	}
-	return "", fmt.Errorf("update manifest has no sha512 for %s", file)
-}
-
-func verifySHA512Base64(path, want string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	h := sha512.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return err
-	}
-	if got := base64.StdEncoding.EncodeToString(h.Sum(nil)); got != want {
-		return fmt.Errorf("sha512 mismatch: got %s, want %s", got, want)
-	}
-	return nil
+	return installElectronDeb(ctx, o, base, deb, manifest, t3codeDebPackage)
 }
 
 func t3codeDesktopUninstall(ctx context.Context, opts ExecOpts) error {
