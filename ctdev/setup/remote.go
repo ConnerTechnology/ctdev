@@ -165,6 +165,37 @@ func applySSHServer(ctx context.Context, o sysutil.Opts, mode string) error {
 	return fmt.Errorf("unknown SSH server mode %q", mode)
 }
 
+// EnsureSSHServer installs openssh-server and enables it at boot for
+// `ctdev install ssh`. A server already running keeps its mode, so an
+// always-on choice made in `configure ssh` survives; one that is off gets
+// the setting's default.
+func EnsureSSHServer(ctx context.Context, o sysutil.Opts) error {
+	mode := detectSSHServer(ctx)
+	if mode == sshOff {
+		mode = sshOnDemand
+	}
+	return applySSHServer(ctx, o, mode)
+}
+
+// DisableSSHServer stops the OpenSSH server and keeps it from starting at boot.
+func DisableSSHServer(ctx context.Context, o sysutil.Opts) error {
+	return applySSHServer(ctx, o, sshOff)
+}
+
+// SSHServerStartsAtBoot reports whether openssh-server is installed and one
+// of its units is enabled.
+func SSHServerStartsAtBoot(ctx context.Context) bool {
+	if _, err := os.Stat(sshdPath); err != nil {
+		return false
+	}
+	for _, unit := range []string{"ssh.socket", "ssh.service"} {
+		if out, _ := remoteProbe(ctx, "systemctl", "is-enabled", unit); out == "enabled" {
+			return true
+		}
+	}
+	return false
+}
+
 // ── Key-only login ──────────────────────────────────────────────────────
 
 // detectSSHKeyOnly reports "enabled" only when ctdev's drop-in exists and

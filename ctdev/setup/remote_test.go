@@ -211,6 +211,57 @@ func TestApplySSHServerInstallsOpenSSHWhenMissing(t *testing.T) {
 	}
 }
 
+// `ctdev install ssh` turns an off server on with the default mode, and keeps
+// a mode already chosen in `configure ssh`.
+func TestEnsureSSHServer(t *testing.T) {
+	tests := []struct {
+		name   string
+		probes map[string]string
+		want   []string
+	}{
+		{"off gets on demand", map[string]string{}, []string{"sudo", "systemctl", "enable", "--now", "ssh.socket"}},
+		{"always on stays", map[string]string{"systemctl is-active ssh.service": "active"}, []string{"sudo", "systemctl", "enable", "--now", "ssh.service"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := useFakeRemote(t)
+			f.probes = tt.probes
+			if err := EnsureSSHServer(context.Background(), quietOpts); err != nil {
+				t.Fatal(err)
+			}
+			if !f.ran(tt.want...) {
+				t.Errorf("calls = %q, want %q among them", f.calls, tt.want)
+			}
+		})
+	}
+}
+
+func TestSSHServerStartsAtBoot(t *testing.T) {
+	tests := []struct {
+		name      string
+		installed bool
+		probes    map[string]string
+		want      bool
+	}{
+		{"socket enabled", true, map[string]string{"systemctl is-enabled ssh.socket": "enabled"}, true},
+		{"service enabled", true, map[string]string{"systemctl is-enabled ssh.service": "enabled"}, true},
+		{"running but not enabled", true, map[string]string{"systemctl is-active ssh.service": "active"}, false},
+		{"not installed", false, map[string]string{"systemctl is-enabled ssh.socket": "enabled"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := useFakeRemote(t)
+			f.probes = tt.probes
+			if !tt.installed {
+				sshdPath = filepath.Join(t.TempDir(), "missing")
+			}
+			if got := SSHServerStartsAtBoot(context.Background()); got != tt.want {
+				t.Errorf("SSHServerStartsAtBoot = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestApplySSHKeyOnlyOff(t *testing.T) {
 	f := useFakeRemote(t)
 	if err := applySSHKeyOnly(context.Background(), quietOpts, "disabled"); err != nil {

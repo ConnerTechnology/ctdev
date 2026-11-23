@@ -20,14 +20,14 @@ Most components declare nothing and take the default: root is needed to put the
 software in place — a package manager, `/usr/local`, a systemd unit — while
 re-running over one already installed only re-syncs files under `$HOME`. A few
 declare otherwise: the ones that do privileged work on every run (`caddy`,
-`nomachine`, `smartmontools`) and the ones that never need it
+`nomachine`, `smartmontools`, `ssh`) and the ones that never need it
 at all, because they install entirely inside `$HOME` or through the Docker
 socket. ctdev asks for a sudo password only when something in the run is
 actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-68 components, counted in `ctdev/component/registry.go` on 2026-11-23. A
+69 components, counted in `ctdev/component/registry.go` on 2026-11-23. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -127,6 +127,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `earlyoom` | Early OOM killer for Linux | Linux |
 | `smartmontools` | SMART disk-health monitoring (smartd) | Linux |
 | `solaar` | Logitech Unifying/Bolt receiver manager | Linux |
+| `ssh` | SSH server, started at boot (Remote Login on macOS) | Linux, macOS |
 
 ## Docker on Linux
 
@@ -146,6 +147,17 @@ an existing machine gets the cap through `ctdev install docker --force`. On a
 machine where Docker is running and has no `daemon.json`, `--force` restarts
 Docker, which stops running containers unless `live-restore` is on. On macOS,
 Docker Desktop comes from Homebrew.
+
+## SSH server
+
+`ctdev install ssh` leaves the machine reachable over SSH after a restart. On
+Linux it installs `openssh-server` with apt and enables it at boot through the
+SSH server setting of `ctdev configure ssh`: a server that is off starts on
+demand (`ssh.socket`), and one already set to always on stays that way. On
+macOS it turns on Remote Login, the switch in System Settings > General >
+Sharing. macOS refuses that from a terminal without Full Disk Access; turn the
+switch on in System Settings instead. `ctdev uninstall ssh` turns the server
+off, and on Linux removes `openssh-server`.
 
 ## Adding one
 
