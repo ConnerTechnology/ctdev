@@ -1,6 +1,6 @@
 ---
-status: accepted
-date: 2026-10-03
+status: superseded by ADR-0022
+date: 2026-11-23
 ---
 
 # Linear app credentials are per computer

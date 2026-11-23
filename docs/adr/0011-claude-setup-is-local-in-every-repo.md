@@ -1,6 +1,6 @@
 ---
-status: accepted
-date: 2026-10-22
+status: superseded by ADR-0022
+date: 2026-11-23
 ---
 
 # Claude Code setup is local in every repo, and ctdev does only the deterministic part

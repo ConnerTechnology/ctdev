@@ -42,14 +42,15 @@ normally lives — a package manager's paths, a `docker-compose.yml` under
 `$HOME`, a systemd unit under `/etc`. Each component's page or `--help` says
 which.
 
-The XDG variables are honored: set `XDG_CONFIG_HOME` or `XDG_STATE_HOME` and
-ctdev follows them, as the uninstaller does for `XDG_CACHE_HOME`.
+Set `XDG_STATE_HOME` and ctdev follows it. Configuration is always under
+`~/.config/ctdev`; the uninstaller also honors `XDG_CONFIG_HOME` and
+`XDG_CACHE_HOME`.
 
 ## Secrets
 
 **No secret is ever stored in this repository.** Every secret ctdev handles —
-a Cloudflare API token, a Pi-hole password, a Beszel key, and a Linear app
-secret — is entered at its `configure` step and written only to the device that
+a Cloudflare API token, a Pi-hole password, a Beszel key, a backup
+destination's credentials — is entered at its `configure` step and written only to the device that
 needs it, with a file mode that restricts it to its owner.
 
 The consequence is deliberate: lose a device and you re-enter its secrets from

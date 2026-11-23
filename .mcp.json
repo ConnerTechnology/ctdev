@@ -2,8 +2,7 @@
   "mcpServers": {
     "linear": {
       "type": "http",
-      "url": "https://mcp.linear.app/mcp",
-      "headersHelper": "ctdev linear mcp-headers --workspace connertechnology"
+      "url": "https://mcp.linear.app/mcp"
     }
   }
 }
