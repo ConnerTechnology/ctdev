@@ -208,7 +208,7 @@ func runNodeInstall(ctx context.Context, arg string, batch bool) error {
 	if len(pkgs) == 0 {
 		return nil
 	}
-	fmt.Printf("\n  %s has %d global npm packages: %s\n", old, len(pkgs), nodenv.Specs(pkgs))
+	fmt.Printf("\n  %s has %s: %s\n", old, npmPackages(len(pkgs)), nodenv.Specs(pkgs))
 	copyThem := true
 	if !batch {
 		if copyThem, err = promptYesNoCtx(ctx, fmt.Sprintf("Copy them to %s?", v), true); err != nil {
@@ -297,6 +297,13 @@ func chooseNodeVersion(ctx context.Context, list []string, arg, cwd string) (str
 	return latest[choice-1], nil
 }
 
+func npmPackages(n int) string {
+	if n == 1 {
+		return "1 global npm package"
+	}
+	return fmt.Sprintf("%d global npm packages", n)
+}
+
 func majors(list []string) string {
 	var ms []string
 	for _, v := range nodenv.LatestPerMajor(list) {
@@ -351,8 +358,8 @@ func (p nodeUpdatePlan) String() string {
 	fmt.Fprintf(&b, "  Node %s → %s (%s)\n\n  This will:\n", p.from, p.to, which)
 	steps := []string{"Install " + p.to}
 	if n := len(p.packages); n > 0 {
-		steps = append(steps, fmt.Sprintf("Reinstall %s's %d global npm packages under %s, at the same versions:\n         %s",
-			p.from, n, p.to, nodenv.Specs(p.packages)))
+		steps = append(steps, fmt.Sprintf("Reinstall %s's %s under %s, at the same versions:\n         %s",
+			p.from, npmPackages(n), p.to, nodenv.Specs(p.packages)))
 	}
 	if p.scope == scopeProject {
 		steps = append(steps, fmt.Sprintf("Write %s to %s", p.to, tildePath(p.pinFile)))
@@ -489,7 +496,7 @@ func runNodeUninstall(ctx context.Context, arg string, batch bool) error {
 			if iv == global {
 				note = "global"
 			} else if n := len(nodenv.GlobalPackages(iv)); n > 0 {
-				note = fmt.Sprintf("%d global npm packages", n)
+				note = npmPackages(n)
 			}
 			fmt.Printf("    %d) %-10s %s\n", i+1, iv, styles.Dimmed.Render(note))
 		}
@@ -510,7 +517,7 @@ func runNodeUninstall(ctx context.Context, arg string, batch bool) error {
 	}
 
 	if pkgs := nodenv.GlobalPackages(v); len(pkgs) > 0 {
-		fmt.Printf("  Its %d global npm packages go with it: %s\n", len(pkgs), nodenv.Specs(pkgs))
+		fmt.Printf("  Its %s go with it: %s\n", npmPackages(len(pkgs)), nodenv.Specs(pkgs))
 	}
 	cwd, _ := os.Getwd()
 	if pinFile, pinned := nodenv.ProjectPin(cwd); pinned == v {

@@ -313,7 +313,7 @@ func TestNodeInstallGlobalCopiesPackages(t *testing.T) {
 			t.Errorf("install: %v", err)
 		}
 	})
-	if !strings.Contains(out, "26.13.1 has 1 global npm packages: ccusage@18.0.3") {
+	if !strings.Contains(out, "26.13.1 has 1 global npm package: ccusage@18.0.3") {
 		t.Errorf("expected the package list; got:\n%s", out)
 	}
 	want := "nodenv install --skip-existing 24.22.3\nnodenv global 24.22.3\n" +

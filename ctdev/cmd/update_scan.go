@@ -404,8 +404,9 @@ func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, nil
 	}
 	// Compare against the global version: `pyenv version` resolves the cwd's
-	// .python-version, so a project pin would make an applied update reappear. `pyenv global` can list several
-	// versions, one per line; the first is the one `python` runs.
+	// .python-version, so a project pin would make an applied update reappear.
+	// `pyenv global` can list several versions, one per line; the first is the
+	// one `python` runs.
 	currentOut, err := exec.CommandContext(ctx, "pyenv", "global").Output()
 	if err != nil {
 		return nil, fmt.Errorf("pyenv global: %w", err)
