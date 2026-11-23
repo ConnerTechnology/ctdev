@@ -6,7 +6,9 @@ GitHub Issues are not used. Issues moved from `CON` on 2026-09-24; their old IDs
 
 Sessions reach Linear through the `linear` server in `.mcp.json`, signed in with Linear's own
 OAuth as the person running Claude Code. When it says it needs authentication, run
-`claude mcp login linear` in the repo root, then `/mcp` and **Reconnect** in the session.
+`claude mcp login linear` in the repo root, then `/mcp` and **Reconnect** in the session. If
+`claude mcp get linear` shows `Scope: Local config`, that is a server an earlier ctdev added,
+whose helper no longer exists: run `claude mcp remove linear --scope local` first (ADR-0022).
 
 ## Conventions
 
