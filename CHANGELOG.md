@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.0.0] - 2026-11-23
+
 ### Added
 - **`ctdev install herdr-desktop`** installs [Herdr's desktop app](https://github.com/herdrdev/herdr-app),
   a window for terminals and coding agents that keep running when you close it. On Apple Silicon
