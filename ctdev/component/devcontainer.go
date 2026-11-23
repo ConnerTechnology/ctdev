@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -51,30 +50,6 @@ func deployDxWrapper(o sysutil.Opts) error {
 		return fmt.Errorf("chmod dx: %w", err)
 	}
 	return nil
-}
-
-// npmPath finds npm, falling back to the nodenv shim when nodenv isn't yet on
-// PATH (common right after `ctdev install node` in the same shell session). In
-// a dry run with no npm yet it returns the bare "npm", so callers print what
-// they would run instead of failing.
-func npmPath(o sysutil.Opts) (string, error) {
-	if p, err := exec.LookPath("npm"); err == nil {
-		return p, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	shim := filepath.Join(home, ".nodenv", "shims", "npm")
-	if _, err := os.Stat(shim); err == nil {
-		return shim, nil
-	}
-	// A dry run installs nothing, so the node component earlier in the same run
-	// can't have put npm in place yet. Report the command a real run would use.
-	if o.DryRun {
-		return "npm", nil
-	}
-	return "", fmt.Errorf("npm not found — install the node component first")
 }
 
 func devcontainerUninstall(ctx context.Context, opts ExecOpts) error {

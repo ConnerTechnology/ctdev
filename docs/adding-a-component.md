@@ -50,6 +50,14 @@ For simple package-manager installs, use the helper:
 GoInstall: SimplePackageInstaller("name"), GoUninstall: SimplePackageUninstaller("name")
 ```
 
+For a CLI published as an npm package, install it globally with the npm helper,
+depend on `node`, and declare `RootNever`. `ctdev update` already upgrades npm
+globals, so it needs no scanner (`codex` and `gemini-cli` in the registry):
+```go
+Dependencies: []string{"node"}, DetectCmd: "name", Root: RootNever,
+GoInstall: npmGlobalInstaller("name", "@scope/pkg"), GoUninstall: npmGlobalUninstaller("name", "@scope/pkg")
+```
+
 Set `Root` when the component isn't a plain package install. The zero value,
 `RootWhenMissing`, means root is needed to put the software in place while a
 re-run over an installed component only re-syncs `$HOME` — so `ctdev install`
