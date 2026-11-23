@@ -11,10 +11,11 @@ import (
 )
 
 // Pi-hole settings (the `pihole` category, run by `ctdev install pihole`) read
-// and write Pi-hole's configuration through `pihole-FTL --config`. Reads are attempted with sudo
-// first — some keys (e.g. dns.upstreams) return empty to an unprivileged
-// caller — and fall back to an unprivileged read. The configure command primes
-// sudo before detecting, so reads succeed without a prompt.
+// and write Pi-hole's configuration through `pihole-FTL --config`. Reads are
+// attempted with sudo first — some keys (e.g. dns.upstreams) return empty to
+// an unprivileged caller — and fall back to an unprivileged read. A bare
+// `ctdev configure` primes sudo before detecting, so reads there succeed
+// without a prompt.
 
 // piholeUpstreamPresets maps a friendly key to the resolver IPs it stands for.
 // The order within each list is the order written to Pi-hole.
