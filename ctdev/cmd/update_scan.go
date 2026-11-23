@@ -44,6 +44,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"kubectl", scanKubectl},
 		{"terraform", scanTerraform},
 		{"t3code", scanT3Code},
+		{"orca", scanOrca},
 	}
 
 	// scanErrs collects failures so one broken source doesn't silently make the
@@ -770,4 +771,24 @@ func t3codeUpdateItems(cli, desktop, latest string) []checklist.UpdateItem {
 		items = append(items, checklist.UpdateItem{Name: "t3code-desktop", Source: "cli", CurrentVer: desktop, NewVer: latest})
 	}
 	return items
+}
+
+// scanOrca offers the Orca .deb on Linux when it is behind the latest release.
+// The macOS cask updates itself, so it isn't scanned.
+func scanOrca(ctx context.Context) ([]checklist.UpdateItem, error) {
+	if runtime.GOOS != "linux" {
+		return nil, nil
+	}
+	current := component.OrcaVersion(ctx)
+	if current == "" {
+		return nil, nil
+	}
+	latest, err := sysutil.GitHubLatestVersion(ctx, component.OrcaRepo)
+	if err != nil {
+		return nil, fmt.Errorf("check latest Orca: %w", err)
+	}
+	if !versionNewer(latest, current) {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{Name: "orca", Source: "cli", CurrentVer: current, NewVer: latest}}, nil
 }

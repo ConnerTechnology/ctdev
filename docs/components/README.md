@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-64 components, counted in `ctdev/component/registry.go` on 2026-11-20. A
+65 components, counted in `ctdev/component/registry.go` on 2026-11-23. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -77,6 +77,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `linear` | Linear issue tracker | macOS |
 | `logi-options` | Logitech Options+ | macOS |
 | `nomachine` | NoMachine remote desktop server | Linux |
+| `orca` | Orca: run coding agents in parallel worktrees | Linux, macOS |
 | `paper` | Paper design tool for interfaces and prototypes | Linux, macOS (Apple Silicon) |
 | `slack` | Slack messaging | Linux, macOS |
 | `t3code-desktop` | T3 Code desktop app | Linux, macOS (Apple Silicon) |
