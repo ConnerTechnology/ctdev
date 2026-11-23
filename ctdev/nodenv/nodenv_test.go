@@ -167,6 +167,7 @@ func TestInstalledAndGlobalPackages(t *testing.T) {
 	writeFile(t, filepath.Join(mods, "ccusage", "package.json"), `{"version":"18.0.3"}`)
 	writeFile(t, filepath.Join(mods, "@openai", "codex", "package.json"), `{"version":"0.171.0"}`)
 	writeFile(t, filepath.Join(mods, ".package-lock.json"), `{}`)
+	writeFile(t, filepath.Join(mods, "broken", "package.json"), `{"name":"broken"}`)
 	linked := t.TempDir()
 	writeFile(t, filepath.Join(linked, "package.json"), `{"version":"0.0.1"}`)
 	if err := os.Symlink(linked, filepath.Join(mods, "my-tool")); err != nil {
@@ -181,9 +182,12 @@ func TestInstalledAndGlobalPackages(t *testing.T) {
 	if got, want := Installed(), []string{"20.20.2", "24.22.3", "26.13.1"}; !slices.Equal(got, want) {
 		t.Errorf("Installed = %v, want %v", got, want)
 	}
-	want := []Package{{"@openai/codex", "0.171.0"}, {"ccusage", "18.0.3"}}
-	if got := GlobalPackages("24.22.3"); !slices.Equal(got, want) {
-		t.Errorf("GlobalPackages = %v, want %v (no npm, corepack or linked packages)", got, want)
+	g := GlobalPackages("24.22.3")
+	if want := []Package{{"@openai/codex", "0.171.0"}, {"ccusage", "18.0.3"}}; !slices.Equal(g.Packages, want) {
+		t.Errorf("Packages = %v, want %v (no npm, corepack, linked or unreadable packages)", g.Packages, want)
+	}
+	if !slices.Equal(g.Linked, []string{"my-tool"}) || !slices.Equal(g.Unreadable, []string{"broken"}) {
+		t.Errorf("Linked = %v, Unreadable = %v; want [my-tool], [broken]", g.Linked, g.Unreadable)
 	}
 	if !HasPackage("24.22.3", "@openai/codex") || HasPackage("26.13.1", "@openai/codex") || HasPackage("", "ccusage") {
 		t.Error("HasPackage should see only the version that has the package")
