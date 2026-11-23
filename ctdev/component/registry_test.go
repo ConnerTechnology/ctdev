@@ -6,8 +6,8 @@ import (
 )
 
 func TestRegistrySize(t *testing.T) {
-	if len(Registry) != 66 {
-		t.Errorf("expected 66 components, got %d", len(Registry))
+	if len(Registry) != 68 {
+		t.Errorf("expected 68 components, got %d", len(Registry))
 	}
 }
 
@@ -49,16 +49,21 @@ func TestHelmDependsOnKubectl(t *testing.T) {
 	}
 }
 
-func TestCcusageInstallsThroughNode(t *testing.T) {
-	c := FindByName("ccusage")
-	if c == nil {
-		t.Fatal("ccusage component missing from registry")
-	}
-	if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
-		t.Errorf("expected ccusage to depend on node, got %v", c.Dependencies)
-	}
-	if c.Root != RootNever {
-		t.Errorf("ccusage installs with npm under $HOME and must declare RootNever, got %v", c.Root)
+// The npm-global components need npm, which the node component puts in place,
+// and install under $HOME without root.
+func TestNpmGlobalComponentsInstallThroughNode(t *testing.T) {
+	for _, name := range []string{"ccusage", "codex", "gemini-cli"} {
+		c := FindByName(name)
+		if c == nil {
+			t.Errorf("%s component missing from registry", name)
+			continue
+		}
+		if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
+			t.Errorf("expected %s to depend on node, got %v", name, c.Dependencies)
+		}
+		if c.Root != RootNever {
+			t.Errorf("%s installs with npm under $HOME and must declare RootNever, got %v", name, c.Root)
+		}
 	}
 }
 
