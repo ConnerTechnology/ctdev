@@ -30,11 +30,14 @@ copy in `~/.local/bin`.
 
 Components installed outside a package manager are checked against their
 vendor's latest stable release: `helm`, `kubectl`, `terraform`, the T3 Code CLI
-(`t3code`) and, on Linux, the T3 Code desktop app (`t3code-desktop`). The T3
+(`t3code`) and, on Linux, the T3 Code desktop app (`t3code-desktop`) and Orca
+(`orca`). The T3
 Code CLI updates through its own `t3 update`, which also restarts its background
 service if you installed one. The Linux desktop app updates by installing the
 newer release's `.deb`, checked against its published sha512. On macOS the T3
-Code app updates itself, so it isn't listed.
+Code app updates itself, so it isn't listed. Orca works the same way: on Linux
+ctdev installs the newer release's `.deb`, checked against its sha512, and on
+macOS the app updates itself.
 
 Root is used only for the updates that need it: the system package manager, the
 Go toolchain (it lives in `/usr/local/go`), `helm`, `kubectl` and `terraform`

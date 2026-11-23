@@ -84,6 +84,10 @@ if err := sysutil.DownloadFile(ctx, debURL, tmp.Name()); err != nil {
 return installDebWithDepFix(ctx, o, tmp.Name(), "name-pkg")
 ```
 
+An Electron app whose GitHub release carries electron-builder's `latest-linux.yml`
+goes through `installElectronDeb` in `ctdev/component/electron_deb.go` instead,
+which checks the `.deb` against the manifest's sha512 (`ctdev/component/orca.go`).
+
 ## Updates
 
 `ctdev update` upgrades whatever a package manager installed (APT, Homebrew,

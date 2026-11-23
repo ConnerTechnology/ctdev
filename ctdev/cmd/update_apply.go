@@ -179,7 +179,7 @@ func runtimeUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 	return updateStep{}, false
 }
 
-// cliUpdateStep builds the step for a CLI-tool update (helm/kubectl/terraform/t3code).
+// cliUpdateStep builds the step for a CLI-tool update (helm/kubectl/terraform/t3code/orca).
 func cliUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 	name := fmt.Sprintf("%s %s → %s", item.Name, item.CurrentVer, item.NewVer)
 	switch item.Name {
@@ -218,6 +218,10 @@ func cliUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 	case "t3code-desktop":
 		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
 			return component.T3CodeDesktopUpdate(ctx, o, item.NewVer)
+		}}, true
+	case "orca":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			return component.OrcaUpdate(ctx, o, item.NewVer)
 		}}, true
 	}
 	return updateStep{}, false
