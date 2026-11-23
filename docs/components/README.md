@@ -157,8 +157,8 @@ demand (`ssh.socket`), and one already set to always on stays that way. On
 macOS it turns on Remote Login, the switch in System Settings > General >
 Sharing. macOS refuses that from a terminal without Full Disk Access; turn the
 switch on in System Settings instead. An interactive install then opens
-`ctdev configure ssh` for the rest of remote access; on macOS that category has
-nothing yet. `ctdev uninstall ssh` turns the server off, and on Linux removes
+the `ctdev configure ssh` menu, for your SSH keys and the server settings; on
+macOS the server settings have nothing yet. `ctdev uninstall ssh` turns the server off, and on Linux removes
 `openssh-server`.
 
 ## Adding one
