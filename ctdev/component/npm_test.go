@@ -3,6 +3,9 @@ package component
 import (
 	"bytes"
 	"context"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -65,5 +68,41 @@ func TestNpmGlobalComponents_DryRunUninstall(t *testing.T) {
 				t.Errorf("expected %q in output; got:\n%s", want, out.String())
 			}
 		})
+	}
+}
+
+// A global install through nodenv's npm rehashes, so the package's command has
+// a shim in the same shell. Without nodenv's npm there is nothing to rehash.
+func TestNpmGlobalInstaller_RehashesNodenv(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir())
+	log := filepath.Join(home, "calls")
+	fake := "#!/bin/sh\necho \"${0##*/} $*\" >> " + log + "\n"
+	for _, p := range []string{".nodenv/shims/npm", ".nodenv/bin/nodenv"} {
+		path := filepath.Join(home, p)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(fake), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ctx := context.Background()
+	opts := ExecOpts{Force: true, Stdout: io.Discard}
+	if err := FindByName("gemini-cli").GoInstall(ctx, opts); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if err := FindByName("gemini-cli").GoUninstall(ctx, opts); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	got, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "npm install -g @google/gemini-cli\nnodenv rehash\nnpm uninstall -g @google/gemini-cli\nnodenv rehash\n"
+	if string(got) != want {
+		t.Errorf("calls:\n%s\nwant:\n%s", got, want)
 	}
 }

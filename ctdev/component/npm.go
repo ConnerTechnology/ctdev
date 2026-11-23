@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -29,6 +30,7 @@ func npmGlobalInstaller(name, pkg string) func(context.Context, ExecOpts) error 
 		if err := sysutil.Run(ctx, o, npm, "install", "-g", pkg); err != nil {
 			return fmt.Errorf("npm install %s: %w", pkg, err)
 		}
+		nodenvRehash(ctx, o, npm)
 		return nil
 	}
 }
@@ -41,7 +43,33 @@ func npmGlobalUninstaller(name, pkg string) func(context.Context, ExecOpts) erro
 		if err != nil {
 			return err
 		}
-		return sysutil.Run(ctx, o, npm, "uninstall", "-g", pkg)
+		if err := sysutil.Run(ctx, o, npm, "uninstall", "-g", pkg); err != nil {
+			return fmt.Errorf("npm uninstall %s: %w", pkg, err)
+		}
+		nodenvRehash(ctx, o, npm)
+		return nil
+	}
+}
+
+// nodenvRehash updates nodenv's shims after a global npm install or uninstall.
+// nodenv makes a shim for a package's command only on rehash, so without it
+// `gemini` is not found until a new shell runs `nodenv init`. The package is
+// already in place by then, so a failed rehash only warns.
+func nodenvRehash(ctx context.Context, o sysutil.Opts, npm string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	root := filepath.Join(home, ".nodenv")
+	if !strings.HasPrefix(npm, root+string(filepath.Separator)) {
+		return
+	}
+	nodenv := filepath.Join(root, "bin", "nodenv")
+	if _, err := os.Stat(nodenv); err != nil {
+		nodenv = "nodenv"
+	}
+	if err := sysutil.Run(ctx, o, nodenv, "rehash"); err != nil {
+		fmt.Fprintf(o.Stdout, "warning: nodenv rehash: %v (open a new shell to pick up the command)\n", err)
 	}
 }
 
