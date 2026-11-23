@@ -4,12 +4,14 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 const (
@@ -131,5 +133,38 @@ func TestCancelledBackupInterruptsRestic(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(marker); string(got) != "INT\n" {
 		t.Errorf("restic got %q, want an interrupt", got)
+	}
+}
+
+// Cancelling a Back up now stops restic, and that isn't a failed backup:
+// the folder keeps its last recorded run.
+func TestCancelledBackupIsNotRecordedAsFailed(t *testing.T) {
+	m, root, _ := failingMachine(t)
+	if err := m.recordRun(root, noon.Add(-time.Hour), nil); err != nil {
+		t.Fatal(err)
+	}
+	standinDestination(t, m, `backup)
+  echo '`+exampleStatus1+`'
+  exec sleep 30 ;;`)
+	d, err := m.Destination("example-backups")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := ReadConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, err = m.BackupNow(ctx, d, root, &cfg, func(BackupProgress) { cancel() })
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	r, _, err := m.lastRun(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Failed() || !r.LastAttempt.Equal(noon.Add(-time.Hour)) {
+		t.Errorf("last run = %+v, want the earlier success untouched", r)
 	}
 }

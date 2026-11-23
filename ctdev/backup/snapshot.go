@@ -112,6 +112,11 @@ func (m *Machine) backup(ctx context.Context, d *Destination, root string, cfg *
 	}
 	started := m.now()
 	out, err := d.restic(ctx, r)
+	if err != nil && ctx.Err() != nil {
+		// Whoever was waiting cancelled it: no backup was made, and none
+		// failed, so the folder's last run stays as it was.
+		return Snapshot{}, ctx.Err()
+	}
 	partial := errors.Is(err, errPartial)
 	if partial {
 		err = nil // the backup was made; Warning says what was skipped
