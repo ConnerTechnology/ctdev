@@ -89,13 +89,18 @@ func init() {
 						return setup.RequestSwapfileSize(states, gib)
 					}
 				}
-				if !flagDryRun && !flagConfigShow {
+				if flagConfigShow {
+					return runCategoryWizard(cmdContext(cmd), slug, true)
+				}
+				// Interactive ssh is a menu over your keys and the server
+				// settings (CTD-177); it asks for sudo when it needs it.
+				if slug == "ssh" && !isBatchMode() {
+					return cancelToClean(runSSHMenu(cmdContext(cmd)))
+				}
+				if !flagDryRun {
 					if err := ensureSudo(cmdContext(cmd)); err != nil {
 						return fmt.Errorf("sudo required: %w", err)
 					}
-				}
-				if flagConfigShow {
-					return runCategoryWizard(cmdContext(cmd), slug, true)
 				}
 				// Non-interactive (--batch or piped stdin): apply defaults without prompting.
 				if isBatchMode() {
