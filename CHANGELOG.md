@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- **`ctdev configure linear`, `ctdev linear` and `ctdev repo setup` are gone** (ADR-0022,
+  replacing ADR-0008 and ADR-0011). ctdev no longer stores Linear app credentials or connects a
+  repo's Claude Code to Linear, and no longer installs the `connertechnology` plugin in a repo.
+  A repo's `.mcp.json` `linear` server now signs in with Linear's own OAuth, as you. The `linear`
+  desktop app component stays. ctdev doesn't clean up what they left; to remove it:
+  1. In each repo where you ran `ctdev configure linear`: `claude mcp remove linear --scope local`,
+     then `claude mcp login linear` if the repo's `.mcp.json` has a `linear` server.
+  2. `rm -r ~/.config/ctdev/linear ~/.cache/ctdev/linear`.
+  3. Delete this computer's app in Linear under Settings → API → OAuth applications.
+
 ## [19.1.0] - 2026-11-23
 
 ### Added

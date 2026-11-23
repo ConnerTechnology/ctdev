@@ -49,9 +49,9 @@ Set `XDG_STATE_HOME` and ctdev follows it. Configuration is always under
 ## Secrets
 
 **No secret is ever stored in this repository.** Every secret ctdev handles —
-a Cloudflare API token, a Pi-hole password, a Beszel key, a backup
-destination's credentials — is entered at its `configure` step and written only to the device that
-needs it, with a file mode that restricts it to its owner.
+a Cloudflare API token, a Pi-hole password and a Beszel key — is entered at
+its `configure` step and written only to the device that needs it, with a file
+mode that restricts it to its owner.
 
 The consequence is deliberate: lose a device and you re-enter its secrets from
 your password manager rather than recovering them from somewhere central.
