@@ -106,3 +106,54 @@ func TestNpmGlobalInstaller_RehashesNodenv(t *testing.T) {
 		t.Errorf("calls:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func writeFakeCmd(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An npm outside ~/.nodenv (system or Homebrew) has no shims to refresh.
+func TestNpmGlobalInstaller_NoRehashWithoutNodenv(t *testing.T) {
+	home := t.TempDir()
+	bin := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", bin)
+	log := filepath.Join(home, "calls")
+	record := "echo \"${0##*/} $*\" >> " + log
+	writeFakeCmd(t, filepath.Join(bin, "npm"), record)
+	writeFakeCmd(t, filepath.Join(bin, "nodenv"), record)
+
+	opts := ExecOpts{Force: true, Stdout: io.Discard}
+	if err := FindByName("codex").GoInstall(context.Background(), opts); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	got, _ := os.ReadFile(log)
+	if want := "npm install -g @openai/codex\n"; string(got) != want {
+		t.Errorf("calls:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// With nodenv from Homebrew there is no ~/.nodenv/bin/nodenv, so the rehash
+// uses nodenv on PATH. If it fails, the package is still installed: warn only.
+func TestNpmGlobalInstaller_FailedRehashWarns(t *testing.T) {
+	home := t.TempDir()
+	bin := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", bin)
+	writeFakeCmd(t, filepath.Join(home, ".nodenv", "shims", "npm"), "exit 0")
+	writeFakeCmd(t, filepath.Join(bin, "nodenv"), "exit 1")
+
+	var out bytes.Buffer
+	opts := ExecOpts{Force: true, Stdout: &out}
+	if err := FindByName("codex").GoInstall(context.Background(), opts); err != nil {
+		t.Fatalf("a failed rehash must not fail the install: %v", err)
+	}
+	if !strings.Contains(out.String(), "warning: nodenv rehash") {
+		t.Errorf("expected a rehash warning; got:\n%s", out.String())
+	}
+}
