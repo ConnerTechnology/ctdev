@@ -38,7 +38,6 @@ ctdev configure keyboard        # Key repeat delay (ms) and rate (cps) on Cinnam
 ctdev configure audio           # PipeWire sound system, Bluetooth audio (codecs, LDAC), alert sounds, volume click (macOS)
 ctdev configure bluetooth       # bluez + Blueman, and bluetooth.service on at startup
 ctdev configure storage         # Weekly SSD TRIM (fstrim.timer, only with an SSD), swapfile size and swappiness (Linux)
-ctdev configure pihole          # Pi-hole DNS (upstreams, listening mode, blocking, host resolver)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
 ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)

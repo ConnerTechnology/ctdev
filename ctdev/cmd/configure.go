@@ -65,9 +65,10 @@ func init() {
 
 	// Register system configuration category subcommands. gpu is handled by a
 	// dedicated subcommand (configure_gpu.go) that also runs driver signing, so
-	// skip the generic registration for it here.
+	// skip the generic registration for it here. pihole has no subcommand
+	// (CTD-171): `ctdev install pihole` and a bare `ctdev configure` reach it.
 	for _, slug := range slugOrder {
-		if slug == "gpu" {
+		if slug == "gpu" || slug == "pihole" {
 			continue
 		}
 		slug := slug // capture

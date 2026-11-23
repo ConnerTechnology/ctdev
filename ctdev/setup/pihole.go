@@ -10,8 +10,8 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-// Pi-hole settings (the `configure pihole` category) read and write Pi-hole's
-// configuration through `pihole-FTL --config`. Reads are attempted with sudo
+// Pi-hole settings (the `pihole` category, run by `ctdev install pihole`) read
+// and write Pi-hole's configuration through `pihole-FTL --config`. Reads are attempted with sudo
 // first — some keys (e.g. dns.upstreams) return empty to an unprivileged
 // caller — and fall back to an unprivileged read. The configure command primes
 // sudo before detecting, so reads succeed without a prompt.
@@ -160,8 +160,10 @@ const (
 	// hostResolverFallback answers when FTL is down. Quad9 validates DNSSEC
 	// and is not the ISP; the router would usually be the ISP.
 	hostResolverFallback = "9.9.9.9"
-	hostResolverMarker   = "# ctdev: Pi-hole host resolver — managed by `ctdev configure pihole`"
-	hostResolvConfPath   = "/etc/resolv.conf"
+	// The marker names a command ctdev no longer has (CTD-171), but nodes
+	// already carry it and detection matches it, so it stays as written.
+	hostResolverMarker = "# ctdev: Pi-hole host resolver — managed by `ctdev configure pihole`"
+	hostResolvConfPath = "/etc/resolv.conf"
 	// hostResolverNMConf tells NetworkManager to leave resolv.conf alone.
 	hostResolverNMConf = "/etc/NetworkManager/conf.d/ctdev-pihole-resolver.conf"
 	// hostResolverDnsmasq is the Pi-hole drop-in forwarding tailnet names.
@@ -235,7 +237,7 @@ func applyPiholeHostResolver(ctx context.Context, o sysutil.Opts) error {
 
 	suffix := sysutil.TailscaleDNS(ctx).MagicDNSSuffix
 	if suffix == "" {
-		fmt.Fprintln(o.Stdout, "  Tailscale not up — tailnet names will not resolve on this host until 'ctdev configure pihole' is re-run")
+		fmt.Fprintln(o.Stdout, "  Tailscale not up — tailnet names will not resolve on this host until 'ctdev install pihole' is re-run")
 	}
 	if err := sysutil.PiholeWriteDnsmasq(ctx, o, hostResolverDnsmasq, magicDNSForwardRecord(suffix)); err != nil {
 		return err

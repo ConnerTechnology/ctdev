@@ -3,12 +3,12 @@
 # alongside an Unbound recursive resolver (sidecar). Lists and config persist in
 # ./etc-pihole.
 # Upstreams and listening mode are intentionally NOT set here so that
-# `ctdev configure pihole` owns them (persisted in ./etc-pihole). Optional
+# `ctdev install pihole` owns them (persisted in ./etc-pihole). Optional
 # per-node values (TZ, admin password) come from ./.env.
 services:
   # Recursive, DNSSEC-validating resolver. Bridge container exposed only on the
   # host loopback, so the host-networked Pi-hole reaches it at 127.0.0.1#5335
-  # (set that as the upstream via `ctdev configure pihole`) but the LAN cannot.
+  # (set that as the upstream via `ctdev install pihole`) but the LAN cannot.
   unbound:
     container_name: unbound
     image: klutchell/unbound:latest

@@ -10,7 +10,7 @@ import (
 // Pi-hole runs as a container (official pihole/pihole image) with host
 // networking so it owns the host's :53 (DNS) and :80 (web, behind Caddy). The
 // stack lives in ~/pihole/; gravity.db and config persist in ./etc-pihole.
-// Tune settings with `ctdev configure pihole`.
+// Tune settings by running `ctdev install pihole` again.
 
 // The tuning drop-ins are read by FTL / Unbound on container (re)start (the
 // unbound one is a single-file bind mount into the image's custom.conf.d —
@@ -43,7 +43,7 @@ func piholeInstall(ctx context.Context, opts ExecOpts) error {
 
 	fmt.Fprintln(opts.Stdout, "Pi-hole container up.")
 	fmt.Fprintln(opts.Stdout, "  Set an admin password: docker exec -it pihole pihole setpassword")
-	fmt.Fprintln(opts.Stdout, "  Tune DNS settings:     ctdev configure pihole")
+	fmt.Fprintln(opts.Stdout, "  Tune DNS settings:     ctdev install pihole")
 	return nil
 }
 
