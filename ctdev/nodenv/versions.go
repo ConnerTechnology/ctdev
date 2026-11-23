@@ -13,6 +13,10 @@ import (
 // also carry graal, chakracore and nightly builds, which ctdev never offers.
 var stable = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
+// IsExact reports whether v is a full x.y.z release, not a major, an alias
+// or "lts" that nodenv resolves itself.
+func IsExact(v string) bool { return stable.MatchString(strings.TrimPrefix(v, "v")) }
+
 // Major is the major of "24.22.3", 0 when v has none.
 func Major(v string) int {
 	m, _, _ := strings.Cut(strings.TrimPrefix(v, "v"), ".")

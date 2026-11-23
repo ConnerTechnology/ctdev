@@ -73,9 +73,12 @@ func IsInstalled(v string) bool {
 	return v != "" && err == nil && info.IsDir()
 }
 
-// readVersionFile is the first word of a nodenv version file. "system" means
-// no nodenv-managed Node, so it reads as "".
-func readVersionFile(path string) string {
+// System is the version name for a Node outside nodenv.
+const System = "system"
+
+// readVersionWord is the first word of a nodenv version file, without a
+// leading "v". "" means the file is missing or empty.
+func readVersionWord(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
 		return ""
@@ -83,16 +86,33 @@ func readVersionFile(path string) string {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Split(bufio.ScanWords)
-	if !sc.Scan() || sc.Text() == "system" {
+	if !sc.Scan() {
 		return ""
 	}
 	return strings.TrimPrefix(sc.Text(), "v")
 }
 
+// readVersionFile is readVersionWord with "system" read as "": it names no
+// nodenv-managed Node.
+func readVersionFile(path string) string {
+	if v := readVersionWord(path); v != System {
+		return v
+	}
+	return ""
+}
+
 // Global is `nodenv global`, "" when it is unset or "system".
 func Global() string {
-	return readVersionFile(filepath.Join(Root(), "version"))
+	return readVersionFile(globalFile())
 }
+
+// GlobalIsSystem reports whether the global version is set to "system", the
+// user's choice of a Node outside nodenv.
+func GlobalIsSystem() bool {
+	return readVersionWord(globalFile()) == System
+}
+
+func globalFile() string { return filepath.Join(Root(), "version") }
 
 // ProjectPin finds the .node-version that governs dir, searching upward as
 // nodenv does. It returns the file and its version, or "" for both.
@@ -109,21 +129,6 @@ func ProjectPin(dir string) (file, version string) {
 		dir = parent
 	}
 	return "", ""
-}
-
-// Current is the version nodenv runs in dir: $NODENV_VERSION, else the
-// nearest .node-version, else the global version. "" means none.
-func Current(dir string) string {
-	if v := os.Getenv("NODENV_VERSION"); v != "" {
-		if v == "system" {
-			return ""
-		}
-		return v
-	}
-	if file, v := ProjectPin(dir); file != "" {
-		return v
-	}
-	return Global()
 }
 
 func nodeModules(v string) string {

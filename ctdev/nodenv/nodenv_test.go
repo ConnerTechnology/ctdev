@@ -123,7 +123,7 @@ func useRoot(t *testing.T) string {
 	return root
 }
 
-func TestCurrentResolvesLikeNodenv(t *testing.T) {
+func TestGlobalAndProjectPin(t *testing.T) {
 	root := useRoot(t)
 	project := t.TempDir()
 	sub := filepath.Join(project, "web", "src")
@@ -131,27 +131,31 @@ func TestCurrentResolvesLikeNodenv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := Current(sub); got != "" {
-		t.Errorf("no global, no pin: Current = %q, want none", got)
+	if Global() != "" || GlobalIsSystem() {
+		t.Errorf("no global: Global = %q, GlobalIsSystem = %v", Global(), GlobalIsSystem())
 	}
 	writeFile(t, filepath.Join(root, "version"), "system\n")
-	if got := Current(sub); got != "" {
-		t.Errorf("global system: Current = %q, want none", got)
+	if Global() != "" || !GlobalIsSystem() {
+		t.Errorf("global system: Global = %q, GlobalIsSystem = %v", Global(), GlobalIsSystem())
 	}
-	writeFile(t, filepath.Join(root, "version"), "26.13.1\n")
-	if got := Current(sub); got != "26.13.1" {
-		t.Errorf("global only: Current = %q, want 26.13.1", got)
+	writeFile(t, filepath.Join(root, "version"), "v26.13.1\n")
+	if Global() != "26.13.1" || GlobalIsSystem() {
+		t.Errorf("global 26.13.1: Global = %q, GlobalIsSystem = %v", Global(), GlobalIsSystem())
+	}
+	if file, v := ProjectPin(sub); file != "" || v != "" {
+		t.Errorf("no pin: ProjectPin = %q, %q", file, v)
 	}
 	writeFile(t, filepath.Join(project, ".node-version"), "v22.23.5\n")
 	if file, v := ProjectPin(sub); file != filepath.Join(project, ".node-version") || v != "22.23.5" {
 		t.Errorf("ProjectPin = %q, %q; want the project's file", file, v)
 	}
-	if got := Current(sub); got != "22.23.5" {
-		t.Errorf("pin in a parent folder: Current = %q, want 22.23.5", got)
-	}
-	t.Setenv("NODENV_VERSION", "24.22.3")
-	if got := Current(sub); got != "24.22.3" {
-		t.Errorf("NODENV_VERSION: Current = %q, want 24.22.3", got)
+}
+
+func TestIsExact(t *testing.T) {
+	for v, want := range map[string]bool{"24.22.3": true, "v24.22.3": true, "24": false, "24.1": false, "lts": false, "lts/iron": false} {
+		if IsExact(v) != want {
+			t.Errorf("IsExact(%q) = %v, want %v", v, !want, want)
+		}
 	}
 }
 
