@@ -44,6 +44,7 @@ func runSettingsBrowser(ctx context.Context) error {
 		return err
 	}
 	resetTerminal()
+	retireRemovedSettings(ctx, "ssh")
 
 	if !m.Applied() {
 		fmt.Println(styles.Dimmed.Render("No changes applied."))

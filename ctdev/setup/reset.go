@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/user"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
@@ -33,7 +32,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 		fmt.Fprintln(w, "[DRY-RUN] Would remove hide-drives udev rule")
 		fmt.Fprintln(w, "[DRY-RUN] Would remove ctdev's xbindkeys config and autostart entry, restoring any backups")
 		fmt.Fprintln(w, "[DRY-RUN] Would remove WirePlumber LDAC config")
-		fmt.Fprintln(w, "[DRY-RUN] Would reset remote access (unmask sleep targets, remove sshd/NM drop-ins, disable UFW + linger, uninstall VS Code tunnel)")
+		fmt.Fprintln(w, "[DRY-RUN] Would reset remote access (unmask sleep targets, remove sshd/NM drop-ins, turn off the retired SSH settings ctdev turned on)")
 		return nil
 	}
 
@@ -202,15 +201,7 @@ func ResetLinuxDefaults(ctx context.Context, o sysutil.Opts) error {
 		_ = sysutil.SudoRun(ctx, o, "rm", "-f", wifiPowersaveConfPath)
 	}
 	resetPiholeHostResolver(ctx, o)
-	if sysutil.CommandExists("ufw") {
-		_ = sysutil.SudoRun(ctx, o, "ufw", "--force", "disable")
-	}
-	if u, err := user.Current(); err == nil {
-		_ = sysutil.SudoRun(ctx, o, "loginctl", "disable-linger", u.Username)
-	}
-	if sysutil.CommandExists("code") {
-		_ = sysutil.Run(ctx, o, "code", "tunnel", "service", "uninstall")
-	}
+	_ = RetireRemovedSSHSettings(ctx, o)
 
 	// Regenerate GRUB config
 	if err := applyUpdateGrub(ctx, o); err != nil {
