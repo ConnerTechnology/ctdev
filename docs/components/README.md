@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-65 components, counted in `ctdev/component/registry.go` on 2026-11-23. A
+66 components, counted in `ctdev/component/registry.go` on 2026-11-23. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -74,6 +74,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `claude-desktop` | Claude desktop application | Linux, macOS |
 | `cleanmymac` | CleanMyMac system cleaner | macOS |
 | `dbeaver` | DBeaver database tool | Linux, macOS |
+| `herdr-desktop` | Herdr desktop app: terminals and coding agents that keep running when you close the window | Linux, macOS (Apple Silicon) |
 | `linear` | Linear issue tracker | macOS |
 | `logi-options` | Logitech Options+ | macOS |
 | `nomachine` | NoMachine remote desktop server | Linux |
