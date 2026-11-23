@@ -177,8 +177,13 @@ func EnsureSSHServer(ctx context.Context, o sysutil.Opts) error {
 	return applySSHServer(ctx, o, mode)
 }
 
-// DisableSSHServer stops the OpenSSH server and keeps it from starting at boot.
+// DisableSSHServer stops the OpenSSH server and keeps it from starting at
+// boot. With openssh-server absent there are no units to disable, and
+// systemctl would fail on them.
 func DisableSSHServer(ctx context.Context, o sysutil.Opts) error {
+	if _, err := os.Stat(sshdPath); err != nil {
+		return nil
+	}
 	return applySSHServer(ctx, o, sshOff)
 }
 
