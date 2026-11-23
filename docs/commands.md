@@ -39,7 +39,6 @@ ctdev configure audio           # PipeWire sound system, Bluetooth audio (codecs
 ctdev configure bluetooth       # bluez + Blueman, and bluetooth.service on at startup
 ctdev configure storage         # Weekly SSD TRIM (fstrim.timer, only with an SSD), swapfile size and swappiness (Linux)
 ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF token)
-ctdev configure claude-code     # Diff ~/.claude/settings.json and CLAUDE.md against ctdev's baseline; ask before replacing (--force, --dry-run)
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev configure storage --batch --swapfile-size 2  # Same, with a 2 GiB swapfile; also resizes ctdev's own

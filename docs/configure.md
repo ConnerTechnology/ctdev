@@ -109,10 +109,6 @@ settings after installing, and again whenever it runs on a node that has
 Pi-hole; a bare `ctdev configure` lists them too. `ctdev configure --batch`
 applies their defaults, which also set the upstream to Cloudflare.
 
-**Claude Code** — `claude-code` isn't a wizard: `ctdev configure claude-code` diffs
-`~/.claude/settings.json` and `CLAUDE.md` against ctdev's baseline and asks before replacing
-either. It also runs after any install that includes `claude-code`.
-
 Every category, with what each one does, is listed in [Commands](commands.md).
 
 ## Secrets
