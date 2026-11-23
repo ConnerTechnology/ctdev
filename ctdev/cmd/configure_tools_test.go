@@ -170,3 +170,14 @@ func TestInstallChainsIntoAWSAndGitWizards(t *testing.T) {
 		}
 	}
 }
+
+// Pi-hole's settings have no `configure pihole` subcommand (CTD-171), but
+// `ctdev install pihole` still runs them.
+func TestPiholeSettingsRunFromInstallOnly(t *testing.T) {
+	if hasSubcommand(childCommand(t, rootCmd, "configure"), "pihole") {
+		t.Error("configure should have no pihole subcommand")
+	}
+	if !componentHasConfigure("pihole") {
+		t.Error("install pihole should still run the pihole settings")
+	}
+}
