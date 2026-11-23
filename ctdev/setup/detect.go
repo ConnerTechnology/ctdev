@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // parseXsetRepeat extracts delay and rate from an xset output line like:
@@ -218,8 +220,7 @@ func detectSystemdService(ctx context.Context, name string) string {
 }
 
 func detectPackageInstalled(ctx context.Context, pkg string) bool {
-	err := exec.CommandContext(ctx, "dpkg", "-s", pkg).Run()
-	return err == nil
+	return sysutil.DebInstalled(ctx, pkg)
 }
 
 func detectFileExists(path string) string {

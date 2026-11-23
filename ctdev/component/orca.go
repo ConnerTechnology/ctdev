@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
-	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
@@ -32,7 +30,7 @@ func orcaInstalled() bool {
 		_, err := os.Stat(orcaMacApp)
 		return err == nil
 	case "linux":
-		return exec.Command("dpkg", "-s", orcaDebPackage).Run() == nil
+		return sysutil.DebInstalled(context.Background(), orcaDebPackage)
 	}
 	return false
 }
@@ -40,11 +38,7 @@ func orcaInstalled() bool {
 // OrcaVersion returns the installed Linux package's version, or "" when it
 // isn't installed. The macOS app updates itself, so it has no counterpart.
 func OrcaVersion(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "dpkg-query", "-W", "-f=${Version}", orcaDebPackage).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return sysutil.DebVersion(ctx, orcaDebPackage)
 }
 
 // orcaDebAsset names the release's .deb and the electron-builder manifest that
