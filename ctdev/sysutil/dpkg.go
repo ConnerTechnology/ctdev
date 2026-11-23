@@ -11,7 +11,7 @@ import (
 // package in dpkg's database in the config-files state, and `dpkg -s` still
 // exits 0 for it.
 func DebVersion(ctx context.Context, pkg string) string {
-	out, err := exec.CommandContext(ctx, "dpkg-query", "-W", "-f=${db:Status-Status} ${Version}", pkg).Output()
+	out, err := exec.CommandContext(ctx, "dpkg-query", "-W", "-f=${db:Status-Status} ${Version}\n", pkg).Output()
 	if err != nil {
 		return ""
 	}
@@ -24,11 +24,13 @@ func DebInstalled(ctx context.Context, pkg string) bool {
 	return DebVersion(ctx, pkg) != ""
 }
 
-// parseDebStatusVersion reads "<status> <version>" from dpkg-query.
+// parseDebStatusVersion reads dpkg-query's "<status> <version>" lines, one per
+// architecture the package is known for, and returns the first installed one.
 func parseDebStatusVersion(out string) string {
-	status, ver, _ := strings.Cut(strings.TrimSpace(out), " ")
-	if status != "installed" {
-		return ""
+	for _, line := range strings.Split(out, "\n") {
+		if ver, ok := strings.CutPrefix(strings.TrimSpace(line), "installed "); ok {
+			return ver
+		}
 	}
-	return ver
+	return ""
 }
