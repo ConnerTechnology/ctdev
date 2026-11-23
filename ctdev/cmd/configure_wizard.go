@@ -402,13 +402,13 @@ func promptMultiPick(ctx context.Context, state *setup.SettingState) (string, er
 		return setup.PicksNone, nil
 	}
 
+	nums, ok := parsePicks(input, len(choices))
+	if !ok {
+		fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
+		return state.CurrentValue, nil
+	}
 	var picks []string
-	for _, f := range strings.FieldsFunc(input, func(r rune) bool { return r == ' ' || r == ',' }) {
-		n, err := strconv.Atoi(f)
-		if err != nil || n < 1 || n > len(choices) {
-			fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
-			return state.CurrentValue, nil
-		}
+	for _, n := range nums {
 		picks = append(picks, choices[n-1].Value)
 	}
 	return setup.JoinPicks(picks), nil

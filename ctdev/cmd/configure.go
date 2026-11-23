@@ -341,7 +341,7 @@ func promptSSHSigningKey(ctx context.Context, email string) (string, error) {
 
 	// Generate new key
 	if choice == generateIdx {
-		return generateSSHKey(email)
+		return generateSSHKey(ctx, email)
 	}
 
 	// Custom path
@@ -369,46 +369,23 @@ func promptSSHSigningKey(ctx context.Context, email string) (string, error) {
 	return "", nil
 }
 
-func generateSSHKey(email string) (string, error) {
-	if flagDryRun {
-		fmt.Println("  [dry-run] would run: ssh-keygen -t ed25519")
-		return "", nil
-	}
-	home, err := os.UserHomeDir()
+// generateSSHKey makes a new ed25519 key for git signing, with the same
+// file-name prompt as `configure ssh`'s Create a key, and returns its public
+// key's path ("" under --dry-run).
+func generateSSHKey(ctx context.Context, email string) (string, error) {
+	dir, err := sshDir()
 	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
+		return "", err
 	}
-	keyPath := filepath.Join(home, ".ssh", "id_ed25519")
-
-	fmt.Println("  Generating new ed25519 key...")
-	fmt.Println()
-
-	genCmd := exec.Command("ssh-keygen", "-t", "ed25519", "-C", email)
-	genCmd.Stdin = os.Stdin
-	genCmd.Stdout = os.Stdout
-	genCmd.Stderr = os.Stderr
-	if err := genCmd.Run(); err != nil {
-		return "", fmt.Errorf("ssh-keygen failed: %w", err)
+	path, err := promptKeyPath(ctx, dir, keyTypes[0])
+	if err != nil {
+		return "", err
 	}
-
-	pubKeyPath := keyPath + ".pub"
-	if _, err := os.Stat(pubKeyPath); err != nil {
-		// Try to find any newly created .pub key
-		newKeys := sysutil.FindSSHPublicKeys()
-		if len(newKeys) > 0 {
-			pubKeyPath = newKeys[len(newKeys)-1].Path
-		} else {
-			return "", fmt.Errorf("could not find generated public key")
-		}
+	pair, ok, err := createKey(ctx, newKey{typ: keyTypes[0], path: path, comment: email})
+	if err != nil || !ok {
+		return "", err
 	}
-
-	fmt.Println()
-	if data, err := os.ReadFile(pubKeyPath); err == nil {
-		fmt.Printf("  %s\n", styles.Dimmed.Render(strings.TrimSpace(string(data))))
-	}
-	fmt.Println()
-
-	return pubKeyPath, nil
+	return pair.Public, nil
 }
 
 func promptGitHubKeyUpload(ctx context.Context, keyPath string) error {
@@ -417,9 +394,10 @@ func promptGitHubKeyUpload(ctx context.Context, keyPath string) error {
 		fmt.Println("  [dry-run] would offer to add the key to GitHub (gh ssh-key add)")
 		return nil
 	}
-	// Check if gh is available and authenticated
-	if err := exec.Command("gh", "auth", "status").Run(); err != nil {
-		printManualGitHubInstructions(keyPath)
+	hostname, _ := os.Hostname()
+	title := "ctdev-" + hostname
+	if !githubReady(ctx) {
+		printManualGitHubInstructions(title, githubBoth)
 		return nil
 	}
 
@@ -431,39 +409,9 @@ func promptGitHubKeyUpload(ctx context.Context, keyPath string) error {
 	if !yes {
 		return nil
 	}
-
-	hostname, _ := os.Hostname()
-	title := "ctdev-" + hostname
-
-	// Add as authentication key
-	ghCmd := exec.Command("gh", "ssh-key", "add", keyPath, "--title", title)
-	if output, err := ghCmd.CombinedOutput(); err != nil {
-		fmt.Println(styles.Warning.Render(fmt.Sprintf("  Failed to add key to GitHub: %s", strings.TrimSpace(string(output)))))
-		printManualGitHubInstructions(keyPath)
-	} else {
-		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added SSH auth key to GitHub as %q", title)))
-	}
-
-	// Also add as signing key for commit verification
-	ghSignCmd := exec.Command("gh", "ssh-key", "add", keyPath, "--title", title+"-signing", "--type", "signing")
-	if output, err := ghSignCmd.CombinedOutput(); err != nil {
-		fmt.Println(styles.Warning.Render(fmt.Sprintf("  Failed to add signing key to GitHub: %s", strings.TrimSpace(string(output)))))
-	} else {
-		fmt.Println(styles.Success.Render(fmt.Sprintf("  Added SSH signing key to GitHub as %q", title+"-signing")))
-	}
+	uploadKeyToGitHub(ctx, keyPath, title, githubBoth)
 	fmt.Println()
 	return nil
-}
-
-func printManualGitHubInstructions(keyPath string) {
-	hostname, _ := os.Hostname()
-	fmt.Println()
-	fmt.Println("  Add this key to GitHub:")
-	fmt.Println("    1. Go to https://github.com/settings/ssh/new")
-	fmt.Printf("    2. Title: ctdev-%s\n", hostname)
-	fmt.Println("    3. Key type: Authentication and Signing")
-	fmt.Println("    4. Paste your public key (shown above)")
-	fmt.Println()
 }
 
 func showGitConfig() error {
