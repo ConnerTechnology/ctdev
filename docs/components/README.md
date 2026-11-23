@@ -27,7 +27,7 @@ actually going to use it. See [Security](../security.md).
 
 ## The registry
 
-66 components, counted in `ctdev/component/registry.go` on 2026-11-23. A
+68 components, counted in `ctdev/component/registry.go` on 2026-11-23. A
 component unsupported on this OS reports as skipped rather than failing.
 
 ### CLI Tools
@@ -41,6 +41,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `ccstatusline` | Claude Code status line | Linux, macOS |
 | `ccusage` | Claude Code token usage and cost reports | Linux, macOS |
 | `claude-code` | Claude Code CLI and configuration | Linux, macOS |
+| `codex` | OpenAI Codex CLI coding agent | Linux, macOS |
 | `devcontainer` | Dev Containers CLI + dx wrapper | Linux, macOS |
 | `direnv` | Per-directory environment variables | Linux, macOS |
 | `docker` | Docker container runtime | Linux, macOS |
@@ -48,6 +49,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `fd` | Fast, friendly find alternative | Linux, macOS |
 | `ffmpeg` | Audio and video converter and recorder | Linux, macOS |
 | `fzf` | Fuzzy finder for the shell | Linux, macOS |
+| `gemini-cli` | Google Gemini CLI coding agent | Linux, macOS |
 | `gh` | GitHub CLI | Linux, macOS |
 | `git-spice` | Git Spice stacked branches tool | Linux, macOS |
 | `gws` | Google Workspace CLI (Drive, Gmail, Calendar, and more) | Linux, macOS |
