@@ -102,7 +102,7 @@ func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 		steps = append(steps, updateStep{
 			name: fmt.Sprintf("npm globals (%d)", len(names)),
 			run: func(ctx context.Context, o sysutil.Opts) error {
-				env, name, prefix := globalNpm()
+				env, name, prefix, _ := globalNpm()
 				return sysutil.RunEnv(ctx, o, env, name, append(prefix, append([]string{"update", "-g"}, names...)...)...)
 			},
 		})

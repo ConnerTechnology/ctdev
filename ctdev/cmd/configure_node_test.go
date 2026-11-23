@@ -599,3 +599,38 @@ func TestNodeInstallDryRunWithoutNodenv(t *testing.T) {
 		})
 	}
 }
+
+// A "system" global is the user's Node, so inside a repo the default scope
+// stays the project and the global is left alone.
+func TestNodeInstallSystemGlobalDefaultsToProjectInRepo(t *testing.T) {
+	f := useFakeNodenv(t, supported, "")
+	f.global(t, "system")
+	top := gitProject(t)
+
+	captureStdout(t, func() {
+		if err := runNodeInstall(context.Background(), "24", true); err != nil {
+			t.Errorf("install: %v", err)
+		}
+	})
+	if b, _ := os.ReadFile(filepath.Join(top, ".node-version")); string(b) != "24.22.3\n" {
+		t.Errorf("%s/.node-version = %q, want 24.22.3", top, b)
+	}
+	if strings.Contains(f.calls(t), "global") {
+		t.Errorf("replaced the system global:\n%s", f.calls(t))
+	}
+}
+
+// With nodenv and no global there is no machine-wide npm, so update must not
+// scan whatever npm the current folder's pin resolves to.
+func TestScanNPMGlobals_NoGlobalScansNothing(t *testing.T) {
+	useFakeNodenv(t, supported, "")
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte("#!/bin/sh\necho '{\"ccusage\":{\"current\":\"1.0.0\",\"latest\":\"2.0.0\"}}'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	items, err := scanNPMGlobals(context.Background())
+	if err != nil || len(items) != 0 {
+		t.Errorf("scan = %v, %v; want nothing", items, err)
+	}
+}

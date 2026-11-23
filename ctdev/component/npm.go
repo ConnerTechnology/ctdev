@@ -64,11 +64,7 @@ func npmInstallGlobal(ctx context.Context, o sysutil.Opts, pkg string) error {
 }
 
 func npmUninstallGlobal(ctx context.Context, o sysutil.Opts, pkg string) error {
-	node := ""
-	if nodenv.Available() {
-		node = nodenv.Global()
-	}
-	if err := runNpm(ctx, o, node, "uninstall", "-g", pkg); err != nil {
+	if err := runNpm(ctx, o, nodenv.GlobalSelector(), "uninstall", "-g", pkg); err != nil {
 		return fmt.Errorf("npm uninstall %s: %w", pkg, err)
 	}
 	return nil
