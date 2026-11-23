@@ -105,10 +105,6 @@ the domain, email and token from `--domain`, `--acme-email`, `CF_API_TOKEN` or
 the existing `~/caddy/.env`. `pihole --batch` applies the category's defaults, which also set
 the upstream to Cloudflare, so run it interactively.
 
-**Claude Code** — `claude-code` isn't a wizard: `ctdev configure claude-code` diffs
-`~/.claude/settings.json` and `CLAUDE.md` against ctdev's baseline and asks before replacing
-either. It also runs after any install that includes `claude-code`.
-
 Every category, with what each one does, is listed in [Commands](commands.md).
 
 ## Secrets

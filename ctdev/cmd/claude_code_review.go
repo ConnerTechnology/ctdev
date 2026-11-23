@@ -10,26 +10,7 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/term"
-	"github.com/spf13/cobra"
 )
-
-var configureClaudeCodeCmd = &cobra.Command{
-	Use:   "claude-code",
-	Short: "Review drift in the Claude Code settings ctdev owns",
-	Long: "Compare ~/.claude/settings.json and ~/.claude/CLAUDE.md with ctdev's baseline. " +
-		"For each file that differs, show the diff and ask before backing it up and " +
-		"replacing it (--force replaces without asking, --dry-run only shows the diff). " +
-		"'ctdev install claude-code' runs this after installing.",
-	RunE: runConfigureClaudeCode,
-}
-
-func init() {
-	configureCmd.AddCommand(configureClaudeCodeCmd)
-}
-
-func runConfigureClaudeCode(cmd *cobra.Command, args []string) error {
-	return cancelToClean(reviewClaudeCode(cmdContext(cmd), claudeCodeReviewFromFlags()))
-}
 
 // canPromptClaudeCode reports whether someone is there to answer: a terminal on
 // both ends and no --batch. Unlike isBatchMode it ignores ACCESSIBLE, since the
@@ -67,8 +48,7 @@ func claudeCodeReviewFromFlags() claudeCodeReview {
 }
 
 // reviewClaudeCode brings ~/.claude in line with ctdev's baseline. It runs
-// after the install's progress screen (which can't show a diff or ask) and as
-// `ctdev configure claude-code`. Every question is asked before anything is
+// after the install's progress screen, which can't show a diff or ask. Every question is asked before anything is
 // written, so cancelling a prompt really does change nothing.
 func reviewClaudeCode(ctx context.Context, r claudeCodeReview) error {
 	drifts, err := component.ClaudeCodeDrift()
