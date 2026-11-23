@@ -46,6 +46,12 @@ and replacing a ctdev binary in a directory you cannot write to.
 Bun, nodenv, rbenv, pyenv and the T3 Code CLI all stay inside `$HOME` and are
 updated as you.
 
+Update never changes your Node version: a new Node would leave every global npm
+package behind on the old one. On Linux it pulls the nodenv and node-build
+clones, which is how new Node releases become installable; on macOS Homebrew
+updates them. Moving to a newer Node is `ctdev configure node update`, which
+takes the packages along.
+
 Python updates stay within the minor version you are on: 3.14.8 is offered
 3.14.9, never 3.15. A new minor breaks every installed package and virtualenv,
 so moving to one is `pyenv install 3.15.0 && pyenv global 3.15.0`, done when

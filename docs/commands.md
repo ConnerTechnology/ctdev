@@ -11,7 +11,7 @@ that includes it, in every mode, so `--dry-run` shows the diff and `--force` say
 backup went.
 
 If a dependency fails, its dependents in the same run are skipped with the reason
-(`ccstatusline skipped: node failed`) rather than run against a missing dependency. They
+(`ccstatusline skipped: nodenv failed`) rather than run against a missing dependency. They
 count as skipped, not failed, and on the progress screen the `Retry:` line lists them with
 the dependency (`--batch` prints no `Retry:` line).
 `uninstall` runs every selected component regardless.
@@ -29,6 +29,14 @@ ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key (installs git first if missing)
 ctdev configure aws             # Pick the AWS profile; offers `aws configure sso` when there is none (installs the AWS CLI first if missing)
+ctdev configure node install [major|version] [--global|--project]
+                                # Install a Node version (22 means its latest release) and use it for every folder or
+                                #   this project (.node-version at the git top); making it global offers to copy the old
+                                #   global's npm packages. --batch needs the version
+ctdev configure node update [--global|--project]
+                                # Update the Node in use here (a .node-version, else global) to the latest of its major,
+                                #   moving global npm packages and deleting the old version unless something here uses it
+ctdev configure node uninstall [version]  # Delete a Node version and its npm packages; never the global one
 ctdev configure ssh             # Remote access: SSH server, key-only login, keep programs running,
                                 #   Mosh, vscode.dev tunnel, LAN-only firewall (UFW)
 ctdev configure power           # Power profile, display/suspend/screensaver timers (minutes or never), never suspend,

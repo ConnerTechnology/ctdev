@@ -13,14 +13,10 @@ func devcontainerInstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 
 	// Phase 1: install the CLI (skip if present unless --force).
-	if opts.Force || !sysutil.CommandExists("devcontainer") {
+	if opts.Force || !alreadyInstalled("devcontainer") {
 		fmt.Fprintln(opts.Stdout, "Installing @devcontainers/cli...")
-		npm, err := npmPath(o)
-		if err != nil {
+		if err := npmInstallGlobal(ctx, o, "@devcontainers/cli"); err != nil {
 			return err
-		}
-		if err := sysutil.Run(ctx, o, npm, "install", "-g", "@devcontainers/cli"); err != nil {
-			return fmt.Errorf("npm install @devcontainers/cli: %w", err)
 		}
 	} else {
 		fmt.Fprintln(opts.Stdout, "@devcontainers/cli already installed, updating wrappers...")
@@ -56,9 +52,7 @@ func devcontainerUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing @devcontainers/cli and dx wrapper...")
 
-	if npm, err := npmPath(o); err == nil {
-		_ = sysutil.Run(ctx, o, npm, "uninstall", "-g", "@devcontainers/cli")
-	}
+	_ = npmUninstallGlobal(ctx, o, "@devcontainers/cli")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
