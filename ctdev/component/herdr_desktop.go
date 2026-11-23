@@ -70,6 +70,9 @@ func herdrDesktopInstall(ctx context.Context, opts ExecOpts) error {
 			return fmt.Errorf("Herdr desktop has no Intel Mac build: %w", ErrUnsupportedOS)
 		}
 	case platform.Linux:
+		if p.Arch != "amd64" && p.Arch != "arm64" {
+			return fmt.Errorf("Herdr desktop only available for amd64/arm64 on Linux (got %s): %w", p.Arch, ErrUnsupportedOS)
+		}
 	default:
 		return ErrUnsupportedOS
 	}
@@ -89,6 +92,12 @@ func herdrDesktopInstall(ctx context.Context, opts ExecOpts) error {
 	// of our own would gain nothing.
 	if err := sysutil.Run(ctx, o, "sh", "-c", "curl -fsSL "+herdrDesktopInstallURL+" | sh"); err != nil {
 		return fmt.Errorf("herdr desktop installer: %w", err)
+	}
+	// A failed curl leaves the inner sh reading nothing, and it exits 0, so
+	// the pipeline's status alone can't tell a failed install from one that
+	// worked.
+	if !o.DryRun && !herdrDesktopInstalled() {
+		return fmt.Errorf("herdr desktop installer finished but %s is missing", herdrDesktopLinuxPaths()[0])
 	}
 	return nil
 }

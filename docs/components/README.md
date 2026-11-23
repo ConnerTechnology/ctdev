@@ -53,7 +53,6 @@ component unsupported on this OS reports as skipped rather than failing.
 | `gws` | Google Workspace CLI (Drive, Gmail, Calendar, and more) | Linux, macOS |
 | `helm` | Kubernetes package manager | Linux, macOS |
 | `herdr` | Background runtime for coding agents: sessions keep running when you disconnect | Linux, macOS |
-| `herdr-desktop` | Herdr desktop app: terminals and coding agents that keep running when you close the window | Linux, macOS (Apple Silicon) |
 | `jq` | JSON processor | Linux, macOS |
 | `kubectl` | Kubernetes CLI | Linux, macOS |
 | `lazygit` | Terminal UI for git | Linux, macOS |
@@ -75,6 +74,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `claude-desktop` | Claude desktop application | Linux, macOS |
 | `cleanmymac` | CleanMyMac system cleaner | macOS |
 | `dbeaver` | DBeaver database tool | Linux, macOS |
+| `herdr-desktop` | Herdr desktop app: terminals and coding agents that keep running when you close the window | Linux, macOS (Apple Silicon) |
 | `linear` | Linear issue tracker | macOS |
 | `logi-options` | Logitech Options+ | macOS |
 | `nomachine` | NoMachine remote desktop server | Linux |
