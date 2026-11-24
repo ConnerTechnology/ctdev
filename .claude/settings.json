@@ -1,8 +1,44 @@
 {
+  "allowedMcpServers": [
+    {
+      "serverUrl": "https://mcp.context7.com/*"
+    }
+  ],
   "attribution": {
     "commit": "",
     "pr": "",
     "sessionUrl": false
+  },
+  "autoMemoryEnabled": false,
+  "claudeMdExcludes": [
+    "**/.claude/CLAUDE.md",
+    "**/Repos/github.com/ConnerTechnology/AI/config/CLAUDE.md",
+    "**/Repos/github.com/ConnerTechnology/CLAUDE.md",
+    "**/ctdev/component/configs/claude-code/CLAUDE.md"
+  ],
+  "deniedMcpServers": [
+    {
+      "serverName": "claude-in-chrome"
+    }
+  ],
+  "disableBundledSkills": true,
+  "disableClaudeAiConnectors": true,
+  "disableWorkflows": true,
+  "enableArtifact": false,
+  "enabledPlugins": {
+    "code-review@claude-plugins-official": false,
+    "code-simplifier@claude-plugins-official": false,
+    "context7@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "gopls-lsp@claude-plugins-official": true,
+    "last30days@last30days-skill": false,
+    "mattpocock-skills@claude-plugins-official": false,
+    "security-guidance@claude-plugins-official": false,
+    "sentry@claude-plugins-official": false,
+    "stripe@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": false,
+    "typescript-lsp@claude-plugins-official": false
   },
   "hooks": {
     "PostToolUse": [
@@ -123,6 +159,11 @@
       }
     ]
   },
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
+    }
+  },
   "permissions": {
     "allow": [
       "Bash(git status:*)",
@@ -140,5 +181,19 @@
       "Read(./.env.*)",
       "Read(./**/credentials*)"
     ]
+  },
+  "skillOverrides": {
+    "brand-guidelines": "off",
+    "doc-coauthoring": "off",
+    "docs": "off",
+    "docx": "off",
+    "humanizer": "off",
+    "import-memory": "off",
+    "internal-comms": "off",
+    "morning": "off",
+    "pdf": "off",
+    "pptx": "off",
+    "skill-creator": "off",
+    "xlsx": "off"
   }
 }
