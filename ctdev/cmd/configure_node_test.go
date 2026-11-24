@@ -634,3 +634,15 @@ func TestScanNPMGlobals_NoGlobalScansNothing(t *testing.T) {
 		t.Errorf("scan = %v, %v; want nothing", items, err)
 	}
 }
+
+// npm components never install into a system Node, so update leaves its
+// packages alone too (and says nothing about a missing npm).
+func TestScanNPMGlobals_SystemGlobalScansNothing(t *testing.T) {
+	f := useFakeNodenv(t, supported, "")
+	f.global(t, "system")
+	t.Setenv("PATH", t.TempDir())
+	items, err := scanNPMGlobals(context.Background())
+	if err != nil || len(items) != 0 {
+		t.Errorf("scan = %v, %v; want nothing", items, err)
+	}
+}

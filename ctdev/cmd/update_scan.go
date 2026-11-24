@@ -440,10 +440,11 @@ func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 // globalNpm is how to run npm against the global Node: through nodenv with
 // NODENV_VERSION set, so a project's .node-version in the current folder
 // can't redirect it (npm components install into the global Node), else the
-// npm on PATH. ok is false when nodenv has no global, so there is no
-// machine-wide npm to update.
+// npm on PATH. ok is false when nodenv has no global of its own ("system"
+// included): npm components install only into a nodenv Node, so there is no
+// machine-wide npm for ctdev to update.
 func globalNpm() (env []string, name string, prefix []string, ok bool) {
-	if v := nodenv.GlobalSelector(); v != "" {
+	if v := nodenv.GlobalSelector(); v != "" && v != nodenv.System {
 		return []string{"NODENV_VERSION=" + v}, nodenv.Bin(), []string{"exec", "npm"}, true
 	}
 	if nodenv.Available() {

@@ -44,7 +44,7 @@ func npmGlobalUninstaller(name, pkg string) func(context.Context, ExecOpts) erro
 // enough. It only stats files: the picker runs it for every component.
 func npmPackageDetect(cmd, pkg string) func() bool {
 	return func() bool {
-		if v := nodenv.Global(); v != "" {
+		if v := nodenv.Global(); v != "" && nodenv.Available() {
 			return nodenv.HasPackage(v, pkg)
 		}
 		p, err := exec.LookPath(cmd)
