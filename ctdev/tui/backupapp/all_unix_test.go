@@ -100,10 +100,13 @@ func TestAllOpensAFolder(t *testing.T) {
 	if err := allFlow(context.Background(), ui, d); err != ErrCancelled {
 		t.Fatalf("err = %v", err)
 	}
-	// browseBackups is a stub until its slice lands, so its error comes back
-	// to the dashboard.
-	if !anyContains(ui.said(Error), "browsing backups isn't built yet") {
-		t.Errorf("said %+v, want List backups to reach browseBackups", ui.Said)
+	// Picking the folder opens its backups (V2), after the folders list.
+	picks := requestsOf[Picker](ui)
+	if len(picks) < 2 {
+		t.Fatalf("pickers = %d, want the folders and then the folder's backups", len(picks))
+	}
+	if title := picks[len(picks)-1].Page.Title; !strings.Contains(title, "Backups") {
+		t.Errorf("last picker title = %q, want the folder's backups", title)
 	}
 }
 
