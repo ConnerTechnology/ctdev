@@ -57,9 +57,17 @@ func next[T any](q *[]any) (T, error) {
 
 func (f *fakeUI) Dashboard(_ context.Context, d Dashboard) (Action, error) {
 	f.Requests = append(f.Requests, d)
+	for _, a := range d.Actions {
+		if len([]rune(a.Key)) != 1 {
+			f.t.Errorf("action %q has key %q: an action's key is one character", a.Label, a.Key)
+		}
+	}
 	key, err := next[string](&f.Dashboards)
 	if err != nil {
 		return Action{}, err
+	}
+	if key == "esc" {
+		return Action{}, ErrBack
 	}
 	for _, a := range d.Actions {
 		if a.Key == key && !a.Dimmed {

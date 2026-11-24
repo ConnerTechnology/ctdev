@@ -42,11 +42,12 @@ ctdev configure caddy           # Caddy reverse proxy (domain, ACME email, CF to
 ctdev configure gpu             # NVIDIA driver/MOK signing + GPU settings (--show, --recover)
 ctdev configure <category> --batch  # Apply a category's defaults non-interactively
 ctdev configure storage --batch --swapfile-size 2  # Same, with a 2 GiB swapfile; also resizes ctdev's own
-ctdev backup                    # The folder you're in: its backup status, then a menu: Back up now, List backups
-                                #   (details, Download as zip, Delete this backup), Configure, Stop backing up, Delete all backups
+ctdev backup                    # The folder you're in, full screen: its status and a key per action: b Back up now,
+                                #   l List backups (details, z Download as zip, D Delete this backup), c Configure,
+                                #   s Stop backing up, D Delete all, q Quit
 ctdev backup --batch            # Status only (also when piped); exits non-zero if not backed up, or the last backup failed or is overdue
-ctdev backup --all              # From any directory: every backed-up folder in the destination, by computer, to list and
-                                #   download; Computers (remove one, I lost this computer); Emergency Kit and password
+ctdev backup --all              # From any directory, full screen: l every backed-up folder in the destination, by computer,
+                                #   to list and download; c Computers (remove one, I lost this computer); e Emergency Kit and password
                                 #   (show the kit, change the master password, new Secret Key, replace backend credentials,
                                 #   Recovery Code, paste an updated kit); connects this computer to a destination first if it has none
 ctdev cleanup                   # Reclaim disk space (scan, pick tasks, clean; --dry-run to preview)

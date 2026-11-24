@@ -22,15 +22,20 @@ func (f *fakeScheduler) Install(context.Context) error { f.installs++; return f.
 
 func (f *fakeScheduler) RemoveIfIdle(context.Context) (bool, error) { return false, nil }
 
-// Configure refuses a status with no folder to act on, before any screen.
-func TestConfigureRefusesAnEmptyTarget(t *testing.T) {
-	ui := &fakeUI{t: t}
+// Configure and Back up now refuse a status with no folder to act on,
+// before any screen.
+func TestActionsRefuseAnEmptyTarget(t *testing.T) {
 	var s backup.Status // what a status that couldn't find the folder looks like
-	if err := configureFolder(context.Background(), ui, Deps{Machine: &backup.Machine{}}, s); err == nil || err.Error() != "no folder to act on" {
-		t.Errorf("want \"no folder to act on\", got %v", err)
-	}
-	if len(ui.Requests) != 0 {
-		t.Errorf("showed %+v", ui.Requests)
+	for name, act := range map[string]func(context.Context, UI, Deps, backup.Status) error{
+		"Configure": configureFolder, "Back up now": backUpNow,
+	} {
+		ui := &fakeUI{t: t}
+		if err := act(context.Background(), ui, Deps{Machine: &backup.Machine{}}, s); err == nil || err.Error() != "no folder to act on" {
+			t.Errorf("%s: want \"no folder to act on\", got %v", name, err)
+		}
+		if len(ui.Requests) != 0 {
+			t.Errorf("%s showed %+v", name, ui.Requests)
+		}
 	}
 }
 

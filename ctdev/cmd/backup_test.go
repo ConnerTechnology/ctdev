@@ -1,18 +1,14 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
-	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/spf13/cobra"
 )
 
@@ -139,23 +135,6 @@ func TestBackupWithoutATerminalFailsWhenTheConfigCantBeRead(t *testing.T) {
 	}
 }
 
-// Back up now and Configure refuse a status with no folder to act on.
-func TestActionsRefuseAnEmptyTarget(t *testing.T) {
-	backupFolderForTest(t)
-	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	var s backup.Status // what a status that couldn't find the folder looks like
-	if err := backupNow(ctx, m, s); err == nil || err.Error() != "no folder to act on" {
-		t.Errorf("backupNow with no target: want \"no folder to act on\", got %v", err)
-	}
-	if err := configureFolder(ctx, m, s); err == nil || err.Error() != "no folder to act on" {
-		t.Errorf("configureFolder with no target: want \"no folder to act on\", got %v", err)
-	}
-}
-
 // A check that passes when backups can't run is useless: a destination this
 // computer isn't set up on fails it.
 func TestBackupWithoutATerminalFailsWhenTheDestinationIsMissing(t *testing.T) {
@@ -201,113 +180,6 @@ func TestBackupWithoutATerminalFailsWhenTheDestinationCantBeRead(t *testing.T) {
 	if !strings.Contains(out, "Problem") {
 		t.Errorf("status = %q", out)
 	}
-}
-
-// Configure in a folder on a computer with no destination walks through
-// creating one, then writes the folder's config file with no secret in it.
-func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
-	if _, err := exec.LookPath("restic"); err != nil {
-		if os.Getenv("CI") != "" {
-			t.Fatal("restic is not on PATH; CI must install it before the Go tests")
-		}
-		t.Skip("restic is not installed; install it (ctdev install restic) to run this test")
-	}
-	dir := backupFolderForTest(t)
-	t.Setenv("RESTIC_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
-	repo := filepath.Join(t.TempDir(), "example-backups")
-	const master = "correct horse example staple"
-
-	saved := stdinScanner
-	t.Cleanup(func() { stdinScanner = saved })
-	stdinScanner = bufio.NewScanner(strings.NewReader(strings.Join([]string{
-		"",                            // destination: 1) Create a new destination
-		"example-backups",             // its name
-		"4",                           // local path
-		"~/Projects/website/.backups", // inside the folder: refused, asked again
-		"4",
-		repo,
-		master, master,
-		"",                 // Enter once the kit and Recovery Code are saved
-		"1",                // Hourly
-		"", "", "", "", "", // default retention
-	}, "\n") + "\n"))
-
-	ctx := context.Background()
-	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	installs := fakeSchedulerInstall(t)
-	var cfgErr error
-	out := captureStdout(t, func() { cfgErr = configureFolder(ctx, m, m.Status(ctx, dir)) })
-	if cfgErr != nil {
-		t.Fatalf("configureFolder: %v\n%s", cfgErr, out)
-	}
-	if *installs != 1 {
-		t.Errorf("Configure installed the scheduler %d times, want once", *installs)
-	}
-	for _, want := range []string{"back the repository up into itself", "Emergency Kit", "Secret Key:", "Recovery Code", "can't be decrypted"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("setup output is missing %q", want)
-		}
-	}
-
-	cfg, err := backup.ReadConfig(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Destination != "example-backups" || cfg.Schedule != backup.Hourly || cfg.Keep != backup.DefaultKeep {
-		t.Errorf("config = %+v", cfg)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, backup.ConfigFileName))
-	if strings.Contains(string(data), "CT1-") || strings.Contains(string(data), master) || strings.Contains(string(data), repo) {
-		t.Errorf("the folder's config file holds a secret or the address:\n%s", data)
-	}
-	if s := m.Status(ctx, dir); !s.Scheduled || s.DestinationMissing {
-		t.Errorf("after Configure: scheduled %v, destination missing %v", s.Scheduled, s.DestinationMissing)
-	}
-
-	// Configured, readable and never failed: the non-terminal check passes.
-	if out, err := runBackupBatch(t); err != nil {
-		t.Errorf("status check after Configure: %v\n%s", err, out)
-	}
-
-	// From a subfolder, Configure reconfigures the backed-up folder above it,
-	// starting from its current values.
-	docs := filepath.Join(dir, "docs")
-	if err := os.MkdirAll(docs, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	stdinScanner = bufio.NewScanner(strings.NewReader(strings.Join([]string{
-		"",                 // destination: 1) example-backups, the current one
-		"3",                // Weekly
-		"", "", "", "", "", // keep the retention
-	}, "\n") + "\n"))
-	out = captureStdout(t, func() { cfgErr = configureFolder(ctx, m, m.Status(ctx, docs)) })
-	if cfgErr != nil {
-		t.Fatalf("configureFolder from a subfolder: %v\n%s", cfgErr, out)
-	}
-	again, err := backup.ReadConfig(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.Schedule != backup.Weekly || again.ID != cfg.ID || again.Keep != cfg.Keep {
-		t.Errorf("reconfigured from a subfolder: %+v, want weekly with the same ID and retention", again)
-	}
-	if _, err := os.Stat(filepath.Join(docs, backup.ConfigFileName)); !os.IsNotExist(err) {
-		t.Error("no config file may be written in the subfolder")
-	}
-}
-
-// fakeSchedulerInstall counts Configure's scheduler installs instead of
-// touching this computer's user timers or launch agents.
-func fakeSchedulerInstall(t *testing.T) *int {
-	t.Helper()
-	n := new(int)
-	saved := installScheduler
-	installScheduler = func(*backup.Machine, context.Context) error { *n++; return nil }
-	t.Cleanup(func() { installScheduler = saved })
-	return n
 }
 
 // The non-terminal check fails for an overdue folder.
@@ -403,37 +275,6 @@ func TestRemovedBackupCommandsAreUnknown(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "unknown") {
 			t.Errorf("ctdev %s: want an unknown-command error, got %v", name, err)
-		}
-	}
-}
-
-// Stop backing up offers to delete the folder's backups, so it refuses when
-// it can't see them, rather than stop without that chance. It refuses before
-// asking anything, and the folder stays backed up.
-func TestStopBackingUpRefusesWhenTheBackupsCantBeRead(t *testing.T) {
-	dir := backupFolderForTest(t)
-	cfg := backup.NewConfig("example-backups")
-	if err := backup.WriteConfig(dir, cfg); err != nil {
-		t.Fatal(err)
-	}
-	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, s := range map[string]backup.Status{
-		"unreadable": {Folder: backup.Folder{Cwd: dir, Root: dir, Config: &cfg}, Target: dir,
-			Destination: "example-backups", ReadErr: errors.New("example failure")},
-		"not set up here": {Folder: backup.Folder{Cwd: dir, Root: dir, Config: &cfg}, Target: dir,
-			Destination: "example-backups", DestinationMissing: true},
-	} {
-		err := stopBackingUp(context.Background(), m, s)
-		if err == nil {
-			t.Errorf("%s: want a refusal", name)
-		} else if name == "unreadable" && !strings.Contains(err.Error(), "can't read the backups of ~/Projects/website") {
-			t.Errorf("%s: error %q doesn't say why", name, err)
-		}
-		if _, err := os.Stat(filepath.Join(dir, backup.ConfigFileName)); err != nil {
-			t.Errorf("%s: the config file is gone: %v", name, err)
 		}
 	}
 }

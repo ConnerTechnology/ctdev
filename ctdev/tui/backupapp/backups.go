@@ -132,7 +132,7 @@ func browseBackups(ctx context.Context, ui UI, d Deps, dests []*backup.Destinati
 			_, err := ui.Dashboard(ctx, Dashboard{
 				Page: Page{Title: title, Subtitle: storedIn(dests, oneOff, styles.Value.Render("0 backups")+styles.Dimmed.Render(" in ")),
 					Body: "  " + styles.Value.Render(where+" has no backups.")},
-				Actions: []Action{{Key: "esc", Label: "Back"}}, Help: "esc back"})
+				Back: "Back", Help: "esc back"})
 			if err == nil {
 				err = ErrBack
 			}
@@ -229,9 +229,9 @@ func backupDetail(ctx context.Context, ui UI, d Deps, title string, b listed, la
 	focus := "z"
 	for {
 		a, err := ui.Dashboard(ctx, Dashboard{Page: page, Focus: focus, Actions: []Action{
-			{Key: "z", Label: "Download as zip"}, {Key: "D", Label: "Delete this backup"}, {Key: "esc", Label: "Back"}}})
+			{Key: "z", Label: "Download as zip"}, {Key: "D", Label: "Delete this backup"}}, Back: "Back"})
 		switch {
-		case errors.Is(err, ErrBack), err == nil && a.Key == "esc":
+		case errors.Is(err, ErrBack):
 			return false, nil
 		case err != nil:
 			return false, err
@@ -363,7 +363,7 @@ func backups(n int, all bool) string {
 	return fmt.Sprintf("%d backups", n)
 }
 
-// deleteAllBackups is Delete all backups: after y and typing the folder's
+// deleteAllBackups is Delete all: after y and typing the folder's
 // name, it forgets every backup of the folder (rows Y).
 func deleteAllBackups(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 	m := d.Machine

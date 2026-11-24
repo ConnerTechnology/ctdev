@@ -122,7 +122,7 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 		t.Errorf("subtitles %q, %q: a new destination has no folders to continue", forms[0].Page.Subtitle, forms[3].Page.Subtitle)
 	}
 	kits := requestsOf[KitScreen](ui)
-	if len(kits) != 1 || !strings.Contains(kits[0].Kit, "Secret Key:") || kits[0].RecoveryCode == "" ||
+	if len(kits) != 1 || kits[0].New || !strings.Contains(kits[0].Kit, "Secret Key:") || kits[0].RecoveryCode == "" ||
 		!slices.ContainsFunc(kits[0].Lines, func(l Line) bool { return strings.Contains(l.Text, "can't be decrypted") }) {
 		t.Errorf("kit screens = %+v", kits)
 	}
@@ -403,7 +403,7 @@ func TestConnectWithTheRecoveryCode(t *testing.T) {
 		t.Errorf("the wrong code's error = %q", e)
 	}
 	kits := requestsOf[KitScreen](ui)
-	if len(kits) != 1 || kits[0].RecoveryCode == "" || kits[0].RecoveryCode == setup.RecoveryCode || kits[0].Kit == setup.Kit {
+	if len(kits) != 1 || !kits[0].New || kits[0].RecoveryCode == "" || kits[0].RecoveryCode == setup.RecoveryCode || kits[0].Kit == setup.Kit {
 		t.Errorf("kit screens = %+v, want the new kit and code", kits)
 	}
 	if _, err := backup.ParseKit(kits[0].Kit); err != nil || dest.Name != "example-backups" {

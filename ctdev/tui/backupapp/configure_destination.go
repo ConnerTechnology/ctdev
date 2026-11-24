@@ -343,7 +343,7 @@ func recoverWith(ctx context.Context, ui UI, page pageFor, name, keysOn string, 
 			lines = append(lines, Line{Warning, capitalize(err.Error())}, Line{})
 		}
 		lines = append(lines, paragraph(Info, pasteOnOtherComputers, frameWidth-4)...)
-		err = ui.ShowKit(ctx, KitScreen{Page: page("New Emergency Kit"), Kit: r.Kit, RecoveryCode: r.RecoveryCode, Lines: lines})
+		err = ui.ShowKit(ctx, KitScreen{Page: page("New Emergency Kit"), Kit: r.Kit, RecoveryCode: r.RecoveryCode, Lines: lines, New: true})
 		// The reset is done: leaving the kit unsaved doesn't undo it.
 		if err != nil && !errors.Is(err, ErrBack) {
 			return nil, err

@@ -82,12 +82,16 @@ func (kv *kitView) view(width, _ int) stepView {
 	if need := kv.needs(); width < need {
 		lines = append(lines, "  "+styles.Warning.Render(fmt.Sprintf("Widen the window to at least %d columns to show the Emergency Kit.", need)))
 	} else {
-		lines = append(lines, "  "+styles.Header.Render("Emergency Kit")+"  "+styles.Dimmed.Render("save it in your password manager or print it"), "")
+		heading := ""
+		if k.New {
+			heading = "New "
+		}
+		lines = append(lines, "  "+styles.Header.Render(heading+"Emergency Kit")+"  "+styles.Dimmed.Render("save it in your password manager or print it"), "")
 		for _, l := range strings.Split(strings.TrimRight(k.Kit, "\n"), "\n") {
 			lines = append(lines, "    "+styles.Value.Render(l))
 		}
 		if k.RecoveryCode != "" {
-			lines = append(lines, "", "  "+styles.Header.Render("Recovery Code")+"  "+styles.Dimmed.Render("keep it apart from the kit; it resets a forgotten master password"),
+			lines = append(lines, "", "  "+styles.Header.Render(heading+"Recovery Code")+"  "+styles.Dimmed.Render("keep it apart from the kit; it resets a forgotten master password"),
 				"", "    "+styles.Value.Render(k.RecoveryCode))
 		}
 	}

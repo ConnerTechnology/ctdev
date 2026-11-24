@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,42 +34,6 @@ func TestBackupAllWithoutATerminalOrADestination(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".config", "ctdev")); !os.IsNotExist(err) {
 		t.Errorf("--all wrote under ~/.config/ctdev (%v)", err)
-	}
-}
-
-// Creating a destination under --all refuses a local path relative to the
-// current directory, which --all can be run from anywhere, but takes one
-// named in full, even under the current directory: ~/Backups from ~.
-func TestCreatingADestinationUnderAllNeedsAPathNamedInFull(t *testing.T) {
-	backupFolderForTest(t)
-	home := os.Getenv("HOME")
-	t.Chdir(home)
-	saved := stdinScanner
-	t.Cleanup(func() { stdinScanner = saved })
-	stdinScanner = bufio.NewScanner(strings.NewReader(strings.Join([]string{
-		"2",               // Create a new destination
-		"example-backups", // its name
-		"4", "backups",    // local path, relative: refused
-		"4", "~/Backups", // named in full, under the current directory: taken
-		// then the input ends at the master password, which cancels
-	}, "\n") + "\n"))
-	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var setupErr error
-	out := captureStdout(t, func() { _, setupErr = destinationForAll(context.Background(), m) })
-	if !errors.Is(setupErr, errPromptCancelled) {
-		t.Errorf("want the setup cancelled when the input ends, got %v", setupErr)
-	}
-	if strings.Count(out, "give an absolute path or one starting with ~/") != 1 {
-		t.Errorf("want only the relative path refused:\n%s", out)
-	}
-	if !strings.Contains(out, "never stores the master password") {
-		t.Errorf("~/Backups should be taken, moving on to the master password:\n%s", out)
-	}
-	if _, err := os.Stat(filepath.Join(home, "Backups")); !os.IsNotExist(err) {
-		t.Errorf("a cancelled setup made ~/Backups (%v)", err)
 	}
 }
 
