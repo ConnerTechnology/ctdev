@@ -1,11 +1,14 @@
 # ctdev CLI
 
 `ctdev install <component>` installs the component (pulling in its `Dependencies`
-first) and then runs its configuration step if it has one — a `configure <name>`
-category (e.g. `pihole`) or a dedicated wizard (`caddy`; see
+first) and then runs its configuration step if it has one — the settings category
+of the same name (`pihole`) or a dedicated wizard (`aws`, `caddy`, `git`, `nodenv`, `ssh`; see
 `componentWizards` in `cmd/install.go`). Re-running `install` on something
-already installed says so and jumps straight to configuration. `ctdev configure
-<name>` configures without installing. (Both skipped in `--batch`/`--dry-run`.)
+already installed runs its installer again, then says it is already installed and
+opens its configuration; one with no configuration step only says it is already installed.
+`ctdev configure <name>` configures without installing, except Pi-hole: its
+settings have no `configure pihole` subcommand and run from `ctdev install pihole`.
+(The configuration step is skipped in `--batch`/`--dry-run`.)
 The exception is `claude-code`: its drift review of `~/.claude/` runs after every install
 that includes it, in every mode, so `--dry-run` shows the diff and `--force` says where the
 backup went.
@@ -23,7 +26,7 @@ ctdev uninstall <component...>  # Remove specific components
 ctdev update [-y]               # Update system packages, components, and Docker stacks
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
-ctdev info                      # Inventory: specs, kernel, uptime, drives, usage, installed components
+ctdev info                      # Inventory: specs, kernel, uptime, drives, usage, installed components (Linux; macOS shows no uptime, drives or usage)
 ctdev configure                 # Full-screen settings browser (all categories)
 ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
