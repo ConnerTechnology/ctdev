@@ -143,7 +143,7 @@ func TestAllComputers(t *testing.T) {
 func TestAllWithNoDestination(t *testing.T) {
 	bin, _ := keyStandin(t)
 	d := Deps{Machine: machineOn(t, bin, "example-laptop"), Cwd: t.TempDir()}
-	ui := &fakeUI{t: t, Picks: []any{1, 0}}
+	ui := &fakeUI{t: t, Picks: []any{1, 0}, Forms: []any{ErrBack, ErrBack}}
 	if err := allFlow(context.Background(), ui, d); err != ErrCancelled {
 		t.Fatalf("err = %v", err)
 	}
@@ -151,9 +151,9 @@ func TestAllWithNoDestination(t *testing.T) {
 	if len(p) != 3 || p[0].Page.Badge != (Badge{Attention, "NOT SET UP"}) || !p[0].Quit || p[1].Cursor != 1 {
 		t.Errorf("offers = %+v", p)
 	}
-	// Both are stubs until the Configure slice lands.
-	if got := ui.said(Error); len(got) != 2 || !strings.Contains(got[0], "creating a destination") || !strings.Contains(got[1], "connecting a destination") {
-		t.Errorf("said %+v, want Create, then Connect, reached", ui.Said)
+	// esc on Create's form, then on Connect's kit, comes back to the offer.
+	if f := requestsOf[Form](ui); len(f) != 2 || !hasField(f[0], "name") || !hasKind(f[1], KitPaste) {
+		t.Errorf("forms = %+v, want Create's, then Connect's", f)
 	}
 }
 
@@ -184,7 +184,7 @@ func TestAllOffersThePasteWhenItCantRead(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "fail-list"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ui := &fakeUI{t: t, Dashboards: []any{"p", "q"}}
+	ui := &fakeUI{t: t, Dashboards: []any{"p", "q"}, Forms: []any{ErrBack}}
 	err := allFlow(context.Background(), ui, d)
 	if err == nil || !strings.Contains(err.Error(), "example failure") {
 		t.Fatalf("err = %v, want the read error", err)
@@ -194,9 +194,9 @@ func TestAllOffersThePasteWhenItCantRead(t *testing.T) {
 		!strings.HasPrefix(dash[0].Message[0].Text, "Can't read example-backups: ") {
 		t.Errorf("offer = %+v", dash)
 	}
-	// pasteUpdatedKit is a stub until the Configure slice lands.
-	if !anyContains(ui.said(Error), "pasting a kit") {
-		t.Errorf("said %+v, want p to reach pasteUpdatedKit", ui.Said)
+	// p asks for the kit; esc there comes back to the offer.
+	if f := requestsOf[Form](ui); len(f) != 1 || !hasKind(f[0], KitPaste) {
+		t.Errorf("forms = %+v, want the kit paste", f)
 	}
 }
 
@@ -230,4 +230,22 @@ func TestAllEndsWhenTheKeyNoLongerOpensIt(t *testing.T) {
 	if errors.Is(err, backup.ErrWrongPassword) {
 		t.Errorf("err = %v, want it said in words", err)
 	}
+}
+
+func hasField(f Form, key string) bool {
+	for _, fd := range f.Fields {
+		if fd.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func hasKind(f Form, k FieldKind) bool {
+	for _, fd := range f.Fields {
+		if fd.Kind == k {
+			return true
+		}
+	}
+	return false
 }

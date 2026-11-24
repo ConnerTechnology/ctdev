@@ -255,9 +255,9 @@ func (fm *form) view(width, _ int) stepView {
 		lines = append(lines, "")
 	}
 	help := "tab next field · shift+tab previous"
-	width := labelWidth
+	lw := labelWidth
 	for _, fd := range fm.f.Fields {
-		width = max(width, len(fd.Label))
+		lw = max(lw, len(fd.Label))
 	}
 	for i, fd := range fm.f.Fields {
 		if !fm.shown(i) {
@@ -268,7 +268,7 @@ func (fm *form) view(width, _ int) stepView {
 		if focused {
 			mark = "▸ "
 		}
-		label := mark + styles.Dimmed.Render(fmt.Sprintf("%-*s", width, fd.Label)) + "   "
+		label := mark + styles.Dimmed.Render(fmt.Sprintf("%-*s", lw, fd.Label)) + "   "
 		v := fm.values[fd.Key]
 		caret := ""
 		if focused {
@@ -279,7 +279,7 @@ func (fm *form) view(width, _ int) stepView {
 			for j, o := range fd.Options {
 				pre := label
 				if j > 0 {
-					pre = strings.Repeat(" ", 2+width+3)
+					pre = strings.Repeat(" ", 2+lw+3)
 				}
 				if o.Value == v {
 					lines = append(lines, pre+styles.Success.Render("◉")+" "+styles.Value.Render(o.Label))

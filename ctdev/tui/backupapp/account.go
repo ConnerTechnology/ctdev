@@ -665,12 +665,7 @@ func changeMasterPassword(ctx context.Context, ui UI, dest *backup.Destination) 
 // enough and both match.
 func askNewMasterPassword(ctx context.Context, ui UI, page Page, intro, submit string) (string, error) {
 	f := Form{Page: page, Intro: intro, Submit: submit, Back: "Cancel", Fields: []Field{
-		{Key: "master", Label: "NEW PASSWORD", Kind: Secret, Required: true, Validate: func(s string) string {
-			if len(s) < 10 {
-				return "Use at least 10 characters."
-			}
-			return ""
-		}},
+		{Key: "master", Label: "NEW PASSWORD", Kind: Secret, Required: true, Validate: masterPasswordRule},
 		{Key: "again", Label: "TYPE IT AGAIN", Kind: Secret, Required: true},
 	}}
 	for {
@@ -749,4 +744,12 @@ func showNewKit(ctx context.Context, ui UI, page Page, kit string) error {
 	}
 	ui.Say(Info, pasteOnOtherComputers)
 	return nil
+}
+
+// masterPasswordRule is what a new master password must be.
+func masterPasswordRule(s string) string {
+	if len(s) < 10 {
+		return "Use at least 10 characters."
+	}
+	return ""
 }

@@ -164,12 +164,7 @@ func createWith(ctx context.Context, ui UI, d Deps, page pageFor, nd backup.NewD
 // masked. v holds what was typed before; mismatch is the second's error.
 func newPasswordFields(v Values, mismatch string) []Field {
 	return []Field{
-		{Key: "master", Label: "MASTER PASSWORD", Kind: Secret, Required: true, Value: v["master"], Validate: func(s string) string {
-			if len(s) < 10 {
-				return "Use at least 10 characters."
-			}
-			return ""
-		}},
+		{Key: "master", Label: "MASTER PASSWORD", Kind: Secret, Required: true, Value: v["master"], Validate: masterPasswordRule},
 		{Key: "again", Label: "TYPE IT AGAIN", Kind: Secret, Required: true, Value: v["again"], Error: mismatch},
 	}
 }
@@ -347,22 +342,16 @@ func recoverWith(ctx context.Context, ui UI, page pageFor, name, keysOn string, 
 			// Part of the reset failed; the kit is what is in force.
 			lines = append(lines, Line{Warning, capitalize(err.Error())}, Line{})
 		}
-		lines = append(lines, pasteElsewhere...)
+		lines = append(lines, paragraph(Info, pasteOnOtherComputers, frameWidth-4)...)
 		err = ui.ShowKit(ctx, KitScreen{Page: page("New Emergency Kit"), Kit: r.Kit, RecoveryCode: r.RecoveryCode, Lines: lines})
 		// The reset is done: leaving the kit unsaved doesn't undo it.
 		if err != nil && !errors.Is(err, ErrBack) {
 			return nil, err
 		}
+		ui.Say(Info, pasteOnOtherComputers)
 		return r.Destination, nil
 	}
 	return nil, errors.New("three wrong tries; nothing was changed")
-}
-
-// pasteElsewhere says how the other computers take a new kit.
-var pasteElsewhere = []Line{
-	{Info, "On each other computer, run ctdev backup --all, choose Emergency Kit and password, then Paste"},
-	{Info, "an updated Emergency Kit, and paste this kit. If that computer can't read the destination any"},
-	{Info, "more, --all offers the paste straight away. No master password is needed there."},
 }
 
 // updateFromKit updates a destination this computer is on from a pasted
