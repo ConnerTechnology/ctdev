@@ -30,7 +30,7 @@ func exampleDest() *backup.Destination {
 }
 
 // The dashboard's rows are what the destination holds; List backups is
-// dimmed, and focus starts on Computers, only with nothing to list (L2, L3).
+// dimmed, and focus starts on Computers, only with nothing to list.
 func TestAllDashboard(t *testing.T) {
 	d := allDashboard(exampleDest(), exampleOverview(), 1_600_000_000, "")
 	if d.Page.Title != "example-backups" || !strings.Contains(ansi.Strip(d.Page.Subtitle), "Backblaze B2") {
@@ -63,7 +63,7 @@ func TestAllDashboard(t *testing.T) {
 }
 
 // Folders are grouped by computer in Overview's order, this one first and
-// marked once, each with its last backup, size and number of backups (L4).
+// marked once, each with its last backup, size and number of backups.
 func TestFoldersAreGroupedByComputer(t *testing.T) {
 	p := foldersPicker("example-backups", exampleOverview().Folders, "example-desktop", 0, now)
 	view := ansi.Strip(strings.Join(newPicker(p).view(frameWidth, 0).content, "\n"))

@@ -84,8 +84,10 @@ anywhere, except on an Emergency Kit, where it asks first, and while something r
 first ctrl+c cancels it. A change to the destination's keys can't be cancelled once it starts.
 
 After an action, its result shows above the bar until the next key. When you quit, ctdev prints
-those result lines in the terminal, so they stay in its scrollback. Nothing else on the screen
-does: no Emergency Kit, Recovery Code or password is ever left there.
+those result lines in the terminal, so they stay in its scrollback, and with `--dry-run` the
+`[dry-run]` commands it would have run, in order with them. Nothing else on the screen does: no
+Emergency Kit, Recovery Code or password is ever left there. Quitting while restic runs stops it
+first, and ctdev says it's waiting while restic removes its lock.
 
 ### Without a terminal
 

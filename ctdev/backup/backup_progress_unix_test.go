@@ -79,60 +79,71 @@ func TestPartialBackupWithProgressKeepsTheSummaryAndWarns(t *testing.T) {
 	}
 }
 
-// restic runs as the leader of its own session, so it has no controlling
-// terminal for an SFTP destination's ssh to take over.
-func TestResticHasNoControllingTerminal(t *testing.T) {
-	m, root, _ := failingMachine(t)
-	marker := filepath.Join(t.TempDir(), "session")
-	standinDestination(t, m, `backup)
+// Under a full-screen program, restic leads its own session, so it has no
+// controlling terminal for an SFTP destination's ssh to take over; otherwise
+// it stays in ctdev's, where ssh can ask for a host key or a passphrase.
+func TestResticLeavesTheTerminalOnlyWhenAsked(t *testing.T) {
+	for _, noTerminal := range []bool{false, true} {
+		m, root, _ := failingMachine(t)
+		m.NoTerminal = noTerminal
+		marker := filepath.Join(t.TempDir(), "session")
+		standinDestination(t, m, `backup)
   ps -o sid= -p $$ | tr -d ' ' > "`+marker+`"
   echo $$ >> "`+marker+`"
   echo '`+exampleSummary+`' ;;`)
-	d, err := m.Destination("example-backups")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := m.BackupNow(context.Background(), d, root, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(marker)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if f := strings.Fields(string(data)); len(f) != 2 || f[0] != f[1] {
-		t.Errorf("restic's session and pid: %q, want restic to lead its own session", data)
+		d, err := m.Destination("example-backups")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.BackupNow(context.Background(), d, root, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(marker)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := strings.Fields(string(data))
+		if len(f) != 2 {
+			t.Fatalf("restic's session and pid: %q", data)
+		}
+		if leads := f[0] == f[1]; leads != noTerminal {
+			t.Errorf("NoTerminal %v: restic's session and pid %q, want it to lead its own session: %v", noTerminal, data, noTerminal)
+		}
 	}
 }
 
 // Cancelling interrupts restic, so it can remove its lock, instead of
-// killing it.
+// killing it, with or without the terminal.
 func TestCancelledBackupInterruptsRestic(t *testing.T) {
-	m, root, _ := failingMachine(t)
-	dir := t.TempDir()
-	fifo, marker := filepath.Join(dir, "started"), filepath.Join(dir, "signal")
-	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	standinDestination(t, m, `backup)
+	for _, noTerminal := range []bool{false, true} {
+		m, root, _ := failingMachine(t)
+		m.NoTerminal = noTerminal
+		dir := t.TempDir()
+		fifo, marker := filepath.Join(dir, "started"), filepath.Join(dir, "signal")
+		if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		standinDestination(t, m, `backup)
   trap 'echo INT > "`+marker+`"; kill $!; exit 130' INT
   sleep 60 >/dev/null 2>&1 &
   echo started > "`+fifo+`"
   wait $! ;;`)
-	d, err := m.Destination("example-backups")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		_, _ = os.ReadFile(fifo) // blocks until the backup has started
+		d, err := m.Destination("example-backups")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			_, _ = os.ReadFile(fifo) // blocks until the backup has started
+			cancel()
+		}()
+		if _, err := m.BackupNow(ctx, d, root, nil, nil); err == nil {
+			t.Fatal("want the cancelled backup to fail")
+		}
 		cancel()
-	}()
-	if _, err := m.BackupNow(ctx, d, root, nil, nil); err == nil {
-		t.Fatal("want the cancelled backup to fail")
-	}
-	if got, _ := os.ReadFile(marker); string(got) != "INT\n" {
-		t.Errorf("restic got %q, want an interrupt", got)
+		if got, _ := os.ReadFile(marker); string(got) != "INT\n" {
+			t.Errorf("NoTerminal %v: restic got %q, want an interrupt", noTerminal, got)
+		}
 	}
 }
 

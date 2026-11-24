@@ -254,4 +254,8 @@ type Running struct {
 	// ChangesKeysOn names the destination whose keys the step changes: such
 	// a step can't be cancelled, and says so.
 	ChangesKeysOn string
+	// Above and Below, when set, make the spinner's line one line of a list
+	// in the body, such as a checklist: styled lines above and below it, and
+	// Detail under them.
+	Above, Below []string
 }

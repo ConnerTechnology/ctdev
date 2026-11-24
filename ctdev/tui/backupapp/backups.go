@@ -90,7 +90,7 @@ func folderDestinations(m *backup.Machine, s backup.Status) ([]*backup.Destinati
 }
 
 // listBackups is List backups: the folder's backups, one backup's details,
-// download and delete (rows V).
+// download and delete.
 func listBackups(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 	m := d.Machine
 	dests, err := folderDestinations(m, s)
@@ -364,7 +364,7 @@ func backups(n int, all bool) string {
 }
 
 // deleteAllBackups is Delete all: after y and typing the folder's
-// name, it forgets every backup of the folder (rows Y).
+// name, it forgets every backup of the folder.
 func deleteAllBackups(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 	m := d.Machine
 	dests, err := folderDestinations(m, s)
@@ -446,8 +446,7 @@ func deleteAllBackups(ctx context.Context, ui UI, d Deps, s backup.Status) error
 // deleted and it comes off this computer's schedule. It optionally deletes
 // the folder's backups too (CTD-87), from every computer, by the folder ID
 // while it's still known; otherwise they're kept. It refuses when it can't
-// see the backups, so the chance to delete them is never silently skipped
-// (rows Y).
+// see the backups, so the chance to delete them is never silently skipped.
 func stopBackingUp(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 	if s.Config == nil {
 		return errors.New("this folder isn't configured, so there's nothing to stop")

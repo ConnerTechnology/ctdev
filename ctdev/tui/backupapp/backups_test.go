@@ -28,7 +28,7 @@ func (r *removals) RemoveIfIdle(context.Context) (bool, error) {
 }
 
 // The space line says when the weekly maintenance frees the space, or
-// that it's within the hour, or nothing about when (V9).
+// that it's within the hour, or nothing about when.
 func TestSpaceFreedSaysWhen(t *testing.T) {
 	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.Local)
 	for _, c := range []struct {

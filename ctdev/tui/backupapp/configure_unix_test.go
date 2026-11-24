@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
@@ -186,7 +187,7 @@ func fieldOf(f Form, key string) Field {
 }
 
 // The wizard steps back with esc, keeping what was chosen, and a failed
-// scheduler install is said, with the folder still configured (W17).
+// scheduler install is said, with the folder still configured.
 func TestConfigureStepsBackAndSaysASchedulerFailure(t *testing.T) {
 	d, _ := standinFolder(t, false, backs, forgets, "example-backups")
 	resticKeyring(t, d)
@@ -257,7 +258,7 @@ func linkFixture(t *testing.T) Deps {
 
 var defaultKeep = Values{"hourly": "24", "daily": "7", "weekly": "4", "monthly": "12", "yearly": "3"}
 
-// A new folder can continue an existing folder's history (W11, W12): picking
+// A new folder can continue an existing folder's history: picking
 // it gives the folder that ID; esc in the list keeps a new history; leaving
 // the wizard saves nothing.
 func TestConfigureBackupHistory(t *testing.T) {
@@ -350,7 +351,7 @@ func createdKit(t *testing.T) (Deps, backup.Setup) {
 
 // Connecting with a kit: a wrong master password offers another try or the
 // Recovery Code, three end it with nothing saved, and the right one sets
-// this computer up with its own key (X3 to X6, X10, X11).
+// this computer up with its own key.
 func TestConnectWithAKit(t *testing.T) {
 	laptop, setup := createdKit(t)
 	desktop := another(t, laptop, "example-desktop")
@@ -384,7 +385,7 @@ func TestConnectWithAKit(t *testing.T) {
 
 // A wrong master password can be answered with the Recovery Code, which sets
 // a new master password and Secret Key and shows the new kit once; a wrong
-// code is said under it (X7 to X9).
+// code is said under it.
 func TestConnectWithTheRecoveryCode(t *testing.T) {
 	laptop, setup := createdKit(t)
 	desktop := another(t, laptop, "example-desktop")
@@ -415,7 +416,7 @@ func TestConnectWithTheRecoveryCode(t *testing.T) {
 }
 
 // A kit for a destination this computer is already on updates it with no
-// master password: its own key vouches for the kit (X4, P14 to P16).
+// master password: its own key vouches for the kit.
 func TestConnectWithAKitThisComputerIsOnUpdatesIt(t *testing.T) {
 	d, setup := createdKit(t)
 	ui := &fakeUI{t: t, Forms: []any{Values{"kit": setup.Kit}}}
@@ -446,5 +447,87 @@ func TestConnectWithAKitThisComputerIsOnUpdatesIt(t *testing.T) {
 	forms := requestsOf[Form](ui)
 	if len(forms) != 2 || !strings.Contains(forms[1].Fields[0].Error, "This computer's key doesn't open the destination the kit describes") {
 		t.Errorf("forms = %+v", forms)
+	}
+}
+
+// esc while Saving takes in the folder's earlier one-offs leaves the wizard,
+// since the config is already saved: it says what was saved and what wasn't,
+// and doesn't install the scheduler. Configuring again finishes it.
+func TestCancellingSaveAfterTheConfigIsWrittenSaysWhatWasSaved(t *testing.T) {
+	d, _ := standinFolder(t, false, backs, forgets, "example-backups")
+	sched := &fakeScheduler{}
+	d.Scheduler = sched
+	home := d.Machine.Home
+	fifo := filepath.Join(t.TempDir(), "tagging")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oneOff := `[{"id":"6b6b6b6b6b6b6b6b","short_id":"6b6b6b6b","time":"2026-11-21T18:40:00Z","hostname":"` + d.Machine.Hostname + `",
+"tags":["ctdev-path:~/Projects/website","ctdev-host:` + d.Machine.Hostname + `"],"summary":{"total_files_processed":1,"total_bytes_processed":15}}]`
+	script := `#!/bin/sh
+echo "$*" >> "` + home + `/restic.log"
+case "$1" in
+version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
+snapshots) if [ -e "` + home + `/tagged" ]; then echo '[]'; else echo '` + oneOff + `'; fi ;;
+stats) echo '{"total_size": 0}' ;;
+key) echo '[]' ;;
+tag)
+  if [ -e "` + home + `/tag-blocks" ]; then
+    trap 'exit 130' INT
+    echo tagging > "` + fifo + `"
+    sleep 60 >/dev/null 2>&1 &
+    wait $!
+  fi
+  touch "` + home + `/tagged" ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(home, ".local", "bin", "restic"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "tag-blocks"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tagging := make(cancelWhen)
+	go func() {
+		_, _ = os.ReadFile(fifo)
+		close(tagging)
+	}()
+	ui := &fakeUI{t: t,
+		Dashboards: []any{"c"},
+		Picks:      []any{0, 0}, // example-backups; Hourly
+		Forms:      []any{defaultKeep},
+		Runs:       []error{nil, nil, tagging}, // the status; reading the destination; Saving
+	}
+	folderFlow(context.Background(), ui, d)
+	if _, err := backup.ReadConfig(d.Cwd); err != nil {
+		t.Fatalf("the config wasn't saved: %v", err)
+	}
+	if got := ui.said(Warning); !slices.Equal(got, []string{"Saving stopped."}) {
+		t.Errorf("warnings = %q", got)
+	}
+	if got := ui.said(Plain); len(got) != 1 || !strings.Contains(got[0], "Saved ~/Projects/website's settings") ||
+		!strings.Contains(got[0], "aren't in its history yet") || !strings.Contains(got[0], "choose Configure again to finish") {
+		t.Errorf("said %+v", ui.Said)
+	}
+	if sched.installs != 0 {
+		t.Errorf("scheduler installed %d times after the stop, want none", sched.installs)
+	}
+	if forms := requestsOf[Form](ui); len(forms) != 1 {
+		t.Errorf("forms = %d, want the wizard left, not the keep form again", len(forms))
+	}
+	dash := requestsOf[Dashboard](ui)
+	if len(dash) != 2 || dash[1].Focus != "c" {
+		t.Errorf("dashboards = %+v, want focus on Configure to finish", dash)
+	}
+
+	// Configuring again takes in the one-off and installs the scheduler.
+	os.Remove(filepath.Join(home, "tag-blocks"))
+	again := &fakeUI{t: t, Dashboards: []any{"c"}, Picks: []any{0, 0}, Forms: []any{defaultKeep}}
+	folderFlow(context.Background(), again, d)
+	if _, err := os.Stat(filepath.Join(home, "tagged")); err != nil {
+		t.Error("configuring again didn't take in the one-off")
+	}
+	if sched.installs != 1 || len(again.said(Warning)) != 0 {
+		t.Errorf("installs = %d, said %+v", sched.installs, again.Said)
 	}
 }

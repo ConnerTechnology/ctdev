@@ -350,6 +350,12 @@ func (d *Destination) files(ctx context.Context, id string) ([]string, error) {
 	return paths, nil
 }
 
+// ErrOneOffsNotTaken is Configure's error once the folder's config is saved
+// and only giving its earlier one-off backups its ID failed or was
+// cancelled. Configuring again finishes it: the one-offs still without an
+// ID are the ones left.
+var ErrOneOffsNotTaken = errors.New("add the folder's earlier backups to its history")
+
 // Configure makes root a backed-up folder: it writes the folder's config
 // file, adds the folder to this computer's list, and gives the folder's
 // earlier one-off backups its new ID so they join its history.
@@ -405,7 +411,7 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	}
 	if len(ids) > 0 {
 		if _, err := d.restic(ctx, tag); err != nil {
-			return fmt.Errorf("add the folder's earlier backups to its history: %w", err)
+			return fmt.Errorf("%w: %w", ErrOneOffsNotTaken, err)
 		}
 	}
 	return nil

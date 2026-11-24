@@ -224,27 +224,47 @@ type lostSteps struct {
 // lines are the checklist: ✓ for each step done, ✗ for the one that failed,
 // ○ for the rest.
 func (l *lostSteps) lines() string {
+	var lines []string
+	for i := range 3 {
+		lines = append(lines, l.row(i)...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// row is step i's lines in the checklist.
+func (l *lostSteps) row(i int) []string {
 	done := []string{
 		"✓ 1. Removed " + l.host + "'s key.",
 		"✓ 2. Made a new Secret Key and saved it on this computer.",
 		"✓ 3. This computer opens " + l.name + " with the new credentials.",
 	}
 	todo := []string{"1. Remove " + l.host + "'s key", "2. Make a new Secret Key", "3. New backend credentials"}
-	var lines []string
+	switch {
+	case i < l.done:
+		row := []string{"  " + styles.Success.Render(done[i])}
+		if i == 1 && l.warning != "" {
+			row = append(row, "    "+styles.Warning.Render(l.warning))
+		}
+		return row
+	case i == l.done && l.failed != nil:
+		return []string{"  " + styles.Error.Render("✗ "+todo[i]), "    " + styles.Error.Render(oneLine(l.failed))}
+	}
+	return []string{"  " + styles.Dimmed.Render("○ "+todo[i])}
+}
+
+// running is the next step in progress: its line of the checklist is the
+// spinner's, labelled label.
+func (l *lostSteps) running(step, label, detail string) Running {
+	r := Running{Page: l.page(step, false), Label: fmt.Sprintf("%d. %s", l.done+1, label), Detail: detail, ChangesKeysOn: l.name}
 	for i := range 3 {
 		switch {
 		case i < l.done:
-			lines = append(lines, "  "+styles.Success.Render(done[i]))
-			if i == 1 && l.warning != "" {
-				lines = append(lines, "    "+styles.Warning.Render(l.warning))
-			}
-		case i == l.done && l.failed != nil:
-			lines = append(lines, "  "+styles.Error.Render("✗ "+todo[i]), "    "+styles.Error.Render(oneLine(l.failed)))
-		default:
-			lines = append(lines, "  "+styles.Dimmed.Render("○ "+todo[i]))
+			r.Above = append(r.Above, l.row(i)...)
+		case i > l.done:
+			r.Below = append(r.Below, l.row(i)...)
 		}
 	}
-	return strings.Join(lines, "\n")
+	return r
 }
 
 // page is the flow's at step: the checklist in its body when withList.
@@ -277,8 +297,7 @@ func lostComputer(ctx context.Context, ui UI, dest *backup.Destination, c backup
 	if err != nil {
 		return err
 	}
-	err = ui.Run(ctx, Running{Page: l.page("Remove the key", true), Label: "Removing " + host + "'s key…",
-		Detail: "restic key remove on " + name, ChangesKeysOn: name},
+	err = ui.Run(ctx, l.running("Remove the key", "Removing "+host+"'s key…", "restic key remove on "+name),
 		func(ctx context.Context, _ func(Progress)) error { return a.RemoveComputer(ctx, c) })
 	if err != nil {
 		return err
@@ -296,10 +315,9 @@ func lostComputer(ctx context.Context, ui UI, dest *backup.Destination, c backup
 
 	// A kit with an error means the new Secret Key is in force and only the
 	// old account key's removal failed; the flow goes on.
-	err = ui.Run(ctx, Running{Page: l.page("New Secret Key", true), Label: "Making a new Secret Key…",
-		Detail: "a new Secret Key and Emergency Kit, then the old account key removed", ChangesKeysOn: name},
+	err = ui.Run(ctx, l.running("New Secret Key", "Making a new Secret Key…", "making a new Secret Key and Emergency Kit, then removing the old account key"),
 		func(ctx context.Context, _ func(Progress)) error {
-			kit, err := a.RegenerateSecretKey(ctx)
+			kit, err := a.RegenerateSecretKey(context.WithoutCancel(ctx))
 			if kit != "" && err != nil {
 				l.warning = err.Error()
 				return nil
@@ -368,6 +386,11 @@ func (l *lostSteps) stopped(ctx context.Context, ui UI, err error) error {
 	}
 	return nil
 }
+
+// newKitNotShown is said when ctdev quits between making a new kit and
+// showing it.
+const newKitNotShown = "A new Emergency Kit was made, but ctdev quit before showing it. To see it, run ctdev backup --all, " +
+	"choose Emergency Kit and password, then Show Emergency Kit."
 
 // newKitLines go under a new kit: what it replaces, and where to paste it.
 func newKitLines() []Line {
@@ -696,7 +719,9 @@ func regenerateSecretKey(ctx context.Context, ui UI, dest *backup.Destination) e
 		Label: "Making a new Secret Key (this takes a few seconds)…", Detail: "a new account key, then the old one removed", ChangesKeysOn: name},
 		func(ctx context.Context, _ func(Progress)) error {
 			var err error
-			kit, err = a.RegenerateSecretKey(ctx)
+			// Not cancelled when ctdev quits, so the new kit isn't lost
+			// halfway: showNewKit says where to see it.
+			kit, err = a.RegenerateSecretKey(context.WithoutCancel(ctx))
 			if kit != "" && err != nil {
 				// The new key is in force; only the old one's removal failed.
 				ui.Say(Warning, err.Error())
@@ -730,14 +755,17 @@ func replaceBackendCredentials(ctx context.Context, ui UI, dest *backup.Destinat
 	return showNewKit(ctx, ui, page("New Emergency Kit"), a.Kit())
 }
 
-// showNewKit shows a kit that replaces the old one. Leaving it unsaved says
-// where to see it again.
+// showNewKit shows a kit that replaces the old one. Leaving it unsaved, or
+// quitting before it shows, says where to see it again.
 func showNewKit(ctx context.Context, ui UI, page Page, kit string) error {
 	err := ui.ShowKit(ctx, KitScreen{Page: page, Kit: kit, Lines: newKitLines(), New: true})
 	switch {
 	case errors.Is(err, ErrBack):
 		ui.Say(Warning, "The new kit wasn't shown to the end: choose Show Emergency Kit to save it.")
 		return nil
+	case errors.Is(err, ErrCancelled):
+		ui.Say(Warning, newKitNotShown)
+		return err
 	case err != nil:
 		return err
 	}

@@ -95,8 +95,7 @@ func configExists(d Deps) bool {
 }
 
 // List backups reads the folder's backups with a spinner, lists them newest
-// first, opens one, downloads it beside the folder, and goes back (V1 to
-// V5).
+// first, opens one, downloads it beside the folder, and goes back.
 func TestListBackupsAndDownload(t *testing.T) {
 	d := standinBackups(t, true, "", "true", "example-backups")
 	setBackups(t, d, "example-backups", []example{older, newer}, nil)
@@ -164,7 +163,7 @@ func mustTime(s string) time.Time {
 }
 
 // A failed download is said in red, and the backup stays on screen to try
-// again (V6).
+// again.
 func TestDownloadFailed(t *testing.T) {
 	d := standinBackups(t, true, "", `echo "Fatal: example failure" >&2; exit 1`, "example-backups")
 	setBackups(t, d, "example-backups", []example{newer}, nil)
@@ -184,7 +183,7 @@ func TestDownloadFailed(t *testing.T) {
 
 // Delete this backup asks y-only, forgets the one backup, says when the
 // space is freed, and the list comes back without it, the cursor where it
-// was (V7 to V9).
+// was.
 func TestDeleteOneBackup(t *testing.T) {
 	d := standinBackups(t, true, "", "true", "example-backups")
 	setBackups(t, d, "example-backups", []example{older, newer}, []example{newer})
@@ -209,7 +208,7 @@ func TestDeleteOneBackup(t *testing.T) {
 	}
 }
 
-// Anything but y keeps the backup, with a dim note (V7 → V3).
+// Anything but y keeps the backup, with a dim note.
 func TestDeleteOneCancelled(t *testing.T) {
 	d := standinBackups(t, true, "", "true", "example-backups")
 	setBackups(t, d, "example-backups", []example{older, newer}, nil)
@@ -239,7 +238,7 @@ func TestDeleteOneWhenBusy(t *testing.T) {
 }
 
 // Deleting the last backup leaves the list saying there are none, with
-// esc back to the dashboard (V10).
+// esc back to the dashboard.
 func TestDeletingTheLastBackup(t *testing.T) {
 	d := standinBackups(t, true, "", "true", "example-backups")
 	setBackups(t, d, "example-backups", []example{newer}, nil)
@@ -260,7 +259,7 @@ func TestDeletingTheLastBackup(t *testing.T) {
 
 // An unconfigured folder's one-offs are listed from every destination,
 // with a column naming each backup's, and a delete dates the space line by
-// the backup's own destination (V11).
+// the backup's own destination.
 func TestListOneOffsInEveryDestination(t *testing.T) {
 	d := standinBackups(t, false, "", "true", "example-archive", "example-backups")
 	setBackups(t, d, "example-archive", []example{newer}, nil)
@@ -292,7 +291,7 @@ func TestListOneOffsInEveryDestination(t *testing.T) {
 }
 
 // Delete all lists the folder's backups now, asks y-only, has the folder's
-// name typed, and forgets exactly those (Y7 to Y10).
+// name typed, and forgets exactly those.
 func TestDeleteAll(t *testing.T) {
 	d := standinBackups(t, true, "", "true", "example-backups")
 	setBackups(t, d, "example-backups", []example{older, newer}, nil)
@@ -324,7 +323,7 @@ func TestDeleteAll(t *testing.T) {
 }
 
 // Anything but y, or esc while typing the name, deletes nothing, with a
-// dim note and focus back on Delete all (Y11).
+// dim note and focus back on Delete all.
 func TestDeleteAllCancelled(t *testing.T) {
 	for name, answers := range map[string][]any{"no": {false}, "name not typed": {true, false}} {
 		t.Run(name, func(t *testing.T) {
@@ -346,7 +345,7 @@ func TestDeleteAllCancelled(t *testing.T) {
 }
 
 // One-offs in two destinations are deleted from each, and the space line
-// can't give one date (Y10, V9).
+// can't give one date.
 func TestDeleteAllFromEveryDestination(t *testing.T) {
 	d := standinBackups(t, false, "", "true", "example-archive", "example-backups")
 	setBackups(t, d, "example-archive", []example{newer}, nil)
@@ -395,8 +394,7 @@ func TestDeleteAllDryRun(t *testing.T) {
 }
 
 // Stop backing up, keeping the backups: the folder comes off the schedule,
-// the runner is removed if idle, and it says where the backups are (Y1,
-// Y2, Y6).
+// the runner is removed if idle, and it says where the backups are.
 func TestStopBackingUpKeepingTheBackups(t *testing.T) {
 	d := standinBackups(t, true, "", "true", "example-backups")
 	setBackups(t, d, "example-backups", []example{older, newer}, nil)
@@ -424,7 +422,7 @@ func TestStopBackingUpKeepingTheBackups(t *testing.T) {
 
 // Stop backing up and delete: after the name is typed, the backups listed
 // go, then the config and schedule entry; a backup made meanwhile is kept
-// and said, and so is a runner that couldn't be removed (Y3 to Y5).
+// and said, and so is a runner that couldn't be removed.
 func TestStopBackingUpAndDelete(t *testing.T) {
 	d := standinBackups(t, true, "", "true", "example-backups")
 	setBackups(t, d, "example-backups", []example{newer}, []example{third})
@@ -451,7 +449,7 @@ func TestStopBackingUpAndDelete(t *testing.T) {
 }
 
 // Every way out before the last step changes nothing: no on the first
-// question, esc on the second, and the name not typed (Y11).
+// question, esc on the second, and the name not typed.
 func TestStopBackingUpCancelled(t *testing.T) {
 	for name, answers := range map[string][]any{
 		"no":             {false},

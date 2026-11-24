@@ -24,7 +24,7 @@ func anyContains(lines []string, want string) bool {
 
 // "I lost this computer" from the laptop, on a local destination: three
 // wrong master passwords change nothing; then the desktop is locked out, the
-// Secret Key is new, and the new kit is shown once (N1 to N7).
+// Secret Key is new, and the new kit is shown once.
 func TestLostComputer(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
@@ -101,7 +101,7 @@ func TestLostComputer(t *testing.T) {
 
 // I lost this computer can't be run again for a computer it already
 // removed, so when it stops it says what it did and which item finishes it,
-// on the screen and after ctdev exits (N9).
+// on the screen and after ctdev exits.
 func TestALostComputerFlowThatStopsSaysHowToFinish(t *testing.T) {
 	ctx := context.Background()
 	address := filepath.Join(t.TempDir(), "repo")
@@ -149,7 +149,7 @@ func TestALostComputerFlowThatStopsSaysHowToFinish(t *testing.T) {
 }
 
 // Replace backend credentials, from Emergency Kit and password: three wrong
-// master passwords change nothing; the right one shows the new kit (P10).
+// master passwords change nothing; the right one shows the new kit.
 func TestReplaceBackendCredentials(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
@@ -180,7 +180,7 @@ func TestReplaceBackendCredentials(t *testing.T) {
 }
 
 // New B2 credentials that don't open the destination are asked for again,
-// with the reason under the fields, then the old ones are revoked (N3 to N6).
+// with the reason under the fields, then the old ones are revoked.
 func TestNewCredentialsAreAskedForAgainUntilTheyOpenIt(t *testing.T) {
 	ctx := context.Background()
 	creds := map[string]string{"B2_ACCOUNT_ID": "000000000000000000000001", "B2_ACCOUNT_KEY": "K000xxxxxxxxxxxxxxxxxxxxxxxxxxx"}
@@ -228,7 +228,7 @@ func mustUnlock(t *testing.T, d *backup.Destination) *backup.Account {
 }
 
 // Remove this computer asks first, warns that a lost computer needs more,
-// and removes the key behind the master password (M4 to M9).
+// and removes the key behind the master password.
 func TestRemoveComputer(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
@@ -257,7 +257,7 @@ func TestRemoveComputer(t *testing.T) {
 }
 
 // Change master password: the current one, then the new one twice; a short
-// or mismatched one is asked again (P3 to P7).
+// or mismatched one is asked again.
 func TestChangeMasterPassword(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
@@ -295,6 +295,98 @@ func TestRegenerateSecretKey(t *testing.T) {
 		t.Errorf("kits = %+v", kits)
 	}
 	if !anyContains(ui.said(Info), "Paste an updated Emergency Kit") {
+		t.Errorf("said %+v", ui.Said)
+	}
+}
+
+// quitsAt is the fake UI with ctdev quitting, as SIGTERM or a closed
+// terminal does, just as the Run labelled label starts.
+type quitsAt struct {
+	*fakeUI
+	label  string
+	cancel context.CancelFunc
+}
+
+func (q quitsAt) Run(ctx context.Context, r Running, fn func(context.Context, func(Progress)) error) error {
+	if r.Label == q.label {
+		q.cancel()
+	}
+	return q.fakeUI.Run(ctx, r, fn)
+}
+
+// Quitting while Regenerate Secret Key runs still makes the new key, and
+// says, after exit, where to see the kit, never the kit itself.
+func TestQuittingWhileRegeneratingSaysWhereTheNewKitIs(t *testing.T) {
+	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ui := &fakeUI{t: t, Picks: []any{2}, Confirms: []any{true}, Forms: []any{Values{"master": exampleMaster}}}
+	q := quitsAt{fakeUI: ui, label: "Making a new Secret Key (this takes a few seconds)…", cancel: cancel}
+	if _, err := kitAndPassword(ctx, q, Deps{Machine: f.laptop}, f.dest); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("err = %v, want the quit passed on", err)
+	}
+	a, err := f.dest.Unlock(context.Background(), exampleMaster)
+	if err != nil || a.Kit() == f.kit {
+		t.Fatalf("the Secret Key wasn't regenerated: %v", err)
+	}
+	if got := ui.said(Warning); !slices.Equal(got, []string{newKitNotShown}) {
+		t.Errorf("said %+v", ui.Said)
+	}
+	for _, l := range ui.Said {
+		if strings.Contains(l.Text, "Secret Key:") {
+			t.Errorf("said a secret: %q", l.Text)
+		}
+	}
+}
+
+// Quitting while a Recovery Code reset runs still finishes it, and says
+// that the new kit and code weren't shown, never the kit or the code.
+func TestQuittingWhileResettingSaysTheNewCodeWasntShown(t *testing.T) {
+	laptop, setup := createdKit(t)
+	desktop := another(t, laptop, "example-desktop")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const newMaster = "new example password"
+	ui := &fakeUI{t: t, Picks: []any{1}, Forms: []any{Values{"kit": setup.Kit}, Values{"master": "wrong example password"},
+		Values{"code": setup.RecoveryCode, "master": newMaster, "again": newMaster, "newcode": "yes"}}}
+	q := quitsAt{fakeUI: ui, label: "Resetting…", cancel: cancel}
+	if _, err := connectDestination(ctx, q, desktop); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("err = %v, want the quit passed on", err)
+	}
+	dest, err := desktop.Machine.Destination("example-backups")
+	if err != nil {
+		t.Fatalf("the reset didn't save the destination: %v", err)
+	}
+	if _, err := dest.Unlock(context.Background(), newMaster); err != nil {
+		t.Fatalf("the new master password doesn't open it: %v", err)
+	}
+	want := []string{newKitNotShown, "A new Recovery Code was made too, and it can't be shown again: the old one no longer works."}
+	if got := ui.said(Warning); !slices.Equal(got, want) {
+		t.Errorf("warnings = %q", got)
+	}
+	for _, l := range ui.Said {
+		if strings.Contains(l.Text, "Secret Key:") || strings.Contains(l.Text, setup.RecoveryCode) {
+			t.Errorf("said a secret: %q", l.Text)
+		}
+	}
+}
+
+// Quitting while I lost this computer makes the new Secret Key still makes
+// it, and the lines printed after exit say so and what's left.
+func TestQuittingWhileTheLostComputerFlowRegeneratesSaysSo(t *testing.T) {
+	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ui := &fakeUI{t: t, Confirms: []any{true}, Forms: []any{Values{"master": exampleMaster}}}
+	q := quitsAt{fakeUI: ui, label: "2. Making a new Secret Key…", cancel: cancel}
+	if err := lostComputer(ctx, q, f.dest, f.computer(t, "example-desktop")); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("err = %v, want the quit passed on", err)
+	}
+	if a, err := f.dest.Unlock(context.Background(), exampleMaster); err != nil || a.Kit() == f.kit {
+		t.Fatalf("the Secret Key wasn't regenerated: %v", err)
+	}
+	if !anyContains(ui.said(Warning), "made a new Secret Key, saved on this computer") ||
+		!anyContains(ui.said(Plain), "then Replace backend credentials, which also shows the new kit.") {
 		t.Errorf("said %+v", ui.Said)
 	}
 }

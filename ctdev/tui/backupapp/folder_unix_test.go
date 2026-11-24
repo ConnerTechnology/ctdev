@@ -86,7 +86,7 @@ const (
 )
 
 // Back up now confirms, backs up, says so, applies the keep rules, and puts
-// focus on Quit (R2 → R3 → R4).
+// focus on Quit.
 func TestBackUpNow(t *testing.T) {
 	d, _ := standinFolder(t, true, `echo '{"message_type":"status","percent_done":0.5,"total_files":2,"files_done":1,"total_bytes":30,"bytes_done":15,"seconds_remaining":2}'; `+backs, forgets, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
@@ -117,7 +117,7 @@ func TestBackUpNow(t *testing.T) {
 }
 
 // Back up now applies the keep rules through Retain, so a failure is
-// recorded on the folder and shows on the next dashboard (U7).
+// recorded on the folder and shows on the next dashboard.
 func TestBackUpNowRecordsARetentionFailure(t *testing.T) {
 	d, _ := standinFolder(t, true, backs, fails, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
@@ -136,7 +136,7 @@ func TestBackUpNowRecordsARetentionFailure(t *testing.T) {
 }
 
 // When the destination stays locked, Back up now says it's busy and to try
-// again, in yellow, and the run is deferred, not failed (S3).
+// again, in yellow, and the run is deferred, not failed.
 func TestBackUpNowSaysWhenTheDestinationIsBusy(t *testing.T) {
 	d, _ := standinFolder(t, true, `echo "Fatal: repository is already locked" >&2; exit 11`, forgets, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
@@ -155,7 +155,7 @@ func TestBackUpNowSaysWhenTheDestinationIsBusy(t *testing.T) {
 }
 
 // A backup restic made while skipping unreadable files is still a backup,
-// with a note (U6).
+// with a note.
 func TestBackUpNowNotesAPartialBackup(t *testing.T) {
 	d, _ := standinFolder(t, true, backs+`; exit 3`, forgets, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
@@ -165,7 +165,7 @@ func TestBackUpNowNotesAPartialBackup(t *testing.T) {
 	}
 }
 
-// A failed backup is said in red, recorded, and offers to try again (U8).
+// A failed backup is said in red, recorded, and offers to try again.
 func TestBackUpNowFails(t *testing.T) {
 	d, _ := standinFolder(t, true, fails, forgets, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
@@ -180,7 +180,7 @@ func TestBackUpNowFails(t *testing.T) {
 }
 
 // esc while backing up cancels it: nothing is recorded, and the dashboard
-// comes back with a dim note (U9).
+// comes back with a dim note.
 func TestCancelledBackUpNow(t *testing.T) {
 	d, _ := standinFolder(t, true, `exec sleep 30`, forgets, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}, Runs: []error{nil, ErrBack}}
@@ -204,7 +204,7 @@ func TestBackUpNowConfirmCancelled(t *testing.T) {
 }
 
 // A folder that isn't configured is backed up once, to the destination
-// chosen among several, with no keep rules (U2 → U3 → U5).
+// chosen among several, with no keep rules.
 func TestBackUpOnceChoosesTheDestination(t *testing.T) {
 	d, _ := standinFolder(t, false, backs, fails, "example-archive", "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Picks: []any{1}, Confirms: []any{true}}
@@ -222,7 +222,7 @@ func TestBackUpOnceChoosesTheDestination(t *testing.T) {
 	}
 }
 
-// With no destination, Back up once offers to set one up first (U1).
+// With no destination, Back up once offers to set one up first.
 func TestBackUpOnceWithNoDestination(t *testing.T) {
 	d, _ := standinFolder(t, false, backs, forgets)
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
@@ -237,7 +237,7 @@ func TestBackUpOnceWithNoDestination(t *testing.T) {
 }
 
 // Under --dry-run nothing is backed up and no success is said; restic's
-// commands go to the log (U10).
+// commands go to the log.
 func TestBackUpNowDryRun(t *testing.T) {
 	d, out := standinFolder(t, true, backs, forgets, "example-backups")
 	d.Machine.Opts.DryRun = true
@@ -249,7 +249,7 @@ func TestBackUpNowDryRun(t *testing.T) {
 }
 
 // A destination that gets busy before the keep rules is a wait, not a
-// failure (U6).
+// failure.
 func TestBackUpNowKeepRulesWaitWhenBusy(t *testing.T) {
 	d, _ := standinFolder(t, true, backs, `echo "Fatal: repository is already locked" >&2; exit 11`, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
