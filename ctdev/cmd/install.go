@@ -145,6 +145,9 @@ var componentWizards = map[string]func(context.Context) error{
 	"aws":   configureAWS,
 	"caddy": configureCaddy,
 	"git":   configureGit,
+	// ssh's settings category is one entry in its menu, which `configure
+	// ssh` opens, so installing it opens the same menu.
+	"ssh": runSSHMenu,
 }
 
 // componentHasConfigure reports whether a component has a configuration step —

@@ -19,11 +19,8 @@ ctdev install                    # pick them from a list
 ctdev install zsh git gh node go docker tailscale vscode claude-code tmux   # or name them
 
 # 3. apply the system settings you want
-ctdev configure ssh --batch      # SSH server, key-only login, Mosh, keep programs running,
-                                 # vscode.dev tunnel (if VS Code is installed), LAN-only firewall
+ctdev configure ssh --batch      # SSH server, key-only login
 ctdev configure power --batch    # never suspend (always-on box)
-# on a DNS/proxy host (Pi-hole/Caddy), run `ctdev configure ssh` without --batch
-# and leave the firewall off: it blocks every service whose ports aren't opened
 ```
 
 `ctdev install <x>` pulls in declared dependencies first and runs `<x>`'s
@@ -33,7 +30,6 @@ Everything is idempotent and safe to re-run.
 **Manual steps**
 
 - Add your client's SSH public key: `echo 'ssh-ed25519 ...' >> ~/.ssh/authorized_keys`, then re-run `ctdev configure ssh --batch` (password auth is disabled only once a key is present)
-- Authenticate the VS Code tunnel once: `code tunnel user login`
 - `gh auth login` · `ctdev configure git` · (optional) `sudo tailscale up`
 
 ## Day one on an existing machine

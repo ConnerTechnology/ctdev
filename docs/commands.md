@@ -29,8 +29,9 @@ ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
 ctdev configure git             # Configure git user and SSH signing key (installs git first if missing)
 ctdev configure aws             # Pick the AWS profile; offers `aws configure sso` when there is none (installs the AWS CLI first if missing)
-ctdev configure ssh             # Remote access: SSH server, key-only login, keep programs running,
-                                #   Mosh, vscode.dev tunnel, LAN-only firewall (UFW)
+ctdev configure ssh             # Menu: Your keys (copy to a server, upload to GitHub, clipboard, delete;
+                                #   pick several to act on each), Create a key, Server settings
+ctdev configure ssh --batch     # Server settings at their defaults: SSH server, key-only login
 ctdev configure power           # Power profile, display/suspend/screensaver timers (minutes or never), never suspend,
                                 #   password right after the screensaver (macOS)
 ctdev configure desktop         # Dock, Finder, animations, save/print dialogs (macOS); Nemo view + Hide drives (Cinnamon)
