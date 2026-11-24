@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.2.0] - 2026-11-23
+
+### Added
+- **`ctdev install ssh`** leaves the machine reachable over SSH after a restart. On Linux it
+  installs `openssh-server` with apt and enables it at boot, on demand through `ssh.socket`, or
+  kept always on if `ctdev configure ssh` already set that. On macOS it turns on Remote Login. If
+  macOS refuses because the terminal lacks Full Disk Access, the error points at the switch in
+  System Settings > General > Sharing. An interactive install then opens `ctdev configure ssh`.
+  `ctdev uninstall ssh` turns the server off, and on Linux removes `openssh-server`.
+
 ## [20.1.0] - 2026-11-23
 
 ### Added
