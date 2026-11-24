@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.4.0] - 2026-11-23
+
+### Added
+- **`ctdev configure node install`, `update` and `uninstall`** manage Node versions through nodenv
+  (ADR-0023).
+  - `install [major|version] [--global|--project]` offers the latest release of each supported
+    major, the list `nodenv install --list` prints. It installs the version you pick and uses it
+    globally or for this project, which writes `.node-version`. Making a version global offers to
+    copy the old global's npm packages.
+  - `update` moves the Node in use here (a project's `.node-version`, else the global one) to the
+    latest release of its major. It reinstalls the old version's global npm packages at the same
+    versions, then deletes the old version unless the global or this folder still uses it. Packages
+    linked with `npm link` are named, not moved.
+  - `uninstall [version]` deletes a version and its npm packages. It never deletes the global one.
+
+### Changed
+- **The `node` component is now `nodenv`.** It installs nodenv and node-build only, and no longer
+  installs Node 24.0.0 or changes your global version. `ctdev install node` no longer exists: use
+  `ctdev install nodenv`, which then offers to install a Node version.
+- **`ctdev update` no longer moves your global Node to the newest LTS.** That move left your global
+  npm packages behind on the old version. It now pulls nodenv and node-build instead (Homebrew
+  updates them on macOS). Use `ctdev configure node update` to update Node itself.
+- **npm components install into your global Node**, even in a project whose `.node-version` pins
+  another one, so `codex`, `gemini`, `ccusage`, `ccstatusline` and `devcontainer` work in every
+  folder. When no Node version is set, they install the latest LTS first, taken from nodejs.org's
+  release index, and make it global. They never change a global you already have. A component counts
+  as installed only when the global Node has its package, not just because a nodenv shim exists.
+
 ## [20.3.0] - 2026-11-23
 
 ### Added
