@@ -48,7 +48,7 @@ func RunAll(ctx context.Context, d Deps) error {
 
 // run shows the program while flow runs on its own goroutine. Once the
 // program exits it cancels the flow and waits for it, so no restic outlives
-// it, then prints the result lines to out.
+// it, then prints the result and log lines to out.
 func run(ctx context.Context, d Deps, out io.Writer, flow func(context.Context, UI, Deps) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -57,20 +57,31 @@ func run(ctx context.Context, d Deps, out io.Writer, flow func(context.Context, 
 	c := &client{out: msgs, done: done}
 	m := &model{in: msgs, done: done, dryRun: d.Machine.Opts.DryRun}
 
-	saved := d.Machine.Opts.Stdout
-	d.Machine.Opts.Stdout = &lineWriter{post: func(line string) { c.post(logMsg(line)) }}
-	defer func() { d.Machine.Opts.Stdout = saved }()
+	saved, savedNoTerminal := d.Machine.Opts.Stdout, d.Machine.NoTerminal
+	d.Machine.Opts.Stdout = &lineWriter{post: c.log}
+	d.Machine.NoTerminal = true
+	defer func() { d.Machine.Opts.Stdout, d.Machine.NoTerminal = saved, savedNoTerminal }()
 
 	var flowErr error
+	finished := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		flowErr = flow(ctx, c, d)
+		close(finished)
 		c.post(flowDoneMsg{})
 	})
 	p := tea.NewProgram(m, append([]tea.ProgramOption{tea.WithContext(ctx)}, programOptions()...)...)
 	_, err := p.Run()
 	close(done)
 	cancel()
+	select {
+	case <-finished:
+	default:
+		if _, busy := m.step.(*running); busy {
+			// restic can take up to its WaitDelay to remove its lock.
+			fmt.Fprintln(out, "  "+styles.Dimmed.Render("Waiting for restic to stop…"))
+		}
+	}
 	wg.Wait()
 	if errors.Is(err, tea.ErrProgramKilled) && ctx.Err() != nil {
 		err = nil
@@ -108,7 +119,7 @@ type client struct {
 	done <-chan struct{} // closed once the program has exited
 
 	mu    sync.Mutex
-	lines []Line
+	lines []Line // every result and log line, printed after the program exits
 }
 
 // post sends msg unless the program has exited.
@@ -155,6 +166,14 @@ func (c *client) Say(kind Kind, text string) {
 	c.lines = append(c.lines, Line{kind, text})
 	c.mu.Unlock()
 	c.post(sayMsg{kind, text})
+}
+
+// log is a line of the backup package's output, such as --dry-run's.
+func (c *client) log(line string) {
+	c.mu.Lock()
+	c.lines = append(c.lines, Line{Info, line})
+	c.mu.Unlock()
+	c.post(logMsg(line))
 }
 
 func (c *client) Dashboard(ctx context.Context, d Dashboard) (Action, error) {

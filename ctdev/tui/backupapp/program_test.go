@@ -121,6 +121,28 @@ func (term *terminal) waitFor(s string) {
 	}
 }
 
+// runningProgram is the real program on a scripted terminal: keys go to keys, and
+// once it exits done gets run's error and after what it printed.
+type runningProgram struct {
+	term  *terminal
+	keys  io.Writer
+	done  chan error
+	after *bytes.Buffer
+}
+
+func startProgram(t *testing.T, d Deps, flow func(context.Context, UI, Deps) error) *runningProgram {
+	t.Helper()
+	in, keys := io.Pipe()
+	p := &runningProgram{term: &terminal{t: t, changed: make(chan struct{}, 1)}, keys: keys, done: make(chan error), after: &bytes.Buffer{}}
+	saved := programOptions
+	programOptions = func() []tea.ProgramOption {
+		return []tea.ProgramOption{tea.WithInput(in), tea.WithOutput(p.term), tea.WithWindowSize(96, 40)}
+	}
+	t.Cleanup(func() { programOptions = saved })
+	go func() { p.done <- run(context.Background(), d, p.after, flow) }()
+	return p
+}
+
 // The real program: the dashboard draws, keys reach the flow, a result line
 // shows, q quits, and the result is printed after the program exits.
 func TestProgramSmoke(t *testing.T) {
@@ -134,30 +156,19 @@ func TestProgramSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in, keys := io.Pipe()
-	term := &terminal{t: t, changed: make(chan struct{}, 1)}
-	saved := programOptions
-	programOptions = func() []tea.ProgramOption {
-		return []tea.ProgramOption{tea.WithInput(in), tea.WithOutput(term), tea.WithWindowSize(96, 40)}
-	}
-	t.Cleanup(func() { programOptions = saved })
-
-	var after bytes.Buffer
-	done := make(chan error)
-	go func() { done <- run(context.Background(), Deps{Machine: m, Cwd: dir}, &after, folderFlow) }()
-
-	term.waitFor("DRY RUN")
-	term.waitFor("no destination on this computer yet")
-	io.WriteString(keys, "b")
-	term.waitFor("This computer has no backup destination yet. Set one up first.")
-	io.WriteString(keys, "\r")
-	term.waitFor("Dry run: destinations aren't created or connected")
-	io.WriteString(keys, "q")
-	if err := <-done; err != nil {
+	p := startProgram(t, Deps{Machine: m, Cwd: dir}, folderFlow)
+	p.term.waitFor("DRY RUN")
+	p.term.waitFor("no destination on this computer yet")
+	io.WriteString(p.keys, "b")
+	p.term.waitFor("This computer has no backup destination yet. Set one up first.")
+	io.WriteString(p.keys, "\r")
+	p.term.waitFor("Dry run: destinations aren't created or connected")
+	io.WriteString(p.keys, "q")
+	if err := <-p.done; err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(ansi.Strip(after.String()), "Dry run: destinations aren't created or connected") {
-		t.Errorf("after exit: %q, want the result line", after.String())
+	if !strings.Contains(ansi.Strip(p.after.String()), "Dry run: destinations aren't created or connected") {
+		t.Errorf("after exit: %q, want the result line", p.after.String())
 	}
 }
 
