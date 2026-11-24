@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.5.0] - 2026-11-23
+
 ### Changed
 - **This repo records its agent sessions with Entire again, and the session is the record.**
   Each commit made in a session links its checkpoint, and the checkpoints go to the private
