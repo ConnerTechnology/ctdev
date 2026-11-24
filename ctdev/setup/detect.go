@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
 	"os"
 	"os/exec"
 	"strings"
@@ -175,8 +176,10 @@ func detectModuleSigned(ctx context.Context) string {
 	if err != nil {
 		return "unknown"
 	}
-	sig := strings.TrimSpace(string(out))
-	if sig != "" {
+	// A signature only counts with this computer's key enrolled: after a CMOS
+	// reset clears the MOK list the module is still signed but won't load, and
+	// "unsigned" makes the setting apply again, which re-enrolls the key.
+	if strings.TrimSpace(string(out)) != "" && gpu.MOKKeyEnrolled() {
 		return "signed"
 	}
 	return "unsigned"
