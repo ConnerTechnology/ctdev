@@ -109,7 +109,7 @@ func (f *fakeRemote) index(cmd ...string) int {
 
 var quietOpts = sysutil.Opts{Stdout: &strings.Builder{}}
 
-// `configure ssh` offers exactly the two server settings (ADR-0023), and the
+// `configure ssh` offers exactly the two server settings (CTD-178), and the
 // categories remote access once lived in are gone.
 func TestRemoteAccessSettingsAreUnderSSH(t *testing.T) {
 	want := []string{

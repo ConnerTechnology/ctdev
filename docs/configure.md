@@ -110,8 +110,7 @@ configure ssh` or bare `ctdev configure` run, except with `--show`, turns off
 whichever of those ctdev turned on, once. A locale that was already there stays, and so does a
 firewall without ctdev's rules; a firewall with other rules stays on once
 ctdev's are deleted. Lingering and the tunnel record no owner, so they are
-turned off wherever they are on; turned back on by hand, they stay on
-([ADR-0023](adr/0023-configure-ssh-is-the-ssh-server-and-key-only-login.md)).
+turned off wherever they are on; turned back on by hand, they stay on.
 `ctdev install ssh` installs the SSH server and then opens this menu.
 
 `desktop` holds how the desktop looks and behaves, on whichever platform you run

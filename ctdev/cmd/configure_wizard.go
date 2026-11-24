@@ -86,7 +86,7 @@ func runCategoryBatchAdjusted(ctx context.Context, slug string, adjust func([]se
 }
 
 // retireRemovedSettings turns off the settings slug's category no longer
-// offers wherever ctdev turned them on (ADR-0023). Every run of a category
+// offers wherever ctdev turned them on (CTD-178). Every run of a category
 // that can change the machine calls it, whether or not a setting changes.
 func retireRemovedSettings(ctx context.Context, slug string) {
 	if slug != "ssh" {
