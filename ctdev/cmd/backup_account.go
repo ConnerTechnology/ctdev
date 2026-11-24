@@ -11,8 +11,8 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
-// The --all actions on a destination's computers and secrets (CTD-124,
-// ADR-0016). Each asks for the master password first and goes through
+// The --all actions on a destination's computers and secrets (CTD-124).
+// Each asks for the master password first and goes through
 // backup.Account, which only a verified master password unlocks; a Recovery
 // Code reset and pasting an updated kit are the exceptions.
 

@@ -49,18 +49,17 @@ run() { # run <name> <command...>: time a job and keep going on failure, so one 
 
 # --changed decides which jobs the files can break. Guidance always runs: it takes a second, and a
 # rename anywhere can break a link it checks.
-want_shell=0 want_go=0 want_goal=0 want_ubuntu=0 want_pwsh=0
+want_shell=0 want_go=0 want_ubuntu=0 want_pwsh=0
 if [ "$mode" = full ]; then
-  want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_pwsh=1
+  want_shell=1 want_go=1 want_ubuntu=1 want_pwsh=1
 else
   for f in "${files[@]}"; do
     case "${f#./}" in
       ctdev/*) want_go=1 want_ubuntu=1 ;;
       # ci.yml holds the shellcheck list, the restic pin and the Ubuntu matrix the jobs read, and a
       # change to this script can break any job it runs: both run every container job.
-      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_goal=1 want_ubuntu=1 want_pwsh=1 ;;
+      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_ubuntu=1 want_pwsh=1 ;;
       install.sh|uninstall.sh|devcontainer.sh) want_shell=1 want_ubuntu=1 ;;
-      scripts/goal*) want_shell=1 want_goal=1 ;;
       scripts/*|.shellcheckrc) want_shell=1 ;;
       install.ps1) want_pwsh=1 ;;
     esac
@@ -68,8 +67,7 @@ else
 fi
 
 # The shell scripts ci.yml lints. Keep in step with its shellcheck job.
-shell_files=(install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh scripts/checks.sh
-  scripts/goal.sh scripts/goal-test.sh scripts/prompt-audit.sh)
+shell_files=(install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh scripts/checks.sh)
 
 shell_job() {
   local f present=()
@@ -229,9 +227,6 @@ needs_docker() {
 
 [ "$want_shell" = 0 ] || run shellcheck shell_job
 run guidance scripts/check-guidance.sh
-# Skipped only where the tree has no goal tests yet; one that is there but not executable fails,
-# as it would in ci.yml.
-[ "$want_goal" = 0 ] || [ ! -e scripts/goal-test.sh ] || run goal-tests scripts/goal-test.sh
 [ "$want_pwsh" = 0 ] || run powershell pwsh_job
 if [ "$want_go" = 1 ] || [ "$want_ubuntu" = 1 ]; then
   run go go_job

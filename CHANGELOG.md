@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **This repo records its agent sessions with Entire again, and the session is the record.**
+  Each commit made in a session links its checkpoint, and the checkpoints go to the private
+  `ConnerTechnology/ctdev-entire` repo, never to this public one; CI fails if one reaches it.
+  `entire why <file>:<line>` finds the session behind a line. On a clone of this repo, run
+  `entire enable --agent claude-code` once. No change to the `ctdev` binary.
+
+### Removed
+- **Linear, ADRs, the goal loop and the repo's skills are gone from the dev workflow.** The
+  `linear` MCP server, `docs/adr/`, `scripts/goal.sh`, `scripts/prompt-audit.sh`, every skill
+  under `.claude/skills/` and the plugin check hook are removed, and the guidance check no longer
+  holds files to byte ceilings. A change is one branch, `scripts/checks.sh --full`, and a pull
+  request. The old ADRs are in git history.
+
 ## [20.2.0] - 2026-11-23
 
 ### Added

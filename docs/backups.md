@@ -117,9 +117,8 @@ generates a Secret Key, creates the restic repository, and shows two things once
 
 The master password and the Secret Key together unlock the destination; neither opens anything
 alone, and ctdev never stores the master password. Each computer gets its own key, labeled with its
-hostname, so backups run without you. [ADR-0016](adr/0016-backup-encryption-like-1password.md) has
-the reasoning. Lose the kit and the master password, with no Recovery Code and no computer still
-set up, and the backups can't be decrypted by anyone, ctdev included.
+hostname, so backups run without you. Lose the kit and the master password, with no Recovery Code
+and no computer still set up, and the backups can't be decrypted by anyone, ctdev included.
 
 ### Connecting to an existing destination
 
