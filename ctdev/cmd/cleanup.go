@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,9 +18,9 @@ var cleanupCmd = &cobra.Command{
 	Use:   "cleanup",
 	Short: "Reclaim disk space (caches, logs, package junk, trash)",
 	Long: "Scan for reclaimable disk space and clean it up — package caches and orphans, " +
-		"logs, snap/flatpak leftovers, Docker junk on Linux; Homebrew, Xcode, caches and " +
-		"trash on macOS. Safe tasks are preselected; riskier ones are shown unchecked, and " +
-		"user data (device backups) is only reported, never deleted.",
+		"logs, snap/flatpak leftovers on Linux; Homebrew, Xcode, caches and trash on " +
+		"macOS; Docker junk on either. Safe tasks are preselected; riskier ones are shown " +
+		"unchecked, and user data (device backups) is only reported, never deleted.",
 	RunE: runCleanup,
 }
 
@@ -54,7 +55,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagDryRun {
-		printActionable(actionable, results)
+		printActionable(os.Stdout, actionable, results)
 		fmt.Println(styles.Dimmed.Render("\n  [dry-run] No changes made."))
 		return nil
 	}
@@ -67,7 +68,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 				selectedIDs = append(selectedIDs, t.ID)
 			}
 		}
-		printActionable(actionable, results)
+		printActionable(os.Stdout, actionable, results)
 	} else {
 		ids, quit, err := pickCleanupTasks(actionable, results)
 		if err != nil {
@@ -186,18 +187,36 @@ func printReportOnly(tasks []cleanup.Task, results map[string]cleanup.ScanResult
 	}
 }
 
-func printActionable(tasks []cleanup.Task, results map[string]cleanup.ScanResult) {
-	var total int64
-	fmt.Println()
+// printActionable previews a run. The total counts only the safe tasks, the
+// ones --batch cleans and the picker preselects; opt-in tasks are listed apart.
+func printActionable(w io.Writer, tasks []cleanup.Task, results map[string]cleanup.ScanResult) {
+	var safe, optIn []cleanup.Task
 	for _, t := range tasks {
-		fmt.Printf("  %s %s\n",
+		if t.Risk == cleanup.Safe {
+			safe = append(safe, t)
+		} else {
+			optIn = append(optIn, t)
+		}
+	}
+	fmt.Fprintln(w)
+	printTasksWithTotal(w, safe, results, "Reclaimable")
+	if len(optIn) > 0 {
+		fmt.Fprintln(w, "\n"+styles.Header.Render("Opt-in (not cleaned in batch; unchecked in the picker):"))
+		printTasksWithTotal(w, optIn, results, "Opt-in")
+	}
+}
+
+func printTasksWithTotal(w io.Writer, tasks []cleanup.Task, results map[string]cleanup.ScanResult, label string) {
+	var total int64
+	for _, t := range tasks {
+		fmt.Fprintf(w, "  %s %s\n",
 			styles.Label(38).Render(t.Name),
 			styles.Value.Render(sizeLabel(results[t.ID])))
 		if b := results[t.ID].Bytes; b > 0 {
 			total += b
 		}
 	}
-	fmt.Printf("\n  %s ≈ %s\n", styles.Header.Render("Reclaimable"), cleanup.Humanize(total))
+	fmt.Fprintf(w, "\n  %s ≈ %s\n", styles.Header.Render(label), cleanup.Humanize(total))
 }
 
 // pickCleanupTasks shows the grouped multi-select picker and returns the chosen
@@ -226,8 +245,8 @@ func pickCleanupTasks(tasks []cleanup.Task, results map[string]cleanup.ScanResul
 
 	m := multiselect.New(groups, multiselect.Options{
 		Title:        "Reclaim disk space",
-		StatusSuffix: "· space to toggle · enter to review & clean",
 		PreselectAll: true,
+		ConfirmHelp:  "review & clean",
 	})
 	wrapped := &cleanupPicker{ms: m}
 	res, runErr := tea.NewProgram(wrapped).Run()

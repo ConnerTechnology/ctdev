@@ -366,3 +366,13 @@ func TestViewSmoke(t *testing.T) {
 		_ = m.View()
 	}
 }
+
+func TestConfirmHelpLabelsEnter(t *testing.T) {
+	if got := New(sample(), Options{}).footerView(); !strings.Contains(got, "apply") {
+		t.Errorf("default enter label should be apply: %q", got)
+	}
+	got := New(sample(), Options{ConfirmHelp: "review & clean"}).footerView()
+	if !strings.Contains(got, "review & clean") || strings.Contains(got, "apply") {
+		t.Errorf("enter label should be the caller's: %q", got)
+	}
+}
