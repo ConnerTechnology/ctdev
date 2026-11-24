@@ -170,7 +170,7 @@ func TestBackUpNowFails(t *testing.T) {
 	d, _ := standinFolder(t, true, fails, forgets, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
 	folderFlow(context.Background(), ui, d)
-	if e := ui.said(Error); len(e) != 1 || !strings.HasPrefix(e[0], "backup failed: ") {
+	if e := ui.said(Error); len(e) != 1 || !strings.HasPrefix(e[0], "Backup failed: ") {
 		t.Errorf("errors = %q", e)
 	}
 	dash := requestsOf[Dashboard](ui)
@@ -231,8 +231,8 @@ func TestBackUpOnceWithNoDestination(t *testing.T) {
 	if len(c) != 1 || c[0].Yes != "Set one up" {
 		t.Errorf("confirm = %+v", c)
 	}
-	if e := ui.said(Error); len(e) != 1 || !strings.Contains(e[0], "isn't built yet") {
-		t.Errorf("errors = %q, want the create flow's", e)
+	if f := requestsOf[Form](ui); len(f) != 1 || f[0].Fields[0].Key != "name" || !strings.Contains(f[0].Page.Subtitle, "Back up once") {
+		t.Errorf("forms = %+v, want the new destination's", f)
 	}
 }
 

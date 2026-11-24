@@ -299,6 +299,9 @@ func (fm *form) view(int, int) stepView {
 		if e := fm.errs[fd.Key]; e != "" {
 			lines = append(lines, "    "+styles.Error.Render(e))
 		}
+		if fd.Note != "" {
+			lines = append(lines, "    "+styles.Dimmed.Render(fd.Note))
+		}
 	}
 	var notes []Line
 	if fm.f.Error != "" {
