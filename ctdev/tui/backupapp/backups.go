@@ -363,7 +363,7 @@ func backups(n int, all bool) string {
 	return fmt.Sprintf("%d backups", n)
 }
 
-// deleteAllBackups is Delete all backups: after y and typing the folder's
+// deleteAllBackups is Delete all: after y and typing the folder's
 // name, it forgets every backup of the folder (rows Y).
 func deleteAllBackups(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 	m := d.Machine

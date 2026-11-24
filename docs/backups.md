@@ -5,33 +5,41 @@ Backup is about the folder you're in. A folder is set up once, then backed up wh
 
 Per-folder backup is arriving in steps under
 [CTD-87](https://linear.app/conner-technology/issue/CTD-87). This page describes what ships today:
-the status screen, Configure, Back up now, List backups, Stop backing up, Delete all backups,
+the full-screen dashboard, Configure, Back up now, List backups, Stop backing up, Delete all,
 scheduled backups with their health, each destination's weekly maintenance and data check, and
 `ctdev backup --all` with its computers, Emergency Kit and password actions.
 
 ## Running `ctdev backup`
 
 `ctdev backup` looks up from the current directory for the nearest `.ctdev-backup.json`, the way
-git finds its repository. Its first line says what it found:
+git finds its repository, and opens a full-screen dashboard for that folder. In a subfolder, the
+dashboard is the backed-up folder's, and its top line says which subfolder you're in. A folder
+that isn't backed up yet looks like this:
 
 ```text
-Backed up folder: ~/Projects/website
-Backed up folder: ~/Projects/website  (you're in ~/Projects/website/docs)
-Not backed up: ~/Downloads
+~/Projects/website                                                    ▲ NOT BACKED UP
+not backed up · no destination on this computer yet
+
+  LAST BACKUP    never
+  NEXT           none: this folder isn't configured
+
+  SIZE NOW       15 B  1 file
+  STORED         none
+  KEEPING        one-off backups, until you delete them
+
+──────────────────────────────────────────────────────────────────────────────────────
+
+  Configure to back it up on a schedule, or back it up once.
+
+   c  Configure   b Back up now (once)   l List backups   s Stop backing up   D Delete all
+   q Quit
 ```
 
-In a subfolder, the status and menu are the backed-up folder's. Then come the status lines:
-
-```text
-  Destination    example-backups (Backblaze B2)
-  Size now       1.2 GB · 4,812 files
-  Last backup    Oct 21, 9:12 PM · succeeded
-  Schedule       daily · next due Oct 22, 9:12 PM
-                 runs only while you're logged in
-  Keeping        24 hourly, 7 daily, 4 weekly, 12 monthly, 3 yearly
-  Backups        14 · oldest Sep 2 · 1.6 GB stored
-  Data check     Oct 20 · OK
-```
+The top line is the folder, with a badge on the right when something needs you: NOT BACKED UP,
+NOT SCHEDULED, OVERDUE, LAST BACKUP FAILED, KEEP RULES FAILED, DATA CHECK FAILED, or one saying
+what can't be read. The line under it names the destination. The rows are the last backup, when the
+next one is due, the folder's size now, what the destination stores for it, the keep rules and the
+data check.
 
 These show in red:
 
@@ -43,35 +51,68 @@ These show in red:
 - **A failed data check**, with the step that failed and why
   ([Weekly maintenance](#weekly-maintenance-and-the-data-check)).
 
-A keep-rules failure shows in yellow on the Keeping line, as "retention failed: …". The backup
-before it still succeeded, so it isn't a failed backup. A data check that last finished more than
-two weeks ago, or hasn't run in the two weeks since the first folder here went on the destination,
-shows in yellow as "Data check  overdue (last Oct 2)" or "overdue (never run)".
+A keep-rules failure shows in yellow, as "retention failed: …". The backup before it still
+succeeded, so it isn't a failed backup. A data check that last finished more than two weeks ago, or
+hasn't run in the two weeks since the first folder here went on the destination, shows in yellow as
+overdue.
 
 "runs only while you're logged in" shows on Linux only ([Scheduled backups](#scheduled-backups)
 says why).
 
-Below the status is a menu you move through with the arrow keys. Items that don't apply are dimmed
-and can't be chosen.
+### Keys
 
-| Folder | Menu |
+The bar at the bottom holds the folder's actions. Press an action's letter, or move with ←/→ (or
+tab) and press enter. Actions that don't apply are dimmed and do nothing.
+
+| Key | Action |
 | --- | --- |
-| Configured | Back up now · List backups · Configure · Stop backing up · Delete all backups · Quit |
-| Not configured | Configure · Back up now (once) · List backups · Stop backing up · Delete all backups · Quit |
+| `b` | Back up now; Back up now (once) in a folder that isn't configured; Try again after a failure |
+| `l` | List backups |
+| `c` | Configure |
+| `s` | Stop backing up |
+| `D` | Delete all (a capital, since it deletes) |
+| `q` | Quit |
 
-List backups and Delete all backups are dimmed until the folder has a backup. Stop backing up is
-always dimmed in a folder that isn't configured.
+In a configured folder the bar starts with Back up now; in one that isn't, with Configure. List
+backups and Delete all are dimmed until the folder has a backup. Stop backing up is dimmed in a
+folder that isn't configured.
+
+Every screen below the dashboard says its keys on its last line. Lists move with ↑/↓ and open with
+enter. esc goes back one screen, and leaves a question unanswered. A question that deletes
+something goes ahead only on `y`; any other key keeps things as they are. ctrl+c quits from
+anywhere, except on an Emergency Kit, where it asks first, and while something runs, where the
+first ctrl+c cancels it. A change to the destination's keys can't be cancelled once it starts.
+
+After an action, its result shows above the bar until the next key. When you quit, ctdev prints
+those result lines in the terminal, so they stay in its scrollback. Nothing else on the screen
+does: no Emergency Kit, Recovery Code or password is ever left there.
 
 ### Without a terminal
 
-Piped (`ctdev backup | cat`) or with `--batch`, `ctdev backup` prints the status and no menu. It
-exits non-zero when the folder isn't backed up, or its last backup failed or is overdue, so it works
-as a check.
+Piped (`ctdev backup | cat`) or with `--batch`, `ctdev backup` opens no dashboard. It prints the
+folder's status as plain lines:
+
+```text
+Backed up folder: ~/Projects/website
+  Destination    example-backups (Backblaze B2)
+  Size now       1.2 GB · 4,812 files
+  Last backup    Oct 21, 9:12 PM · succeeded
+  Schedule       daily · next due Oct 22, 9:12 PM
+                 runs only while you're logged in
+  Keeping        24 hourly, 7 daily, 4 weekly, 12 monthly, 3 yearly
+  Backups        14 · oldest Sep 2 · 1.6 GB stored
+  Data check     Oct 20 · OK
+```
+
+The first line is "Backed up folder: …", with "(you're in …)" in a subfolder, or "Not backed up: …".
+It exits non-zero when the folder isn't backed up, or its last backup failed or is overdue, so it
+works as a check.
 
 ## Configure
 
-Configure sets up the folder in one walk-through: a destination, a schedule and retention.
-Reconfiguring a folder starts from its current values.
+Configure (`c`) sets up the folder in one walk-through, a step per screen: a destination, a
+schedule and retention. Its subtitle counts the steps. Reconfiguring a folder starts from its
+current values, and esc goes back a step with what you entered kept.
 
 - **Destination.** Pick one this computer already has, create a new one, or connect to an existing
   one (below). A destination is one restic repository, shared by every folder and computer that
@@ -93,12 +134,13 @@ computer, that `ctdev backup --all` shows, and this folder's `.ctdev-backup.json
 folder's ID, so its backups continue that history. Use it for a folder rebuilt on a new computer, or
 one whose backing up was stopped. Only folders with an ID can be continued, not one-off backups,
 and the list leaves out any folder this computer still backs up, since two folders sharing an ID
-would share their keep rules and deletes. Going Back from the list (or q or esc) starts a new
-history instead; Ctrl+C cancels Configure.
+would share their keep rules and deletes. Going back from the list with esc starts a new history
+instead. Leaving Configure before its last step writes no `.ctdev-backup.json`; a destination
+created on the way is kept.
 
 The list can't tell whether another computer still backs a folder up. Linking to one that it does
 makes this folder share that folder's keep rules and deletes: retention counts both folders'
-backups together, and Delete all backups in either removes both. Link only a folder that was rebuilt
+backups together, and Delete all in either removes both. Link only a folder that was rebuilt
 or moved here, not one that is still in use elsewhere.
 
 In a subfolder, Configure reconfigures the backed-up folder above it; a folder inside a backed-up
@@ -107,13 +149,19 @@ allowed, with a warning that the inner folder will be in both folders' backups.
 
 ### Creating a destination
 
-You name it, choose the backend and give its credentials, and type a master password twice. ctdev
-generates a Secret Key, creates the restic repository, and shows two things once:
+On one screen you name it, choose the backend and give its credentials. On the next you type a
+master password twice. ctdev generates a Secret Key, creates the restic repository, and shows two
+things once:
 
 - **The Emergency Kit**: the destination's name and address, the backend credentials, the Secret
   Key, and a blank line to write the master password on. Save it in your password manager or print
   it.
 - **The Recovery Code**: keep it apart from the kit. It's for resetting a forgotten master password.
+
+`c` copies the kit and the code to the clipboard, where the terminal allows it, and enter says
+you've saved them. Leaving with esc or ctrl+c first asks "Leave without saving them?". The kit is
+never printed to the terminal, so once you leave the screen it's gone from it; Show Emergency Kit
+under `ctdev backup --all` shows it again.
 
 The master password and the Secret Key together unlock the destination; neither opens anything
 alone, and ctdev never stores the master password. Each computer gets its own key, labeled with its
@@ -123,17 +171,23 @@ set up, and the backups can't be decrypted by anyone, ctdev included.
 
 ### Connecting to an existing destination
 
-On another computer, choose "Connect to an existing destination", paste the Emergency Kit, and type
-the master password. ctdev opens the repository with them before saving anything; a wrong password
+On another computer, choose "Connect to an existing destination (Emergency Kit)", paste the
+Emergency Kit, and type the master password. ctdev opens the repository with them before saving anything; a wrong password
 or kit saves nothing. It then adds this computer's own key.
 
 ## Back up now
 
-Back up now says how much it will back up and asks first:
+Back up now (`b`) says how much it will back up and asks first:
 
 ```text
-  This backs up all of ~/Projects/website: 1.2 GB, 4,812 files. Continue? [Y/n]
+  Back up now
+  All of ~/Projects/website · 1.2 GB · 4,812 files  →  example-backups
+
+   enter  Back up     esc Cancel
 ```
+
+While it runs, it shows the files and bytes done and about how long is left. esc or ctrl+c cancels
+it, and no backup is made. When it finishes, the dashboard says what it backed up and its short ID.
 
 The whole folder is backed up from inside it, with paths relative to it. Each backup is tagged with
 the folder's ID, its path as shown on this computer (`~/Projects/website`), and the hostname.
@@ -159,20 +213,21 @@ for longer than restic waits aren't a failure: the next scheduled run applies th
 
 ## List backups
 
-List backups shows the folder's backups, newest first, under a header with how many there are and
-the space they take in the destination after deduplication:
+List backups (`l`) shows the folder's backups, newest first, under a line with how many there are
+and the space they take in the destination after deduplication:
 
 ```text
-Backups of ~/Projects/website · 14 backups · 1.6 GB stored
+~/Projects/website › Backups
+14 backups · 1.6 GB stored in example-backups · Backblaze B2
 
-  > Oct 21, 9:12 PM     1.2 GB     12.0 MB new   4,812 files  latest
-    Oct 20, 9:10 PM     1.2 GB      3.1 MB new   4,809 files
-    ...
-    Back
+  WHEN                SIZE      NEW   FILES
+  Oct 21, 9:12 PM   1.2 GB  12.0 MB   4,812   latest
+  Oct 20, 9:10 PM   1.2 GB   3.1 MB   4,809
 ```
 
-Choosing a backup shows its size, file count, new data, the files changed and added since the
-backup before it, how long it took, the computer that made it and its short ID. Then:
+Opening a backup with enter shows its size, file count, new data, the files changed and added since
+the backup before it, how long it took, the computer that made it and its short ID. Its bar is
+`z` Download as zip · `D` Delete this backup · esc Back:
 
 - **Download as zip.** restic writes the backup as a zip into a temporary file, which is renamed
   into place once complete, and ctdev prints the path. The zip holds the folder's contents at their
@@ -181,12 +236,13 @@ backup before it, how long it took, the computer that made it and its short ID. 
   `~/Projects`, and never inside a backed-up folder: when the folder sits inside another backed-up
   folder, the zip goes beside the outer one. The zip is readable only by you (mode 0600), since it
   holds the folder's contents. ctdev doesn't restore; open the zip and copy back what you need.
-- **Delete this backup** asks `[y/N]`, then forgets that one backup.
-- **Back** returns to the list.
+- **Delete this backup** asks first and deletes only on `y`, then forgets that one backup.
+- **esc** returns to the list.
 
-## Delete all backups
+## Delete all
 
-Delete all backups asks `[y/N]`, then has you type the folder's name, and forgets every backup of
+Delete all (`D`) says how many backups it deletes and asks first, going on only on `y`. Then it has
+you type the folder's name and press enter, and forgets every backup of
 the folder: by its ID once configured, or, for a folder that isn't, its one-offs, the backups with
 no folder ID that this computer made of its path. A backup that carries a folder ID always belongs
 to that folder, so a new folder made where a backed-up one used to be never claims the old one's
@@ -196,9 +252,10 @@ freed at the next weekly maintenance, due Oct 27."
 
 ## Stop backing up
 
-Stop backing up asks `[y/N]`, deletes the folder's `.ctdev-backup.json` and takes it off this
-computer's list. It then asks whether to also delete all the folder's backups, from every computer;
-saying yes has you type the folder's name, as Delete all backups does, and forgets every backup with
+Stop backing up (`s`) asks first, going on only on `y`, then deletes the folder's
+`.ctdev-backup.json` and takes it off this computer's list. It then asks whether to also delete all
+the folder's backups, from every computer, with "Keep them" as the default; saying yes has you type
+the folder's name, as Delete all does, and forgets every backup with
 the folder's ID before its config file goes. A backup that finishes in the meantime, such as a
 scheduled one that was already running, isn't in the list you confirmed, so it's kept; ctdev lists
 the folder's backups again afterwards and says so, and `ctdev backup --all` lists it.
@@ -321,32 +378,40 @@ same hostname don't mistake each other's.
 ## Every folder: `ctdev backup --all`
 
 `ctdev backup --all` is the whole destination rather than the folder you're in. It works from any
-directory and writes nothing into it, except a download that falls back there (below). Its first
-line names the destination and what it holds, with the space stored measured once when `--all`
-starts:
+directory and writes nothing into it, except a download that falls back there (below). It opens a
+dashboard for the destination, with the space stored measured once when `--all` starts:
 
 ```text
-example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored
+example-backups
+all backups on this destination · Backblaze B2
+
+  COMPUTERS      2                 with a key to example-backups
+  FOLDERS        3                 from 2 computers
+  STORED         1.6 GB            every backup of every folder
+
+──────────────────────────────────────────────────────────────────────────────────────
+
+   l  List backups   c Computers   e Emergency Kit and password   q Quit
 ```
 
-The menu is List backups · Computers · Emergency Kit and password · Quit. With several destinations
-on this computer, `--all` asks which one first. "Computers" counts hostnames, so a computer set up again under the same name counts once.
+The keys work as on the folder dashboard ([Keys](#keys)). With several destinations on this
+computer, `--all` asks which one first. COMPUTERS counts hostnames, so a computer set up again under
+the same name counts once.
 
-List backups shows every backed-up folder in the destination, grouped by computer, with this
+List backups (`l`) shows every backed-up folder in the destination, grouped by computer, with this
 computer first. Each entry is the folder's path as it was on that computer, with its latest backup,
 that backup's size and the number of backups:
 
 ```text
-Folders in example-backups
+example-backups › Folders
+Folders in example-backups · by computer, this one first
 
+    FOLDER               LAST BACKUP                        SIZE   BACKUPS
   example-desktop (this computer)
-  > ~/Documents/notes   Oct 21, 9:12 PM    52.0 kB  3 backups
-
+    ~/Documents/notes    15 hours ago   Oct 21, 9:12 PM  52.0 kB   3 backups
   example-laptop
-    ~/Downloads/scans   Oct 2, 8:05 AM      3.4 MB  1 backup
-    ~/Projects/website  Oct 20, 9:10 PM     1.2 GB  14 backups
-
-    Back
+    ~/Downloads/scans    20 days ago    Oct 2, 8:05 AM    3.4 MB   1 backup
+    ~/Projects/website   2 days ago     Oct 20, 9:10 PM   1.2 GB   14 backups
 ```
 
 A folder backed up from two computers appears under each. One-off backups, which have no folder ID,
@@ -360,12 +425,14 @@ directory, or, when that is inside a backed-up folder, beside that folder. The s
 when you can't write to that parent, as for a folder recorded as `~`. It never lands inside a
 backed-up folder.
 
-Piped or with `--batch`, `ctdev backup --all` prints each destination's first line and its folders.
+Piped or with `--batch`, `ctdev backup --all` opens no dashboard. It prints a line per destination,
+such as `example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored`, and its folders
+under each computer.
 
 ### Setting up a new computer
 
 On a computer with no destination, `ctdev backup --all` first offers "Connect to an existing
-destination" or "Create a new destination". To connect, paste the Emergency Kit and type the master
+destination (Emergency Kit)" or "Create a new destination". To connect, paste the Emergency Kit and type the master
 password. ctdev checks them by opening the repository before it saves anything; a wrong password or
 kit saves nothing. It then adds this computer's own key, labeled with its hostname, and saves the
 destination to `~/.config/ctdev/backup/destinations/<name>.env`.
@@ -389,9 +456,9 @@ without that step.
 
 ### Computers
 
-Computers lists each computer with a key on the destination, by hostname and the date its key was
-added, with this computer marked. The account key and the Recovery Code's key aren't computers and
-aren't listed. Pick one for Remove this computer · I lost this computer · Back.
+Computers (`c`) lists each computer with a key on the destination, by hostname and the date its key
+was added, with this computer marked. The account key and the Recovery Code's key aren't computers
+and aren't listed. Opening one gives `R` Remove this computer · `L` I lost this computer · esc Back.
 
 Every action here and under Emergency Kit and password asks for the master password first, and
 checks it by opening the destination with the account key. A wrong one changes nothing. The two
@@ -408,7 +475,7 @@ exceptions are Use a Recovery Code and Paste an updated Emergency Kit.
      and that provider's documentation has the exact clicks. For SFTP it gives the steps for taking
      the lost computer's SSH key off the server and then checks the connection. A local path or USB
      drive has nothing to revoke.
-  4. It shows the new Emergency Kit.
+  4. It shows the new Emergency Kit, under a checklist of the steps done.
   5. You paste the new kit once on each other computer (below).
 
   If it stops partway, after a failure or Ctrl-C, it says what it has done and which items under
@@ -416,6 +483,11 @@ exceptions are Use a Recovery Code and Paste an updated Emergency Kit.
   be started again for it.
 
 ### Emergency Kit and password
+
+Emergency Kit and password (`e`) is a list: the first four items need the master password, the last
+two don't. Every kit it shows is on a screen like the one Creating a destination shows, with `c` to
+copy it, and is never printed to the terminal. A kit that replaces the old one is headed "New
+Emergency Kit".
 
 - **Show Emergency Kit** shows the kit this computer has.
 - **Change master password** asks for the new one twice. The Secret Key and the kit stay the same,
