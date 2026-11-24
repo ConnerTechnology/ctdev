@@ -26,7 +26,6 @@ func TestNpmComponents_DryRunWithoutNpm(t *testing.T) {
 		{"ccusage", FindByName("ccusage").GoInstall, "[dry-run] npm install -g ccusage"},
 		{"codex", FindByName("codex").GoInstall, "[dry-run] npm install -g @openai/codex"},
 		{"devcontainer", devcontainerInstall, "[dry-run] npm install -g @devcontainers/cli"},
-		{"gemini-cli", FindByName("gemini-cli").GoInstall, "[dry-run] npm install -g @google/gemini-cli"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,9 +52,8 @@ func TestNpmPath_RealRunWithoutNpmFails(t *testing.T) {
 
 func TestNpmGlobalComponents_DryRunUninstall(t *testing.T) {
 	cases := map[string]string{
-		"ccusage":    "[dry-run] npm uninstall -g ccusage",
-		"codex":      "[dry-run] npm uninstall -g @openai/codex",
-		"gemini-cli": "[dry-run] npm uninstall -g @google/gemini-cli",
+		"ccusage": "[dry-run] npm uninstall -g ccusage",
+		"codex":   "[dry-run] npm uninstall -g @openai/codex",
 	}
 	for name, want := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -144,14 +142,14 @@ func TestNpmGlobalInstaller_RehashesNodenv(t *testing.T) {
 
 	ctx := context.Background()
 	opts := ExecOpts{Force: true, Stdout: io.Discard}
-	if err := FindByName("gemini-cli").GoInstall(ctx, opts); err != nil {
+	if err := FindByName("codex").GoInstall(ctx, opts); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if err := FindByName("gemini-cli").GoUninstall(ctx, opts); err != nil {
+	if err := FindByName("codex").GoUninstall(ctx, opts); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
-	want := "NODENV_VERSION=24.1.0 nodenv exec npm install -g @google/gemini-cli\nnodenv rehash\n" +
-		"NODENV_VERSION=24.1.0 nodenv exec npm uninstall -g @google/gemini-cli\nnodenv rehash\n"
+	want := "NODENV_VERSION=24.1.0 nodenv exec npm install -g @openai/codex\nnodenv rehash\n" +
+		"NODENV_VERSION=24.1.0 nodenv exec npm uninstall -g @openai/codex\nnodenv rehash\n"
 	if got := readCalls(t, log); got != want {
 		t.Errorf("calls:\n%s\nwant:\n%s", got, want)
 	}

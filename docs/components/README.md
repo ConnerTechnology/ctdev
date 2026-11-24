@@ -34,6 +34,7 @@ component unsupported on this OS reports as skipped rather than failing.
 
 | Component | What it is | Platforms |
 | --- | --- | --- |
+| `antigravity-cli` | Google Antigravity CLI coding agent (`agy`) | Linux, macOS |
 | `aws` | AWS CLI v2 | Linux, macOS |
 | `bat` | cat with syntax highlighting | Linux, macOS |
 | `btop` | Resource monitor | Linux, macOS |
@@ -49,7 +50,6 @@ component unsupported on this OS reports as skipped rather than failing.
 | `fd` | Fast, friendly find alternative | Linux, macOS |
 | `ffmpeg` | Audio and video converter and recorder | Linux, macOS |
 | `fzf` | Fuzzy finder for the shell | Linux, macOS |
-| `gemini-cli` | Google Gemini CLI coding agent | Linux, macOS |
 | `gh` | GitHub CLI | Linux, macOS |
 | `git-spice` | Git Spice stacked branches tool | Linux, macOS |
 | `gws` | Google Workspace CLI (Drive, Gmail, Calendar, and more) | Linux, macOS |

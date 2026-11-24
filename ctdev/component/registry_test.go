@@ -52,7 +52,7 @@ func TestHelmDependsOnKubectl(t *testing.T) {
 // The npm-global components need npm, which runs under the Node nodenv manages,
 // and install under $HOME without root.
 func TestNpmGlobalComponentsInstallThroughNode(t *testing.T) {
-	for _, name := range []string{"ccusage", "codex", "gemini-cli"} {
+	for _, name := range []string{"ccusage", "codex"} {
 		c := FindByName(name)
 		if c == nil {
 			t.Errorf("%s component missing from registry", name)

@@ -110,7 +110,7 @@ func ensureGlobalNode(ctx context.Context, o sysutil.Opts) (string, error) {
 
 // runNpm runs npm under nodenv version node, or the npm on PATH when node is
 // "". nodenv makes a shim for a package's command only on rehash, so without
-// one `gemini` is not found until a new shell runs `nodenv init`. The package
+// one `codex` is not found until a new shell runs `nodenv init`. The package
 // is already in place by then, so a failed rehash only warns.
 func runNpm(ctx context.Context, o sysutil.Opts, node string, args ...string) error {
 	if node != "" {

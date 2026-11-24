@@ -16,7 +16,7 @@ import (
 // `ctdev configure node`. A global version has project-wide effects (native
 // modules, engines fields), and `ctdev update` runs unattended with -y, so
 // ctdev never picks or bumps one itself. Bumping it once left every global npm
-// package on the old version, and claude, codex and gemini stopped resolving.
+// package on the old version, and claude, codex and ccusage stopped resolving.
 func nodenvInstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 
