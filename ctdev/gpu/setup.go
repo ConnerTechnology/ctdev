@@ -3,6 +3,7 @@ package gpu
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -187,6 +188,7 @@ func SignNvidiaModules(ctx context.Context, opts Opts) error {
 	}
 
 	signedCount := 0
+	var failures []error
 	for _, module := range modules {
 		if opts.DryRun {
 			fmt.Fprintf(opts.Stdout, "[dry-run] Would sign: %s\n", module)
@@ -194,43 +196,48 @@ func SignNvidiaModules(ctx context.Context, opts Opts) error {
 			continue
 		}
 
-		actual := module
-		compressed := false
-		var compressFormat string
-
-		if strings.HasSuffix(module, ".zst") {
-			actual = strings.TrimSuffix(module, ".zst")
-			compressFormat = "zst"
-			compressed = true
-			_ = sudoRun(ctx, opts, "zstd", "-d", "-f", module, "-o", actual)
-		} else if strings.HasSuffix(module, ".xz") {
-			actual = strings.TrimSuffix(module, ".xz")
-			compressFormat = "xz"
-			compressed = true
-			_ = sudoRun(ctx, opts, "xz", "-d", "-k", "-f", module)
-		}
-
-		if err := sudoRun(ctx, opts, signFile, "sha256", MOKPriv, MOKCert, actual); err != nil {
-			fmt.Fprintf(opts.Stdout, "Failed to sign: %s\n", module)
+		if err := signNvidiaModule(ctx, opts, signFile, module); err != nil {
+			failures = append(failures, fmt.Errorf("sign %s: %w", module, err))
 			continue
 		}
 
 		fmt.Fprintf(opts.Stdout, "Signed: %s\n", module)
 		signedCount++
-
-		if compressed {
-			switch compressFormat {
-			case "zst":
-				_ = sudoRun(ctx, opts, "zstd", "-f", actual, "-o", module)
-				_ = sudoRun(ctx, opts, "rm", "-f", actual)
-			case "xz":
-				_ = sudoRun(ctx, opts, "xz", "-f", actual)
-			}
-		}
 	}
 
 	if !opts.DryRun {
 		fmt.Fprintf(opts.Stdout, "Signed %d module(s)\n", signedCount)
+	}
+	return errors.Join(failures...)
+}
+
+func signNvidiaModule(ctx context.Context, opts Opts, signFile, module string) error {
+	actual := module
+	switch {
+	case strings.HasSuffix(module, ".zst"):
+		actual = strings.TrimSuffix(module, ".zst")
+		if err := sudoRun(ctx, opts, "zstd", "-d", "-f", module, "-o", actual); err != nil {
+			return fmt.Errorf("decompress: %w", err)
+		}
+	case strings.HasSuffix(module, ".xz"):
+		actual = strings.TrimSuffix(module, ".xz")
+		if err := sudoRun(ctx, opts, "xz", "-d", "-k", "-f", module); err != nil {
+			return fmt.Errorf("decompress: %w", err)
+		}
+	}
+	if err := sudoRun(ctx, opts, signFile, "sha256", MOKPriv, MOKCert, actual); err != nil {
+		return err
+	}
+	switch {
+	case strings.HasSuffix(module, ".zst"):
+		if err := sudoRun(ctx, opts, "zstd", "-f", actual, "-o", module); err != nil {
+			return fmt.Errorf("recompress: %w", err)
+		}
+		return sudoRun(ctx, opts, "rm", "-f", actual)
+	case strings.HasSuffix(module, ".xz"):
+		if err := sudoRun(ctx, opts, "xz", "-f", actual); err != nil {
+			return fmt.Errorf("recompress: %w", err)
+		}
 	}
 	return nil
 }
@@ -373,10 +380,10 @@ func RunSetup(ctx context.Context, opts Opts) error {
 	if ModuleSignatureValid() && !opts.Force {
 		fmt.Fprintln(opts.Stdout, "NVIDIA modules already signed with correct key")
 	} else {
-		if err := RebuildDKMS(ctx, opts); err != nil {
-			fmt.Fprintf(opts.Stdout, "DKMS rebuild failed, falling back to manual signing: %v\n", err)
-			if err := SignNvidiaModules(ctx, opts); err != nil {
-				fmt.Fprintf(opts.Stdout, "Warning: manual signing also failed: %v\n", err)
+		if rebuildErr := RebuildDKMS(ctx, opts); rebuildErr != nil {
+			fmt.Fprintf(opts.Stdout, "DKMS rebuild failed, falling back to manual signing: %v\n", rebuildErr)
+			if signErr := SignNvidiaModules(ctx, opts); signErr != nil {
+				return fmt.Errorf("%w; manual signing also failed: %w", rebuildErr, signErr)
 			}
 		}
 	}

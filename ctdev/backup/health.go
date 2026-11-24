@@ -72,6 +72,9 @@ func (m *Machine) Health() ([]FolderHealth, error) {
 	out := make([]FolderHealth, 0, len(folders))
 	for _, e := range folders {
 		r := runs[e.Path]
+		if !r.atDestination(e.Destination, "") {
+			r = Run{}
+		}
 		out = append(out, FolderHealth{Path: e.Path, Schedule: e.schedule(), State: judge(e, r, now), Run: r})
 	}
 	return out, nil

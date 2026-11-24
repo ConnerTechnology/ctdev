@@ -154,14 +154,16 @@ func TestBackUpNowSaysWhenTheDestinationIsBusy(t *testing.T) {
 	}
 }
 
-// A backup restic made while skipping unreadable files is still a backup,
-// with a note.
-func TestBackUpNowNotesAPartialBackup(t *testing.T) {
+// An incomplete snapshot can still be restored, but it shouldn't trigger retention.
+func TestBackUpNowReportsAPartialBackup(t *testing.T) {
 	d, _ := standinFolder(t, true, backs+`; exit 3`, forgets, "example-backups")
 	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
 	folderFlow(context.Background(), ui, d)
-	if len(ui.said(OK)) != 1 || !slices.Equal(ui.said(Warning), []string{"Note: some files couldn't be read."}) {
-		t.Errorf("said %+v, want the success and the note", ui.Said)
+	if got := ui.said(Error); len(got) != 1 || !strings.Contains(got[0], "some files couldn't be read") || !strings.Contains(got[0], "01234567") || len(ui.said(OK)) != 0 {
+		t.Errorf("said %+v, want an incomplete backup error with the snapshot ID", ui.Said)
+	}
+	if strings.Contains(resticLog(t, d), "forget ") {
+		t.Error("Back up now ran retention after an incomplete backup")
 	}
 }
 

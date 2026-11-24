@@ -14,6 +14,11 @@ import (
 // fakeNotifier records the notifications it's asked to send.
 type fakeNotifier struct{ sent []string }
 
+// Simulate a run recorded by a version that didn't store its destination.
+func (m *Machine) recordRun(root string, at time.Time, err error) error {
+	return m.recordRunAt(root, "", at, err)
+}
+
 func (n *fakeNotifier) Notify(_ context.Context, title, body string) error {
 	n.sent = append(n.sent, title+": "+body)
 	return nil

@@ -5,8 +5,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 	"github.com/spf13/cobra"
@@ -115,6 +117,73 @@ func TestBackupWithoutATerminalFailsWhenNotBackedUp(t *testing.T) {
 	}
 	if !strings.HasPrefix(out, "Not backed up: ~/Projects/website\n") || !strings.Contains(out, "Last backup") {
 		t.Errorf("status = %q", out)
+	}
+}
+
+func TestBackupWithoutATerminalChecksLocalScheduleAndSnapshots(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("the scheduler supports Linux and macOS")
+	}
+	for _, tt := range []struct {
+		name                        string
+		listed, installed, snapshot bool
+		wantErr                     string
+	}{
+		{name: "config only", wantErr: "not scheduled"},
+		{name: "timer missing", listed: true, snapshot: true, wantErr: "not scheduled"},
+		{name: "first backup pending", listed: true, installed: true, wantErr: "no backups"},
+		{name: "backed up", listed: true, installed: true, snapshot: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := backupFolderForTest(t)
+			home := os.Getenv("HOME")
+			cfg := backup.NewConfig("example-backups")
+			if err := backup.WriteConfig(dir, cfg); err != nil {
+				t.Fatal(err)
+			}
+			write := func(path, body string, mode os.FileMode) {
+				t.Helper()
+				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(body), mode); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfgDir := filepath.Join(home, ".config", "ctdev", "backup")
+			write(filepath.Join(cfgDir, "destinations", cfg.Destination+".env"), "RESTIC_REPOSITORY="+filepath.Join(home, "repo")+"\nCTDEV_COMPUTER_KEY=example\n", 0o600)
+			if tt.listed {
+				now := time.Now().UTC().Format(time.RFC3339)
+				write(filepath.Join(cfgDir, "folders.json"), `{"folders":[{"path":"`+dir+`","id":"`+cfg.ID+`","schedule":"daily","added":"`+now+`"}]}`, 0o600)
+			}
+			if tt.installed {
+				if runtime.GOOS == "linux" {
+					systemd := filepath.Join(home, ".config", "systemd", "user")
+					for _, name := range []string{"ctdev-backup.service", "ctdev-backup.timer", "timers.target.wants/ctdev-backup.timer"} {
+						write(filepath.Join(systemd, name), "", 0o600)
+					}
+				} else {
+					write(filepath.Join(home, "Library", "LaunchAgents", "io.connertechnology.ctdev.backup.plist"), "", 0o600)
+				}
+			}
+			snapshots := "[]"
+			if tt.snapshot {
+				snapshots = `[{"id":"0123456789abcdef","time":"2026-10-21T12:00:00Z","tags":["ctdev-folder:` + cfg.ID + `"]}]`
+			}
+			write(filepath.Join(home, ".local", "bin", "restic"), `#!/bin/sh
+case "$*" in
+version) echo 'restic 0.19.1' ;;
+snapshots*ctdev-maintenance*) echo '[]' ;;
+snapshots*) echo '`+snapshots+`' ;;
+stats*) echo '{"total_size": 1}' ;;
+*) exit 1 ;;
+esac
+`, 0o755)
+			out, err := runBackupBatch(t)
+			if tt.wantErr == "" && err != nil || tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
+				t.Errorf("want error containing %q, got %v; status:\n%s", tt.wantErr, err, out)
+			}
+		})
 	}
 }
 

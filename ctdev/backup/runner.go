@@ -90,7 +90,7 @@ func (m *Machine) RunScheduled(ctx context.Context) ([]ScheduledRun, []Maintenan
 			errs = append(errs, fmt.Errorf("%s: %w", r.Destination, r.Err))
 		}
 	}
-	errs = append(errs, m.notifyChanges(ctx, folders))
+	errs = append(errs, m.notifyChanges(ctx))
 	return results, maint, errors.Join(errs...)
 }
 
@@ -139,6 +139,9 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 		}
 		return res
 	}
+	if !last.atDestination(cfg.Destination, e.Destination) {
+		last = Run{}
+	}
 	if dry {
 		// Say what would happen, writing nothing: Backup dry-runs too.
 		if !Due(cfg.Schedule, last, m.now()) {
@@ -182,7 +185,7 @@ func (m *Machine) runOne(ctx context.Context, e folderEntry, last Run) Scheduled
 	d, err := m.Destination(cfg.Destination)
 	if err != nil {
 		res.Outcome, res.Err = Failed, err
-		if rerr := m.recordRun(e.Path, m.now(), err); rerr != nil {
+		if rerr := m.recordRunAt(e.Path, cfg.Destination, m.now(), err); rerr != nil {
 			res.Err = errors.Join(err, rerr)
 		}
 		return res
@@ -240,7 +243,11 @@ func (m *Machine) findListed(e folderEntry) (Config, string) {
 // (a failed or missing last attempt) and one when it recovers, never one per
 // failed run. Whether the "failing" one went out is kept in state.json, so a
 // success from Back up now counts as a recovery too.
-func (m *Machine) notifyChanges(ctx context.Context, folders []folderEntry) error {
+func (m *Machine) notifyChanges(ctx context.Context) error {
+	folders, err := m.scheduledFolders()
+	if err != nil {
+		return err
+	}
 	runs, err := m.runs()
 	if err != nil {
 		return err
@@ -248,6 +255,9 @@ func (m *Machine) notifyChanges(ctx context.Context, folders []folderEntry) erro
 	n := m.notifier()
 	for _, e := range folders {
 		r := runs[e.Path]
+		if !r.atDestination(e.Destination, "") {
+			continue
+		}
 		failing := r.Failed()
 		if failing == r.Alerted {
 			continue

@@ -131,6 +131,17 @@ func (d *Destination) ApplyRetention(ctx context.Context, cfg Config) error {
 // success clears it. Back up now, a scheduled run and the weekly maintenance
 // all apply them this way.
 func (m *Machine) Retain(ctx context.Context, d *Destination, root string, cfg Config) error {
+	if !m.Opts.DryRun {
+		last, _, err := m.lastRun(root)
+		if err != nil {
+			return err
+		}
+		// Weekly maintenance can run even when the backup failed. Protect
+		// the older snapshots until this folder has a complete backup again.
+		if last.Incomplete && last.atDestination(d.Name, "") {
+			return nil
+		}
+	}
 	err := d.ApplyRetention(ctx, cfg)
 	if m.Opts.DryRun {
 		return err
@@ -151,7 +162,7 @@ func (m *Machine) Retain(ctx context.Context, d *Destination, root string, cfg C
 		// failure stands until they apply.
 		change = func(r *Run) { r.RetentionDeferred = true }
 	}
-	if rerr := m.updateRun(root, change); rerr != nil {
+	if rerr := m.updateRunAt(root, d.Name, change); rerr != nil {
 		return errors.Join(err, rerr)
 	}
 	return err

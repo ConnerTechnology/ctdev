@@ -64,8 +64,6 @@ type Snapshot struct {
 	FilesNew     int           // files the backup found new since the one before
 	FilesChanged int           // files changed since the one before
 	Duration     time.Duration // how long the backup took
-
-	Warning string
 }
 
 // Backup backs up the whole folder at root to d, as the user, from inside
@@ -118,27 +116,27 @@ func (m *Machine) backup(ctx context.Context, d *Destination, root string, cfg *
 		return Snapshot{}, ctx.Err()
 	}
 	partial := errors.Is(err, errPartial)
-	if partial {
-		err = nil // the backup was made; Warning says what was skipped
-	}
 	var snap Snapshot
-	if err == nil {
-		snap, err = backupSummary(out)
+	if partial || err == nil {
+		var summaryErr error
+		snap, summaryErr = backupSummary(out)
+		if partial && summaryErr == nil && snap.ShortID != "" {
+			err = fmt.Errorf("incomplete backup %s saved: %w", snap.ShortID, err)
+		} else {
+			err = errors.Join(err, summaryErr)
+		}
 	}
 	snap.Host, snap.FolderID, snap.Path = m.Hostname, ref.FolderID, ref.Path
-	if partial && err == nil {
-		snap.Warning = errPartial.Error()
-	}
 	if errors.Is(err, ErrDestinationBusy) {
 		// Nothing ran: the destination was locked, usually by another
 		// computer's weekly maintenance. That's deferred, not failed.
-		if serr := m.updateRun(root, func(r *Run) { r.Deferred, r.DeferredAt = err.Error(), started }); serr != nil {
+		if serr := m.updateRunAt(root, d.Name, func(r *Run) { r.Deferred, r.DeferredAt = err.Error(), started }); serr != nil {
 			err = errors.Join(err, serr)
 		}
 		return snap, err
 	}
-	if serr := m.recordRun(root, started, err); serr != nil && err == nil {
-		err = serr
+	if serr := m.recordRunAt(root, d.Name, started, err); serr != nil {
+		err = errors.Join(err, serr)
 	}
 	return snap, err
 }
