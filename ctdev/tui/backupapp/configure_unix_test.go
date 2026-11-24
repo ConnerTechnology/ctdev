@@ -16,15 +16,15 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-const master = "correct horse example staple"
+const masterPassword = "correct horse example staple"
 
-// keyStandin replaces the folder's stand-in restic with one that keeps a
+// resticKeyring replaces the folder's stand-in restic with one that keeps a
 // repository's keys: init makes one for RESTIC_PASSWORD, key add, list and
 // remove need a password a key holds (exit 12 otherwise, as restic's wrong
 // password), and the new key's password arrives on fd 3. A repository with
 // no keys lists none. Key IDs count up. snapshots lists ~/snapshots.json, or none when asked
 // by tag.
-func keyStandin(t *testing.T, d Deps) {
+func resticKeyring(t *testing.T, d Deps) {
 	t.Helper()
 	script := `#!/bin/sh
 echo "$*" >> "$HOME/restic.log"
@@ -94,7 +94,7 @@ func newPassword(pw string) Values { return Values{"master": pw, "again": pw} }
 // the folder above, starting from its current values.
 func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 	d, _ := standinFolder(t, false, backs, forgets)
-	keyStandin(t, d)
+	resticKeyring(t, d)
 	sched := &fakeScheduler{}
 	d.Scheduler = sched
 	m := d.Machine
@@ -106,7 +106,7 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 		Forms: []any{
 			localPlace("example-backups", "~/Projects/website/.backups"), // inside the folder: refused
 			localPlace("example-backups", repo),
-			newPassword(master),
+			newPassword(masterPassword),
 			Values{"hourly": "24", "daily": "7", "weekly": "4", "monthly": "12", "yearly": "3"},
 		},
 		Kits: []error{nil},
@@ -141,7 +141,7 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 		t.Errorf("config = %+v", cfg)
 	}
 	data, _ := os.ReadFile(filepath.Join(d.Cwd, backup.ConfigFileName))
-	if strings.Contains(string(data), "CT1-") || strings.Contains(string(data), master) || strings.Contains(string(data), repo) {
+	if strings.Contains(string(data), "CT1-") || strings.Contains(string(data), masterPassword) || strings.Contains(string(data), repo) {
 		t.Errorf("the folder's config file holds a secret or the address:\n%s", data)
 	}
 	if s := m.Status(ctx, d.Cwd); !s.Scheduled || s.DestinationMissing {
@@ -160,7 +160,7 @@ func TestConfigureCreatesADestinationAndConfiguresTheFolder(t *testing.T) {
 		t.Fatalf("configureFolder from a subfolder: %v", err)
 	}
 	picks := requestsOf[Picker](ui)
-	if len(picks) != 2 || picks[0].Cursor != 0 || !slices.Contains(picks[0].Items[0].Cells, "(current)") ||
+	if len(picks) != 2 || picks[0].Cursor != 0 || !strings.HasSuffix(picks[0].Items[0].Cells[0], "(current)") ||
 		!strings.Contains(picks[0].Page.Subtitle, "step 1 of 3") || picks[1].Cursor != 0 {
 		t.Errorf("pickers = %+v, want each opening on the current value", picks)
 	}
@@ -189,7 +189,7 @@ func fieldOf(f Form, key string) Field {
 // scheduler install is said, with the folder still configured (W17).
 func TestConfigureStepsBackAndSaysASchedulerFailure(t *testing.T) {
 	d, _ := standinFolder(t, false, backs, forgets, "example-backups")
-	keyStandin(t, d)
+	resticKeyring(t, d)
 	d.Scheduler = &fakeScheduler{err: errors.New("example: no user session")}
 	keep := Values{"hourly": "24", "daily": "7", "weekly": "4", "monthly": "12", "yearly": "0"}
 	ui := &fakeUI{t: t,
@@ -219,7 +219,7 @@ func TestConfigureStepsBackAndSaysASchedulerFailure(t *testing.T) {
 // Configure says what it would write.
 func TestConfigureDryRun(t *testing.T) {
 	d, out := standinFolder(t, false, backs, forgets, "example-backups")
-	keyStandin(t, d)
+	resticKeyring(t, d)
 	d.Machine.Opts.DryRun = true
 	d.Scheduler = &fakeScheduler{}
 	ui := &fakeUI{t: t, Picks: []any{0, 1},
@@ -244,7 +244,7 @@ func TestConfigureDryRun(t *testing.T) {
 func linkFixture(t *testing.T) Deps {
 	t.Helper()
 	d, _ := standinFolder(t, false, backs, forgets, "example-backups")
-	keyStandin(t, d)
+	resticKeyring(t, d)
 	d.Scheduler = &fakeScheduler{}
 	snaps := `[{"id":"5a5a5a5a5a5a5a5a","short_id":"5a5a5a5a","time":"2026-11-21T18:40:00Z","hostname":"example-laptop",
 "tags":["ctdev-folder:0a0a0a0a-0000-4000-8000-000000000001","ctdev-path:~/Code/website","ctdev-host:example-laptop"],
@@ -339,9 +339,9 @@ func TestCreatingADestinationUnderAllNeedsAPathNamedInFull(t *testing.T) {
 func createdKit(t *testing.T) (Deps, backup.Setup) {
 	t.Helper()
 	d, _ := standinFolder(t, false, backs, forgets)
-	keyStandin(t, d)
+	resticKeyring(t, d)
 	setup, err := d.Machine.CreateDestination(context.Background(),
-		backup.NewDestination{Name: "example-backups", Address: filepath.Join(t.TempDir(), "repo")}, master)
+		backup.NewDestination{Name: "example-backups", Address: filepath.Join(t.TempDir(), "repo")}, masterPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +369,7 @@ func TestConnectWithAKit(t *testing.T) {
 		t.Errorf("a wrong password saved %v", names)
 	}
 
-	ui = &fakeUI{t: t, Forms: []any{kit, wrong, Values{"master": master}}, Picks: []any{0}}
+	ui = &fakeUI{t: t, Forms: []any{kit, wrong, Values{"master": masterPassword}}, Picks: []any{0}}
 	dest, err := connectDestination(ctx, ui, desktop)
 	if err != nil {
 		t.Fatal(err)

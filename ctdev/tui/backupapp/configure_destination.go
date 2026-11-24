@@ -11,8 +11,8 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
-// pageFor is the page a destination step shows, by the step's name; the
-// wizard's names its section instead.
+// pageFor is the page a destination step shows, given the step's name.
+// Configure's pages name their wizard section instead.
 type pageFor func(step string) Page
 
 // stores are where a new destination can keep its backups.
@@ -23,9 +23,10 @@ var stores = []Option{
 	{Value: "local", Label: "Local path or USB drive"},
 }
 
-// placeFields are W5's fields: the name, the store, and the store's own
-// fields, which a store's credentials are keyed by their variable's name.
-// v holds what was typed before; errs, a refusal under a field.
+// placeFields are W5's fields: the name, the store, and each store's own
+// fields, shown while it's chosen. Credentials are keyed by their
+// environment variable. v holds what was typed before; errs, a refusal to
+// show under a field.
 func placeFields(v Values, errs map[string]string) []Field {
 	host, _ := os.Hostname()
 	field := func(store, key, label string, kind FieldKind, def string, required bool) Field {

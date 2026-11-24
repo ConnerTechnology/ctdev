@@ -101,6 +101,12 @@ func (w *wizard) chooseDestination(ctx context.Context, ui UI) error {
 		}
 		intro += "  " + styles.Value.Render("Back up to which destination?")
 
+		// One cell each, so Create and Connect below don't widen the
+		// destinations' name column.
+		wide := 0
+		for _, n := range names {
+			wide = max(wide, len(n))
+		}
 		items := make([]Item, 0, len(names)+2)
 		cursor := -1
 		for i, n := range names {
@@ -108,11 +114,11 @@ func (w *wizard) chooseDestination(ctx context.Context, ui UI) error {
 			if dest, err := m.Destination(n); err == nil {
 				backend = dest.Backend()
 			}
-			cells := []string{n, backend}
+			row := fmt.Sprintf("%-*s   %-12s", wide, n, backend)
 			if n == current {
-				cells = append(cells, "(current)")
+				row += "   (current)"
 			}
-			items = append(items, Item{Cells: cells})
+			items = append(items, Item{Cells: []string{strings.TrimRight(row, " ")}})
 			if n == preferred || (cursor < 0 && preferred == "") {
 				cursor = i
 			}
