@@ -145,7 +145,9 @@ GO
         GOOS="${t%/*}" GOARCH="${t#*/}" go vet ./...
       done
       version=$(cat ../VERSION)
-      CGO_ENABLED=0 go build -ldflags "-X main.version=$version" -o ctdev .
+      # No VCS stamp: the copied .git belongs to the host user, so git refuses it as root here,
+      # and the version comes from -ldflags anyway.
+      CGO_ENABLED=0 go build -buildvcs=false -ldflags "-X main.version=$version" -o ctdev .
       ./ctdev --help >/dev/null
       ./ctdev --version
       ./ctdev info >/dev/null
