@@ -176,29 +176,6 @@ else
     info "Latest version: $VERSION"
 fi
 
-# Clean up old bash-based install. Skipped entirely when running ephemerally:
-# removing things from someone else's machine is exactly what --doctor
-# promises not to do.
-if [[ $EPHEMERAL -eq 0 ]]; then
-    if [[ -L "$INSTALL_DIR/ctdev" ]]; then
-        old_target=$(readlink "$INSTALL_DIR/ctdev" 2>/dev/null || true)
-        if [[ "$old_target" == */dotfiles/ctdev ]] || [[ "$old_target" == */dotfiles/ctdev.sh ]]; then
-            info "Removing old bash ctdev symlink..."
-            rm -f "$INSTALL_DIR/ctdev"
-        fi
-    fi
-    # /usr/local/bin/ctdev is a leftover only when it isn't the install
-    # target. Root installing system-wide (a cloud node's boot script, or
-    # `ctdev update` of a system install) puts it there on purpose.
-    if [[ "${INSTALL_DIR%/}" != "/usr/local/bin" ]] && { [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; }; then
-        # sudo -n only: a script running from a curl|bash pipe should never sit on a
-        # password prompt (and training people to type sudo passwords into piped
-        # scripts is its own problem).
-        info "Removing old ctdev from /usr/local/bin..."
-        sudo -n rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev (needs sudo) — run: sudo rm /usr/local/bin/ctdev"
-    fi
-fi
-
 # Fetch the release's checksum first: it decides both whether the binary
 # already installed can stay, and whether the download can be trusted. Fail
 # closed: a missing SUMS file or sha256sum binary aborts the install — anyone
