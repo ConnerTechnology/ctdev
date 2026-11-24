@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -81,12 +82,12 @@ func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 		})
 	}
 
-	if len(bySource["git"]) > 0 { // only one oh-my-zsh
+	for _, item := range bySource["git"] {
+		dir := gitRepoDir(item.Name)
 		steps = append(steps, updateStep{
-			name: "oh-my-zsh",
+			name: item.Name,
 			run: func(ctx context.Context, o sysutil.Opts) error {
-				omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
-				return sysutil.Run(ctx, o, "git", "-C", omzDir, "pull", "--rebase", "--quiet")
+				return sysutil.Run(ctx, o, "git", "-C", dir, "pull", "--rebase", "--quiet")
 			},
 		})
 	}
@@ -102,7 +103,11 @@ func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 		steps = append(steps, updateStep{
 			name: fmt.Sprintf("npm globals (%d)", len(names)),
 			run: func(ctx context.Context, o sysutil.Opts) error {
-				return sysutil.Run(ctx, o, "npm", append([]string{"update", "-g"}, names...)...)
+				env, name, prefix, ok := globalNpm()
+				if !ok {
+					return errors.New("nodenv no longer has a global Node version to update npm packages in")
+				}
+				return sysutil.RunEnv(ctx, o, env, name, append(prefix, append([]string{"update", "-g"}, names...)...)...)
 			},
 		})
 	}
@@ -135,20 +140,13 @@ func buildUpdateSteps(items []checklist.UpdateItem) []updateStep {
 	return steps
 }
 
-// runtimeUpdateStep builds the step for a runtime update (bun/node/go/ruby).
+// runtimeUpdateStep builds the step for a runtime update (bun/python/go/ruby).
 func runtimeUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 	name := fmt.Sprintf("%s %s → %s", item.Name, item.CurrentVer, item.NewVer)
 	switch item.Name {
 	case "bun":
 		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
 			return sysutil.Run(ctx, o, "bun", "upgrade")
-		}}, true
-	case "node (nodenv)":
-		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
-			if err := sysutil.Run(ctx, o, "nodenv", "install", "--skip-existing", item.NewVer); err != nil {
-				return fmt.Errorf("nodenv install: %w", err)
-			}
-			return sysutil.Run(ctx, o, "nodenv", "global", item.NewVer)
 		}}, true
 	case "python (pyenv)":
 		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {

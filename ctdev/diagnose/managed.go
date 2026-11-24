@@ -30,7 +30,7 @@ var managedTools = []managedTool{
 	{component: "zsh", binary: "zsh", args: []string{"--version"}},
 	{component: "tmux", binary: "tmux", args: []string{"-V"}},
 	{component: "jq", binary: "jq", args: []string{"--version"}},
-	{component: "node", binary: "node", args: []string{"--version"}},
+	{component: "nodenv", binary: "nodenv", args: []string{"--version"}},
 	{component: "python", binary: "python", args: []string{"--version"}},
 	{component: "docker", binary: "docker", args: []string{"--version"}},
 	{component: "vscode", binary: "code", args: []string{"--version"}},

@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
+	"github.com/ConnerTechnology/ctdev/ctdev/nodenv"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
@@ -31,9 +33,7 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"apt", scanAPT},
 		{"flatpak", scanFlatpak},
 		{"brew", scanBrew},
-		{"oh-my-zsh", scanOhMyZsh},
 		{"bun", scanBun},
-		{"nodenv", scanNodeEnv},
 		{"npm", scanNPMGlobals},
 		{"ctdev", scanCtdev},
 		{"docker", scanDocker},
@@ -45,6 +45,12 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		{"terraform", scanTerraform},
 		{"t3code", scanT3Code},
 		{"orca", scanOrca},
+	}
+
+	for _, r := range gitRepos() {
+		scanners = append(scanners, namedScanner{r.name, func(ctx context.Context) ([]checklist.UpdateItem, error) {
+			return scanGitRepo(ctx, r.name, r.dir)
+		}})
 	}
 
 	// scanErrs collects failures so one broken source doesn't silently make the
@@ -208,11 +214,11 @@ func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
 // brewManages reports whether Homebrew owns this formula on this machine.
 //
 // The runtime updaters install upstream tarballs into /usr/local (go) or drive
-// nodenv/rbenv, which is right on Linux but actively harmful on a Mac where the
+// rbenv, which is right on Linux but actively harmful on a Mac where the
 // same tool came from brew: `updateGo` would `sudo rm -rf /usr/local/go` on top
 // of a Homebrew install, and the tool would show up twice in the same update
 // list. The installers already defer to brew here (see component/go.go,
-// component/ruby.go, component/node.go); the scanners have to as well.
+// component/ruby.go); the scanners have to as well.
 //
 // `brew list --versions` exits non-zero when the formula isn't installed, which
 // is exactly the question being asked.
@@ -322,30 +328,46 @@ var managedCasks = map[string]string{
 	"font-jetbrains-mono-nerd-font": "fonts",
 }
 
-func scanOhMyZsh(ctx context.Context) ([]checklist.UpdateItem, error) {
-	omzDir := os.ExpandEnv("$HOME/.oh-my-zsh")
-	if _, err := os.Stat(omzDir + "/.git"); err != nil {
+// gitRepos are the tools ctdev installs as a git clone, which only a pull
+// updates. Homebrew's nodenv has no clone, and brew updates it instead.
+func gitRepos() []struct{ name, dir string } {
+	home, _ := os.UserHomeDir()
+	return []struct{ name, dir string }{
+		{"oh-my-zsh", filepath.Join(home, ".oh-my-zsh")},
+		{"nodenv", nodenv.Root()},
+		{"node-build", filepath.Join(nodenv.Root(), "plugins", "node-build")},
+	}
+}
+
+func gitRepoDir(name string) string {
+	for _, r := range gitRepos() {
+		if r.name == name {
+			return r.dir
+		}
+	}
+	return ""
+}
+
+// scanGitRepo reports the clone at dir when it is behind its upstream.
+func scanGitRepo(ctx context.Context, name, dir string) ([]checklist.UpdateItem, error) {
+	if _, err := os.Stat(dir + "/.git"); err != nil {
 		return nil, nil
 	}
-	// Fetch latest from remote
-	fetch := exec.CommandContext(ctx, "git", "-C", omzDir, "fetch", "--quiet")
-	if err := fetch.Run(); err != nil {
-		return nil, fmt.Errorf("git fetch oh-my-zsh: %w", err)
+	if err := exec.CommandContext(ctx, "git", "-C", dir, "fetch", "--quiet").Run(); err != nil {
+		return nil, fmt.Errorf("git fetch %s: %w", name, err)
 	}
-	// Check if behind
-	out, err := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-list", "--count", "HEAD..@{u}").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-list", "--count", "HEAD..@{u}").Output()
 	if err != nil {
-		return nil, fmt.Errorf("oh-my-zsh rev-list: %w", err)
+		return nil, fmt.Errorf("%s rev-list: %w", name, err)
 	}
 	behind := strings.TrimSpace(string(out))
 	if behind == "" || behind == "0" {
 		return nil, nil
 	}
-	// Get current and remote short SHAs
-	currentSHA, _ := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-parse", "--short", "HEAD").Output()
-	remoteSHA, _ := exec.CommandContext(ctx, "git", "-C", omzDir, "rev-parse", "--short", "@{u}").Output()
+	currentSHA, _ := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--short", "HEAD").Output()
+	remoteSHA, _ := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--short", "@{u}").Output()
 	return []checklist.UpdateItem{{
-		Name:       "oh-my-zsh",
+		Name:       name,
 		Source:     "git",
 		CurrentVer: strings.TrimSpace(string(currentSHA)),
 		NewVer:     strings.TrimSpace(string(remoteSHA)) + " (" + behind + " commits)",
@@ -382,44 +404,14 @@ func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}}, nil
 }
 
-func scanNodeEnv(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("nodenv"); err != nil {
-		return nil, nil
-	}
-	// Compare against the global version — that's what the update step sets.
-	// `nodenv version` resolves the cwd's .node-version, so a project pin would
-	// make an already-applied update reappear forever.
-	currentOut, err := exec.CommandContext(ctx, "nodenv", "global").Output()
-	if err != nil {
-		return nil, fmt.Errorf("nodenv global: %w", err)
-	}
-	current := strings.TrimSpace(string(currentOut))
-	if current == "" || current[0] < '0' || current[0] > '9' {
-		// "system" or unset — not nodenv-managed, nothing for us to update
-		return nil, nil
-	}
-
-	// fetchLatestNodeLTS returns "" when nodenv has no usable definition list,
-	// which is a "can't determine", not a failure — stay silent in that case.
-	latest := fetchLatestNodeLTS(ctx)
-	if latest == "" || !versionNewer(latest, current) {
-		return nil, nil
-	}
-	return []checklist.UpdateItem{{
-		Name:       "node (nodenv)",
-		Source:     "runtime",
-		CurrentVer: current,
-		NewVer:     latest,
-	}}, nil
-}
-
 func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("pyenv"); err != nil {
 		return nil, nil
 	}
-	// Compare against the global version, as scanNodeEnv does: `pyenv version`
-	// resolves the cwd's .python-version. `pyenv global` can list several
-	// versions, one per line; the first is the one `python` runs.
+	// Compare against the global version: `pyenv version` resolves the cwd's
+	// .python-version, so a project pin would make an applied update reappear.
+	// `pyenv global` can list several versions, one per line; the first is the
+	// one `python` runs.
 	currentOut, err := exec.CommandContext(ctx, "pyenv", "global").Output()
 	if err != nil {
 		return nil, fmt.Errorf("pyenv global: %w", err)
@@ -445,14 +437,36 @@ func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}}, nil
 }
 
+// globalNpm is how to run npm against the global Node: through nodenv with
+// NODENV_VERSION set, so a project's .node-version in the current folder
+// can't redirect it (npm components install into the global Node), else the
+// npm on PATH. ok is false when nodenv has no global of its own ("system"
+// included): npm components install only into a nodenv Node, so there is no
+// machine-wide npm for ctdev to update.
+func globalNpm() (env []string, name string, prefix []string, ok bool) {
+	if v := nodenv.GlobalSelector(); v != "" && v != nodenv.System {
+		return []string{"NODENV_VERSION=" + v}, nodenv.Bin(), []string{"exec", "npm"}, true
+	}
+	if nodenv.Available() {
+		return nil, "", nil, false
+	}
+	return nil, "npm", nil, true
+}
+
 func scanNPMGlobals(ctx context.Context) ([]checklist.UpdateItem, error) {
-	if _, err := exec.LookPath("npm"); err != nil {
+	env, name, prefix, ok := globalNpm()
+	if !ok {
+		return nil, nil
+	}
+	if _, err := exec.LookPath(name); err != nil {
 		return nil, nil
 	}
 	// `npm outdated` exits non-zero precisely when there ARE outdated packages,
 	// so a non-zero exit WITH output is the normal case. Only an error with no
 	// output at all is a genuine failure worth surfacing.
-	out, err := exec.CommandContext(ctx, "npm", "outdated", "-g", "--json").Output()
+	c := exec.CommandContext(ctx, name, append(prefix, "outdated", "-g", "--json")...)
+	c.Env = append(os.Environ(), env...)
+	out, err := c.Output()
 	if err != nil && len(out) == 0 {
 		return nil, fmt.Errorf("npm outdated -g: %w", err)
 	}

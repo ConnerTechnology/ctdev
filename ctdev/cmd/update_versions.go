@@ -1,4 +1,4 @@
-// Latest-version lookups (GitHub, go.dev, dl.k8s.io, nodenv/ruby-build/pyenv) and
+// Latest-version lookups (GitHub, go.dev, dl.k8s.io, ruby-build/pyenv) and
 // version-comparison helpers.
 package cmd
 
@@ -95,34 +95,6 @@ func versionNewer(candidate, current string) bool {
 		}
 	}
 	return false
-}
-
-func fetchLatestNodeLTS(ctx context.Context) string {
-	// Use a simpler endpoint that returns just the LTS schedule
-	// The full index.json is huge, so we use nodenv's definitions if available
-	if _, err := exec.LookPath("nodenv"); err == nil {
-		out, err := exec.CommandContext(ctx, "nodenv", "install", "--list").Output()
-		if err == nil {
-			// Find latest even-numbered major version (LTS)
-			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-			for i := len(lines) - 1; i >= 0; i-- {
-				v := strings.TrimSpace(lines[i])
-				if v == "" || strings.Contains(v, "-") {
-					continue
-				}
-				parts := strings.SplitN(v, ".", 2)
-				if len(parts) < 2 {
-					continue
-				}
-				major := 0
-				fmt.Sscanf(parts[0], "%d", &major)
-				if major > 0 && major%2 == 0 {
-					return v
-				}
-			}
-		}
-	}
-	return ""
 }
 
 // goRelease mirrors the subset of https://go.dev/dl/?mode=json we consume.

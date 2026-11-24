@@ -9,7 +9,7 @@ considered and rejected, and what was checked.
 2. `entire checkpoint explain <commit-or-checkpoint>` summarizes that session; add `--full` for
    the whole transcript. Checkpoints live in the private `ConnerTechnology/ctdev-entire` repo and
    are fetched when asked for.
-3. No checkpoint, which is every commit before Entire was turned back on (v20.4.0): fall back to
+3. No checkpoint, which is every commit before Entire was turned back on (v20.5.0): fall back to
    `git log -L <start>,<end>:<file>`, the commit body, and the pull request
    (`gh pr list --search <sha> --state merged`). Older commits cite a `CTD-` Linear issue, and
    older docs an ADR under `docs/adr/` that is now only in git history

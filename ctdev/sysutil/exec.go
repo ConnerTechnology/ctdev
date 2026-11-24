@@ -3,6 +3,7 @@ package sysutil
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -10,11 +11,23 @@ import (
 // Run executes a command, routing output to opts.Stdout and respecting
 // ctx for cancellation. If opts.DryRun, prints the command without executing.
 func Run(ctx context.Context, o Opts, name string, args ...string) error {
+	return RunEnv(ctx, o, nil, name, args...)
+}
+
+// RunEnv is Run with extra KEY=VALUE entries added to the environment.
+func RunEnv(ctx context.Context, o Opts, env []string, name string, args ...string) error {
 	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] %s %s\n", name, strings.Join(args, " "))
+		prefix := ""
+		if len(env) > 0 {
+			prefix = strings.Join(env, " ") + " "
+		}
+		fmt.Fprintf(o.Stdout, "[dry-run] %s%s %s\n", prefix, name, strings.Join(args, " "))
 		return nil
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.Stdout = o.Stdout
 	cmd.Stderr = o.Stdout
 	if err := cmd.Run(); err != nil {

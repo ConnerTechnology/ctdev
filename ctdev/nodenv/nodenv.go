@@ -1,0 +1,318 @@
+// Package nodenv reads and changes the Node versions nodenv manages. Reads go
+// straight to nodenv's files, so they are cheap enough for the install picker;
+// changes shell out through sysutil, so a dry run prints them.
+package nodenv
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+)
+
+// IndexURL lists every Node release with its LTS codename.
+const IndexURL = "https://nodejs.org/dist/index.json"
+
+// VersionFile is the per-project pin nodenv reads.
+const VersionFile = ".node-version"
+
+// Root is nodenv's directory: $NODENV_ROOT, else ~/.nodenv, which Homebrew's
+// nodenv uses too.
+func Root() string {
+	if r := os.Getenv("NODENV_ROOT"); r != "" {
+		return r
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".nodenv")
+}
+
+// Bin is the nodenv to run: the git clone's, else Homebrew's on PATH. A shell
+// started before the clone has neither on PATH, so the clone's path is
+// absolute.
+func Bin() string {
+	p := filepath.Join(Root(), "bin", "nodenv")
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	return "nodenv"
+}
+
+// Available reports whether nodenv is installed.
+func Available() bool {
+	_, err := exec.LookPath(Bin())
+	return err == nil
+}
+
+// Installed lists the versions under nodenv's versions directory, oldest
+// first.
+func Installed() []string {
+	entries, _ := os.ReadDir(filepath.Join(Root(), "versions"))
+	var vs []string
+	for _, e := range entries {
+		if IsInstalled(e.Name()) {
+			vs = append(vs, e.Name())
+		}
+	}
+	slices.SortFunc(vs, Compare)
+	return vs
+}
+
+// IsInstalled reports whether version v is installed.
+func IsInstalled(v string) bool {
+	info, err := os.Stat(filepath.Join(Root(), "versions", v))
+	return v != "" && err == nil && info.IsDir()
+}
+
+// System is the version name for a Node outside nodenv.
+const System = "system"
+
+// readVersionWord is the first word of a nodenv version file, without a
+// leading "v". "" means the file is missing or empty.
+func readVersionWord(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Split(bufio.ScanWords)
+	if !sc.Scan() {
+		return ""
+	}
+	return strings.TrimPrefix(sc.Text(), "v")
+}
+
+// readVersionFile is readVersionWord with "system" read as "": it names no
+// nodenv-managed Node.
+func readVersionFile(path string) string {
+	if v := readVersionWord(path); v != System {
+		return v
+	}
+	return ""
+}
+
+// Global is `nodenv global`, "" when it is unset or "system".
+func Global() string {
+	return readVersionFile(globalFile())
+}
+
+// GlobalIsSystem reports whether the global version is set to "system", the
+// user's choice of a Node outside nodenv.
+func GlobalIsSystem() bool {
+	return readVersionWord(globalFile()) == System
+}
+
+// GlobalSelector is the NODENV_VERSION that picks the global Node whatever
+// the current folder pins: the global version, "system" for a system global,
+// or "" when nodenv is missing or has no global.
+func GlobalSelector() string {
+	if !Available() {
+		return ""
+	}
+	if GlobalIsSystem() {
+		return "system"
+	}
+	return Global()
+}
+
+func globalFile() string { return filepath.Join(Root(), "version") }
+
+// ProjectPin finds the .node-version that governs dir, searching upward as
+// nodenv does. It returns the file and its version, or "" for both.
+func ProjectPin(dir string) (file, version string) {
+	for dir != "" {
+		p := filepath.Join(dir, VersionFile)
+		if _, err := os.Stat(p); err == nil {
+			return p, readVersionFile(p)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", ""
+}
+
+func nodeModules(v string) string {
+	return filepath.Join(Root(), "versions", v, "lib", "node_modules")
+}
+
+// HasPackage reports whether version v has the global npm package pkg.
+func HasPackage(v, pkg string) bool {
+	_, err := os.Stat(filepath.Join(nodeModules(v), pkg, "package.json"))
+	return v != "" && err == nil
+}
+
+// bundled ship with Node itself, so every version already has them.
+var bundled = map[string]bool{"npm": true, "corepack": true}
+
+// Globals is what a version's global node_modules holds, read as `npm ls -g`
+// would. Only Packages can move to another version: Linked ones are `npm link`
+// checkouts, which a registry install would replace, and Unreadable ones have
+// no version to reinstall at.
+type Globals struct {
+	Packages   []Package
+	Linked     []string
+	Unreadable []string
+}
+
+// GlobalPackages reads the global npm packages version v has.
+func GlobalPackages(v string) Globals {
+	var g Globals
+	var walk func(dir, scope string)
+	walk = func(dir, scope string) {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			name := e.Name()
+			full := scope + name
+			switch {
+			case strings.HasPrefix(name, "."), bundled[full]:
+				continue
+			case e.Type()&os.ModeSymlink != 0:
+				g.Linked = append(g.Linked, full)
+				continue
+			case !e.IsDir():
+				continue
+			case scope == "" && strings.HasPrefix(name, "@"):
+				walk(filepath.Join(dir, name), name+"/")
+				continue
+			}
+			var meta struct {
+				Version string `json:"version"`
+			}
+			data, err := os.ReadFile(filepath.Join(dir, name, "package.json"))
+			if err != nil || json.Unmarshal(data, &meta) != nil || meta.Version == "" {
+				g.Unreadable = append(g.Unreadable, full)
+				continue
+			}
+			g.Packages = append(g.Packages, Package{Name: full, Version: meta.Version})
+		}
+	}
+	walk(nodeModules(v), "")
+	slices.SortFunc(g.Packages, func(a, b Package) int { return strings.Compare(a.Name, b.Name) })
+	slices.Sort(g.Linked)
+	slices.Sort(g.Unreadable)
+	return g
+}
+
+// List is `nodenv install --list`: node-build's newest release of each major
+// it supports. It is a read, so it runs in a dry run too.
+func List(ctx context.Context) ([]string, error) {
+	return list(ctx, "--list")
+}
+
+// ListAll is `nodenv install --list-all`, which still carries retired majors.
+func ListAll(ctx context.Context) ([]string, error) {
+	return list(ctx, "--list-all")
+}
+
+func list(ctx context.Context, flag string) ([]string, error) {
+	out, err := exec.CommandContext(ctx, Bin(), "install", flag).Output()
+	if err != nil {
+		return nil, fmt.Errorf("nodenv install %s: %w", flag, err)
+	}
+	return ParseList(string(out)), nil
+}
+
+// LTS is the release LatestLTS picked.
+type LTS struct {
+	Version string
+	LTSLine
+}
+
+// LatestLTS is the newest release node-build has of the newest LTS major in
+// nodejs.org's index.
+func LatestLTS(ctx context.Context) (LTS, error) {
+	data, err := fetchIndex(ctx)
+	if err != nil {
+		return LTS{}, err
+	}
+	rs, err := ParseIndex(data)
+	if err != nil {
+		return LTS{}, err
+	}
+	line, ok := PickLTS(rs)
+	if !ok {
+		return LTS{}, errors.New("nodejs.org lists no LTS release")
+	}
+	vs, err := List(ctx)
+	if err != nil {
+		return LTS{}, err
+	}
+	v := LatestOfMajor(vs, line.Major)
+	if v == "" {
+		return LTS{}, fmt.Errorf("node-build has no Node %d yet; update it with ctdev update", line.Major)
+	}
+	return LTS{Version: v, LTSLine: line}, nil
+}
+
+func fetchIndex(ctx context.Context) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, IndexURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := sysutil.HTTPClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch Node release index: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch Node release index: %s", resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// Install installs version v, skipping it when it is already there.
+func Install(ctx context.Context, o sysutil.Opts, v string) error {
+	return sysutil.Run(ctx, o, Bin(), "install", "--skip-existing", v)
+}
+
+// Uninstall deletes version v and every global package it has.
+func Uninstall(ctx context.Context, o sysutil.Opts, v string) error {
+	return sysutil.Run(ctx, o, Bin(), "uninstall", "-f", v)
+}
+
+// SetGlobal is `nodenv global v`.
+func SetGlobal(ctx context.Context, o sysutil.Opts, v string) error {
+	return sysutil.Run(ctx, o, Bin(), "global", v)
+}
+
+// Rehash refreshes nodenv's shims, which is how a package's command reaches
+// PATH.
+func Rehash(ctx context.Context, o sysutil.Opts) error {
+	return sysutil.Run(ctx, o, Bin(), "rehash")
+}
+
+// WritePin writes version v to the .node-version file p, as `nodenv local`
+// does in p's folder.
+func WritePin(o sysutil.Opts, p, v string) error {
+	if o.DryRun {
+		fmt.Fprintf(o.Stdout, "[dry-run] write %s: %s\n", p, v)
+		return nil
+	}
+	return os.WriteFile(p, []byte(v+"\n"), 0o644)
+}
+
+// InstallPackages installs ps globally under version v at the versions they
+// carry.
+func InstallPackages(ctx context.Context, o sysutil.Opts, v string, ps []Package) error {
+	if len(ps) == 0 {
+		return nil
+	}
+	args := []string{"exec", "npm", "install", "-g"}
+	for _, p := range ps {
+		args = append(args, p.Spec())
+	}
+	return sysutil.RunEnv(ctx, o, []string{"NODENV_VERSION=" + v}, Bin(), args...)
+}
