@@ -300,9 +300,9 @@ func (fm *form) view(int, int) stepView {
 			lines = append(lines, "    "+styles.Error.Render(e))
 		}
 	}
-	var notes []string
+	var notes []Line
 	if fm.f.Error != "" {
-		notes = append(notes, styles.Error.Render(fm.f.Error))
+		notes = append(notes, Line{Error, fm.f.Error})
 	}
 	keys := "  " + chip("enter  "+orDefault(fm.f.Submit, "Next")) + "   " + keyHint("esc", orDefault(fm.f.Back, "Back"))
 	return stepView{content: lines, notes: notes, keys: keys, help: orDefault(fm.f.Help, help)}

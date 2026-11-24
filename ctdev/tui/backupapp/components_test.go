@@ -59,7 +59,11 @@ func press(s step, keys ...string) *answer {
 // screen is the plain text a step shows.
 func screen(s step) string {
 	v := s.view(96, 0)
-	return ansi.Strip(strings.Join(append(append(v.content, v.notes...), v.keys, v.help), "\n"))
+	lines := v.content
+	for _, n := range v.notes {
+		lines = append(lines, n.Text)
+	}
+	return ansi.Strip(strings.Join(append(lines, v.keys, v.help), "\n"))
 }
 
 var exampleBar = Dashboard{Actions: []Action{

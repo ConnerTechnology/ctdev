@@ -70,10 +70,6 @@ func (b *dashboard) update(msg tea.Msg) (*answer, tea.Cmd) {
 }
 
 func (b *dashboard) view(width, _ int) stepView {
-	var notes []string
-	for _, l := range b.d.Message {
-		notes = append(notes, styleLine(l))
-	}
 	help := b.d.Help
 	if help == "" {
 		help = "←/→ choose · enter run · or press the letter"
@@ -89,7 +85,7 @@ func (b *dashboard) view(width, _ int) stepView {
 			items[i] = " " + keyHint(a.Key, a.Label) + " "
 		}
 	}
-	return stepView{notes: notes, notesGiveWay: true, keys: strings.Join(bar(items, width), "\n"), help: help}
+	return stepView{notes: b.d.Message, notesGiveWay: true, keys: strings.Join(bar(items, width), "\n"), help: help}
 }
 
 // bar lays out items one space apart after a two-space indent, wrapping

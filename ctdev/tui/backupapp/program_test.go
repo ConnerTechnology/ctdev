@@ -160,3 +160,17 @@ func TestProgramSmoke(t *testing.T) {
 		t.Errorf("after exit: %q, want the result line", after.String())
 	}
 }
+
+// Long lines wrap at spaces, never inside a word such as a hyphenated name.
+func TestWrapAtSpaces(t *testing.T) {
+	got := wrap(Line{Info, "[dry-run] restic backup . --json --retry-lock 1m --host example-desktop --tag ctdev-path:~/Projects/website --tag ctdev-host:example-desktop"}, 60, 6)
+	for i, l := range got {
+		plain := ansi.Strip(l)
+		if ansi.StringWidth(plain) > 60 || (i > 0 && !strings.HasPrefix(plain, "      ")) || strings.HasSuffix(plain, "-") {
+			t.Errorf("line %d: %q", i, plain)
+		}
+	}
+	if len(got) < 2 {
+		t.Errorf("didn't wrap: %q", got)
+	}
+}

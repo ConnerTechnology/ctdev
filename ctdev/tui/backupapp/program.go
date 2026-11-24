@@ -237,7 +237,7 @@ type stepView struct {
 	content []string
 	// notes show under the rule, above the keys: a dashboard's message, a
 	// form's error.
-	notes []string
+	notes []Line
 	// notesGiveWay hides notes while there are result lines to show.
 	notesGiveWay bool
 	keys         string
@@ -251,8 +251,8 @@ type model struct {
 	page   Page
 	step   step
 	reply  chan answer
-	banner []string // rendered result and log lines, until the next key
-	logged bool     // the banner has log lines
+	banner []bannerLine // result and log lines, until the next key
+	logged bool         // the banner has log lines
 	dryRun bool
 	width  int
 	height int
@@ -281,14 +281,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.step, m.reply = msg.step, msg.reply
 		return m, tea.Batch(m.listen, m.step.init())
 	case sayMsg:
-		m.banner = append(m.banner, styleLine(Line(msg)))
+		m.banner = append(m.banner, bannerLine{Line: Line(msg)})
 		return m, m.listen
 	case logMsg:
 		if m.dryRun && !m.logged {
-			m.banner = append(m.banner, styles.Header.Render("Dry run")+"  "+styles.Dimmed.Render("nothing is changed. This is what would run:"))
+			m.banner = append(m.banner, bannerLine{dryRunHeading: true})
 		}
 		m.logged = true
-		m.banner = append(m.banner, styles.Dimmed.Render(string(msg)))
+		m.banner = append(m.banner, bannerLine{Line: Line{Info, string(msg)}, log: true})
 		return m, m.listen
 	case flowDoneMsg:
 		return m, tea.Quit
@@ -397,7 +397,14 @@ func (m *model) render() string {
 	}
 	lines = append(lines, "", styles.Dimmed.Render(strings.Repeat("─", w)), "")
 	for _, b := range m.banner {
-		under = append(under, wrap(b, w, 4)...)
+		switch {
+		case b.dryRunHeading:
+			under = append(under, "  "+styles.Header.Render("Dry run")+"  "+styles.Dimmed.Render("nothing is changed. This is what would run:"))
+		case b.log:
+			under = append(under, wrap(b.Line, w, 6)...)
+		default:
+			under = append(under, wrap(b.Line, w, 2)...)
+		}
 	}
 	if !(sv.notesGiveWay && len(m.banner) > 0) {
 		for _, n := range sv.notes {
@@ -465,16 +472,37 @@ func styleLine(l Line) string {
 	return styles.Dimmed.Render(l.Text)
 }
 
-// wrap indents s by two and wraps it to the frame, continuing indent
-// columns in.
-func wrap(s string, w, indent int) []string {
-	lines := strings.Split(ansi.Wrap(s, max(w-2, 20), " "), "\n")
+// bannerLine is a result line, a line of the backup package's output, or
+// the heading --dry-run's output goes under.
+type bannerLine struct {
+	Line
+	log           bool
+	dryRunHeading bool
+}
+
+// wrap styles l, indented two, and wraps it at spaces to the frame with its
+// continuation lines indent columns in.
+func wrap(l Line, w, indent int) []string {
+	var lines []string
+	line, limit := "", w-2
+	for i, word := range strings.Split(l.Text, " ") {
+		if i > 0 && ansi.StringWidth(line)+1+ansi.StringWidth(word) > limit {
+			lines = append(lines, line)
+			line, limit = word, w-indent
+			continue
+		}
+		if i > 0 {
+			line += " "
+		}
+		line += word
+	}
+	lines = append(lines, line)
 	for i := range lines {
 		pre := "  "
 		if i > 0 {
-			pre += strings.Repeat(" ", indent-2)
+			pre = strings.Repeat(" ", indent)
 		}
-		lines[i] = pre + lines[i]
+		lines[i] = pre + styleLine(Line{l.Kind, lines[i]})
 	}
 	return lines
 }

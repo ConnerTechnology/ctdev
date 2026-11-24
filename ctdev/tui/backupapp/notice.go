@@ -41,12 +41,12 @@ func (nt *notice) view(width, _ int) stepView {
 	}
 	for i, s := range n.Steps {
 		num := fmt.Sprintf("%d. ", i+1)
-		for j, l := range wrap(s, width-len(num)-2, 2) {
+		for j, l := range wrap(Line{Plain, s}, width-2-len(num), 2) {
 			pre := "    " + styles.Dimmed.Render(num)
 			if j > 0 {
 				pre = strings.Repeat(" ", 4+len(num))
 			}
-			lines = append(lines, pre+styles.Value.Render(strings.TrimLeft(l, " ")))
+			lines = append(lines, pre+strings.TrimPrefix(l, "  "))
 		}
 	}
 	if n.Note != "" {

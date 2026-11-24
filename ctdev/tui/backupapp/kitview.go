@@ -100,7 +100,7 @@ func (kv *kitView) view(width, _ int) stepView {
 	if kv.asking {
 		return stepView{
 			content: lines,
-			notes:   []string{styles.Header.Render("Leave without saving them?"), styles.Dimmed.Render("ctdev shows these once.")},
+			notes:   []Line{{Heading, "Leave without saving them?"}, {Info, "ctdev shows these once."}},
 			keys:    "  " + dangerChip("y  Leave") + "    " + keyHint("enter", "Stay"),
 			help:    "y leaves · enter or esc stays",
 		}
