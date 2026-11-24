@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`antigravity-cli` replaces `gemini-cli`.** Google replaced Gemini CLI with the Antigravity CLI
+  (`agy`). `ctdev install antigravity-cli` runs Google's installer, which puts `agy` in
+  `~/.local/bin`; it no longer needs the `nodenv` component. `ctdev uninstall antigravity-cli`
+  removes the binary and leaves `~/.gemini` (login and conversations) alone. Remove an old install
+  with `npm uninstall -g @google/gemini-cli`.
+
 ## [20.7.1] - 2026-11-24
 
 ### Fixed

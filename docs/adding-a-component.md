@@ -56,7 +56,7 @@ global Node whatever the folder pins, and installs the latest LTS as the global
 version first when none is set. Detect it with `npmPackageDetect`, which checks
 the global Node's packages: a nodenv shim on PATH outlives the version it came
 from. `ctdev update` already upgrades npm globals, so it needs no
-scanner (`codex` and `gemini-cli` in the registry):
+scanner (`codex` and `ccusage` in the registry):
 ```go
 Dependencies: []string{"nodenv"}, Detect: npmPackageDetect("name", "@scope/pkg"), Root: RootNever,
 GoInstall: npmGlobalInstaller("name", "@scope/pkg"), GoUninstall: npmGlobalUninstaller("name", "@scope/pkg")
