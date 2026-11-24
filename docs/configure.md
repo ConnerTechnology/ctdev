@@ -133,6 +133,17 @@ component's own install check, so an AWS CLI v1 counts as missing. When
 `aws configure sso` to create one. `ctdev install git` and `ctdev install aws` run
 these wizards afterward.
 
+**Node versions** — `configure node install`, `update` and `uninstall` choose
+which Node runs, for every folder (`nodenv global`) or for one project (the
+`.node-version` that governs this folder, else a new one at the top of its git
+repository). ctdev never picks or bumps a Node version on its own; see ADR-0023.
+`update` reinstalls the old version's global npm packages at the same versions
+and deletes the old version, unless it is still the global version or this
+folder's `.node-version` pins it. Packages linked with `npm link` don't move:
+the plan names them so you can link them again. A pin that isn't an exact
+version (`22`, `lts`) is left for nodenv to resolve. `ctdev install nodenv`
+offers to install a first version, global by default.
+
 **Component wizards** — `caddy` belongs to a component and mostly runs for you
 when you install it; running `configure caddy` reconfigures without
 reinstalling. `caddy --batch` skips its prompts and takes the domain, email and

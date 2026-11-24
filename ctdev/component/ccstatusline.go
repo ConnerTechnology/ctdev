@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // ccstatusline renders the Claude Code status line. Installed from npm on
@@ -21,12 +19,8 @@ func ccstatuslineInstall(ctx context.Context, opts ExecOpts) error {
 	// Phase 1: install the binary (skip if present unless --force)
 	if opts.Force || !alreadyInstalled("ccstatusline") {
 		fmt.Fprintln(opts.Stdout, "Installing ccstatusline...")
-		npm, err := npmPath(o)
-		if err != nil {
+		if err := npmInstallGlobal(ctx, o, "ccstatusline"); err != nil {
 			return err
-		}
-		if err := sysutil.Run(ctx, o, npm, "install", "-g", "ccstatusline"); err != nil {
-			return fmt.Errorf("npm install ccstatusline: %w", err)
 		}
 	} else {
 		fmt.Fprintln(opts.Stdout, "ccstatusline already installed")
@@ -47,12 +41,8 @@ func ccstatuslineUninstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 	fmt.Fprintln(opts.Stdout, "Removing ccstatusline...")
 
-	npm, err := npmPath(o)
-	if err != nil {
+	if err := npmUninstallGlobal(ctx, o, "ccstatusline"); err != nil {
 		return err
-	}
-	if err := sysutil.Run(ctx, o, npm, "uninstall", "-g", "ccstatusline"); err != nil {
-		return fmt.Errorf("npm uninstall ccstatusline: %w", err)
 	}
 
 	// Remove the layout only once the package is gone

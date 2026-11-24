@@ -142,9 +142,10 @@ func ensureSudoForInstall(ctx context.Context, names []string, force bool) error
 // componentWizards are the components whose configuration step is a dedicated
 // wizard rather than a setup.Registry category from setup.Registry.
 var componentWizards = map[string]func(context.Context) error{
-	"aws":   configureAWS,
-	"caddy": configureCaddy,
-	"git":   configureGit,
+	"aws":    configureAWS,
+	"caddy":  configureCaddy,
+	"git":    configureGit,
+	"nodenv": configureNodeAfterInstall,
 	// ssh's settings category is one entry in its menu, which `configure
 	// ssh` opens, so installing it opens the same menu.
 	"ssh": runSSHMenu,

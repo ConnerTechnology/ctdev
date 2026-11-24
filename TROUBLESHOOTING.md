@@ -130,6 +130,10 @@ sudo nvme smart-log /dev/nvme0n1 | grep unsafe     # Unsafe shutdown count
 
 **Version manager not found:** These are configured in `~/.zsh/path.zsh` (deployed by `ctdev install zsh`). Restart your shell after installing.
 
+**`nodenv: version 'X' is not installed`:** a `.node-version` here, or the global version, names a Node that is gone. `ctdev configure node install X` puts it back, or `ctdev configure node install` picks another.
+
+**A global npm command vanished after changing Node:** each Node version has its own global packages. `ctdev configure node install` and `update` offer to copy them; to do it by hand, `NODENV_VERSION=<old> nodenv exec npm ls -g --depth=0` lists them.
+
 **Build failing:** Install dependencies first:
 ```bash
 # macOS

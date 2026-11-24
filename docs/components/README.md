@@ -94,7 +94,7 @@ component unsupported on this OS reports as skipped rather than failing.
 | `fonts` | Nerd Fonts for terminal | Linux, macOS |
 | `git` | Git configuration and aliases | Linux, macOS |
 | `go` | Go toolchain (official tarball) | Linux, macOS |
-| `node` | Node.js via nodenv | Linux, macOS |
+| `nodenv` | nodenv and node-build (Node version manager); `ctdev configure node` picks the Node versions | Linux, macOS |
 | `python` | Python via pyenv | Linux, macOS |
 | `ruby` | Ruby via rbenv | Linux, macOS |
 | `zsh` | Zsh, Oh My Zsh, Pure prompt, plugins | Linux, macOS |
