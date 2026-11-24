@@ -57,7 +57,7 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, bin, r.args...)
 	cmd.Dir = r.dir
 	cmd.Env = d.env(r.password, r.keyHint)
-	resticProcess(cmd)
+	resticProcess(cmd, d.m.NoTerminal)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	var status *statusWriter
