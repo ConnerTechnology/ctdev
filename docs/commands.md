@@ -37,8 +37,9 @@ ctdev configure node update [--global|--project]
                                 # Update the Node in use here (a .node-version, else global) to the latest of its major,
                                 #   moving global npm packages and deleting the old version unless something here uses it
 ctdev configure node uninstall [version]  # Delete a Node version and its npm packages; never the global one
-ctdev configure ssh             # Remote access: SSH server, key-only login, keep programs running,
-                                #   Mosh, vscode.dev tunnel, LAN-only firewall (UFW)
+ctdev configure ssh             # Menu: Your keys (copy to a server, upload to GitHub, clipboard, delete;
+                                #   pick several to act on each), Create a key, Server settings
+ctdev configure ssh --batch     # Server settings at their defaults: SSH server, key-only login
 ctdev configure power           # Power profile, display/suspend/screensaver timers (minutes or never), never suspend,
                                 #   password right after the screensaver (macOS)
 ctdev configure desktop         # Dock, Finder, animations, save/print dialogs (macOS); Nemo view + Hide drives (Cinnamon)

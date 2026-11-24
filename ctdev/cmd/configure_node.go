@@ -110,15 +110,6 @@ func gitToplevel(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// tildePath shortens a path under $HOME for display.
-func tildePath(p string) string {
-	home, _ := os.UserHomeDir()
-	if home != "" && (p == home || strings.HasPrefix(p, home+string(filepath.Separator))) {
-		return "~" + strings.TrimPrefix(p, home)
-	}
-	return p
-}
-
 func requireNodenv() error {
 	if !nodenv.Available() {
 		return errors.New("nodenv isn't installed. Install it with: ctdev install nodenv")

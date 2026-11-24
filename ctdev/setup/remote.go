@@ -3,9 +3,9 @@ package setup
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -21,7 +21,7 @@ import (
 // vars below so tests can record them instead of touching the machine.
 
 var (
-	// remoteSudo runs a root command (systemctl, ufw, loginctl, locale-gen).
+	// remoteSudo runs a root command (systemctl, ufw, loginctl, localedef).
 	remoteSudo = sysutil.SudoRun
 	// remoteRun runs a command as the user (`code tunnel`).
 	remoteRun = sysutil.Run
@@ -34,7 +34,7 @@ var (
 		out, err := sysutil.SudoNoPrompt(ctx, name, args...).Output()
 		return strings.TrimSpace(string(out)), err
 	}
-	// remoteUsername is the login lingering is turned on and off for.
+	// remoteUsername is the login lingering is turned off for.
 	remoteUsername = func() (string, error) {
 		u, err := user.Current()
 		if err != nil {
@@ -46,7 +46,7 @@ var (
 	remoteStateDir = state.StateDir
 	// remoteCommandExists reports whether a binary is on PATH.
 	remoteCommandExists = sysutil.CommandExists
-	// remoteInstall installs apt packages (openssh-server, ufw).
+	// remoteInstall installs apt packages (openssh-server).
 	remoteInstall = applyPackages
 	// sshdPath is the OpenSSH server binary; its absence means
 	// openssh-server isn't installed.
@@ -65,10 +65,6 @@ const (
 	sshOff      = "off"
 )
 
-// lanCIDRs are the RFC1918 private ranges UFW rules are scoped to. Inter-VLAN
-// enforcement is delegated to the gateway firewall (see remote-access design).
-var lanCIDRs = []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"}
-
 // sshdDropIn is ctdev's sshd drop-in. sshd keeps the first value it reads
 // and includes sshd_config.d/*.conf in name order, so the 00- prefix puts it
 // ahead of drop-ins like 50-cloud-init.conf. sshdLegacyDropIn is the name
@@ -86,35 +82,17 @@ ClientAliveInterval 60
 ClientAliveCountMax 3
 `
 
-// moshLocale is the locale Mosh needs. moshLocaleMarker, in ctdev's state
-// dir, records that ctdev generated it, so turning Mosh support off never
-// removes a locale that was already there.
+// Markers in ctdev's state dir. moshLocaleMarker records that the retired
+// Mosh support setting generated en_US.UTF-8, so only a locale ctdev added is
+// removed. sshSettingsRetiredMarker records that the retired settings were
+// turned off, so lingering or a tunnel turned back on by hand stays on.
 const (
-	moshLocale       = "en_US.UTF-8"
-	moshLocaleMarker = "mosh-locale-added"
+	moshLocaleMarker         = "mosh-locale-added"
+	sshSettingsRetiredMarker = "ssh-settings-retired"
 )
 
 // remoteOn reports whether a toggle value asks for the setting to be on.
 func remoteOn(value string) bool { return value == "enabled" }
-
-// gateMosh reports whether mosh-server is on PATH on this Linux host; the
-// UTF-8 locale only matters to Mosh.
-func gateMosh() bool {
-	if !gateLinux() {
-		return false
-	}
-	return remoteCommandExists("mosh-server")
-}
-
-// gateVSCode reports whether VS Code's `code` CLI is on PATH on this Linux
-// host; the tunnel is a systemd user service it installs.
-func gateVSCode() bool {
-	if !gateLinux() {
-		return false
-	}
-	_, err := exec.LookPath("code")
-	return err == nil
-}
 
 // ── SSH server ──────────────────────────────────────────────────────────
 
@@ -300,73 +278,107 @@ func hasAuthorizedKey() bool {
 	return false
 }
 
-// ── Keep my programs running (lingering) ────────────────────────────────
+// ── Settings `configure ssh` no longer offers (ADR-0023) ────────────────
 
-// detectLinger reports whether systemd lingering is enabled for the current user.
-func detectLinger(ctx context.Context) string {
-	name, err := remoteUsername()
-	if err != nil {
-		return "disabled"
-	}
-	out, err := remoteProbe(ctx, "loginctl", "show-user", name, "--property=Linger")
-	if err == nil && out == "Linger=yes" {
-		return "enabled"
-	}
-	return "disabled"
+// retiredSSHSettings are the four settings CTD-178 removed from `configure
+// ssh`. Each pairs a check that ctdev turned it on with the old setting's
+// off path, which removes only what ctdev added. The tunnel comes before
+// lingering, which it relied on.
+var retiredSSHSettings = []struct {
+	name  string
+	added func(context.Context) (bool, error)
+	off   func(context.Context, sysutil.Opts) error
+}{
+	{"Open this machine from vscode.dev", known(codeTunnelInstalled), uninstallCodeTunnel},
+	{"Keep my programs running after I disconnect", known(lingering), disableLinger},
+	{"Mosh support", known(moshLocaleAdded), removeMoshLocale},
+	{"Only allow SSH and Mosh from my local network (firewall)", ctdevUFWOn, removeCtdevUFW},
 }
 
-// applyLinger turns systemd lingering on or off for the current user, so
-// user services (VS Code tunnel, tmux) survive without a login session.
-func applyLinger(ctx context.Context, o sysutil.Opts, value string) error {
+// RetireRemovedSSHSettings turns off each retired setting ctdev turned on,
+// so a setting removed from the menu doesn't stay on with no off switch. A
+// machine where ctdev turned none of them on is left alone. It runs until a
+// pass succeeds, then never again.
+func RetireRemovedSSHSettings(ctx context.Context, o sysutil.Opts) error {
+	done := filepath.Join(remoteStateDir(), sshSettingsRetiredMarker)
+	if _, err := os.Stat(done); err == nil || !gateLinux() {
+		return nil
+	}
+	var errs []error
+	for _, s := range retiredSSHSettings {
+		added, err := s.added(ctx)
+		if err != nil {
+			// --dry-run skips sudo, so it can't read root-only state; it changes
+			// nothing and writes no marker anyway.
+			if !o.DryRun {
+				errs = append(errs, fmt.Errorf("check %q: %w", s.name, err))
+			}
+			continue
+		}
+		if !added {
+			continue
+		}
+		fmt.Fprintf(o.Stdout, "  Turning off %q, which ctdev no longer offers\n", s.name)
+		if err := s.off(ctx, o); err != nil {
+			errs = append(errs, fmt.Errorf("turn off %q: %w", s.name, err))
+		}
+	}
+	if len(errs) > 0 || o.DryRun {
+		return errors.Join(errs...)
+	}
+	if err := os.MkdirAll(filepath.Dir(done), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(done, nil, 0o644)
+}
+
+// codeTunnelInstalled reports whether the VS Code tunnel user service exists
+// and the `code` CLI that uninstalls it is on PATH. Nothing records who
+// installed it; ctdev's vscode.dev setting defaulted to on wherever VS Code
+// was installed, so on a ctdev machine it was ctdev.
+func codeTunnelInstalled(_ context.Context) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || !remoteCommandExists("code") {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(home, ".config", "systemd", "user", "code-tunnel.service"))
+	return err == nil
+}
+
+func uninstallCodeTunnel(ctx context.Context, o sysutil.Opts) error {
+	return remoteRun(ctx, o, "code", "tunnel", "service", "uninstall")
+}
+
+// lingering reports whether systemd lingering is on for the current user.
+// Nothing records who turned it on; ctdev's "Keep my programs running"
+// setting defaulted to on in every --batch run, so on a ctdev machine it was
+// ctdev, and ctdev otherwise never turns lingering on (docs/backups.md).
+func lingering(ctx context.Context) bool {
+	name, err := remoteUsername()
+	if err != nil {
+		return false
+	}
+	out, err := remoteProbe(ctx, "loginctl", "show-user", name, "--property=Linger")
+	return err == nil && out == "Linger=yes"
+}
+
+func disableLinger(ctx context.Context, o sysutil.Opts) error {
 	name, err := remoteUsername()
 	if err != nil {
 		return err
 	}
-	if remoteOn(value) {
-		return remoteSudo(ctx, o, "loginctl", "enable-linger", name)
-	}
-	if detectCodeTunnel(ctx) == "enabled" {
-		fmt.Fprintln(o.Stdout, "  warning: the vscode.dev tunnel is on and stops when you log out without this; turn \"Open this machine from vscode.dev\" off too, or keep this on")
-	}
 	return remoteSudo(ctx, o, "loginctl", "disable-linger", name)
 }
 
-// ── Mosh support (UTF-8 locale) ─────────────────────────────────────────
-
-// detectMoshLocale reports "enabled" if an en_US UTF-8 locale is generated.
-func detectMoshLocale(ctx context.Context) string {
-	out, _ := remoteProbe(ctx, "locale", "-a")
-	low := strings.ToLower(out)
-	if strings.Contains(low, "en_us.utf-8") || strings.Contains(low, "en_us.utf8") {
-		return "enabled"
-	}
-	return "disabled"
+// moshLocaleAdded reports whether ctdev generated en_US.UTF-8.
+func moshLocaleAdded(_ context.Context) bool {
+	_, err := os.Stat(filepath.Join(remoteStateDir(), moshLocaleMarker))
+	return err == nil
 }
 
-// applyMoshLocale generates en_US.UTF-8, which mosh-server needs, and
-// remembers that ctdev added it. Off removes the locale only when ctdev was
-// the one that generated it.
-func applyMoshLocale(ctx context.Context, o sysutil.Opts, value string) error {
-	marker := filepath.Join(remoteStateDir(), moshLocaleMarker)
-	if remoteOn(value) {
-		if detectMoshLocale(ctx) == "enabled" {
-			return nil
-		}
-		if err := remoteSudo(ctx, o, "locale-gen", moshLocale); err != nil {
-			return fmt.Errorf("locale-gen: %w", err)
-		}
-		if o.DryRun {
-			return nil
-		}
-		if err := os.MkdirAll(filepath.Dir(marker), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(marker, []byte(moshLocale+"\n"), 0o644)
-	}
-	if _, err := os.Stat(marker); err != nil {
-		fmt.Fprintf(o.Stdout, "  note: %s was here before ctdev, so it stays\n", moshLocale)
-		return nil
-	}
+// removeMoshLocale removes the en_US.UTF-8 locale ctdev generated, then the
+// marker that says it did.
+func removeMoshLocale(ctx context.Context, o sysutil.Opts) error {
 	if err := remoteSudo(ctx, o, "sed", "-i", `s/^en_US\.UTF-8 UTF-8/# en_US.UTF-8 UTF-8/`, "/etc/locale.gen"); err != nil {
 		return err
 	}
@@ -376,68 +388,37 @@ func applyMoshLocale(ctx context.Context, o sysutil.Opts, value string) error {
 	if o.DryRun {
 		return nil
 	}
-	return os.Remove(marker)
+	return os.Remove(filepath.Join(remoteStateDir(), moshLocaleMarker))
 }
 
-// ── Open this machine from vscode.dev (VS Code tunnel) ──────────────────
-
-// detectCodeTunnel reports whether the VS Code tunnel user service exists.
-func detectCodeTunnel(_ context.Context) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "disabled"
-	}
-	if _, err := os.Stat(filepath.Join(home, ".config", "systemd", "user", "code-tunnel.service")); err == nil {
-		return "enabled"
-	}
-	return "disabled"
-}
-
-// applyCodeTunnel installs or uninstalls the VS Code tunnel user service.
-// Turning it on also turns on lingering, which the tunnel needs to keep
-// running after you log out. Authentication (`code tunnel user login`)
-// remains a one-time manual step.
-func applyCodeTunnel(ctx context.Context, o sysutil.Opts, value string) error {
-	if !remoteCommandExists("code") {
-		return fmt.Errorf("VS Code (code) not found — install the vscode component first")
-	}
-	if !remoteOn(value) {
-		if err := remoteRun(ctx, o, "code", "tunnel", "service", "uninstall"); err != nil {
-			return fmt.Errorf("code tunnel service uninstall: %w", err)
-		}
-		return nil
-	}
-	lingerWasOff := detectLinger(ctx) != "enabled"
-	if err := applyLinger(ctx, o, "enabled"); err != nil {
-		return fmt.Errorf("keep programs running (lingering): %w", err)
-	}
-	if lingerWasOff {
-		fmt.Fprintln(o.Stdout, "  note: also turned on \"Keep my programs running after I disconnect\", which the tunnel needs (if you turned it off in this run, the tunnel turned it back on)")
-	}
-	if err := remoteRun(ctx, o, "code", "tunnel", "service", "install", "--accept-server-license-terms"); err != nil {
-		return fmt.Errorf("code tunnel service install: %w", err)
-	}
-	fmt.Fprintln(o.Stdout, "  run 'code tunnel user login' once to authenticate, then reach this machine at https://vscode.dev")
-	return nil
-}
-
-// ── Local-network-only firewall (UFW) ───────────────────────────────────
-
-// detectUFW reports "enabled" when UFW is on (ufw.conf's ENABLED=yes) and
-// every allow rule ctdev adds is present (`ufw status`, root-only). When the
-// probe can't run (--show and --dry-run skip sudo) it reads "unknown".
-func detectUFW(ctx context.Context) string {
+// ctdevUFWOn reports whether UFW is on (ufw.conf's ENABLED=yes) with every
+// allow rule ctdev added (`ufw status`, root-only). A probe that can't run is
+// an error, not "ctdev didn't add it", so the cleanup isn't marked done
+// without having looked.
+func ctdevUFWOn(ctx context.Context) (bool, error) {
 	if !ufwEnabled() {
-		return "disabled"
+		return false, nil
 	}
 	status, err := remoteSudoProbe(ctx, "ufw", "status")
 	if err != nil {
-		return ValueUnknown
+		return false, fmt.Errorf("read UFW's rules (needs sudo): %w", err)
 	}
-	if !ufwHasCtdevRules(status) {
-		return "disabled"
+	return ufwHasCtdevRules(status), nil
+}
+
+// known adapts a check that can't fail to the retired-settings table.
+func known(added func(context.Context) bool) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) { return added(ctx), nil }
+}
+
+// SSHSettingsRetirePending reports whether RetireRemovedSSHSettings still has
+// to run here, so a caller that hasn't asked for sudo yet can ask first.
+func SSHSettingsRetirePending() bool {
+	if !gateLinux() {
+		return false
 	}
-	return "enabled"
+	_, err := os.Stat(filepath.Join(remoteStateDir(), sshSettingsRetiredMarker))
+	return err != nil
 }
 
 // ufwEnabled reports whether ufw.conf, readable without root, has ENABLED=yes.
@@ -456,19 +437,14 @@ func ufwEnabled() bool {
 	return false
 }
 
-// ufwRule is one allow rule ctdev adds: a port and protocol from a range.
+// ufwRule is one allow rule ctdev added: a port and protocol from a range.
 type ufwRule struct{ port, proto, cidr string }
 
-// args returns the rule as `ufw allow` / `ufw delete allow` arguments.
-func (r ufwRule) args() []string {
-	return []string{"from", r.cidr, "to", "any", "port", r.port, "proto", r.proto}
-}
-
-// ufwRules are the allow rules ctdev adds, one SSH and one Mosh rule per
-// private range.
+// ufwRules are the allow rules ctdev added, one SSH and one Mosh rule per
+// RFC1918 private range.
 func ufwRules() []ufwRule {
 	var rules []ufwRule
-	for _, cidr := range lanCIDRs {
+	for _, cidr := range []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"} {
 		rules = append(rules,
 			ufwRule{port: "22", proto: "tcp", cidr: cidr},
 			ufwRule{port: "60000:61000", proto: "udp", cidr: cidr})
@@ -476,7 +452,7 @@ func ufwRules() []ufwRule {
 	return rules
 }
 
-// ufwHasCtdevRules reports whether `ufw status` lists every rule ctdev adds.
+// ufwHasCtdevRules reports whether `ufw status` lists every rule ctdev added.
 // UFW prints each as "22/tcp  ALLOW  192.168.0.0/16".
 func ufwHasCtdevRules(status string) bool {
 	listed := map[ufwRule]bool{}
@@ -499,30 +475,13 @@ func ufwHasCtdevRules(status string) bool {
 	return true
 }
 
-// applyUFW turns the local-network-only firewall on or off. On opens SSH and
-// Mosh from private LAN ranges and enables UFW. Off deletes exactly those
-// rules, then turns UFW off only if no other rules are left, so a firewall
-// you configured yourself stays up.
-func applyUFW(ctx context.Context, o sysutil.Opts, value string) error {
-	if remoteOn(value) {
-		if !remoteCommandExists("ufw") {
-			if err := remoteInstall(ctx, o, []string{"ufw"}); err != nil {
-				return fmt.Errorf("install ufw: %w", err)
-			}
-		}
-		for _, r := range ufwRules() {
-			if err := remoteSudo(ctx, o, "ufw", append([]string{"allow"}, r.args()...)...); err != nil {
-				return fmt.Errorf("ufw allow %s: %w", strings.Join(r.args(), " "), err)
-			}
-		}
-		return remoteSudo(ctx, o, "ufw", "--force", "enable")
-	}
-	if !remoteCommandExists("ufw") {
-		return nil
-	}
+// removeCtdevUFW deletes exactly the rules ctdev added, then turns UFW off
+// only if no other rules are left, so a firewall you configured yourself
+// stays up.
+func removeCtdevUFW(ctx context.Context, o sysutil.Opts) error {
 	// Best-effort: a rule someone already deleted by hand isn't an error.
 	for _, r := range ufwRules() {
-		_ = remoteSudo(ctx, o, "ufw", append([]string{"delete", "allow"}, r.args()...)...)
+		_ = remoteSudo(ctx, o, "ufw", "delete", "allow", "from", r.cidr, "to", "any", "port", r.port, "proto", r.proto)
 	}
 	if !o.DryRun {
 		status, err := remoteSudoProbe(ctx, "ufw", "status")
