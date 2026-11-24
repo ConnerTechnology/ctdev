@@ -722,7 +722,9 @@ func regenerateSecretKey(ctx context.Context, ui UI, dest *backup.Destination) e
 func replaceBackendCredentials(ctx context.Context, ui UI, dest *backup.Destination) error {
 	name := dest.Name
 	title := kitPage(name, "Replace backend credentials").Title
-	page := func(step string) Page { return Page{Title: title, Subtitle: subtitle("Replace backend credentials", step)} }
+	page := func(step string) Page {
+		return Page{Title: title, Subtitle: subtitle("Replace backend credentials", step)}
+	}
 	a, err := unlockAccount(ctx, ui, dest, page("Master password"), "")
 	if err != nil {
 		return err
