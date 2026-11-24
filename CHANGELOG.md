@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.3.0] - 2026-11-23
+
+### Added
+- **`ctdev configure ssh` opens a menu** with three entries: Your keys, Create a key, and Server
+  settings.
+  - Your keys lists the key pairs in `~/.ssh`. For one key you can copy it to a server
+    (`ssh-copy-id`), upload it to GitHub for authentication, signing or both, copy it to the
+    clipboard, or delete it. Pick several (`1 3`) to copy, upload or delete each one.
+  - The clipboard is `pbcopy`, `wl-copy` or `xclip`. In an SSH session ctdev uses OSC 52, which
+    puts the key on the clipboard of the terminal you're typing in.
+  - Create a key asks the type (`ed25519`, `ed25519-sk`, `ecdsa` or `rsa` 4096), the file name
+    and the comment, then lets `ssh-keygen` ask for the passphrase. It never overwrites a key. On
+    macOS the key goes into the Keychain.
+  - `--batch` and `--show` work on the server settings as before. `ctdev install ssh` opens the
+    menu after installing.
+
+### Changed
+- **`configure ssh` keeps two server settings: SSH server and key-only login.** Lingering, Mosh
+  support, the vscode.dev tunnel and the LAN-only UFW firewall are gone. The first
+  `ctdev configure ssh` or `ctdev configure` run turns off whichever of them ctdev turned on,
+  once. Lingering and the tunnel are turned off wherever they're on, since nothing recorded who
+  turned them on. `ctdev install mosh` still installs Mosh;
+  [TROUBLESHOOTING.md](TROUBLESHOOTING.md) has the one command it needs afterwards.
+- **`configure git` never overwrites a key.** Its Generate option now asks for the file name
+  and refuses one already in use.
+
 ## [20.2.0] - 2026-11-23
 
 ### Added
