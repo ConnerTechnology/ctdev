@@ -57,7 +57,8 @@ access point to change a setting.
 ctdev runs as you and escalates with `sudo` only for the steps that need it: a
 package manager, a systemd unit, a file under `/etc` or `/usr/local`. Its own
 files live in `~/.local/bin`, `~/.config/ctdev` and `~/.local/state/ctdev`, and
-the uninstaller removes them.
+the uninstaller removes them, along with the scheduled-backup timer. It keeps
+`~/.config/ctdev/backup`, this computer's backup keys, unless you pass `--purge`.
 
 **No secret is ever stored in this repository.** Every secret is entered at its
 `configure` step and written only to the device that needs it, owner-readable
