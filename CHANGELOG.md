@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.7.1] - 2026-11-24
+
+### Fixed
+- **The `ctdev configure gpu` changes listed under 20.7.0 ship in this release.** Their pull
+  request merged after the 20.7.0 tag, so 20.7.0 doesn't have them: signing in one place, `--force`
+  re-applying the setting, the enrolled-key check after a CMOS reset, and the `--show` labels.
+
 ## [20.7.0] - 2026-11-24
 
 ### Changed
