@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.7.0] - 2026-11-24
+
+### Changed
+- **`ctdev uninstall <name>` skips a component that isn't installed** and says so
+  ("<name> isn't installed (--force runs its uninstaller anyway)"), and asks for sudo only when
+  something will run. `--force` runs the uninstaller anyway, for leftovers of a partial install.
+  `ctdev uninstall` with no arguments still picks from what's installed.
+- **`ctdev cleanup --batch` and `--dry-run` total only what batch cleans.** Opt-in tasks are listed
+  apart, with their own total, as the ones the picker leaves unchecked. The picker labels enter
+  "review & clean" in one place.
+- **`ctdev configure gpu` signs the NVIDIA driver in one place: the setting.** It ran signing a
+  second time after the setting, which asked for the MOK password twice and signed even when you
+  answered no. `--force` re-applies the setting rather than regenerating the keys; `--recover` is
+  unchanged. A signed module counts as signed only with this computer's key enrolled, so after a
+  CMOS reset clears the MOK list, `configure gpu` enrolls it again.
+
+### Fixed
+- `ctdev doctor` keeps every check name clear of its detail: the name column grows to the longest
+  name, so "Controller certificate" no longer runs into its text and long names don't wrap.
+- `ctdev doctor --deep`'s help says what it adds: the network equipment fingerprint and vendor API
+  checks (it named a speed test, Wi-Fi scan and path trace that don't exist).
+- `ctdev configure gpu --show` labels no longer wrap ("MOK key enrolled:", "Module signature:").
+- `ctdev cleanup --help` says Docker junk is cleaned on macOS too.
+- The docs match the code: `update --check` still refreshes the package indexes, which updates need
+  root (any Docker stack, Orca), the five setup wizards `install` opens, that re-running `install`
+  reinstalls before opening configuration, what `info` shows on macOS, and what a `configure`
+  category is.
+
 ## [20.6.1] - 2026-11-23
 
 ### Fixed
