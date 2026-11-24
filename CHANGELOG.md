@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.8.0] - 2026-11-24
+
 ### Changed
 - **`antigravity-cli` replaces `gemini-cli`.** Google replaced Gemini CLI with the Antigravity CLI
   (`agy`). `ctdev install antigravity-cli` runs Google's installer, which puts `agy` in
