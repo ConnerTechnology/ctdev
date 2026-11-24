@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 
 	tea "charm.land/bubbletea/v2"
 	comp "github.com/ConnerTechnology/ctdev/ctdev/component"
@@ -33,7 +34,10 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("unknown component: %s", name)
 			}
 		}
-		selected = args
+		selected = installedOrForced(cmd.OutOrStdout(), args)
+		if len(selected) == 0 {
+			return nil
+		}
 	} else if isBatchMode() {
 		return fmt.Errorf("no components specified (batch mode requires arguments)")
 	} else {
@@ -76,4 +80,23 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		mode:  progress.ModeUninstall,
 		names: selected,
 	})
+}
+
+// installedOrForced drops the named components that aren't installed, saying
+// so, unless --force. Detection can miss a leftover (an older kopia than the
+// pinned one, an SSH server that no longer starts at boot), which is what
+// --force is for.
+func installedOrForced(w io.Writer, names []string) []string {
+	if flagForce {
+		return names
+	}
+	var installed []string
+	for _, name := range names {
+		if comp.FindByName(name).IsInstalled() {
+			installed = append(installed, name)
+		} else {
+			fmt.Fprintf(w, "%s isn't installed (--force runs its uninstaller anyway).\n", name)
+		}
+	}
+	return installed
 }

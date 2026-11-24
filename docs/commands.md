@@ -14,12 +14,15 @@ If a dependency fails, its dependents in the same run are skipped with the reaso
 (`ccstatusline skipped: nodenv failed`) rather than run against a missing dependency. They
 count as skipped, not failed, and on the progress screen the `Retry:` line lists them with
 the dependency (`--batch` prints no `Retry:` line).
-`uninstall` runs every selected component regardless.
+`uninstall` runs every selected component regardless. A component named on the command line
+that isn't installed is reported (`kopia isn't installed`) and skipped; `--force` runs its
+uninstaller anyway, for a leftover the check misses, such as a kopia older than the pinned one.
 
 ```bash
 ctdev install                   # Pick components to install from the registry
 ctdev install <component...>    # Install components (then configure them)
-ctdev uninstall <component...>  # Remove specific components
+ctdev uninstall                 # Pick components to remove from the installed ones
+ctdev uninstall <component...>  # Remove specific components (skips any not installed)
 ctdev update [-y]               # Update system packages, components, and Docker stacks
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
