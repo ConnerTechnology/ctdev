@@ -13,8 +13,9 @@ ctdev update --refresh-keys     # refresh APT GPG keys first
 
 The scan refreshes the package index (APT or Homebrew) first, so what it lists
 is current; `--no-refresh` skips that when you have just done it yourself.
-`--check` is read-only — it never refreshes keys, even if you also pass
-`--refresh-keys`, because a key refresh writes to the machine.
+`--check` installs nothing, but it still runs that refresh (`apt-get update`
+through sudo, `brew update`) unless you also pass `--no-refresh`. It never
+refreshes keys, even if you also pass `--refresh-keys`.
 
 `--refresh-keys` exists for the failure that looks like a broken repository: an
 APT signing key that expired or rotated, leaving `apt update` complaining about
@@ -39,12 +40,14 @@ Code app updates itself, so it isn't listed. Orca works the same way: on Linux
 ctdev installs the newer release's `.deb`, checked against its sha512, and on
 macOS the app updates itself.
 
-Root is used only for the updates that need it: the system package manager, the
-Go toolchain (it lives in `/usr/local/go`), `helm`, `kubectl` and `terraform`
-(they live in `/usr/local/bin`), the T3 Code `.deb`, rebuilding a Docker stack,
-and replacing a ctdev binary in a directory you cannot write to.
-Bun, nodenv, rbenv, pyenv and the T3 Code CLI all stay inside `$HOME` and are
-updated as you.
+ctdev asks for your password before it applies anything when one of the
+selected updates needs root: APT packages, Homebrew casks, the Go toolchain (it
+lives in `/usr/local/go`), `helm`, `kubectl` and `terraform` (they live in
+`/usr/local/bin`), the T3 Code and Orca `.deb`s, any Docker stack, and a ctdev
+binary in a directory you cannot write to. Of the Docker stacks, only one built
+from a Dockerfile (Caddy) rebuilds as root; a stack of registry images pulls as
+you, but selecting it still asks. Homebrew formulae, Flatpak, npm, Bun, nodenv,
+rbenv, pyenv and the T3 Code CLI all stay out of root and are updated as you.
 
 Update never changes your Node version: a new Node would leave every global npm
 package behind on the old one. On Linux it pulls the nodenv and node-build

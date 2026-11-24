@@ -8,7 +8,7 @@ not set up — a family member's laptop, a client's desktop.
 ```bash
 ctdev doctor                    # the report
 ctdev doctor --network          # network and internet checks only
-ctdev doctor --deep             # + vendor APIs, Wi-Fi scan, path trace
+ctdev doctor --deep             # + vendor APIs (UniFi/Synology/Proxmox), gear fingerprint
 ctdev doctor --root             # prompt once for sudo so root-only checks run
 ctdev doctor --report [path]    # also write a shareable Markdown report
 ctdev doctor --redact           # mask SSID, MACs and public IP before sharing
@@ -57,7 +57,7 @@ read-only UniFi key and it will report radar events, airtime and mesh uplinks:
 
 ```bash
 CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep
-ctdev doctor --deep --unifi https://10.2.2.1   # when it isn't the gateway
+ctdev doctor --deep --unifi https://192.0.2.1  # when it isn't the gateway
 ```
 
 Create that key in the UniFi console under Settings → Control Plane →

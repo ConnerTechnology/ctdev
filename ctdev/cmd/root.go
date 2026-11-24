@@ -107,7 +107,7 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&flagDryRun, "dry-run", "n", false, "preview changes without applying")
-	rootCmd.PersistentFlags().BoolVarP(&flagForce, "force", "f", false, "force re-run install scripts")
+	rootCmd.PersistentFlags().BoolVarP(&flagForce, "force", "f", false, "force re-run install scripts, or uninstall what isn't detected as installed")
 	rootCmd.PersistentFlags().BoolVar(&flagBatch, "batch", false, "non-interactive mode")
 
 }

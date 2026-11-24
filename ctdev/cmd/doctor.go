@@ -53,7 +53,7 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 
 	doctorCmd.Flags().BoolVar(&flagDoctorDeep, "deep", false,
-		"include slow probes (speed test, Wi-Fi scan, path trace)")
+		"add the network equipment fingerprint and vendor API checks")
 	doctorCmd.Flags().BoolVar(&flagDoctorNetwork, "network", false,
 		"only run the network and internet checks")
 	doctorCmd.Flags().BoolVar(&flagDoctorStrict, "strict", false,

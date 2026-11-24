@@ -1,11 +1,14 @@
 # ctdev CLI
 
 `ctdev install <component>` installs the component (pulling in its `Dependencies`
-first) and then runs its configuration step if it has one — a `configure <name>`
-category (e.g. `pihole`) or a dedicated wizard (`caddy`; see
+first) and then runs its configuration step if it has one — the settings category
+of the same name (`pihole`) or a dedicated wizard (`aws`, `caddy`, `git`, `nodenv`, `ssh`; see
 `componentWizards` in `cmd/install.go`). Re-running `install` on something
-already installed says so and jumps straight to configuration. `ctdev configure
-<name>` configures without installing. (Both skipped in `--batch`/`--dry-run`.)
+already installed runs its installer again, then says it is already installed and
+opens its configuration; one with no configuration step only says it is already installed.
+`ctdev configure <name>` configures without installing, except Pi-hole: its
+settings have no `configure pihole` subcommand and run from `ctdev install pihole`.
+(The configuration step is skipped in `--batch`/`--dry-run`.)
 The exception is `claude-code`: its drift review of `~/.claude/` runs after every install
 that includes it, in every mode, so `--dry-run` shows the diff and `--force` says where the
 backup went.
@@ -14,16 +17,19 @@ If a dependency fails, its dependents in the same run are skipped with the reaso
 (`ccstatusline skipped: nodenv failed`) rather than run against a missing dependency. They
 count as skipped, not failed, and on the progress screen the `Retry:` line lists them with
 the dependency (`--batch` prints no `Retry:` line).
-`uninstall` runs every selected component regardless.
+`uninstall` runs every selected component regardless. A component named on the command line
+that isn't installed is reported (`kopia isn't installed`) and skipped; `--force` runs its
+uninstaller anyway, for a leftover the check misses, such as a kopia older than the pinned one.
 
 ```bash
 ctdev install                   # Pick components to install from the registry
 ctdev install <component...>    # Install components (then configure them)
-ctdev uninstall <component...>  # Remove specific components
+ctdev uninstall                 # Pick components to remove from the installed ones
+ctdev uninstall <component...>  # Remove specific components (skips any not installed)
 ctdev update [-y]               # Update system packages, components, and Docker stacks
 ctdev update --check            # List available updates without installing
 ctdev update --refresh-keys     # Refresh APT GPG keys before updating
-ctdev info                      # Inventory: specs, kernel, uptime, drives, usage, installed components
+ctdev info                      # Inventory: specs, kernel, uptime, drives, usage, installed components (Linux; macOS shows no uptime, drives or usage)
 ctdev configure                 # Full-screen settings browser (all categories)
 ctdev configure <category>      # Configure a specific category
 ctdev configure --show          # Show current system configuration
@@ -71,7 +77,7 @@ ctdev doctor --no-integrations  # never call a vendor API, even with credentials
 
 # Vendor deep-dive: the key alone is enough — the controller defaults to the gateway.
 CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep
-ctdev doctor --deep --unifi https://10.2.2.1   # when it isn't the gateway
+ctdev doctor --deep --unifi https://192.0.2.1  # when it isn't the gateway
 ```
 
 **Flags that work on any command:** `--help`, `--dry-run`, `--verbose`, `--force`, `--batch`, `--version`

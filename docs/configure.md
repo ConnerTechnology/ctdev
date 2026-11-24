@@ -11,8 +11,8 @@ ctdev configure <category> --batch   # apply that category's defaults, no prompt
 ctdev configure --show          # what is currently configured
 ```
 
-Each setting is a **category**. Run with no arguments and you get a browser over
-all of them; name one and you get just that one. `--batch` applies the
+Settings are grouped into **categories**, one topic each. Run with no arguments
+and you get a browser over all of them; name one and you get just its settings. `--batch` applies the
 recommended defaults without asking, which is what you want in a script.
 
 ## The categories
