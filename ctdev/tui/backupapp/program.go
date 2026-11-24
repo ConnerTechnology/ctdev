@@ -43,7 +43,7 @@ func RunFolder(ctx context.Context, d Deps) error {
 
 // RunAll runs `ctdev backup --all`.
 func RunAll(ctx context.Context, d Deps) error {
-	return errors.New("ctdev backup --all isn't built yet")
+	return run(ctx, d, os.Stdout, allFlow)
 }
 
 // run shows the program while flow runs on its own goroutine. Once the
