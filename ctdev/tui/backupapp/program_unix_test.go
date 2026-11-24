@@ -40,7 +40,7 @@ func TestDryRunCommandsArePrintedAfterExit(t *testing.T) {
 // it's still stopping says what ctdev waits on, after the screen closes.
 func TestQuittingWhileResticStopsSaysSo(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "session")
-	d, _ := standinFolder(t, true, `ps -o sid= -p $$ | tr -d ' ' > "`+marker+`"; echo $$ >> "`+marker+`"
+	d, _ := standinFolder(t, true, `ps -o pgid= -p $$ | tr -d ' ' > "`+marker+`"; echo $$ >> "`+marker+`"
   trap 'sleep 1; exit 130' INT
   sleep 60 >/dev/null 2>&1 &
   wait $!`, forgets, "example-backups")

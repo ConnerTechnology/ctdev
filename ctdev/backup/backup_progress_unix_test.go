@@ -86,9 +86,11 @@ func TestResticLeavesTheTerminalOnlyWhenAsked(t *testing.T) {
 	for _, noTerminal := range []bool{false, true} {
 		m, root, _ := failingMachine(t)
 		m.NoTerminal = noTerminal
+		// A new session makes restic its own process group's leader too, and
+		// BSD ps (macOS) has no sid keyword, so the group stands in for it.
 		marker := filepath.Join(t.TempDir(), "session")
 		standinDestination(t, m, `backup)
-  ps -o sid= -p $$ | tr -d ' ' > "`+marker+`"
+  ps -o pgid= -p $$ | tr -d ' ' > "`+marker+`"
   echo $$ >> "`+marker+`"
   echo '`+exampleSummary+`' ;;`)
 		d, err := m.Destination("example-backups")
