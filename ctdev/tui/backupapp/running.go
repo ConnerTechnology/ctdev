@@ -82,9 +82,15 @@ func (rn *running) view(width, _ int) stepView {
 			lines = append(lines, "  "+styles.Dimmed.Render(strings.TrimPrefix(p.CurrentFile, "/")))
 		}
 	} else {
+		lines = append(lines, r.Above...)
 		lines = append(lines, "  "+rn.spin.View()+" "+styles.Value.Render(r.Label))
+		lines = append(lines, r.Below...)
+		indent := "    "
+		if r.Above != nil || r.Below != nil {
+			indent = "  " // under the list, not the spinner's line
+		}
 		if r.Detail != "" {
-			lines = append(lines, "    "+styles.Dimmed.Render(r.Detail))
+			lines = append(lines, indent+styles.Dimmed.Render(r.Detail))
 		}
 	}
 	keys := "  " + keyHint("esc", orDefault(r.CancelLabel, "Cancel"))

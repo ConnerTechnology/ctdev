@@ -378,7 +378,7 @@ func TestQuittingWhileTheLostComputerFlowRegeneratesSaysSo(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ui := &fakeUI{t: t, Confirms: []any{true}, Forms: []any{Values{"master": exampleMaster}}}
-	q := quitsAt{fakeUI: ui, label: "Making a new Secret Key…", cancel: cancel}
+	q := quitsAt{fakeUI: ui, label: "2. Making a new Secret Key…", cancel: cancel}
 	if err := lostComputer(ctx, q, f.dest, f.computer(t, "example-desktop")); !errors.Is(err, ErrCancelled) {
 		t.Fatalf("err = %v, want the quit passed on", err)
 	}

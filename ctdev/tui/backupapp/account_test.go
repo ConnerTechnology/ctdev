@@ -166,3 +166,24 @@ func TestNewCredentialsLineUp(t *testing.T) {
 		}
 	}
 }
+
+// While I lost this computer makes the new Secret Key, the step is the
+// checklist's spinner line, with what it does dim under the list, and only
+// why it can't be cancelled under the rule.
+func TestLostComputerStepRunsInItsChecklist(t *testing.T) {
+	l := &lostSteps{host: "example-desktop", name: "example-backups", done: 1}
+	m := &model{}
+	r := l.running("New Secret Key", "Making a new Secret Key…", "making a new Secret Key and Emergency Kit, then removing the old account key")
+	m.Update(request{page: r.Page, step: newRunning(r, func() {})})
+	got := strings.Split(ansi.Strip(m.render()), "\n")
+	want := []string{
+		"  ✓ 1. Removed example-desktop's key.",
+		"  ⠋ 2. Making a new Secret Key…",
+		"  ○ 3. New backend credentials",
+		"  making a new Secret Key and Emergency Kit, then removing the old account key",
+	}
+	if len(got) < 7 || !slices.Equal(got[3:7], want) || !strings.HasPrefix(got[8], "────") ||
+		got[10] != "  Can't be cancelled: this step changes the keys on example-backups." {
+		t.Errorf("screen:\n%s", strings.Join(got, "\n"))
+	}
+}
