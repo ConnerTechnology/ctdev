@@ -4,7 +4,7 @@
 they sit on: our own today, clients' later. It is a single Go CLI that installs components,
 configures system settings, runs backups, and diagnoses devices, including unmanaged devices it can
 see but not install on. The Go module is `ctdev/`; everything else at the root is the installer,
-the CI and the changelog.
+the CI and the installers.
 
 ## Guardrails
 
@@ -28,7 +28,7 @@ Change the behavior and the comment that explains it together.
 | `ctdev/component/registry.go` | Every component, with its dependencies, detection and `Root` need |
 | `CONTEXT.md` | The vocabulary |
 | `TROUBLESHOOTING.md` | Symptoms and fixes on a live machine |
-| `CHANGELOG.md` | What shipped in each version |
+| GitHub Releases, git history | What shipped in each version: see "What changed" below |
 
 When a convention has no code to hang a comment on, it goes here, not in a new file.
 
@@ -84,14 +84,28 @@ or two, says why. The release commit has no body. Attribution is off, set in
 
 ## Releases
 
-1. Update CHANGELOG.md
-2. Bump VERSION
-3. Commit straight to `main`: `docs: update for vX.Y.Z`
-4. Tag: `git tag vX.Y.Z`
-5. Push: `git push && git push --tags`
-6. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
+1. Bump VERSION
+2. Commit straight to `main`: `chore: release vX.Y.Z`
+3. Tag: `git tag vX.Y.Z`
+4. Push: `git push && git push --tags`
+5. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
+
+## What changed
+
+There is no changelog file. To answer "what changed since vX":
+
+- `gh release list` and `gh release view vX.Y.Z --repo ConnerTechnology/ctdev` show the release
+  notes CI generates from the merged pull requests' titles. They work without a clone.
+  A tag can lack a release, so when `gh release view` says
+  "release not found", use `gh api repos/ConnerTechnology/ctdev/compare/vA...vB` or `git log`.
+- `git log vA..vB --no-merges --format='%h %s'` lists the commits, in a clone.
+- `entire why` and `gh pr view <number>` give the reason and the detail (see Sessions).
+
+So a pull request's title is the user-facing line: say what changed for someone running ctdev,
+not which file moved. Anything a user must do (a renamed flag, a manual cleanup) goes in the pull
+request description, and a breaking change takes the conventional `!` (`feat!: ...`).
 
 ## Guidance is checked
 
 `scripts/check-guidance.sh` runs in CI. It verifies that every repo path named in a backticked
-token in this file exists, and that no tracked file but `CHANGELOG.md` names a real tailnet.
+token in this file exists, and that no tracked file names a real tailnet.

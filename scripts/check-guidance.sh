@@ -7,7 +7,7 @@
 #
 # Checks:
 #   1. every backticked repo path in AGENTS.md exists or is gitignored
-#   2. no tracked file but CHANGELOG.md names a real tailnet (a tail<hex>.ts.net MagicDNS name)
+#   2. no tracked file names a real tailnet (a tail<hex>.ts.net MagicDNS name)
 #
 # Usage: scripts/check-guidance.sh   (exit 1 on any failure, all failures listed)
 
@@ -43,11 +43,10 @@ done < <(grep -oE '`[^`]+`' AGENTS.md | tr -d '`' \
 # The repo is public and carries no real family or client data (AGENTS.md, "Guardrails"). A
 # real tailnet's MagicDNS suffix is tail<hex>.ts.net, so the pattern catches any tailnet
 # without this script naming ours. Examples use tailnet-example.ts.net, which it does not
-# match. CHANGELOG.md is excluded because its past entries record what shipped. A hit is
-# reported by file and line only, so a real name never reaches the public CI log.
+# match. A hit is reported by file and line only, so a real name never reaches the public CI log.
 while IFS= read -r hit; do
   bad "$hit names a real tailnet (tail<hex>.ts.net); use tailnet-example.ts.net instead"
-done < <(git grep -nIE 'tail[0-9a-f]+\.ts\.net' -- ':!CHANGELOG.md' | cut -d: -f1,2)
+done < <(git grep -nIE 'tail[0-9a-f]+\.ts\.net' | cut -d: -f1,2)
 
 if [ "$fail" -eq 0 ]; then say "guidance check: ok"; fi
 exit "$fail"

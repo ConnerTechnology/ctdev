@@ -74,7 +74,7 @@ proves the file is the one the release page lists — not who built it.
 ## More
 
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — symptoms and fixes on a live machine
-- [CHANGELOG.md](CHANGELOG.md) — what shipped in each version
+- [Releases](https://github.com/ConnerTechnology/ctdev/releases) — what shipped in each version
 
 ## License
 
