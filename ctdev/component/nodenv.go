@@ -13,7 +13,10 @@ import (
 
 // nodenvInstall installs nodenv and node-build and no Node version: which
 // Node runs, globally or per project, is the user's call through
-// `ctdev configure node` (ADR-0023).
+// `ctdev configure node`. A global version has project-wide effects (native
+// modules, engines fields), and `ctdev update` runs unattended with -y, so
+// ctdev never picks or bumps one itself. Bumping it once left every global npm
+// package on the old version, and claude, codex and gemini stopped resolving.
 func nodenvInstall(ctx context.Context, opts ExecOpts) error {
 	o := execOpts(opts)
 

@@ -9,7 +9,7 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
-// The --all screens for a destination's computers and secrets (ADR-0016):
+// The --all screens for a destination's computers and secrets:
 // the Computers list, a computer's actions, the Emergency Kit and password
 // menu, and each action's confirmation.
 

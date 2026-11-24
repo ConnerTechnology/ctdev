@@ -110,8 +110,7 @@ configure ssh` or bare `ctdev configure` run, except with `--show`, turns off
 whichever of those ctdev turned on, once. A locale that was already there stays, and so does a
 firewall without ctdev's rules; a firewall with other rules stays on once
 ctdev's are deleted. Lingering and the tunnel record no owner, so they are
-turned off wherever they are on; turned back on by hand, they stay on
-([ADR-0023](adr/0023-configure-ssh-is-the-ssh-server-and-key-only-login.md)).
+turned off wherever they are on; turned back on by hand, they stay on.
 `ctdev install ssh` installs the SSH server and then opens this menu.
 
 `desktop` holds how the desktop looks and behaves, on whichever platform you run
@@ -136,7 +135,7 @@ these wizards afterward.
 **Node versions** — `configure node install`, `update` and `uninstall` choose
 which Node runs, for every folder (`nodenv global`) or for one project (the
 `.node-version` that governs this folder, else a new one at the top of its git
-repository). ctdev never picks or bumps a Node version on its own; see ADR-0023.
+repository). ctdev never picks or bumps a Node version on its own: which Node a project runs is your call.
 `update` reinstalls the old version's global npm packages at the same versions
 and deletes the old version, unless it is still the global version or this
 folder's `.node-version` pins it. Packages linked with `npm link` don't move:

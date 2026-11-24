@@ -278,10 +278,13 @@ func hasAuthorizedKey() bool {
 	return false
 }
 
-// ── Settings `configure ssh` no longer offers (ADR-0023) ────────────────
+// ── Settings `configure ssh` no longer offers ───────────────────────────
 
 // retiredSSHSettings are the four settings CTD-178 removed from `configure
-// ssh`. Each pairs a check that ctdev turned it on with the old setting's
+// ssh`: plain SSH over the LAN or Tailscale, with tmux, needs none of them.
+// Tailscale keeps addresses stable, so Mosh's roaming isn't needed, and
+// Ubuntu doesn't kill user processes at logout, so tmux doesn't need
+// lingering. Each pairs a check that ctdev turned it on with the old setting's
 // off path, which removes only what ctdev added. The tunnel comes before
 // lingering, which it relied on.
 var retiredSSHSettings = []struct {
