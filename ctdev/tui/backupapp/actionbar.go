@@ -1,0 +1,119 @@
+package backupapp
+
+import (
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
+	"github.com/charmbracelet/x/ansi"
+)
+
+// dashboard is a Dashboard's step: its message and the one-key action bar.
+type dashboard struct {
+	d      Dashboard
+	cursor int // -1 when every action is dimmed
+}
+
+func newDashboard(d Dashboard) *dashboard {
+	b := &dashboard{d: d, cursor: -1}
+	for i, a := range d.Actions {
+		if a.Dimmed {
+			continue
+		}
+		if b.cursor < 0 || a.Key == d.Focus {
+			b.cursor = i
+		}
+		if a.Key == d.Focus {
+			break
+		}
+	}
+	return b
+}
+
+func (b *dashboard) init() tea.Cmd { return nil }
+
+// move steps the cursor to the next action in dir that isn't dimmed,
+// staying put at either end.
+func (b *dashboard) move(dir int) {
+	for i := b.cursor + dir; i >= 0 && i < len(b.d.Actions); i += dir {
+		if !b.d.Actions[i].Dimmed {
+			b.cursor = i
+			return
+		}
+	}
+}
+
+func (b *dashboard) update(msg tea.Msg) (*answer, tea.Cmd) {
+	k, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return nil, nil
+	}
+	switch k.String() {
+	case "left", "shift+tab":
+		b.move(-1)
+	case "right", "tab":
+		b.move(1)
+	case "enter", "space":
+		if b.cursor >= 0 {
+			return &answer{value: b.d.Actions[b.cursor]}, nil
+		}
+	case "esc":
+		return &answer{err: ErrBack}, nil
+	default:
+		for _, a := range b.d.Actions {
+			if a.Key == k.Text && !a.Dimmed {
+				return &answer{value: a}, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func (b *dashboard) view(width, _ int) stepView {
+	var notes []string
+	for _, l := range b.d.Message {
+		notes = append(notes, styleLine(l))
+	}
+	help := b.d.Help
+	if help == "" {
+		help = "←/→ choose · enter run · or press the letter"
+	}
+	items := make([]string, len(b.d.Actions))
+	for i, a := range b.d.Actions {
+		switch {
+		case i == b.cursor:
+			items[i] = chip(a.Key + "  " + a.Label)
+		case a.Dimmed:
+			items[i] = " " + styles.Dimmed.Render(a.Key+" "+a.Label) + " "
+		default:
+			items[i] = " " + keyHint(a.Key, a.Label) + " "
+		}
+	}
+	return stepView{notes: notes, notesGiveWay: true, keys: strings.Join(bar(items, width), "\n"), help: help}
+}
+
+// bar lays out items one space apart after a two-space indent, wrapping
+// before an item that would cross the frame.
+func bar(items []string, width int) []string {
+	var lines []string
+	line := " "
+	for _, it := range items {
+		if ansi.StringWidth(line)+1+ansi.StringWidth(it) > width && line != " " {
+			lines = append(lines, line)
+			line = " "
+		}
+		line += " " + it
+	}
+	return append(lines, line)
+}
+
+// chip is a focused button.
+func chip(text string) string { return styles.Chip.Render(" " + text + " ") }
+
+// dangerChip is a destructive button.
+func dangerChip(text string) string { return styles.BadgeDanger.Render(text) }
+
+// keyHint is a key and what it does: "esc Back".
+func keyHint(key, label string) string {
+	return styles.Key.Render(key) + " " + styles.Dimmed.Render(label)
+}
