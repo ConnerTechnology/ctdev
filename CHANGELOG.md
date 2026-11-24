@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.6.1] - 2026-11-23
+
+### Fixed
+- **v20.5.0 and v20.6.0 now reach a release.** Their macOS CI job failed, so no GitHub Release was
+  built. Two node tests compared a resolved temp path (/private/var) with the /var path ctdev
+  prints, and two backup tests read restic's session with a `ps` keyword macOS doesn't have. Both
+  were test bugs; the `ctdev` binary is the same as v20.6.0's.
+
 ## [20.6.0] - 2026-11-23
 
 ### Changed
