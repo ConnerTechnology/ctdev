@@ -189,8 +189,8 @@ func computerDashboard(name string, c backup.Computer) Dashboard {
 func removeComputer(ctx context.Context, ui UI, dest *backup.Destination, c backup.Computer) error {
 	host, name := c.Hostname, dest.Name
 	if err := confirmAction(ctx, ui, Confirm{
-		Warning: "If " + host + " was lost or stolen, choose I lost this computer instead: it also replaces\n" +
-			"  the Secret Key and the backend credentials, which a removed key leaves working.",
+		Warning: "If " + host + " was lost or stolen, choose I lost this computer instead: it also replaces " +
+			"the Secret Key and the backend credentials, which a removed key leaves working.",
 		Question:    "Remove " + host + "'s key?",
 		Consequence: styles.Dimmed.Render(host + " can no longer open " + name + "."),
 		Yes:         "Remove", Destructive: true,

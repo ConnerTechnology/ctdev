@@ -11,7 +11,8 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
-// labelWidth is a form label's column; values start at column 21.
+// labelWidth is a form label's column; values start at column 21, or
+// further right when a label is longer.
 const labelWidth = 16
 
 // form is a Form's step.
@@ -252,6 +253,10 @@ func (fm *form) view(int, int) stepView {
 		lines = append(lines, "")
 	}
 	help := "tab next field · shift+tab previous"
+	width := labelWidth
+	for _, fd := range fm.f.Fields {
+		width = max(width, len(fd.Label))
+	}
 	for i, fd := range fm.f.Fields {
 		if !fm.shown(i) {
 			continue
@@ -261,7 +266,7 @@ func (fm *form) view(int, int) stepView {
 		if focused {
 			mark = "▸ "
 		}
-		label := mark + styles.Dimmed.Render(fmt.Sprintf("%-*s", labelWidth, fd.Label)) + "   "
+		label := mark + styles.Dimmed.Render(fmt.Sprintf("%-*s", width, fd.Label)) + "   "
 		v := fm.values[fd.Key]
 		caret := ""
 		if focused {
@@ -272,7 +277,7 @@ func (fm *form) view(int, int) stepView {
 			for j, o := range fd.Options {
 				pre := label
 				if j > 0 {
-					pre = strings.Repeat(" ", 2+labelWidth+3)
+					pre = strings.Repeat(" ", 2+width+3)
 				}
 				if o.Value == v {
 					lines = append(lines, pre+styles.Success.Render("◉")+" "+styles.Value.Render(o.Label))

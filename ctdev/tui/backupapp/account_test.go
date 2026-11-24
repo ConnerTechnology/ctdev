@@ -1,6 +1,9 @@
 package backupapp
 
 import (
+	"context"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -120,5 +123,46 @@ func TestNewKitLines(t *testing.T) {
 	}
 	if strings.Join(text, " ") != pasteOnOtherComputers {
 		t.Errorf("lines = %q", text)
+	}
+}
+
+// The lost-computer and remove confirmations fit the frame, and only y goes
+// ahead (M4, N1).
+func TestAccountConfirmationsFitTheFrame(t *testing.T) {
+	c := exampleComputers()[1]
+	dest := exampleDest()
+	for name, flow := range map[string]func(*fakeUI) error{
+		"remove": func(ui *fakeUI) error { return removeComputer(context.Background(), ui, dest, c) },
+		"lost":   func(ui *fakeUI) error { return lostComputer(context.Background(), ui, dest, c) },
+	} {
+		ui := &fakeUI{t: t, Confirms: []any{false}}
+		if err := flow(ui); !errors.Is(err, errDeclined) || len(ui.Requests) != 1 {
+			t.Errorf("%s: declined: %v, requests %+v", name, err, ui.Requests)
+			continue
+		}
+		cf := requestsOf[Confirm](ui)[0]
+		if !cf.Destructive {
+			t.Errorf("%s: only y goes ahead", name)
+		}
+		for _, l := range newConfirm(cf).view(frameWidth, 0).content {
+			if w := ansi.StringWidth(l); w > frameWidth {
+				t.Errorf("%s: %q is %d wide", name, ansi.Strip(l), w)
+			}
+		}
+	}
+}
+
+// The new credentials' values line up past their longest label (N3).
+func TestNewCredentialsLineUp(t *testing.T) {
+	ui := &fakeUI{t: t}
+	page := func(string) Page { return Page{Title: "example"} }
+	if err := replaceCredentials(context.Background(), ui, nil, exampleDest(), page, nil, "Cancel"); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("err = %v", err)
+	}
+	for _, l := range newForm(requestsOf[Form](ui)[0]).view(frameWidth, 0).content {
+		// "NEW B2 APPLICATIONKEY" is 21 wide: the first value starts 3 after it.
+		if l := []rune(ansi.Strip(l)); strings.Contains(string(l), "NEW B2 KEYID") && slices.Index(l, '█') != 2+21+3 {
+			t.Errorf("the keyID's value starts at %d:\n%s", slices.Index(l, '█'), string(l))
+		}
 	}
 }
