@@ -130,7 +130,7 @@ func TestProgramSmoke(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	m, err := backup.ThisMachine(sysutil.Opts{Stdout: io.Discard})
+	m, err := backup.ThisMachine(sysutil.Opts{Stdout: io.Discard, DryRun: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,17 +146,17 @@ func TestProgramSmoke(t *testing.T) {
 	done := make(chan error)
 	go func() { done <- run(context.Background(), Deps{Machine: m, Cwd: dir}, &after, folderFlow) }()
 
-	term.waitFor("NOT BACKED UP")
+	term.waitFor("DRY RUN")
 	term.waitFor("no destination on this computer yet")
 	io.WriteString(keys, "b")
 	term.waitFor("This computer has no backup destination yet. Set one up first.")
 	io.WriteString(keys, "\r")
-	term.waitFor("isn't built yet")
+	term.waitFor("Dry run: destinations aren't created or connected")
 	io.WriteString(keys, "q")
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(ansi.Strip(after.String()), "setting up a destination isn't built yet") {
+	if !strings.Contains(ansi.Strip(after.String()), "Dry run: destinations aren't created or connected") {
 		t.Errorf("after exit: %q, want the result line", after.String())
 	}
 }

@@ -42,6 +42,7 @@ func folderFlow(ctx context.Context, ui UI, d Deps) error {
 		case a.Key == "q":
 			return nil
 		}
+		before := s
 		err = folderActions[a.Key](ctx, ui, d, s)
 		focus, retry = a.Key, false
 		switch {
@@ -58,6 +59,9 @@ func folderFlow(ctx context.Context, ui UI, d Deps) error {
 			s = next
 		} else if errors.Is(err, ErrCancelled) {
 			return err
+		}
+		if a.Key == "c" && err == nil {
+			focus = focusAfterConfigure(before, s)
 		}
 	}
 }
@@ -91,7 +95,7 @@ func sayError(ui UI, err error) {
 		ui.Say(Warning, "Try again in a few minutes.")
 		return
 	}
-	ui.Say(Error, err.Error())
+	ui.Say(Error, capitalize(err.Error()))
 }
 
 // actionable refuses a status with no folder to act on, or whose config file

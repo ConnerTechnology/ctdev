@@ -258,6 +258,13 @@ func TestKitPaste(t *testing.T) {
 		t.Errorf("a bad paste submitted: %+v", a)
 	}
 
+	// Terminals paste line ends as carriage returns.
+	fm = newForm(f)
+	fm.update(tea.PasteMsg{Content: strings.ReplaceAll(exampleKit, "\n", "\r")})
+	if a := press(fm, "enter"); a == nil || a.value.(Values)["kit"] != exampleKit {
+		t.Errorf("a paste with carriage returns → %+v", a)
+	}
+
 	// Without bracketed paste, the kit arrives as keys: enter ends each
 	// line and an empty line ends the kit. Nothing typed is shown.
 	fm = newForm(f)

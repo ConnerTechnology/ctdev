@@ -198,6 +198,7 @@ type Field struct {
 	// form's current values, so a Choice can swap the fields below it.
 	Show  func(Values) bool
 	Error string // red under the field from the start: a later step's error
+	Note  string // dim under the field
 }
 
 // Option is one choice of a Choice field.

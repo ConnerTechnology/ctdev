@@ -229,6 +229,8 @@ func (fm *form) typeKit(key string, k tea.KeyPressMsg) *answer {
 // takeKit parses a pasted kit: kept when it parses, emptied for the next
 // paste when it doesn't.
 func (fm *form) takeKit(key, text string) {
+	// Terminals paste line ends as carriage returns, as if typed.
+	text = strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(text)
 	if _, err := backup.ParseKit(text); err != nil {
 		fm.values[key] = ""
 		fm.errs[key] = capitalize(err.Error()) + ": paste the whole kit again."
@@ -246,7 +248,7 @@ func capitalize(s string) string {
 	return string(r)
 }
 
-func (fm *form) view(int, int) stepView {
+func (fm *form) view(width, _ int) stepView {
 	var lines []string
 	if fm.f.Intro != "" {
 		lines = append(lines, strings.Split(fm.f.Intro, "\n")...)
@@ -301,8 +303,16 @@ func (fm *form) view(int, int) stepView {
 		default:
 			lines = append(lines, label+styles.Value.Render(v)+caret)
 		}
+		under := func(l Line) {
+			for _, w := range wrap(l, width-2, 2) {
+				lines = append(lines, "  "+w)
+			}
+		}
 		if e := fm.errs[fd.Key]; e != "" {
-			lines = append(lines, "    "+styles.Error.Render(e))
+			under(Line{Error, e})
+		}
+		if fd.Note != "" {
+			under(Line{Info, fd.Note})
 		}
 	}
 	var notes []Line
