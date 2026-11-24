@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Incomplete backups are reported as failures while preserving the snapshot for recovery and
+  pausing that computer's keep rules until a complete backup succeeds.
+- `ctdev backup --batch` fails if the folder has no stored backups or no local schedule.
+- Switching a folder's destination makes its first backup there due immediately.
+- `ctdev configure gpu` reports a failure when both the NVIDIA driver rebuild and fallback signing
+  fail.
+- `ctdev install antigravity-cli` waits for the installer download to finish before running it and
+  reports a failed download.
+
 ## [20.8.0] - 2026-11-24
 
 ### Changed

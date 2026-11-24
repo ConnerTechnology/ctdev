@@ -309,9 +309,6 @@ func detailRows(s backup.Snapshot) string {
 		Row("COMPUTER", val(s.Host)),
 		Row("ID", val(s.ShortID)),
 	}
-	if s.Warning != "" {
-		rows = append(rows, Row("NOTE", styles.Warning.Render(s.Warning)))
-	}
 	return strings.Join(rows, "\n")
 }
 

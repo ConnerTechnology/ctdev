@@ -10,14 +10,31 @@ import (
 )
 
 func antigravityInstall(ctx context.Context, opts ExecOpts) error {
-	if !opts.Force && sysutil.CommandExists("agy") {
+	if !opts.Force && alreadyInstalled("antigravity-cli") {
 		fmt.Fprintln(opts.Stdout, "Antigravity CLI already installed")
 		return nil
 	}
 
 	fmt.Fprintln(opts.Stdout, "Installing Antigravity CLI...")
-	if err := sysutil.Run(ctx, execOpts(opts), "bash", "-c", "curl -fsSL https://antigravity.google/cli/install.sh | bash"); err != nil {
-		return fmt.Errorf("antigravity installer: %w", err)
+	const url = "https://antigravity.google/cli/install.sh"
+	if opts.DryRun {
+		fmt.Fprintf(opts.Stdout, "[dry-run] download and run %s\n", url)
+		return nil
+	}
+	// Finish the download before running any of it. Even a failed transfer
+	// can leave a prefix that bash would interpret as a valid program.
+	dir, err := os.MkdirTemp("", "ctdev-antigravity-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	script := filepath.Join(dir, "install.sh")
+	o := execOpts(opts)
+	if err := sysutil.Run(ctx, o, "curl", "-fsSL", "-o", script, url); err != nil {
+		return fmt.Errorf("download Antigravity installer: %w", err)
+	}
+	if err := sysutil.Run(ctx, o, "bash", script); err != nil {
+		return fmt.Errorf("run Antigravity installer: %w", err)
 	}
 	return nil
 }

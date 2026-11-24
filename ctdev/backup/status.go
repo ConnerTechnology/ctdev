@@ -122,6 +122,12 @@ func (m *Machine) Status(ctx context.Context, cwd string) Status {
 		if entry, s.Scheduled, err = m.scheduledEntry(f.Root, f.Config.ID); err != nil {
 			s.ReadErr = errors.Join(s.ReadErr, err)
 		}
+		if s.Last != nil && !s.Last.atDestination(s.Destination, entry.Destination) {
+			s.Last = nil
+		}
+		if entry.Destination != "" && entry.Destination != s.Destination {
+			entry.Added = s.At
+		}
 		if names, err := m.Destinations(); err != nil {
 			// Couldn't list them: that's a read error, not a missing destination.
 			s.ReadErr = errors.Join(s.ReadErr, err)

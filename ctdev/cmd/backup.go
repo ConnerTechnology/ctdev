@@ -23,7 +23,7 @@ var backupCmd = &cobra.Command{
 	Long: "Show whether the folder you're in is backed up, on a full-screen dashboard with its actions. " +
 		"ctdev looks up from the current directory for the nearest .ctdev-backup.json, the way " +
 		"git finds its repository. Without a terminal, or with --batch, it prints the status " +
-		"only, and exits non-zero when the folder isn't backed up, or its last backup failed " +
+		"only, and exits non-zero when the folder isn't backed up or scheduled, or its last backup failed " +
 		"or is overdue.\n\n" +
 		"With --all, from any directory: every backed-up folder in the destination, from every " +
 		"computer, grouped by computer, to list and download; the computers with access, to remove " +
@@ -151,6 +151,10 @@ func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io
 		return fmt.Errorf("destination %s isn't set up on this computer: run ctdev backup in a terminal and choose Configure", s.Destination)
 	case s.ReadErr != nil:
 		return fmt.Errorf("can't read the backups of %s: %w", where, s.ReadErr)
+	case !s.Scheduled || !s.SchedulerInstalled:
+		return fmt.Errorf("backups for %s are not scheduled on this computer: run ctdev backup in a terminal and choose Configure", where)
+	case !s.HasBackups():
+		return fmt.Errorf("no backups of %s are stored in %s yet", where, s.Destination)
 	}
 	return nil
 }

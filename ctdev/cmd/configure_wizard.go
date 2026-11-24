@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -489,7 +490,8 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 func applySettings(ctx context.Context, states []setup.SettingState, force, dryRun, verbose bool) error {
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: dryRun}
 	appliedGroups := make(map[string]bool)
-	var applied, failed int
+	var applied int
+	var failures []error
 
 	for i := range states {
 		if !states[i].NeedsApply(force) {
@@ -512,7 +514,7 @@ func applySettings(ctx context.Context, states []setup.SettingState, force, dryR
 		if s.ApplyFunc != nil {
 			if err := s.ApplyFunc(ctx, o, states[i].DesiredValue); err != nil {
 				fmt.Printf("  ✗ %s: %v\n", s.Name, err)
-				failed++
+				failures = append(failures, fmt.Errorf("%s: %w", s.Name, err))
 				continue
 			}
 		}
@@ -529,15 +531,16 @@ func applySettings(ctx context.Context, states []setup.SettingState, force, dryR
 			if hook, ok := setup.PostApplyHooks[group]; ok {
 				if err := hook(ctx, o); err != nil {
 					fmt.Printf("  ✗ post-apply hook %s: %v\n", group, err)
+					failures = append(failures, fmt.Errorf("post-apply hook %s: %w", group, err))
 				}
 			}
 		}
 	}
 
 	fmt.Printf("\n  %d applied", applied)
-	if failed > 0 {
-		fmt.Printf(" · %d failed", failed)
+	if len(failures) > 0 {
+		fmt.Printf(" · %d failed", len(failures))
 	}
 	fmt.Println()
-	return nil
+	return errors.Join(failures...)
 }

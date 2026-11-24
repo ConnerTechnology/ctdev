@@ -107,8 +107,8 @@ Backed up folder: ~/Projects/website
 ```
 
 The first line is "Backed up folder: …", with "(you're in …)" in a subfolder, or "Not backed up: …".
-It exits non-zero when the folder isn't backed up, or its last backup failed or is overdue, so it
-works as a check.
+It exits non-zero if no backup is stored, the folder isn't scheduled on this computer, or its last
+backup failed or is overdue, so it works as a check.
 
 ## Configure
 
@@ -292,10 +292,14 @@ starts while another is running exits without doing anything. Configure and Back
 for a scheduled backup to finish.
 
 Every hour, the runner backs up each folder on this computer's list whose schedule is due: an hour,
-a day or a week after its last successful backup. A computer that was asleep catches up on its next
-run. After each backup it applies the folder's keep rules ([Retention](#retention)). Each folder's
-result is recorded in `state.json`. Then it checks each destination its folders use for the
+a day or a week after its last successful backup to the current destination. The first backup after
+changing destinations is due on the next run. A computer that was asleep catches up on its next
+run. After a complete backup it applies the folder's keep rules ([Retention](#retention)). Each
+folder's result is recorded in `state.json`. Then it checks each destination its folders use for the
 [weekly maintenance](#weekly-maintenance-and-the-data-check).
+
+If restic skips unreadable files, the incomplete snapshot is still available to restore. The run
+counts as failed and this computer pauses the folder's keep rules until it makes a complete backup.
 
 A backup that finds the destination locked for longer than restic's 30-minute wait, usually by
 another computer's weekly maintenance, is deferred rather than failed: it doesn't notify, the

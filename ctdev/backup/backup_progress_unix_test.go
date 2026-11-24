@@ -57,7 +57,7 @@ func TestBackupNowReportsProgressAndStillReadsTheSummary(t *testing.T) {
 	if !reflect.DeepEqual(got, exampleProgress) {
 		t.Errorf("progress = %+v, want %+v", got, exampleProgress)
 	}
-	if snap.ID != "0123456789abcdef" || snap.Files != 4 || snap.Size != 4000 || snap.Added != 900 || snap.Warning != "" {
+	if snap.ID != "0123456789abcdef" || snap.Files != 4 || snap.Size != 4000 || snap.Added != 900 {
 		t.Errorf("snapshot = %+v, want the summary's", snap)
 	}
 	if r, _, _ := m.lastRun(root); r.Failed() {
@@ -66,16 +66,70 @@ func TestBackupNowReportsProgressAndStillReadsTheSummary(t *testing.T) {
 }
 
 // Exit 3 is restic's "snapshot made, some files unreadable".
-func TestPartialBackupWithProgressKeepsTheSummaryAndWarns(t *testing.T) {
-	_, _, snap, got, err := backupWithProgress(t, "exit 3")
-	if err != nil {
-		t.Fatal(err)
+func TestPartialBackupWithProgressKeepsTheSummaryButFails(t *testing.T) {
+	m, root, snap, got, err := backupWithProgress(t, "exit 3")
+	if err == nil || !strings.Contains(err.Error(), "some files couldn't be read") {
+		t.Errorf("partial backup error = %v, want the reason some files are missing", err)
 	}
 	if len(got) != len(exampleProgress) {
 		t.Errorf("progress = %+v, want %d reports", got, len(exampleProgress))
 	}
-	if snap.ID != "0123456789abcdef" || snap.Warning != errPartial.Error() {
-		t.Errorf("snapshot = %+v, want the summary with a warning", snap)
+	if snap.ID != "0123456789abcdef" {
+		t.Errorf("snapshot = %+v, want the partial snapshot ID for recovery", snap)
+	}
+	if r, _, _ := m.lastRun(root); !r.Failed() || !r.LastSuccess.IsZero() {
+		t.Errorf("state = %+v, want a failed run with no successful backup", r)
+	}
+}
+
+func TestScheduledPartialBackupTellsTheUserAndPreservesHistory(t *testing.T) {
+	m, root, n := failingMachine(t)
+	previous := noon.Add(-25 * time.Hour)
+	if err := m.recordRun(root, previous, nil); err != nil {
+		t.Fatal(err)
+	}
+	incomplete := filepath.Join(t.TempDir(), "example-unreadable-file")
+	if err := os.WriteFile(incomplete, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	log := standinDestination(t, m, `backup)
+  echo '`+exampleSummary+`'
+  if [ "$2" = . ] && [ -f "`+incomplete+`" ]; then exit 3; fi ;;
+snapshots) echo '[]' ;;
+forget|prune|check) exit 0 ;;`)
+	results, _, err := m.RunScheduled(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "some files couldn't be read") ||
+		len(results) != 1 || results[0].Outcome != Failed {
+		t.Errorf("scheduled run = %+v, %v, want failure with the reason", results, err)
+	}
+	if r, _, _ := m.lastRun(root); !r.Failed() || !r.LastSuccess.Equal(previous) {
+		t.Errorf("state = %+v, want the last success to remain the complete backup", r)
+	}
+	if len(n.sent) != 1 || !strings.Contains(n.sent[0], "some files couldn't be read") {
+		t.Errorf("notifications = %v, want a warning about the partial backup", n.sent)
+	}
+	commands, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(commands), "forget --retry-lock "+retryLock+" --tag ctdev-folder:") {
+		t.Errorf("retention ran on a folder whose backup is incomplete:\n%s", commands)
+	}
+	if !strings.Contains(string(commands), "prune ") {
+		t.Errorf("weekly maintenance didn't run, so its keep rules were never exercised:\n%s", commands)
+	}
+
+	if err := os.Remove(incomplete); err != nil {
+		t.Fatal(err)
+	}
+	at(m, noon.Add(time.Hour))
+	results, _, err = m.RunScheduled(context.Background())
+	if err != nil || len(results) != 1 || results[0].Outcome != BackedUp {
+		t.Errorf("next hourly run = %+v, %v, want to retry and record a full backup", results, err)
+	}
+	commands, err = os.ReadFile(log)
+	if err != nil || !strings.Contains(string(commands), "forget --retry-lock "+retryLock+" --tag ctdev-folder:") {
+		t.Errorf("retention didn't resume after a complete backup: %v\n%s", err, commands)
 	}
 }
 

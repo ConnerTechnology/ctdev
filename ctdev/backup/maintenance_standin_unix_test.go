@@ -380,6 +380,63 @@ func TestTheScheduleListRecordsEachFoldersDestination(t *testing.T) {
 	}
 }
 
+func TestFirstBackupToAChangedDestinationIsDueImmediately(t *testing.T) {
+	for _, change := range []string{"Configure", "edited config"} {
+		t.Run(change, func(t *testing.T) {
+			ctx := context.Background()
+			m, root, _ := failingMachine(t)
+			standinDestination(t, m, `backup) echo '`+exampleSummary+`' ;;
+snapshots) case "$*" in *ctdev-maintenance*) echo '`+markerList(t, recentCheck)+`' ;; *) echo '[]' ;; esac ;;
+forget) exit 0 ;;`)
+			cfg, err := ReadConfig(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			old, err := m.Destination(cfg.Destination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := m.Configure(ctx, old, root, cfg); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := m.Backup(ctx, old, root, &cfg); err != nil {
+				t.Fatal(err)
+			}
+			at(m, noon.Add(time.Hour)) // the previous destination's daily backup isn't due yet
+			oldConfig := cfg
+			cfg.Destination = "example-new-backups"
+			if err := os.WriteFile(m.destinationFile(cfg.Destination), []byte("RESTIC_REPOSITORY="+filepath.Join(t.TempDir(), "new-repo")+"\nCTDEV_COMPUTER_KEY=example\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if change == "Configure" {
+				d, err := m.Destination(cfg.Destination)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := m.Configure(ctx, d, root, cfg); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := WriteConfig(root, cfg); err != nil {
+				t.Fatal(err)
+			}
+			if s := m.Status(ctx, root); s.ReadErr != nil || !s.NextDue.Equal(m.now()) {
+				t.Errorf("first backup to the new destination is due at %v, want now (%v); read error: %v", s.NextDue, m.now(), s.ReadErr)
+			}
+			results, _, err := m.RunScheduled(ctx)
+			if err != nil || len(results) != 1 || results[0].Outcome != BackedUp {
+				t.Errorf("first scheduled run after switching: %+v, %v, want a backup", results, err)
+			}
+			at(m, noon.Add(2*time.Hour))
+			if _, err := m.Backup(ctx, old, root, &oldConfig); err != nil {
+				t.Fatal(err)
+			}
+			if s := m.Status(ctx, root); !s.NextDue.Equal(noon.Add(25 * time.Hour)) {
+				t.Errorf("a late result for the old destination changed when the next backup is due to %v", s.NextDue)
+			}
+		})
+	}
+}
+
 // Once the maintenance has run, its result stands: a failed check is
 // reported as failed even when removing the old markers then finds the
 // destination locked, not as waiting for the next hour.

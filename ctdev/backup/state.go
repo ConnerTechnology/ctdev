@@ -83,8 +83,11 @@ func (m *Machine) addFolder(root, id string, schedule Schedule) error {
 	for _, e := range f.Folders {
 		switch {
 		case e.Path == root:
-			if e.ID == id && !e.Added.IsZero() {
-				entry.Added = e.Added
+			if e.ID == id {
+				entry.Destination = e.Destination // setListed compares this with the new config
+				if !e.Added.IsZero() {
+					entry.Added = e.Added
+				}
 			}
 		case e.ID == id && s.Folders[e.Path].Missing && !exists(e.Path):
 			// The new place starts fresh: due now, and not overdue
@@ -131,6 +134,18 @@ func (m *Machine) setListed(root string, cfg Config) error {
 	changed := false
 	for i, e := range f.Folders {
 		if e.Path == root && (e.Schedule != cfg.Schedule || e.Destination != cfg.Destination) {
+			if e.Destination != "" && e.Destination != cfg.Destination {
+				// Older state didn't record the destination. Attribute it to the
+				// old one before changing the schedule list's destination.
+				if run, ok, err := m.lastRun(root); err != nil {
+					return err
+				} else if ok && run.Destination == "" {
+					if err := m.updateRun(root, func(r *Run) { r.Destination = e.Destination }); err != nil {
+						return err
+					}
+				}
+				f.Folders[i].Added = m.now()
+			}
 			f.Folders[i].Schedule, f.Folders[i].Destination, changed = cfg.Schedule, cfg.Destination, true
 		}
 	}
@@ -195,9 +210,11 @@ func (m *Machine) scheduledEntry(root, id string) (folderEntry, bool, error) {
 
 // Run is the record of a folder's last backup on this computer.
 type Run struct {
+	Destination string    `json:"destination,omitempty"` // the destination of this run, for when configuration changes
 	LastAttempt time.Time `json:"last_attempt"`
 	LastSuccess time.Time `json:"last_success,omitzero"`
 	Error       string    `json:"error,omitempty"`
+	Incomplete  bool      `json:"incomplete,omitempty"` // pause keep rules until there is a complete backup
 	// RetentionError is why applying the folder's keep rules after its last
 	// successful backup failed. The backup still succeeded, so it isn't
 	// Error; it's cleared the next time the keep rules apply.
@@ -221,6 +238,15 @@ type Run struct {
 
 // Failed reports whether the last attempt failed.
 func (r Run) Failed() bool { return r.Error != "" }
+
+// atDestination uses the schedule entry as a fallback for state written
+// before runs recorded their destination. Empty legacy entries remain usable.
+func (r Run) atDestination(destination, listed string) bool {
+	if r.Destination != "" {
+		listed = r.Destination
+	}
+	return destination == "" || listed == "" || listed == destination
+}
 
 type stateFile struct {
 	Folders map[string]Run `json:"folders"`
@@ -292,19 +318,42 @@ func (m *Machine) updateRun(root string, change func(*Run)) error {
 	}
 	r := s.Folders[root]
 	change(&r)
+	if r == s.Folders[root] {
+		return nil
+	}
 	s.Folders[root] = r
 	return writeJSON(m.stateFile(), s)
 }
 
-// recordRun notes a backup attempt of the folder at root in state.json.
-func (m *Machine) recordRun(root string, at time.Time, runErr error) error {
+func (m *Machine) updateRunAt(root, destination string, change func(*Run)) error {
 	return m.updateRun(root, func(r *Run) {
+		// An older run can finish after Configure switches destinations.
+		// Its result belongs in the old repository, not in this schedule.
+		if destination != "" {
+			if cfg, err := ReadConfig(root); err == nil && cfg.Destination != destination {
+				return
+			}
+		}
+		if !r.atDestination(destination, "") {
+			*r = Run{}
+		}
+		if destination != "" {
+			r.Destination = destination
+		}
+		change(r)
+	})
+}
+
+// recordRunAt keeps the last complete backup's time if the attempt failed.
+func (m *Machine) recordRunAt(root, destination string, at time.Time, runErr error) error {
+	return m.updateRunAt(root, destination, func(r *Run) {
 		r.LastAttempt, r.Error, r.Missing = at, "", false
 		r.Deferred, r.DeferredAt = "", time.Time{}
 		if runErr != nil {
 			r.Error = runErr.Error()
+			r.Incomplete = r.Incomplete || errors.Is(runErr, errPartial)
 		} else {
-			r.LastSuccess = at
+			r.LastSuccess, r.Incomplete = at, false
 		}
 	})
 }

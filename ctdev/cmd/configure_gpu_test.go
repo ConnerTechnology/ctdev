@@ -228,8 +228,8 @@ func TestGPUWizard_ApplyAnywayAsksOnce(t *testing.T) {
 		if _, err := promptSetting(ctx, &states[0]); err != nil {
 			t.Errorf("promptSetting: %v", err)
 		}
-		if err := applySettings(ctx, states, false, false, false); err != nil {
-			t.Errorf("applySettings: %v", err)
+		if err := applySettings(ctx, states, false, false, false); err == nil || !strings.Contains(err.Error(), "NVIDIA DKMS module not found") {
+			t.Errorf("applySettings = %v, want the real signing failure", err)
 		}
 	}))
 	if n := strings.Count(out, "anyway"); n != 1 {
@@ -240,27 +240,60 @@ func TestGPUWizard_ApplyAnywayAsksOnce(t *testing.T) {
 	}
 }
 
-// One `configure gpu --batch` on a Secure Boot machine with an unsigned NVIDIA
-// driver runs the signing setup once, so mokutil asks for the MOK password
-// once. No dkms is on PATH, so setup stops at its DKMS check.
+// The GPU wizard runs signing once and returns the outcome of that attempt.
 func TestConfigureGPU_RunsSigningOnce(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("GPU setup is Linux-only")
 	}
-	uefi(t)
-	fakeBins(t, map[string]string{
-		"mokutil":   `echo "SecureBoot enabled"`,
-		"lsmod":     `echo "nvidia 1 0"`,
-		"modinfo":   `echo`,
-		"systemctl": `echo masked; exit 1`,
-	})
-	oldBatch := flagBatch
-	flagBatch = true
-	t.Cleanup(func() { flagBatch = oldBatch })
-
-	out := plain(captureStdout(t, func() { _ = runConfigureGPU(configureGPUCmd, nil) }))
-	if n := strings.Count(out, "GPU Signing Setup"); n != 1 {
-		t.Errorf("signing setup ran %d times, want once; output %q", n, out)
+	for _, tt := range []struct {
+		name               string
+		dkms, rebuildFails bool
+		wantErr            []string
+	}{
+		{name: "no DKMS driver", wantErr: []string{"NVIDIA DKMS module not found"}},
+		{name: "rebuild fails and there are no modules to sign", dkms: true, rebuildFails: true,
+			wantErr: []string{"DKMS rebuild failed", "manual signing"}},
+		{name: "rebuild succeeds", dkms: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			uefi(t)
+			bins := map[string]string{
+				"mokutil":   `echo 'SecureBoot enabled'`,
+				"lsmod":     `echo 'nvidia 1 0'`,
+				"modinfo":   `echo`,
+				"systemctl": `echo masked; exit 1`,
+				"uname":     `echo example-test-kernel-with-no-modules`,
+				"sudo":      `exit 0`,
+			}
+			if tt.dkms {
+				bins["dkms"] = `echo 'nvidia/123.45, example-kernel, x86_64: installed'`
+			}
+			if tt.rebuildFails {
+				bins["sudo"] = `if [ "$1 $2" = 'dkms install' ]; then exit 1; fi`
+			}
+			fakeBins(t, bins)
+			oldBatch := flagBatch
+			flagBatch = true
+			t.Cleanup(func() { flagBatch = oldBatch })
+			var err error
+			out := plain(captureStdout(t, func() { err = runConfigureGPU(configureGPUCmd, nil) }))
+			if n := strings.Count(out, "GPU Signing Setup"); n != 1 {
+				t.Errorf("signing setup ran %d times, want once; output %q", n, out)
+			}
+			if tt.rebuildFails && !strings.Contains(out, "falling back to manual signing") {
+				t.Errorf("didn't attempt fallback signing: %q", out)
+			}
+			if len(tt.wantErr) == 0 {
+				if err != nil || !strings.Contains(out, "DKMS rebuild complete") {
+					t.Fatalf("want successful rebuild, got %v; output %q", err, out)
+				}
+			}
+			for _, want := range tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Errorf("configure gpu err = %v; want it to contain %q", err, want)
+				}
+			}
+		})
 	}
 }
 

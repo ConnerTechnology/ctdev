@@ -171,9 +171,6 @@ func backUpNow(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 	if !m.Opts.DryRun {
 		ui.Say(OK, fmt.Sprintf("✓ Backed up %s (%s), %s new, as %s.",
 			backupscreen.Files(snap.Files), backupscreen.Bytes(snap.Size), backupscreen.Bytes(snap.Added), snap.ShortID))
-		if snap.Warning != "" {
-			ui.Say(Warning, "Note: "+snap.Warning+".")
-		}
 	}
 	if s.Config == nil {
 		return nil // one-offs are kept until deleted: no keep rules
