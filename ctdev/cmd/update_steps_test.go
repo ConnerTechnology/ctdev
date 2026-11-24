@@ -125,6 +125,13 @@ func TestBuildUpdateSteps_NpmGlobalsUseGlobalNode(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("NODENV_ROOT", root)
+	t.Setenv("PATH", t.TempDir())
+	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "bin", "nodenv"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "version"), []byte("24.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

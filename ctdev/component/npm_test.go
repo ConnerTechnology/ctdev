@@ -311,6 +311,7 @@ func TestNpmInstall_GlobalSystemFailsClearly(t *testing.T) {
 func TestNpmPackageDetect(t *testing.T) {
 	home, bin := useHome(t)
 	writeFakeCmd(t, filepath.Join(home, ".nodenv", "shims", "codex"), "exit 0")
+	writeFakeCmd(t, filepath.Join(home, ".nodenv", "bin", "nodenv"), "exit 0")
 	t.Setenv("PATH", filepath.Join(home, ".nodenv", "shims")+":"+bin)
 	codex := FindByName("codex")
 

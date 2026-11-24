@@ -112,6 +112,19 @@ func GlobalIsSystem() bool {
 	return readVersionWord(globalFile()) == System
 }
 
+// GlobalSelector is the NODENV_VERSION that picks the global Node whatever
+// the current folder pins: the global version, "system" for a system global,
+// or "" when nodenv is missing or has no global.
+func GlobalSelector() string {
+	if !Available() {
+		return ""
+	}
+	if GlobalIsSystem() {
+		return "system"
+	}
+	return Global()
+}
+
 func globalFile() string { return filepath.Join(Root(), "version") }
 
 // ProjectPin finds the .node-version that governs dir, searching upward as

@@ -220,3 +220,40 @@ func TestChangesDryRun(t *testing.T) {
 		t.Errorf("dry run:\n%s\nwant:\n%s", out.String(), want)
 	}
 }
+
+func TestGlobalSelector(t *testing.T) {
+	cases := []struct {
+		name, global string
+		nodenv       bool
+		want         string
+	}{
+		{"version", "24.1.0", true, "24.1.0"},
+		{"system", "system", true, "system"},
+		{"unset", "", true, ""},
+		{"stale version file, nodenv gone", "24.1.0", false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("NODENV_ROOT", root)
+			t.Setenv("PATH", t.TempDir())
+			if tc.nodenv {
+				if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "bin", "nodenv"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.global != "" {
+				if err := os.WriteFile(filepath.Join(root, "version"), []byte(tc.global+"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := GlobalSelector(); got != tc.want {
+				t.Errorf("GlobalSelector() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

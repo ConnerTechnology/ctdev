@@ -59,6 +59,8 @@ var configureNodeUninstallCmd = &cobra.Command{
 	},
 }
 
+const orUpdateGlobal = ", or update the global Node with: ctdev configure node update --global"
+
 func init() {
 	for _, c := range []*cobra.Command{configureNodeInstallCmd, configureNodeUpdateCmd} {
 		c.Flags().BoolVar(&flagNodeGlobal, "global", false, "use it for every folder without its own version")
@@ -163,7 +165,7 @@ func runNodeInstall(ctx context.Context, arg string, batch bool) error {
 		// With no global version, nothing outside this project has a Node,
 		// npm components included, so the first one goes global.
 		def := scopeGlobal
-		if toplevel != "" && nodenv.Global() != "" {
+		if toplevel != "" && (nodenv.Global() != "" || nodenv.GlobalIsSystem()) {
 			def = scopeProject
 		}
 		scope = def
@@ -485,11 +487,11 @@ func runNodeUpdate(ctx context.Context, batch bool) error {
 	from, label := global, "Global"
 	if scope == scopeProject {
 		if pinFile == "" {
-			return fmt.Errorf("no %s governs this folder. Pin one with: ctdev configure node install --project", nodenv.VersionFile)
+			return fmt.Errorf("no %s governs this folder. Pin one with: ctdev configure node install --project%s", nodenv.VersionFile, orUpdateGlobal)
 		}
 		if pinned == "" {
 			return fmt.Errorf("%s is empty or says system, so no nodenv Node runs here. "+
-				"Pin one with: ctdev configure node install --project", tildePath(pinFile))
+				"Pin one with: ctdev configure node install --project%s", tildePath(pinFile), orUpdateGlobal)
 		}
 		from, label = pinned, "Project"
 	}
@@ -506,6 +508,9 @@ func runNodeUpdate(ctx context.Context, batch bool) error {
 			where = tildePath(pinFile)
 		}
 		fmt.Printf("  %s says %q, which is not an exact version: nodenv resolves it itself. Nothing changed.\n", where, from)
+		if scope == scopeProject {
+			fmt.Println("  To update the global Node instead: ctdev configure node update --global")
+		}
 		return nil
 	}
 
