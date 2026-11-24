@@ -247,3 +247,14 @@ func TestBackUpNowDryRun(t *testing.T) {
 		t.Errorf("said %+v, log %q", ui.Said, out)
 	}
 }
+
+// A destination that gets busy before the keep rules is a wait, not a
+// failure (U6).
+func TestBackUpNowKeepRulesWaitWhenBusy(t *testing.T) {
+	d, _ := standinFolder(t, true, backs, `echo "Fatal: repository is already locked" >&2; exit 11`, "example-backups")
+	ui := &fakeUI{t: t, Dashboards: []any{"b"}, Confirms: []any{true}}
+	folderFlow(context.Background(), ui, d)
+	if got := ui.said(Info); !slices.Equal(got, []string{"The destination got busy, so the keep rules apply at the next scheduled run."}) || len(ui.said(Warning)) > 0 {
+		t.Errorf("said %+v", ui.Said)
+	}
+}

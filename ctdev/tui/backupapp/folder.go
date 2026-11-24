@@ -183,8 +183,10 @@ func backUpNow(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 	case err == nil || m.Opts.DryRun:
 	case errors.Is(err, ErrCancelled):
 		return err
-	case errors.Is(err, ErrBack), errors.Is(err, backup.ErrDestinationBusy):
-		ui.Say(Info, "The keep rules apply at the next scheduled run.")
+	case errors.Is(err, ErrBack):
+		ui.Say(Info, "Cancelled: the keep rules apply at the next scheduled run.")
+	case errors.Is(err, backup.ErrDestinationBusy):
+		ui.Say(Info, "The destination got busy, so the keep rules apply at the next scheduled run.")
 	default:
 		ui.Say(Warning, "Applying the keep rules failed, so older backups weren't thinned: "+err.Error())
 	}
