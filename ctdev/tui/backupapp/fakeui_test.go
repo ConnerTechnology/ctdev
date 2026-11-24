@@ -24,7 +24,8 @@ type fakeUI struct {
 	Notices    []error // nil acknowledges
 	Kits       []error // nil is "I've saved it"
 	// Runs are how each Run ends: nil runs fn to the end; ErrBack runs it
-	// with its context already cancelled, as esc does.
+	// with its context already cancelled, as esc does; a cancelWhen
+	// cancels it once its channel closes, as esc pressed midway does.
 	Runs []error
 
 	Requests []any // every Dashboard, Picker, Confirm, Form, Notice, KitScreen and Running, in order
@@ -120,11 +121,27 @@ func (f *fakeUI) Run(ctx context.Context, r Running, fn func(context.Context, fu
 	f.Requests = append(f.Requests, r)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if end, _ := pop(&f.Runs); errors.Is(end, ErrBack) {
+	end, _ := pop(&f.Runs)
+	var midway cancelWhen
+	switch {
+	case errors.Is(end, ErrBack):
 		cancel()
+	case errors.As(end, &midway):
+		go func() {
+			select {
+			case <-midway:
+				cancel()
+			case <-runCtx.Done():
+			}
+		}()
 	}
 	return ranTo(ctx, runCtx, fn(runCtx, func(p Progress) { f.Progress = append(f.Progress, p) }))
 }
+
+// cancelWhen is a Run's end that cancels fn once the channel is closed.
+type cancelWhen chan struct{}
+
+func (cancelWhen) Error() string { return "cancelled midway" }
 
 func (f *fakeUI) Say(kind Kind, text string) { f.Said = append(f.Said, Line{kind, text}) }
 

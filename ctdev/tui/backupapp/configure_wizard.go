@@ -306,8 +306,11 @@ func (w *wizard) keepAndSave(ctx context.Context, ui UI) error {
 		}
 		page.Body = w.summary()
 		var schedErr error
+		saved := false // the folder's config is written, whatever came after
 		err = ui.Run(ctx, Running{Page: page, Label: "Saving…", Detail: detail}, func(ctx context.Context, _ func(Progress)) error {
-			if err := m.Configure(ctx, w.dest, w.s.Target, w.cfg); err != nil {
+			err := m.Configure(ctx, w.dest, w.s.Target, w.cfg)
+			saved = err == nil || errors.Is(err, backup.ErrOneOffsNotTaken)
+			if err != nil {
 				return err
 			}
 			// Rewritten every time, so a ctdev that has moved is picked up.
@@ -315,6 +318,8 @@ func (w *wizard) keepAndSave(ctx context.Context, ui UI) error {
 			return nil
 		})
 		switch {
+		case saved && err != nil:
+			return w.notFinished(ui, err)
 		case errors.Is(err, ErrBack):
 			saveErr = ""
 			continue
@@ -338,6 +343,24 @@ func (w *wizard) keepAndSave(ctx context.Context, ui UI) error {
 		}
 		return nil
 	}
+}
+
+// notFinished says what Saving saved before err stopped it: the folder's
+// config, but not its earlier one-offs or the scheduler. The scheduler isn't
+// installed after a stop, so the dashboard says "not scheduled" until
+// Configure runs again, which takes in the one-offs left and installs it.
+func (w *wizard) notFinished(ui UI, err error) error {
+	why := "Saving stopped"
+	if !errors.Is(err, ErrBack) && !errors.Is(err, ErrCancelled) {
+		why = "Saving failed: " + err.Error()
+	}
+	ui.Say(Warning, why+".")
+	ui.Say(Plain, "Saved "+w.where+"'s settings, but its earlier one-off backups aren't in its history yet, "+
+		"and it isn't scheduled on this computer: choose Configure again to finish.")
+	if errors.Is(err, ErrCancelled) {
+		return err
+	}
+	return nil
 }
 
 // summary is what Saving saves.
