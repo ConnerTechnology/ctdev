@@ -69,6 +69,7 @@ type Options struct {
 	Title        string // screen title
 	StatusSuffix string // static text appended after "N selected"
 	PreselectAll bool   // start with every Bulk item selected
+	ConfirmHelp  string // help-bar label for enter; "apply" when empty
 }
 
 // Result is the outcome of a run.
@@ -130,6 +131,9 @@ func New(groups []Group, opts Options) *Model {
 		collapsed:    map[string]bool{},
 		help:         help.New(),
 		keys:         defaultKeys(),
+	}
+	if opts.ConfirmHelp != "" {
+		m.keys.Confirm.SetHelp("enter", opts.ConfirmHelp)
 	}
 	m.cursor = m.firstLandable()
 	return m
