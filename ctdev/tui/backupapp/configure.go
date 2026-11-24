@@ -8,7 +8,7 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
-// configureFolder is Configure (rows W and X): where backups go, the backup
+// configureFolder is Configure: where backups go, the backup
 // history for a new folder, how often and what to keep, each step opening
 // on the folder's current values. esc steps back; nothing is saved until
 // the last step, except a destination, created or connected in its own step.
@@ -65,7 +65,7 @@ func focusAfterConfigure(before, after backup.Status) string {
 }
 
 // createDestinationForOnce sets up this computer's first destination for a
-// one-off backup (U1 → W5), and returns it.
+// one-off backup, and returns it.
 func createDestinationForOnce(ctx context.Context, ui UI, d Deps, s backup.Status) (*backup.Destination, error) {
 	page := Page{Title: backup.DisplayPath(d.Machine.Home, s.Target),
 		Subtitle: styles.Dimmed.Render("Back up once · ") + styles.Value.Render("New destination")}
@@ -73,7 +73,7 @@ func createDestinationForOnce(ctx context.Context, ui UI, d Deps, s backup.Statu
 		func(address string) (string, error) { return d.Machine.CheckNewAddress(address, s.Target) })
 }
 
-// createDestination is the new-destination step (W5 to W10) as --all shows
+// createDestination is the new-destination step as --all shows
 // it: name, backend, credentials, master password, creating it, and the kit
 // shown once. check refuses an address (CheckNewAddress, or
 // CheckNewAddressFromAll under --all).
@@ -83,8 +83,8 @@ func createDestination(ctx context.Context, ui UI, d Deps, preferred string, che
 	}, preferred, check)
 }
 
-// connectDestination connects this computer with an Emergency Kit (X1 to
-// X11), as --all shows it.
+// connectDestination connects this computer with an Emergency Kit, as --all
+// shows it.
 func connectDestination(ctx context.Context, ui UI, d Deps) (*backup.Destination, error) {
 	return connectWith(ctx, ui, d, func(step string) Page {
 		return Page{Title: "Backup destination › Connect", Subtitle: styles.Dimmed.Render("Connect to an existing destination · ") + styles.Value.Render(step)}
@@ -92,7 +92,7 @@ func connectDestination(ctx context.Context, ui UI, d Deps) (*backup.Destination
 }
 
 // recoveryReset sets a new master password and Secret Key with a Recovery
-// Code (X7 to X10, P11 to P13), and shows the new kit. recover is
+// Code, and shows the new kit. recover is
 // Destination.Recover or a RecoverFromKit closure.
 func recoveryReset(ctx context.Context, ui UI, d Deps, name string, recover func(ctx context.Context, code, master string, newCode bool) (backup.Recovery, error)) error {
 	_, err := recoverWith(ctx, ui, func(step string) Page {
@@ -102,8 +102,8 @@ func recoveryReset(ctx context.Context, ui UI, d Deps, name string, recover func
 	return err
 }
 
-// pasteUpdatedKit reads an Emergency Kit and updates this computer from it
-// (X4, P14 to P16), and returns the destination it updated. It needs no
+// pasteUpdatedKit reads an Emergency Kit and updates this computer from it,
+// and returns the destination it updated. It needs no
 // master password: this computer's own key opens the repository, and the
 // backup package checks it does with the kit's details before saving them.
 // Its screens keep the page they open on.

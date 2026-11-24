@@ -22,7 +22,7 @@ func exampleComputers() []backup.Computer {
 }
 
 // Computers lists each computer by hostname and date added, this one
-// marked, and never a key's ID (M1).
+// marked, and never a key's ID.
 func TestComputersListsEachComputerWithThisOneMarked(t *testing.T) {
 	p := computersPicker(Page{}, exampleComputers(), 0)
 	view := ansi.Strip(strings.Join(newPicker(p).view(frameWidth, 0).content, "\n"))
@@ -42,7 +42,7 @@ func TestComputersListsEachComputerWithThisOneMarked(t *testing.T) {
 
 // Another computer offers Remove · I lost this computer · Back, with
 // capital letters since both are destructive; this one can't be removed
-// from itself, so both are dimmed and focus starts on Back (M2, M3).
+// from itself, so both are dimmed and focus starts on Back.
 func TestComputerActions(t *testing.T) {
 	cs := exampleComputers()
 	d := computerDashboard("example-backups", cs[1])
@@ -65,8 +65,7 @@ func TestComputerActions(t *testing.T) {
 	}
 }
 
-// The kit menu is split by whether an action asks for the master password
-// (P1).
+// The kit menu is split by whether an action asks for the master password.
 func TestKitMenu(t *testing.T) {
 	var actions []kitAction
 	for _, a := range []struct {
@@ -127,7 +126,7 @@ func TestNewKitLines(t *testing.T) {
 }
 
 // The lost-computer and remove confirmations fit the frame, and only y goes
-// ahead (M4, N1).
+// ahead.
 func TestAccountConfirmationsFitTheFrame(t *testing.T) {
 	c := exampleComputers()[1]
 	dest := exampleDest()
@@ -152,7 +151,7 @@ func TestAccountConfirmationsFitTheFrame(t *testing.T) {
 	}
 }
 
-// The new credentials' values line up past their longest label (N3).
+// The new credentials' values line up past their longest label.
 func TestNewCredentialsLineUp(t *testing.T) {
 	ui := &fakeUI{t: t}
 	page := func(string) Page { return Page{Title: "example"} }

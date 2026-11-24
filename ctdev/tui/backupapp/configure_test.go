@@ -40,8 +40,8 @@ func TestActionsRefuseAnEmptyTarget(t *testing.T) {
 }
 
 // A folder inside a backed-up one is never configured: the warning lands on
-// the dashboard and the wizard doesn't open (W1). Backed-up folders inside
-// this one are listed, and the wizard opens only once that's confirmed (W2).
+// the dashboard and the wizard doesn't open. Backed-up folders inside
+// this one are listed, and the wizard opens only once that's confirmed.
 func TestConfigureChecksTheFoldersAroundIt(t *testing.T) {
 	home := t.TempDir()
 	projects := filepath.Join(home, "Projects")
@@ -81,8 +81,7 @@ func TestConfigureChecksTheFoldersAroundIt(t *testing.T) {
 }
 
 // Once Configure saves, the dashboard focuses Configure while the folder
-// isn't scheduled, Back up now for a folder new to backups, else Quit (W16,
-// W17).
+// isn't scheduled, Back up now for a folder new to backups, else Quit.
 func TestFocusAfterConfigure(t *testing.T) {
 	scheduled := configured()
 	unscheduled := configured()

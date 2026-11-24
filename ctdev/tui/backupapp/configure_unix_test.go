@@ -187,7 +187,7 @@ func fieldOf(f Form, key string) Field {
 }
 
 // The wizard steps back with esc, keeping what was chosen, and a failed
-// scheduler install is said, with the folder still configured (W17).
+// scheduler install is said, with the folder still configured.
 func TestConfigureStepsBackAndSaysASchedulerFailure(t *testing.T) {
 	d, _ := standinFolder(t, false, backs, forgets, "example-backups")
 	resticKeyring(t, d)
@@ -258,7 +258,7 @@ func linkFixture(t *testing.T) Deps {
 
 var defaultKeep = Values{"hourly": "24", "daily": "7", "weekly": "4", "monthly": "12", "yearly": "3"}
 
-// A new folder can continue an existing folder's history (W11, W12): picking
+// A new folder can continue an existing folder's history: picking
 // it gives the folder that ID; esc in the list keeps a new history; leaving
 // the wizard saves nothing.
 func TestConfigureBackupHistory(t *testing.T) {
@@ -351,7 +351,7 @@ func createdKit(t *testing.T) (Deps, backup.Setup) {
 
 // Connecting with a kit: a wrong master password offers another try or the
 // Recovery Code, three end it with nothing saved, and the right one sets
-// this computer up with its own key (X3 to X6, X10, X11).
+// this computer up with its own key.
 func TestConnectWithAKit(t *testing.T) {
 	laptop, setup := createdKit(t)
 	desktop := another(t, laptop, "example-desktop")
@@ -385,7 +385,7 @@ func TestConnectWithAKit(t *testing.T) {
 
 // A wrong master password can be answered with the Recovery Code, which sets
 // a new master password and Secret Key and shows the new kit once; a wrong
-// code is said under it (X7 to X9).
+// code is said under it.
 func TestConnectWithTheRecoveryCode(t *testing.T) {
 	laptop, setup := createdKit(t)
 	desktop := another(t, laptop, "example-desktop")
@@ -416,7 +416,7 @@ func TestConnectWithTheRecoveryCode(t *testing.T) {
 }
 
 // A kit for a destination this computer is already on updates it with no
-// master password: its own key vouches for the kit (X4, P14 to P16).
+// master password: its own key vouches for the kit.
 func TestConnectWithAKitThisComputerIsOnUpdatesIt(t *testing.T) {
 	d, setup := createdKit(t)
 	ui := &fakeUI{t: t, Forms: []any{Values{"kit": setup.Kit}}}

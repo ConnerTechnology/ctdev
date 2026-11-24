@@ -23,8 +23,8 @@ var stores = []Option{
 	{Value: "local", Label: "Local path or USB drive"},
 }
 
-// placeFields are W5's fields: the name, the store, and each store's own
-// fields, shown while it's chosen. Credentials are keyed by their
+// placeFields are the new-destination form's fields: the name, the store,
+// and each store's own fields, shown while it's chosen. Credentials are keyed by their
 // environment variable. v holds what was typed before; errs, a refusal to
 // show under a field.
 func placeFields(v Values, errs map[string]string) []Field {
@@ -60,8 +60,8 @@ func placeFields(v Values, errs map[string]string) []Field {
 	}
 }
 
-// place is the restic repository and credentials W5's answers describe, and
-// the field a refused address is shown under.
+// place is the restic repository and credentials the new-destination
+// form's answers describe, and the field a refused address is shown under.
 func place(v Values) (address string, creds map[string]string, at string) {
 	creds = map[string]string{}
 	switch v["store"] {
@@ -77,7 +77,7 @@ func place(v Values) (address string, creds map[string]string, at string) {
 	return v["local.path"], creds, "local.path"
 }
 
-// newDestination creates a destination (W5 to W10) on page: where it goes,
+// newDestination creates a destination on page: where it goes,
 // checked by check before the master password is asked, so no password is
 // asked for a place that can't work; then the master password, creating
 // it, and the kit and Recovery Code shown once. esc on the first step
@@ -109,8 +109,8 @@ func newDestination(ctx context.Context, ui UI, d Deps, page pageFor, preferred 
 	}
 }
 
-// createWith is W8 to W10: the master password, creating the destination,
-// and its kit. esc on the password returns ErrBack.
+// createWith asks for the master password, creates the destination, and
+// shows its kit. esc on the password returns ErrBack.
 func createWith(ctx context.Context, ui UI, d Deps, page pageFor, nd backup.NewDestination) (*backup.Destination, error) {
 	v := Values{}
 	var mismatch, failed string
@@ -180,7 +180,7 @@ func kitLine(kit string) string {
 		styles.Value.Render(fmt.Sprintf("Pasted an Emergency Kit for %s (%s)", k.Destination, backup.BackendLabel(k.Address)))
 }
 
-// connectWith connects this computer with an Emergency Kit (X1 to X11) on
+// connectWith connects this computer with an Emergency Kit on
 // page. A kit for a destination it's already on updates it instead, with no
 // master password. esc on the paste returns ErrBack.
 func connectWith(ctx context.Context, ui UI, d Deps, page pageFor) (*backup.Destination, error) {
@@ -216,8 +216,8 @@ func connectWith(ctx context.Context, ui UI, d Deps, page pageFor) (*backup.Dest
 	}
 }
 
-// connectWithPassword is X3 to X6 and X11: the master password, three tries
-// of it, and the Recovery Code instead. esc returns ErrBack, to paste
+// connectWithPassword asks for the master password, up to three tries, or
+// takes the Recovery Code instead. esc returns ErrBack, to paste
 // another kit.
 func connectWithPassword(ctx context.Context, ui UI, d Deps, page pageFor, kit string) (*backup.Destination, error) {
 	k, _ := backup.ParseKit(kit)
@@ -262,11 +262,11 @@ func connectWithPassword(ctx context.Context, ui UI, d Deps, page pageFor, kit s
 	}
 }
 
-// errTryAgain is X6's "Try the master password again".
+// errTryAgain is "Try the master password again", after a wrong one.
 var errTryAgain = errors.New("try the master password again")
 
-// afterWrongPassword is X6: try the master password again (errTryAgain),
-// up to three tries in all, or reset with a Recovery Code.
+// afterWrongPassword offers, after a wrong master password, to try it again
+// (errTryAgain), up to three tries in all, or reset with a Recovery Code.
 func afterWrongPassword(ctx context.Context, ui UI, d Deps, page pageFor, kit, name string, tries int) (*backup.Destination, error) {
 	for {
 		i, err := ui.Pick(ctx, Picker{Page: page("Master password"),
@@ -294,7 +294,7 @@ func afterWrongPassword(ctx context.Context, ui UI, d Deps, page pageFor, kit, n
 	}
 }
 
-// recoverWith is a Recovery Code reset on page (X7 to X10, P11 to P13): the
+// recoverWith is a Recovery Code reset on page: the
 // code, a new master password, and whether to replace the code, then the
 // new kit (and code) shown once. name is the destination as the text calls
 // it; keysOn, its name. esc returns ErrBack.
@@ -364,7 +364,7 @@ func recoverWith(ctx context.Context, ui UI, page pageFor, name, keysOn string, 
 }
 
 // updateFromKit updates a destination this computer is on from a pasted
-// kit (X4, P15, P16) and says so. why is the refusal to show under the kit
+// kit and says so. why is the refusal to show under the kit
 // field, for another paste; ErrBack means checking was cancelled.
 func updateFromKit(ctx context.Context, ui UI, d Deps, page Page, kit, detail string) (dest *backup.Destination, why string, err error) {
 	var newSecretKey bool

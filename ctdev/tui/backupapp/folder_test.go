@@ -48,7 +48,7 @@ type dashboardWant struct {
 	absent  string // not in the rows
 }
 
-// Each state of the folder's dashboard, as rows R, S and T draw them.
+// Each state of the folder's dashboard: its badge, rows, message and actions.
 func TestFolderDashboardStates(t *testing.T) {
 	for name, c := range map[string]struct {
 		s    func(*backup.Status)

@@ -24,7 +24,7 @@ func anyContains(lines []string, want string) bool {
 
 // "I lost this computer" from the laptop, on a local destination: three
 // wrong master passwords change nothing; then the desktop is locked out, the
-// Secret Key is new, and the new kit is shown once (N1 to N7).
+// Secret Key is new, and the new kit is shown once.
 func TestLostComputer(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
@@ -101,7 +101,7 @@ func TestLostComputer(t *testing.T) {
 
 // I lost this computer can't be run again for a computer it already
 // removed, so when it stops it says what it did and which item finishes it,
-// on the screen and after ctdev exits (N9).
+// on the screen and after ctdev exits.
 func TestALostComputerFlowThatStopsSaysHowToFinish(t *testing.T) {
 	ctx := context.Background()
 	address := filepath.Join(t.TempDir(), "repo")
@@ -149,7 +149,7 @@ func TestALostComputerFlowThatStopsSaysHowToFinish(t *testing.T) {
 }
 
 // Replace backend credentials, from Emergency Kit and password: three wrong
-// master passwords change nothing; the right one shows the new kit (P10).
+// master passwords change nothing; the right one shows the new kit.
 func TestReplaceBackendCredentials(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
@@ -180,7 +180,7 @@ func TestReplaceBackendCredentials(t *testing.T) {
 }
 
 // New B2 credentials that don't open the destination are asked for again,
-// with the reason under the fields, then the old ones are revoked (N3 to N6).
+// with the reason under the fields, then the old ones are revoked.
 func TestNewCredentialsAreAskedForAgainUntilTheyOpenIt(t *testing.T) {
 	ctx := context.Background()
 	creds := map[string]string{"B2_ACCOUNT_ID": "000000000000000000000001", "B2_ACCOUNT_KEY": "K000xxxxxxxxxxxxxxxxxxxxxxxxxxx"}
@@ -228,7 +228,7 @@ func mustUnlock(t *testing.T, d *backup.Destination) *backup.Account {
 }
 
 // Remove this computer asks first, warns that a lost computer needs more,
-// and removes the key behind the master password (M4 to M9).
+// and removes the key behind the master password.
 func TestRemoveComputer(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
@@ -257,7 +257,7 @@ func TestRemoveComputer(t *testing.T) {
 }
 
 // Change master password: the current one, then the new one twice; a short
-// or mismatched one is asked again (P3 to P7).
+// or mismatched one is asked again.
 func TestChangeMasterPassword(t *testing.T) {
 	ctx := context.Background()
 	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)

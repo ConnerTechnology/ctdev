@@ -45,7 +45,7 @@ func standinCalls(t *testing.T, root, prefix string) int {
 }
 
 // A --all session measures the space stored once, not on every return to
-// its dashboard (L1, L2).
+// its dashboard.
 func TestAllMeasuresStoredOnce(t *testing.T) {
 	f, d, _ := allFixture(t, oneFolder)
 	ui := &fakeUI{t: t, Dashboards: []any{"l", "l", "q"}, Picks: []any{ErrBack, ErrBack}}
@@ -76,7 +76,7 @@ func TestAllMeasuresStoredOnce(t *testing.T) {
 	}
 }
 
-// With no folders, nothing is measured and List backups is dimmed (L3).
+// With no folders, nothing is measured and List backups is dimmed.
 func TestAllWithNoFolders(t *testing.T) {
 	f, d, _ := allFixture(t, "[]")
 	ui := &fakeUI{t: t, Dashboards: []any{"q"}}
@@ -100,7 +100,7 @@ func TestAllOpensAFolder(t *testing.T) {
 	if err := allFlow(context.Background(), ui, d); err != ErrCancelled {
 		t.Fatalf("err = %v", err)
 	}
-	// Picking the folder opens its backups (V2), after the folders list.
+	// Picking the folder opens its backups, after the folders list.
 	picks := requestsOf[Picker](ui)
 	if len(picks) < 2 {
 		t.Fatalf("pickers = %d, want the folders and then the folder's backups", len(picks))
@@ -111,7 +111,7 @@ func TestAllOpensAFolder(t *testing.T) {
 }
 
 // Computers lists every computer, this one marked; picking one shows its
-// actions, dimmed for this computer (M1 to M3).
+// actions, dimmed for this computer.
 func TestAllComputers(t *testing.T) {
 	_, d, _ := allFixture(t, oneFolder)
 	ui := &fakeUI{t: t, Dashboards: []any{"c", "esc", "esc", "q"}, Picks: []any{1, 0, ErrBack}}
@@ -139,7 +139,7 @@ func TestAllComputers(t *testing.T) {
 }
 
 // A computer with no destination is offered Connect or Create, and comes
-// back to the offer when either doesn't finish (K1 to K3).
+// back to the offer when either doesn't finish.
 func TestAllWithNoDestination(t *testing.T) {
 	bin, _ := keyStandin(t)
 	d := Deps{Machine: machineOn(t, bin, "example-laptop"), Cwd: t.TempDir()}
@@ -157,7 +157,7 @@ func TestAllWithNoDestination(t *testing.T) {
 	}
 }
 
-// With several destinations, --all asks which (K5).
+// With several destinations, --all asks which.
 func TestAllAsksWhichDestination(t *testing.T) {
 	f, d, _ := allFixture(t, "[]")
 	if _, err := f.laptop.CreateDestination(context.Background(),
@@ -178,7 +178,7 @@ func TestAllAsksWhichDestination(t *testing.T) {
 }
 
 // A destination that can't be read offers to paste the new kit; q quits
-// with the read error (K6).
+// with the read error.
 func TestAllOffersThePasteWhenItCantRead(t *testing.T) {
 	_, d, repo := allFixture(t, "[]")
 	if err := os.WriteFile(filepath.Join(repo, "fail-list"), nil, 0o644); err != nil {
@@ -201,7 +201,7 @@ func TestAllOffersThePasteWhenItCantRead(t *testing.T) {
 }
 
 // A key that no longer opens the destination ends the session: a new kit
-// can't help (K7).
+// can't help.
 func TestAllEndsWhenTheKeyNoLongerOpensIt(t *testing.T) {
 	f, d, _ := allFixture(t, "[]")
 	this := f.computer(t, "example-laptop")

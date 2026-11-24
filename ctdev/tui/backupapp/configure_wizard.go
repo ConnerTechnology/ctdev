@@ -81,8 +81,8 @@ func (w *wizard) page(n int, section string) Page {
 		Subtitle: styles.Dimmed.Render(fmt.Sprintf("Configure · step %d of %d · ", n, w.total())) + styles.Value.Render(section)}
 }
 
-// chooseDestination is W3 and W4: one of this computer's destinations, or a
-// new one created or connected here.
+// chooseDestination asks where backups go: one of this computer's
+// destinations, or a new one created or connected here.
 func (w *wizard) chooseDestination(ctx context.Context, ui UI) error {
 	m := w.d.Machine
 	for {
@@ -168,7 +168,7 @@ func (w *wizard) chooseDestination(ctx context.Context, ui UI) error {
 	}
 }
 
-// history is W11 and W12, for a new folder only: start a new history, or
+// history is Backup history, for a new folder only: start a new history, or
 // continue one of the destination's folders by taking its ID.
 // backup.Machine.Linkable says which can be continued.
 func (w *wizard) history(ctx context.Context, ui UI) error {
@@ -245,7 +245,7 @@ func (w *wizard) folderItems(list []backup.FoundFolder) []Item {
 	return items
 }
 
-// schedule is W13: how often.
+// schedule asks how often backups run.
 func (w *wizard) schedule(ctx context.Context, ui UI) error {
 	items := make([]Item, len(backup.Schedules))
 	cursor := 0
@@ -280,8 +280,8 @@ var keeps = []struct {
 	{"yearly", "YEARLY", func(k *backup.Keep) *int { return &k.Yearly }},
 }
 
-// keepAndSave is W14 and W15: what to keep, then saving the folder's config
-// and installing the scheduler, with the result said on the dashboard.
+// keepAndSave asks what to keep, then saves the folder's config and
+// installs the scheduler, with the result said on the dashboard.
 func (w *wizard) keepAndSave(ctx context.Context, ui UI) error {
 	m := w.d.Machine
 	saveErr := ""
