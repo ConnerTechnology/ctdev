@@ -323,7 +323,9 @@ func recoverWith(ctx context.Context, ui UI, page pageFor, name, keysOn string, 
 			Detail: "a new master password and Secret Key for " + name + "; this takes a few seconds", ChangesKeysOn: keysOn},
 			func(ctx context.Context, _ func(Progress)) error {
 				var err error
-				r, err = recover(ctx, got["code"], got["master"], got["newcode"] == "yes")
+				// Not cancelled when ctdev quits, so the reset isn't left
+				// halfway, and what it made is said.
+				r, err = recover(context.WithoutCancel(ctx), got["code"], got["master"], got["newcode"] == "yes")
 				return err
 			})
 		switch {
@@ -345,6 +347,13 @@ func recoverWith(ctx context.Context, ui UI, page pageFor, name, keysOn string, 
 		lines = append(lines, paragraph(Info, pasteOnOtherComputers, frameWidth-4)...)
 		err = ui.ShowKit(ctx, KitScreen{Page: page("New Emergency Kit"), Kit: r.Kit, RecoveryCode: r.RecoveryCode, Lines: lines, New: true})
 		// The reset is done: leaving the kit unsaved doesn't undo it.
+		if errors.Is(err, ErrCancelled) {
+			ui.Say(Warning, newKitNotShown)
+			if r.RecoveryCode != "" {
+				// Show Emergency Kit never shows a Recovery Code.
+				ui.Say(Warning, "A new Recovery Code was made too, and it can't be shown again: the old one no longer works.")
+			}
+		}
 		if err != nil && !errors.Is(err, ErrBack) {
 			return nil, err
 		}

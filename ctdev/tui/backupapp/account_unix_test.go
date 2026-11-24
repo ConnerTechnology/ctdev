@@ -298,3 +298,95 @@ func TestRegenerateSecretKey(t *testing.T) {
 		t.Errorf("said %+v", ui.Said)
 	}
 }
+
+// quitsAt is the fake UI with ctdev quitting, as SIGTERM or a closed
+// terminal does, just as the Run labelled label starts.
+type quitsAt struct {
+	*fakeUI
+	label  string
+	cancel context.CancelFunc
+}
+
+func (q quitsAt) Run(ctx context.Context, r Running, fn func(context.Context, func(Progress)) error) error {
+	if r.Label == q.label {
+		q.cancel()
+	}
+	return q.fakeUI.Run(ctx, r, fn)
+}
+
+// Quitting while Regenerate Secret Key runs still makes the new key, and
+// says, after exit, where to see the kit, never the kit itself.
+func TestQuittingWhileRegeneratingSaysWhereTheNewKitIs(t *testing.T) {
+	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ui := &fakeUI{t: t, Picks: []any{2}, Confirms: []any{true}, Forms: []any{Values{"master": exampleMaster}}}
+	q := quitsAt{fakeUI: ui, label: "Making a new Secret Key (this takes a few seconds)…", cancel: cancel}
+	if _, err := kitAndPassword(ctx, q, Deps{Machine: f.laptop}, f.dest); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("err = %v, want the quit passed on", err)
+	}
+	a, err := f.dest.Unlock(context.Background(), exampleMaster)
+	if err != nil || a.Kit() == f.kit {
+		t.Fatalf("the Secret Key wasn't regenerated: %v", err)
+	}
+	if got := ui.said(Warning); !slices.Equal(got, []string{newKitNotShown}) {
+		t.Errorf("said %+v", ui.Said)
+	}
+	for _, l := range ui.Said {
+		if strings.Contains(l.Text, "Secret Key:") {
+			t.Errorf("said a secret: %q", l.Text)
+		}
+	}
+}
+
+// Quitting while a Recovery Code reset runs still finishes it, and says
+// that the new kit and code weren't shown, never the kit or the code.
+func TestQuittingWhileResettingSaysTheNewCodeWasntShown(t *testing.T) {
+	laptop, setup := createdKit(t)
+	desktop := another(t, laptop, "example-desktop")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const newMaster = "new example password"
+	ui := &fakeUI{t: t, Picks: []any{1}, Forms: []any{Values{"kit": setup.Kit}, Values{"master": "wrong example password"},
+		Values{"code": setup.RecoveryCode, "master": newMaster, "again": newMaster, "newcode": "yes"}}}
+	q := quitsAt{fakeUI: ui, label: "Resetting…", cancel: cancel}
+	if _, err := connectDestination(ctx, q, desktop); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("err = %v, want the quit passed on", err)
+	}
+	dest, err := desktop.Machine.Destination("example-backups")
+	if err != nil {
+		t.Fatalf("the reset didn't save the destination: %v", err)
+	}
+	if _, err := dest.Unlock(context.Background(), newMaster); err != nil {
+		t.Fatalf("the new master password doesn't open it: %v", err)
+	}
+	want := []string{newKitNotShown, "A new Recovery Code was made too, and it can't be shown again: the old one no longer works."}
+	if got := ui.said(Warning); !slices.Equal(got, want) {
+		t.Errorf("warnings = %q", got)
+	}
+	for _, l := range ui.Said {
+		if strings.Contains(l.Text, "Secret Key:") || strings.Contains(l.Text, setup.RecoveryCode) {
+			t.Errorf("said a secret: %q", l.Text)
+		}
+	}
+}
+
+// Quitting while I lost this computer makes the new Secret Key still makes
+// it, and the lines printed after exit say so and what's left.
+func TestQuittingWhileTheLostComputerFlowRegeneratesSaysSo(t *testing.T) {
+	f := newAccountFixture(t, filepath.Join(t.TempDir(), "repo"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ui := &fakeUI{t: t, Confirms: []any{true}, Forms: []any{Values{"master": exampleMaster}}}
+	q := quitsAt{fakeUI: ui, label: "Making a new Secret Key…", cancel: cancel}
+	if err := lostComputer(ctx, q, f.dest, f.computer(t, "example-desktop")); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("err = %v, want the quit passed on", err)
+	}
+	if a, err := f.dest.Unlock(context.Background(), exampleMaster); err != nil || a.Kit() == f.kit {
+		t.Fatalf("the Secret Key wasn't regenerated: %v", err)
+	}
+	if !anyContains(ui.said(Warning), "made a new Secret Key, saved on this computer") ||
+		!anyContains(ui.said(Plain), "then Replace backend credentials, which also shows the new kit.") {
+		t.Errorf("said %+v", ui.Said)
+	}
+}
