@@ -6,28 +6,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
-
-// skipOnMacOSCI skips a test that drives the full-screen program through a
-// terminal stand-in. On GitHub's macOS runners these hang or never see the
-// screen they wait for; Linux and local macOS runs pass. The cause isn't found.
-func skipOnMacOSCI(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "darwin" && os.Getenv("CI") != "" {
-		t.Skip("flaky on GitHub's macOS runners")
-	}
-}
 
 // Under --dry-run, restic's commands stay in the terminal after the program
 // exits, in order with the result lines, as they did before it was
 // full-screen.
 func TestDryRunCommandsArePrintedAfterExit(t *testing.T) {
-	skipOnMacOSCI(t)
 	d, _ := standinFolder(t, true, backs, forgets, "example-backups")
 	d.Machine.Opts.DryRun = true
 	p := startProgram(t, d, folderFlow)
@@ -36,9 +26,7 @@ func TestDryRunCommandsArePrintedAfterExit(t *testing.T) {
 	p.term.waitFor("All of ~/Projects/website")
 	io.WriteString(p.keys, "\r")
 	p.term.waitFor("[dry-run] restic forget")
-	io.WriteString(p.keys, "q")
-	io.WriteString(p.keys, "q")
-	if err := <-p.done; err != nil {
+	if err := p.quit(); err != nil {
 		t.Fatal(err)
 	}
 	after := ansi.Strip(p.after.String())
@@ -50,11 +38,23 @@ func TestDryRunCommandsArePrintedAfterExit(t *testing.T) {
 
 // While the program runs, restic has no controlling terminal. Quitting while
 // it's still stopping says what ctdev waits on, after the screen closes.
+//
+// The stand-in tells the test when it is running and will take its time to
+// stop: it installs its INT trap, then reports its session and pid through a
+// FIFO. Ctrl-C waits for that, because the screen shows the backup running
+// before restic has started.
 func TestQuittingWhileResticStopsSaysSo(t *testing.T) {
-	skipOnMacOSCI(t)
-	marker := filepath.Join(t.TempDir(), "session")
-	d, _ := standinFolder(t, true, `ps -o pgid= -p $$ | tr -d ' ' > "`+marker+`"; echo $$ >> "`+marker+`"
-  trap 'sleep 1; exit 130' INT
+	fifo := filepath.Join(t.TempDir(), "ready")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ready := make(chan []byte, 1)
+	go func() {
+		data, _ := os.ReadFile(fifo)
+		ready <- data
+	}()
+	d, _ := standinFolder(t, true, `trap 'sleep 1; exit 130' INT
+  { ps -o pgid= -p $$ | tr -d ' '; echo $$; } > "`+fifo+`"
   sleep 60 >/dev/null 2>&1 &
   wait $!`, forgets, "example-backups")
 	p := startProgram(t, d, folderFlow)
@@ -62,7 +62,12 @@ func TestQuittingWhileResticStopsSaysSo(t *testing.T) {
 	io.WriteString(p.keys, "b")
 	p.term.waitFor("All of ~/Projects/website")
 	io.WriteString(p.keys, "\r")
-	p.term.waitFor("BACKING UP")
+	var session []byte
+	select {
+	case session = <-ready:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("restic never reported ready on:\n%s", p.term.text())
+	}
 	io.WriteString(p.keys, "\x03")
 	p.term.waitFor("Cancelling…")
 	io.WriteString(p.keys, "\x03")
@@ -72,9 +77,8 @@ func TestQuittingWhileResticStopsSaysSo(t *testing.T) {
 	if after := ansi.Strip(p.after.String()); !strings.Contains(after, "Waiting for restic to stop…") {
 		t.Errorf("after exit: %q, want the wait said", after)
 	}
-	data, _ := os.ReadFile(marker)
-	if f := strings.Fields(string(data)); len(f) != 2 || f[0] != f[1] {
-		t.Errorf("restic's session and pid: %q, want restic to lead its own session", data)
+	if f := strings.Fields(string(session)); len(f) != 2 || f[0] != f[1] {
+		t.Errorf("restic's session and pid: %q, want restic to lead its own session", session)
 	}
 	if d.Machine.NoTerminal {
 		t.Error("NoTerminal is still set after the program exits")
