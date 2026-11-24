@@ -303,6 +303,14 @@ func TestKitView(t *testing.T) {
 	if !strings.Contains(got, "CT1-AAAAAA") || !strings.Contains(got, "XXXXXXXX-XXXXXXXX") || !strings.Contains(got, "enter  I've saved both") {
 		t.Errorf("kit:\n%s", got)
 	}
+	if !strings.Contains(got, "Emergency Kit  save it") || strings.Contains(got, "New ") {
+		t.Errorf("a first kit is headed Emergency Kit:\n%s", got)
+	}
+	k.New = true
+	if got := screen(newKitView(k)); !strings.Contains(got, "New Emergency Kit") || !strings.Contains(got, "New Recovery Code") {
+		t.Errorf("a kit that replaces the old is headed New:\n%s", got)
+	}
+	k.New = false
 	if _, cmd := kv.update(key("c")); cmd == nil || !strings.Contains(screen(kv), "✓ Copied") {
 		t.Error("c doesn't copy")
 	}

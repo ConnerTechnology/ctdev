@@ -317,7 +317,7 @@ func lostComputer(ctx context.Context, ui UI, dest *backup.Destination, c backup
 	}
 	l.done = 3
 
-	if err := ui.ShowKit(ctx, KitScreen{Page: l.page("New Emergency Kit", true), Kit: a.Kit(), Lines: newKitLines()}); err != nil {
+	if err := ui.ShowKit(ctx, KitScreen{Page: l.page("New Emergency Kit", true), Kit: a.Kit(), Lines: newKitLines(), New: true}); err != nil {
 		return err
 	}
 	ui.Say(Info, pasteOnOtherComputers)
@@ -733,7 +733,7 @@ func replaceBackendCredentials(ctx context.Context, ui UI, dest *backup.Destinat
 // showNewKit shows a kit that replaces the old one. Leaving it unsaved says
 // where to see it again.
 func showNewKit(ctx context.Context, ui UI, page Page, kit string) error {
-	err := ui.ShowKit(ctx, KitScreen{Page: page, Kit: kit, Lines: newKitLines()})
+	err := ui.ShowKit(ctx, KitScreen{Page: page, Kit: kit, Lines: newKitLines(), New: true})
 	switch {
 	case errors.Is(err, ErrBack):
 		ui.Say(Warning, "The new kit wasn't shown to the end: choose Show Emergency Kit to save it.")

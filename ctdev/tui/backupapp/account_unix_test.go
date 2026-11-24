@@ -65,8 +65,8 @@ func TestLostComputer(t *testing.T) {
 		t.Errorf("a local destination should say it has no credentials to revoke: %q", detail)
 	}
 	kits := requestsOf[KitScreen](ui)
-	if len(kits) != 1 {
-		t.Fatalf("kits = %+v", kits)
+	if len(kits) != 1 || !kits[0].New {
+		t.Fatalf("kits = %+v, want one new kit", kits)
 	}
 	k := kits[0]
 	for _, want := range []string{"✓ 1. Removed example-desktop's key.", "✓ 2. Made a new Secret Key", "✓ 3. This computer opens example-backups"} {
@@ -174,7 +174,7 @@ func TestReplaceBackendCredentials(t *testing.T) {
 		t.Errorf("said %+v", ui.Said)
 	}
 	kits := requestsOf[KitScreen](ui)
-	if len(kits) != 1 || !strings.Contains(kits[0].Kit, "Secret Key:") || kits[0].Page.Title != "example-backups › Emergency Kit and password › Replace backend credentials" {
+	if len(kits) != 1 || !kits[0].New || !strings.Contains(kits[0].Kit, "Secret Key:") || kits[0].Page.Title != "example-backups › Emergency Kit and password › Replace backend credentials" {
 		t.Errorf("kits = %+v", kits)
 	}
 }
@@ -291,7 +291,7 @@ func TestRegenerateSecretKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	kits := requestsOf[KitScreen](ui)
-	if len(kits) != 1 || secretKeyOf(t, kits[0].Kit) == secretKeyOf(t, f.kit) || kits[0].Lines[0].Text != "The old Emergency Kit stops working." {
+	if len(kits) != 1 || !kits[0].New || secretKeyOf(t, kits[0].Kit) == secretKeyOf(t, f.kit) || kits[0].Lines[0].Text != "The old Emergency Kit stops working." {
 		t.Errorf("kits = %+v", kits)
 	}
 	if !anyContains(ui.said(Info), "Paste an updated Emergency Kit") {

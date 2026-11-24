@@ -240,6 +240,7 @@ type KitScreen struct {
 	Kit          string
 	RecoveryCode string
 	Lines        []Line // under the kit and code
+	New          bool   // it replaces the old: headed "New Emergency Kit", "New Recovery Code"
 	Ack          string // "" is "I've saved it", or "I've saved both" with a code
 }
 
