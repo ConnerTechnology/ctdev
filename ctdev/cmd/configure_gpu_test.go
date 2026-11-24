@@ -240,24 +240,44 @@ func TestGPUWizard_ApplyAnywayAsksOnce(t *testing.T) {
 	}
 }
 
-// After the settings, `configure gpu` runs the signing flow only when it's
-// needed. --batch says why it skipped; the wizard already said so.
-func TestGPUSigningNeeded(t *testing.T) {
-	ctx := context.Background()
+// One `configure gpu --batch` on a Secure Boot machine with an unsigned NVIDIA
+// driver runs the signing setup once, so mokutil asks for the MOK password
+// once. No dkms is on PATH, so setup stops at its DKMS check.
+func TestConfigureGPU_RunsSigningOnce(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("GPU setup is Linux-only")
+	}
 	uefi(t)
-	fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot disabled"`})
-	var needed bool
-	out := plain(captureStdout(t, func() { needed = gpuSigningNeeded(ctx, true) }))
-	if needed || !strings.Contains(out, "Driver signing not needed: Secure Boot is off") {
-		t.Errorf("batch, Secure Boot off: needed=%v out=%q, want false and the reason", needed, out)
-	}
-	out = captureStdout(t, func() { needed = gpuSigningNeeded(ctx, false) })
-	if needed || out != "" {
-		t.Errorf("wizard, Secure Boot off: needed=%v out=%q, want false and silence", needed, out)
-	}
+	fakeBins(t, map[string]string{
+		"mokutil":   `echo "SecureBoot enabled"`,
+		"lsmod":     `echo "nvidia 1 0"`,
+		"modinfo":   `echo`,
+		"systemctl": `echo masked; exit 1`,
+	})
+	oldBatch := flagBatch
+	flagBatch = true
+	t.Cleanup(func() { flagBatch = oldBatch })
 
-	fakeBins(t, map[string]string{"mokutil": `echo "SecureBoot enabled"`})
-	if !gpuSigningNeeded(ctx, true) {
-		t.Error("Secure Boot on: signing should be needed")
+	out := plain(captureStdout(t, func() { _ = runConfigureGPU(configureGPUCmd, nil) }))
+	if n := strings.Count(out, "GPU Signing Setup"); n != 1 {
+		t.Errorf("signing setup ran %d times, want once; output %q", n, out)
+	}
+}
+
+// Every --show status label fits its column, so none wraps onto a second line.
+func TestGPUShow_StatusLabelsFit(t *testing.T) {
+	checks := []gpu.StatusCheck{
+		{Name: "Secure Boot", Pass: true, Detail: "enabled"},
+		{Name: "MOK key enrolled", Pass: true, Detail: "in firmware"},
+		{Name: "Module signature", Pass: false, Detail: "signed with a different key"},
+	}
+	lines := strings.Split(ansi.Strip(captureStdout(t, func() { printSigningStatus(checks) })), "\n")
+	if len(lines) != len(checks)+1 {
+		t.Fatalf("want one line per check, got %q", lines)
+	}
+	for i, check := range checks {
+		if !strings.Contains(lines[i], check.Name+":") || !strings.Contains(lines[i], check.Detail) {
+			t.Errorf("line %d = %q, want %q and its detail on it", i, lines[i], check.Name+":")
+		}
 	}
 }
