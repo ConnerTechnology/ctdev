@@ -102,21 +102,25 @@ func (term *terminal) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// text is everything drawn so far, as plain text.
+func (term *terminal) text() string {
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	return ansi.Strip(term.out.String())
+}
+
 // waitFor returns once s has been drawn.
 func (term *terminal) waitFor(s string) {
 	term.t.Helper()
 	timeout := time.After(10 * time.Second)
 	for {
-		term.mu.Lock()
-		seen := strings.Contains(ansi.Strip(term.out.String()), s)
-		term.mu.Unlock()
-		if seen {
+		if strings.Contains(term.text(), s) {
 			return
 		}
 		select {
 		case <-term.changed:
 		case <-timeout:
-			term.t.Fatalf("%q never appeared on:\n%s", s, ansi.Strip(term.out.String()))
+			term.t.Fatalf("%q never appeared on:\n%s", s, term.text())
 		}
 	}
 }
@@ -130,9 +134,26 @@ type runningProgram struct {
 	after *bytes.Buffer
 }
 
+// quit presses q until the program exits, and returns its error. The program
+// drops a key sent while a step runs or between steps, so a q pressed the
+// moment a result line shows is lost whenever the status refresh behind it is
+// still running. The next frame the program draws means it has moved on, so
+// press again then.
+func (p *runningProgram) quit() error {
+	for {
+		go io.WriteString(p.keys, "q")
+		select {
+		case err := <-p.done:
+			return err
+		case <-p.term.changed:
+		}
+	}
+}
+
 func startProgram(t *testing.T, d Deps, flow func(context.Context, UI, Deps) error) *runningProgram {
 	t.Helper()
 	in, keys := io.Pipe()
+	t.Cleanup(func() { keys.Close() }) // frees a quit's last key, which nothing reads once the program has exited
 	p := &runningProgram{term: &terminal{t: t, changed: make(chan struct{}, 1)}, keys: keys, done: make(chan error), after: &bytes.Buffer{}}
 	saved := programOptions
 	programOptions = func() []tea.ProgramOption {
@@ -163,8 +184,7 @@ func TestProgramSmoke(t *testing.T) {
 	p.term.waitFor("This computer has no backup destination yet. Set one up first.")
 	io.WriteString(p.keys, "\r")
 	p.term.waitFor("Dry run: destinations aren't created or connected")
-	io.WriteString(p.keys, "q")
-	if err := <-p.done; err != nil {
+	if err := p.quit(); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(ansi.Strip(p.after.String()), "Dry run: destinations aren't created or connected") {
