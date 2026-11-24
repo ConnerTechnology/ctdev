@@ -53,11 +53,11 @@ func TestComputerActions(t *testing.T) {
 			t.Errorf("%s is dimmed for another computer", a.Label)
 		}
 	}
-	if got := strings.Join(keys, ","); got != "R Remove this computer,L I lost this computer,esc Back" {
+	if got := strings.Join(append(keys, "esc "+d.Back), ","); got != "R Remove this computer,L I lost this computer,esc Back" {
 		t.Errorf("actions = %s", got)
 	}
 	this := computerDashboard("example-backups", cs[0])
-	if b := newDashboard(this); !this.Actions[0].Dimmed || !this.Actions[1].Dimmed || this.Actions[b.cursor].Key != "esc" {
+	if b := newDashboard(this); !this.Actions[0].Dimmed || !this.Actions[1].Dimmed || b.cursor != len(this.Actions) {
 		t.Errorf("this computer: actions %+v, focus %d", this.Actions, b.cursor)
 	}
 	if !strings.Contains(ansi.Strip(this.Page.Body), "This computer: remove it from another computer that's set up.") {

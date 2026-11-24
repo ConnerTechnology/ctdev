@@ -9,9 +9,10 @@ import (
 )
 
 // dashboard is a Dashboard's step: its message and the one-key action bar.
+// The cursor runs over the actions, then the esc item when there is one.
 type dashboard struct {
 	d      Dashboard
-	cursor int // -1 when every action is dimmed
+	cursor int // -1 when nothing can be focused
 }
 
 func newDashboard(d Dashboard) *dashboard {
@@ -27,6 +28,9 @@ func newDashboard(d Dashboard) *dashboard {
 			break
 		}
 	}
+	if b.cursor < 0 && d.Back != "" {
+		b.cursor = len(d.Actions)
+	}
 	return b
 }
 
@@ -35,8 +39,12 @@ func (b *dashboard) init() tea.Cmd { return nil }
 // move steps the cursor to the next action in dir that isn't dimmed,
 // staying put at either end.
 func (b *dashboard) move(dir int) {
-	for i := b.cursor + dir; i >= 0 && i < len(b.d.Actions); i += dir {
-		if !b.d.Actions[i].Dimmed {
+	last := len(b.d.Actions)
+	if b.d.Back != "" {
+		last++
+	}
+	for i := b.cursor + dir; i >= 0 && i < last; i += dir {
+		if i == len(b.d.Actions) || !b.d.Actions[i].Dimmed {
 			b.cursor = i
 			return
 		}
@@ -54,7 +62,10 @@ func (b *dashboard) update(msg tea.Msg) (*answer, tea.Cmd) {
 	case "right", "tab":
 		b.move(1)
 	case "enter", "space":
-		if b.cursor >= 0 {
+		switch {
+		case b.cursor == len(b.d.Actions):
+			return &answer{err: ErrBack}, nil
+		case b.cursor >= 0:
 			return &answer{value: b.d.Actions[b.cursor]}, nil
 		}
 	case "esc":
@@ -84,6 +95,13 @@ func (b *dashboard) view(width, _ int) stepView {
 		default:
 			items[i] = " " + keyHint(a.Key, a.Label) + " "
 		}
+	}
+	switch {
+	case b.d.Back == "":
+	case b.cursor == len(b.d.Actions):
+		items = append(items, chip("esc  "+b.d.Back))
+	default:
+		items = append(items, " "+keyHint("esc", b.d.Back)+" ")
 	}
 	return stepView{notes: b.d.Message, notesGiveWay: true, keys: strings.Join(bar(items, width), "\n"), help: help}
 }

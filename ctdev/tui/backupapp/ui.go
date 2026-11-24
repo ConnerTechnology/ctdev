@@ -107,6 +107,7 @@ type Dashboard struct {
 	Message []Line
 	Actions []Action
 	Focus   string // the key of the action focused first; "" is the first available
+	Back    string // the esc item's label, last in the bar; "" draws none
 	Help    string // "" is "←/→ choose · enter run · or press the letter"
 }
 

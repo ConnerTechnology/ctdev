@@ -180,8 +180,8 @@ func computerDashboard(name string, c backup.Computer) Dashboard {
 		Actions: []Action{
 			{Key: "R", Label: "Remove this computer", Dimmed: c.ThisComputer},
 			{Key: "L", Label: "I lost this computer", Dimmed: c.ThisComputer},
-			{Key: "esc", Label: "Back"},
 		},
+		Back: "Back",
 		Help: "←/→ choose · enter open · or press the letter",
 	}
 }
@@ -357,8 +357,7 @@ func (l *lostSteps) stopped(ctx context.Context, ui UI, err error) error {
 	page.Badge = Badge{Attention, "STOPPED"}
 	a, err := ui.Dashboard(ctx, Dashboard{Page: page, Message: msg, Actions: []Action{
 		{Key: "e", Label: "Emergency Kit and password"},
-		{Key: "esc", Label: "Back to Computers"},
-	}})
+	}, Back: "Back to Computers"})
 	switch {
 	case errors.Is(err, ErrBack):
 		return nil

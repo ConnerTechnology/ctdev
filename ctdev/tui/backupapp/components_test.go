@@ -98,6 +98,19 @@ func TestActionBar(t *testing.T) {
 	if got := screen(newDashboard(exampleBar)); !strings.Contains(got, " c  Configure ") || !strings.Contains(got, "l List backups") {
 		t.Errorf("bar:\n%s", got)
 	}
+
+	// The esc item comes last, and the cursor reaches it.
+	back := Dashboard{Actions: []Action{{Key: "z", Label: "Download as zip"}}, Back: "Back to Computers"}
+	if got := screen(newDashboard(back)); !strings.Contains(got, "esc Back to Computers") {
+		t.Errorf("bar with Back:\n%s", got)
+	}
+	if a := press(newDashboard(back), "right", "right", "enter"); a == nil || !errors.Is(a.err, ErrBack) {
+		t.Errorf("enter on the esc item → %+v, want ErrBack", a)
+	}
+	back.Actions[0].Dimmed = true
+	if got := screen(newDashboard(back)); !strings.Contains(got, " esc  Back to Computers ") {
+		t.Errorf("with every action dimmed, the esc item is focused:\n%s", got)
+	}
 }
 
 func TestPicker(t *testing.T) {
