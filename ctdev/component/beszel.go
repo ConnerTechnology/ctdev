@@ -15,6 +15,10 @@ import (
 // https://beszel.<domain>) and an agent that collects this host's metrics over a
 // shared unix socket. The agent's KEY/TOKEN, issued by the hub's "Add System"
 // dialog, live in ~/beszel/.env; the hub comes up first so they can be obtained.
+//
+// Keep it off any public network (Tailscale only). Per-container CPU, memory
+// and network stats all need the kernel memory cgroup: see the sys.memcgroup
+// check in package diagnose.
 
 var beszelStack = composeStack{
 	Name:  "beszel",

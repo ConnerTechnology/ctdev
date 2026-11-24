@@ -9,6 +9,10 @@ set -euo pipefail
 #
 # Or, to install one exact release system-wide (as root, e.g. a boot script):
 #   CTDEV_VERSION=v1.2.3 INSTALL_DIR=/usr/local/bin bash install.sh
+#
+# `ctdev update` updates ctdev itself by running this script from the new release's
+# tag (ctdev/cmd/update_apply.go), passing INSTALL_DIR (the running binary's
+# directory) and CTDEV_VERSION. A release's install.sh must keep honoring both.
 
 REPO="ConnerTechnology/ctdev"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"

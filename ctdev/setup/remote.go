@@ -355,7 +355,7 @@ func uninstallCodeTunnel(ctx context.Context, o sysutil.Opts) error {
 // lingering reports whether systemd lingering is on for the current user.
 // Nothing records who turned it on; ctdev's "Keep my programs running"
 // setting defaulted to on in every --batch run, so on a ctdev machine it was
-// ctdev, and ctdev otherwise never turns lingering on (docs/backups.md).
+// ctdev, and ctdev otherwise never turns lingering on.
 func lingering(ctx context.Context) bool {
 	name, err := remoteUsername()
 	if err != nil {
