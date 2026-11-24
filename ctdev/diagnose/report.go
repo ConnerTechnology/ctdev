@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	// nameWidth is the check-name column. Wide enough for "Internet reachable"
-	// without pushing detail off an 80-column terminal.
+	// nameWidth is the narrowest check-name column. A longer name widens the
+	// column for the whole report so every detail still lines up.
 	nameWidth = 22
 	minWidth  = 60
 	defWidth  = 80
@@ -103,11 +103,13 @@ func wrap(s string, width int) string {
 func renderGroups(r Report, width int) string {
 	var b strings.Builder
 	byGroup := make(map[string][]Check)
+	nameCol := nameWidth
 	for _, c := range r.Checks {
 		if _, ran := r.Results[c.ID]; !ran {
 			continue
 		}
 		byGroup[c.Group] = append(byGroup[c.Group], c)
+		nameCol = max(nameCol, ansi.StringWidth(c.Name)+2)
 	}
 
 	for _, group := range groupsInOrder(byGroup) {
@@ -119,26 +121,26 @@ func renderGroups(r Report, width int) string {
 
 		b.WriteString(styles.Header.Render(group) + "\n")
 		for _, c := range checks {
-			b.WriteString(renderCheck(c, r.Results[c.ID], width))
+			b.WriteString(renderCheck(c, r.Results[c.ID], nameCol, width))
 		}
 		b.WriteString("\n")
 	}
 	return b.String()
 }
 
-func renderCheck(c Check, res Result, width int) string {
+func renderCheck(c Check, res Result, nameCol, width int) string {
 	var b strings.Builder
 	style := severityStyle(res.Severity)
 
 	b.WriteString("  " + style.Render(res.Severity.Glyph()) + " ")
-	b.WriteString(styles.Label(nameWidth).Render(c.Name))
+	b.WriteString(styles.Label(nameCol).Render(c.Name))
 	b.WriteString(styles.Value.Render(res.Detail) + "\n")
 
 	// Advice earns a line whenever there's something to do — which includes
 	// informational rows like "this is a UniFi network, here's how to look
 	// deeper". Only a clean pass has nothing to add.
 	if res.Advice != "" && res.Severity != OK {
-		b.WriteString(renderAdvice(res.Advice, width))
+		b.WriteString(renderAdvice(res.Advice, nameCol, width))
 	}
 	return b.String()
 }
@@ -149,10 +151,10 @@ func renderCheck(c Check, res Result, width int) string {
 // instructions with numbered steps — breaks out to the full width instead:
 // squeezed into a 50-column gutter the steps rewrap into soup, and the commands
 // they contain are meant to be copied.
-func renderAdvice(advice string, width int) string {
+func renderAdvice(advice string, nameCol, width int) string {
 	if !strings.Contains(advice, "\n") {
-		indentBy := strings.Repeat(" ", nameWidth+4)
-		wrapped := wrap("→ "+advice, width-nameWidth-8)
+		indentBy := strings.Repeat(" ", nameCol+4)
+		wrapped := wrap("→ "+advice, width-nameCol-8)
 		return hangingIndent(styles.Dimmed.Render(wrapped), indentBy, "  ") + "\n"
 	}
 
