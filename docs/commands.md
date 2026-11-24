@@ -71,7 +71,7 @@ ctdev doctor --no-integrations  # never call a vendor API, even with credentials
 
 # Vendor deep-dive: the key alone is enough — the controller defaults to the gateway.
 CTDEV_UNIFI_API_KEY=<key> ctdev doctor --deep
-ctdev doctor --deep --unifi https://10.2.2.1   # when it isn't the gateway
+ctdev doctor --deep --unifi https://192.0.2.1  # when it isn't the gateway
 ```
 
 **Flags that work on any command:** `--help`, `--dry-run`, `--verbose`, `--force`, `--batch`, `--version`
