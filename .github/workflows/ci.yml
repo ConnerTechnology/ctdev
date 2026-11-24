@@ -1,7 +1,7 @@
 name: CI
 
-# No pull_request trigger: scripts/goal.sh land runs these jobs locally (scripts/checks.sh) and
-# merges when they pass. main and release tags still run here, for the macOS job, which only GitHub
+# No pull_request trigger: a change runs these jobs locally (scripts/checks.sh --full) and its
+# pull request merges when they pass. main and release tags still run here, for the macOS job, which only GitHub
 # can run; build-release needs every job, so a macOS failure blocks the release and is fixed forward.
 on:
   push:
@@ -35,8 +35,7 @@ jobs:
       - name: Check syntax
         run: |
           for f in install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh \
-            scripts/prompt-audit.sh; do
+            scripts/checks.sh; do
             bash -n "$f" || exit 1
           done
 
@@ -46,19 +45,25 @@ jobs:
       - name: Run ShellCheck
         run: |
           shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh scripts/goal.sh scripts/goal-test.sh \
-            scripts/prompt-audit.sh
-
-      # scripts/goal.sh merges slices and lands goals; its tests run it against a throwaway repo
-      # with a stand-in gh, so nothing here touches GitHub.
-      - name: Goal script tests
-        run: scripts/goal-test.sh
+            scripts/checks.sh
 
       # AGENTS.md, the path-scoped rules and docs/agents/ are claims about the tree that
-      # nothing else compiles — this holds them to their byte budgets and to paths that exist,
-      # and holds the README and docs/ to relative links that go somewhere.
+      # nothing else compiles — this holds them to paths that exist, and the README and docs/
+      # to relative links that go somewhere.
       - name: Check guidance
         run: scripts/check-guidance.sh
+
+      # Entire's checkpoints hold whole agent transcripts and belong in the private
+      # ConnerTechnology/ctdev-entire repo (.entire/settings.json). This repo is public, so
+      # fail if one ever lands here.
+      - name: No checkpoints on this repo
+        run: |
+          refs=$(git ls-remote origin 'refs/entire/*' 'refs/heads/entire/*')
+          if [ -n "$refs" ]; then
+            echo "Entire checkpoint refs are on this public repo; delete them:" >&2
+            echo "$refs" >&2
+            exit 1
+          fi
 
   powershell-lint:
     name: PowerShell Lint

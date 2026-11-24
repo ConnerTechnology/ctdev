@@ -181,8 +181,8 @@ func TestToolCheckShowsVersion(t *testing.T) {
 // A binary path can carry the username (~/.local/bin, ~/.nodenv), and the
 // report is meant to be shared.
 func TestToolCheckWithoutVersionHidesPath(t *testing.T) {
-	p := fakeProbe{paths: map[string]string{"node": "/home/example/.nodenv/shims/node"}}
-	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("node"), p), "tool.node").Run(context.Background(), Facts{})
+	p := fakeProbe{paths: map[string]string{"nodenv": "/home/example/.nodenv/bin/nodenv"}}
+	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("nodenv"), p), "tool.nodenv").Run(context.Background(), Facts{})
 	if res.Severity != OK {
 		t.Fatalf("severity = %v, want OK", res.Severity)
 	}
@@ -192,7 +192,7 @@ func TestToolCheckWithoutVersionHidesPath(t *testing.T) {
 }
 
 func TestToolCheckMissingBinaryFails(t *testing.T) {
-	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("node"), fakeProbe{}), "tool.node").Run(context.Background(), Facts{})
+	res := findCheck(t, managedChecks(linuxInfo, linuxFacts("nodenv"), fakeProbe{}), "tool.nodenv").Run(context.Background(), Facts{})
 	if res.Severity != Fail {
 		t.Fatalf("severity = %v, want Fail", res.Severity)
 	}

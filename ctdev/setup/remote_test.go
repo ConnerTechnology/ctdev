@@ -109,16 +109,12 @@ func (f *fakeRemote) index(cmd ...string) int {
 
 var quietOpts = sysutil.Opts{Stdout: &strings.Builder{}}
 
-// The six remote-access settings all live under `configure ssh`, and the
-// categories they came from are gone.
+// `configure ssh` offers exactly the two server settings (CTD-178), and the
+// categories remote access once lived in are gone.
 func TestRemoteAccessSettingsAreUnderSSH(t *testing.T) {
 	want := []string{
 		"SSH server",
 		"Key-only login",
-		"Keep my programs running after I disconnect",
-		"Mosh support",
-		"Open this machine from vscode.dev",
-		"Only allow SSH and Mosh from my local network (firewall)",
 	}
 	var got []string
 	for _, s := range FilterBySlug(Registry, "ssh") {
@@ -297,149 +293,7 @@ func TestApplySSHKeyOnlyOn(t *testing.T) {
 	}
 }
 
-func TestApplyLingerOnAndOff(t *testing.T) {
-	f := useFakeRemote(t)
-	_ = applyLinger(context.Background(), quietOpts, "enabled")
-	_ = applyLinger(context.Background(), quietOpts, "disabled")
-	want := [][]string{
-		{"sudo", "loginctl", "enable-linger", "tester"},
-		{"sudo", "loginctl", "disable-linger", "tester"},
-	}
-	if !reflect.DeepEqual(f.calls, want) {
-		t.Errorf("calls = %q, want %q", f.calls, want)
-	}
-}
-
-func TestDetectLinger(t *testing.T) {
-	f := useFakeRemote(t)
-	f.probes["loginctl show-user tester --property=Linger"] = "Linger=yes"
-	if got := detectLinger(context.Background()); got != "enabled" {
-		t.Errorf("detectLinger = %q, want enabled", got)
-	}
-}
-
-// Turning on vscode.dev also turns on "Keep my programs running", before the
-// tunnel service is installed.
-func TestApplyCodeTunnelOnTurnsOnLinger(t *testing.T) {
-	f := useFakeRemote(t)
-	if err := applyCodeTunnel(context.Background(), quietOpts, "enabled"); err != nil {
-		t.Fatal(err)
-	}
-	linger := f.index("sudo", "loginctl", "enable-linger", "tester")
-	install := f.index("code", "tunnel", "service", "install", "--accept-server-license-terms")
-	if linger < 0 || install < 0 || linger > install {
-		t.Errorf("want enable-linger before the tunnel install, got %q", f.calls)
-	}
-}
-
-func TestApplyCodeTunnelOff(t *testing.T) {
-	f := useFakeRemote(t)
-	if err := applyCodeTunnel(context.Background(), quietOpts, "disabled"); err != nil {
-		t.Fatal(err)
-	}
-	want := [][]string{{"code", "tunnel", "service", "uninstall"}}
-	if !reflect.DeepEqual(f.calls, want) {
-		t.Errorf("calls = %q, want %q", f.calls, want)
-	}
-}
-
-func TestApplyMoshLocaleOnRemembersItAddedTheLocale(t *testing.T) {
-	f := useFakeRemote(t)
-	f.probes["locale -a"] = "C\nC.utf8\nPOSIX"
-	if err := applyMoshLocale(context.Background(), quietOpts, "enabled"); err != nil {
-		t.Fatal(err)
-	}
-	if !f.ran("sudo", "locale-gen", "en_US.UTF-8") {
-		t.Errorf("expected locale-gen: %q", f.calls)
-	}
-	if _, err := os.Stat(filepath.Join(f.stateDir, moshLocaleMarker)); err != nil {
-		t.Errorf("marker not written: %v", err)
-	}
-}
-
-func TestApplyMoshLocaleOnLeavesAnExistingLocaleUnclaimed(t *testing.T) {
-	f := useFakeRemote(t)
-	f.probes["locale -a"] = "C\nen_US.utf8"
-	if err := applyMoshLocale(context.Background(), quietOpts, "enabled"); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.calls) != 0 {
-		t.Errorf("locale already there; want no calls, got %q", f.calls)
-	}
-	if _, err := os.Stat(filepath.Join(f.stateDir, moshLocaleMarker)); err == nil {
-		t.Error("marker written for a locale ctdev didn't add")
-	}
-}
-
-func TestApplyMoshLocaleOffRemovesOnlyWhatCtdevAdded(t *testing.T) {
-	t.Run("ctdev added it", func(t *testing.T) {
-		f := useFakeRemote(t)
-		marker := filepath.Join(f.stateDir, moshLocaleMarker)
-		if err := os.WriteFile(marker, []byte("en_US.UTF-8\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := applyMoshLocale(context.Background(), quietOpts, "disabled"); err != nil {
-			t.Fatal(err)
-		}
-		if !f.ran("sudo", "localedef", "--delete-from-archive", "en_US.utf8") {
-			t.Errorf("expected the locale deleted: %q", f.calls)
-		}
-		if _, err := os.Stat(marker); err == nil {
-			t.Error("marker should be removed")
-		}
-	})
-	t.Run("it was already there", func(t *testing.T) {
-		f := useFakeRemote(t)
-		if err := applyMoshLocale(context.Background(), quietOpts, "disabled"); err != nil {
-			t.Fatal(err)
-		}
-		if len(f.calls) != 0 {
-			t.Errorf("want no calls, got %q", f.calls)
-		}
-	})
-}
-
-func TestApplyUFWOn(t *testing.T) {
-	f := useFakeRemote(t)
-	if err := applyUFW(context.Background(), quietOpts, "enabled"); err != nil {
-		t.Fatal(err)
-	}
-	if !f.ran("sudo", "ufw", "allow", "from", "192.168.0.0/16", "to", "any", "port", "22", "proto", "tcp") ||
-		!f.ran("sudo", "ufw", "allow", "from", "10.0.0.0/8", "to", "any", "port", "60000:61000", "proto", "udp") {
-		t.Errorf("missing LAN allow rules: %q", f.calls)
-	}
-	if last := f.calls[len(f.calls)-1]; !reflect.DeepEqual(last, []string{"sudo", "ufw", "--force", "enable"}) {
-		t.Errorf("last call = %q, want ufw --force enable", last)
-	}
-}
-
-func TestApplyUFWOff(t *testing.T) {
-	t.Run("only ctdev's rules", func(t *testing.T) {
-		f := useFakeRemote(t)
-		f.sudoOut["ufw status"] = "Status: active"
-		if err := applyUFW(context.Background(), quietOpts, "disabled"); err != nil {
-			t.Fatal(err)
-		}
-		if !f.ran("sudo", "ufw", "delete", "allow", "from", "172.16.0.0/12", "to", "any", "port", "22", "proto", "tcp") {
-			t.Errorf("ctdev's rules not deleted: %q", f.calls)
-		}
-		if !f.ran("sudo", "ufw", "--force", "disable") {
-			t.Errorf("UFW not turned off: %q", f.calls)
-		}
-	})
-	t.Run("other rules stay up", func(t *testing.T) {
-		f := useFakeRemote(t)
-		f.sudoOut["ufw status"] = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n53                         ALLOW       Anywhere"
-		if err := applyUFW(context.Background(), quietOpts, "disabled"); err != nil {
-			t.Fatal(err)
-		}
-		if f.ran("sudo", "ufw", "--force", "disable") {
-			t.Error("UFW turned off while other rules remain")
-		}
-	})
-}
-
-// ctdevUFWStatus is `ufw status` with every rule ctdev adds.
+// ctdevUFWStatus is `ufw status` with every rule ctdev added.
 func ctdevUFWStatus() string {
 	var b strings.Builder
 	b.WriteString("Status: active\n\nTo                         Action      From\n--                         ------      ----\n")
@@ -447,45 +301,6 @@ func ctdevUFWStatus() string {
 		b.WriteString(r.port + "/" + r.proto + "                     ALLOW       " + r.cidr + "\n")
 	}
 	return b.String()
-}
-
-func TestDetectUFW(t *testing.T) {
-	enable := func(t *testing.T) {
-		t.Helper()
-		if err := os.WriteFile(ufwConfPath, []byte("# comment\nENABLED=yes\nLOGLEVEL=low\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Run("no ufw.conf", func(t *testing.T) {
-		f := useFakeRemote(t)
-		f.sudoOut["ufw status"] = ctdevUFWStatus()
-		if got := detectUFW(context.Background()); got != "disabled" {
-			t.Errorf("got %q, want disabled", got)
-		}
-	})
-	t.Run("on with ctdev's rules", func(t *testing.T) {
-		f := useFakeRemote(t)
-		enable(t)
-		f.sudoOut["ufw status"] = ctdevUFWStatus()
-		if got := detectUFW(context.Background()); got != "enabled" {
-			t.Errorf("got %q, want enabled", got)
-		}
-	})
-	t.Run("on some other way, without ctdev's rules", func(t *testing.T) {
-		f := useFakeRemote(t)
-		enable(t)
-		f.sudoOut["ufw status"] = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW       Anywhere"
-		if got := detectUFW(context.Background()); got != "disabled" {
-			t.Errorf("got %q, want disabled", got)
-		}
-	})
-	t.Run("status unreadable", func(t *testing.T) {
-		useFakeRemote(t)
-		enable(t)
-		if got := detectUFW(context.Background()); got != ValueUnknown {
-			t.Errorf("got %q, want %q", got, ValueUnknown)
-		}
-	})
 }
 
 func writeAuthorizedKey(t *testing.T, f *fakeRemote) {
@@ -649,44 +464,6 @@ func writeTunnelService(t *testing.T, f *fakeRemote) {
 	}
 }
 
-func TestApplyLingerOffWarnsWhenTunnelIsOn(t *testing.T) {
-	f := useFakeRemote(t)
-	writeTunnelService(t, f)
-	var out strings.Builder
-	if err := applyLinger(context.Background(), sysutil.Opts{Stdout: &out}, "disabled"); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "vscode.dev tunnel is on") {
-		t.Errorf("want a tunnel warning, got %q", out.String())
-	}
-}
-
-func TestApplyCodeTunnelOnSaysItTurnedLingerBackOn(t *testing.T) {
-	useFakeRemote(t)
-	var out strings.Builder
-	if err := applyCodeTunnel(context.Background(), sysutil.Opts{Stdout: &out}, "enabled"); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "turned it back on") {
-		t.Errorf("want a note that lingering was turned on, got %q", out.String())
-	}
-}
-
-func TestGateMosh(t *testing.T) {
-	if !gateLinux() {
-		t.Skip("gateMosh is Linux-only")
-	}
-	f := useFakeRemote(t)
-	f.commands["mosh-server"] = true
-	if !gateMosh() {
-		t.Error("mosh-server on PATH: want shown")
-	}
-	delete(f.commands, "mosh-server")
-	if gateMosh() {
-		t.Error("no mosh-server: want hidden")
-	}
-}
-
 func TestUFWHasCtdevRules(t *testing.T) {
 	if !ufwHasCtdevRules(ctdevUFWStatus()) {
 		t.Error("full ctdev status should match")
@@ -694,5 +471,176 @@ func TestUFWHasCtdevRules(t *testing.T) {
 	partial := strings.Replace(ctdevUFWStatus(), "60000:61000/udp                     ALLOW       10.0.0.0/8\n", "", 1)
 	if ufwHasCtdevRules(partial) {
 		t.Error("a missing Mosh rule should not match")
+	}
+}
+
+// ctdevAddedEverything sets up a machine where ctdev turned on all four
+// retired settings, with ctdev's UFW rules the only ones.
+func ctdevAddedEverything(t *testing.T) *fakeRemote {
+	t.Helper()
+	f := useFakeRemote(t)
+	writeTunnelService(t, f)
+	f.probes["loginctl show-user tester --property=Linger"] = "Linger=yes"
+	if err := os.WriteFile(filepath.Join(f.stateDir, moshLocaleMarker), []byte("en_US.UTF-8\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ufwConfPath, []byte("ENABLED=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.sudoOut["ufw status"] = ctdevUFWStatus()
+	f.onSudo = func(cmd []string) {
+		if len(cmd) > 2 && cmd[1] == "ufw" && cmd[2] == "delete" {
+			f.sudoOut["ufw status"] = "Status: active"
+		}
+	}
+	return f
+}
+
+func TestRetireRemovedSSHSettingsTurnsOffWhatCtdevAdded(t *testing.T) {
+	if !gateLinux() {
+		t.Skip("the retired settings were Linux-only")
+	}
+	f := ctdevAddedEverything(t)
+	if err := RetireRemovedSSHSettings(context.Background(), quietOpts); err != nil {
+		t.Fatal(err)
+	}
+	tunnel := f.index("code", "tunnel", "service", "uninstall")
+	linger := f.index("sudo", "loginctl", "disable-linger", "tester")
+	if tunnel < 0 || linger < 0 || tunnel > linger {
+		t.Errorf("want the tunnel uninstalled, then lingering off: %q", f.calls)
+	}
+	if !f.ran("sudo", "localedef", "--delete-from-archive", "en_US.utf8") {
+		t.Errorf("the locale ctdev added stays: %q", f.calls)
+	}
+	if _, err := os.Stat(filepath.Join(f.stateDir, moshLocaleMarker)); err == nil {
+		t.Error("the locale marker stays")
+	}
+	for _, r := range ufwRules() {
+		if !f.ran("sudo", "ufw", "delete", "allow", "from", r.cidr, "to", "any", "port", r.port, "proto", r.proto) {
+			t.Errorf("ctdev's rule %v stays: %q", r, f.calls)
+		}
+	}
+	if !f.ran("sudo", "ufw", "--force", "disable") {
+		t.Errorf("UFW stays on with no rules left: %q", f.calls)
+	}
+}
+
+// A firewall with rules of its own stays up once ctdev's rules are gone.
+func TestRetireRemovedSSHSettingsKeepsAFirewallWithOtherRules(t *testing.T) {
+	if !gateLinux() {
+		t.Skip("the retired settings were Linux-only")
+	}
+	f := ctdevAddedEverything(t)
+	f.onSudo = func(cmd []string) {
+		if len(cmd) > 2 && cmd[1] == "ufw" && cmd[2] == "delete" {
+			f.sudoOut["ufw status"] = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n53                         ALLOW       Anywhere"
+		}
+	}
+	if err := RetireRemovedSSHSettings(context.Background(), quietOpts); err != nil {
+		t.Fatal(err)
+	}
+	if !f.ran("sudo", "ufw", "delete", "allow", "from", "10.0.0.0/8", "to", "any", "port", "22", "proto", "tcp") {
+		t.Errorf("ctdev's rules stay: %q", f.calls)
+	}
+	if f.ran("sudo", "ufw", "--force", "disable") {
+		t.Error("UFW turned off while other rules remain")
+	}
+}
+
+// A machine where ctdev never turned the retired settings on: the locale was
+// already there, UFW is on with someone else's rule, no lingering, and no
+// tunnel. Nothing is touched.
+func TestRetireRemovedSSHSettingsLeavesAloneWhatCtdevDidNotAdd(t *testing.T) {
+	f := useFakeRemote(t)
+	f.probes["locale -a"] = "C\nen_US.utf8"
+	f.probes["loginctl show-user tester --property=Linger"] = "Linger=no"
+	if err := os.WriteFile(ufwConfPath, []byte("ENABLED=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.sudoOut["ufw status"] = "Status: active\n\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW       192.168.0.0/16"
+	var out strings.Builder
+	if err := RetireRemovedSSHSettings(context.Background(), sysutil.Opts{Stdout: &out}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 0 || out.Len() != 0 {
+		t.Errorf("want nothing touched, got calls %q and output %q", f.calls, out.String())
+	}
+}
+
+// Under --dry-run sudo isn't cached, so UFW's rules can't be read and the
+// firewall is left alone rather than guessed at.
+func TestRetireRemovedSSHSettingsLeavesUFWAloneWhenItCantReadIt(t *testing.T) {
+	f := useFakeRemote(t)
+	if err := os.WriteFile(ufwConfPath, []byte("ENABLED=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RetireRemovedSSHSettings(context.Background(), sysutil.Opts{Stdout: &strings.Builder{}, DryRun: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("want UFW untouched, got %q", f.calls)
+	}
+}
+
+// Without sudo, UFW's rules can't be read. That isn't "ctdev didn't add it":
+// the pass fails and stays pending, so a firewall ctdev added isn't stranded.
+func TestRetireRemovedSSHSettingsStaysPendingWhenUFWIsUnreadable(t *testing.T) {
+	if !gateLinux() {
+		t.Skip("the retired settings were Linux-only")
+	}
+	f := useFakeRemote(t)
+	if err := os.WriteFile(ufwConfPath, []byte("ENABLED=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := RetireRemovedSSHSettings(context.Background(), quietOpts)
+	if err == nil || !strings.Contains(err.Error(), "UFW") {
+		t.Errorf("err = %v, want one saying UFW's rules couldn't be read", err)
+	}
+	if !SSHSettingsRetirePending() {
+		t.Error("the cleanup was marked done without reading UFW's rules")
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("want UFW untouched, got %q", f.calls)
+	}
+}
+
+// After one clean pass the cleanup is done: lingering turned back on by hand
+// stays on.
+func TestRetireRemovedSSHSettingsRunsOnce(t *testing.T) {
+	if !gateLinux() {
+		t.Skip("the retired settings were Linux-only")
+	}
+	f := useFakeRemote(t)
+	f.probes["loginctl show-user tester --property=Linger"] = "Linger=yes"
+	if err := RetireRemovedSSHSettings(context.Background(), quietOpts); err != nil {
+		t.Fatal(err)
+	}
+	f.calls = nil
+	if err := RetireRemovedSSHSettings(context.Background(), quietOpts); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("second run touched the machine: %q", f.calls)
+	}
+}
+
+// A failed off path leaves the cleanup to retry on the next run.
+func TestRetireRemovedSSHSettingsRetriesAfterAFailure(t *testing.T) {
+	if !gateLinux() {
+		t.Skip("the retired settings were Linux-only")
+	}
+	f := useFakeRemote(t)
+	f.probes["loginctl show-user tester --property=Linger"] = "Linger=yes"
+	failing := remoteSudo
+	remoteSudo = func(context.Context, sysutil.Opts, string, ...string) error { return errors.New("exit status 1") }
+	if err := RetireRemovedSSHSettings(context.Background(), quietOpts); err == nil {
+		t.Fatal("want the failure reported")
+	}
+	remoteSudo = failing
+	if err := RetireRemovedSSHSettings(context.Background(), quietOpts); err != nil {
+		t.Fatal(err)
+	}
+	if !f.ran("sudo", "loginctl", "disable-linger", "tester") {
+		t.Errorf("the second run didn't retry: %q", f.calls)
 	}
 }

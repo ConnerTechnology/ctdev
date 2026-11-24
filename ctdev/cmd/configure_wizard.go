@@ -81,7 +81,21 @@ func runCategoryBatchAdjusted(ctx context.Context, slug string, adjust func([]se
 			return err
 		}
 	}
+	retireRemovedSettings(ctx, slug)
 	return applySettings(ctx, states, flagForce, flagDryRun, flagVerbose)
+}
+
+// retireRemovedSettings turns off the settings slug's category no longer
+// offers wherever ctdev turned them on (CTD-178). Every run of a category
+// that can change the machine calls it, whether or not a setting changes.
+func retireRemovedSettings(ctx context.Context, slug string) {
+	if slug != "ssh" {
+		return
+	}
+	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
+	if err := setup.RetireRemovedSSHSettings(ctx, o); err != nil {
+		fmt.Printf("  ✗ %v\n", err)
+	}
 }
 
 // runCategoryWizardOn is the testable core of runCategoryWizard — it takes an
@@ -112,6 +126,8 @@ func runCategoryWizardOn(ctx context.Context, registry []setup.Setting, slug str
 		fmt.Println()
 		return nil
 	}
+
+	retireRemovedSettings(ctx, slug)
 
 	var changed []int
 	for i := range states {
@@ -402,13 +418,13 @@ func promptMultiPick(ctx context.Context, state *setup.SettingState) (string, er
 		return setup.PicksNone, nil
 	}
 
+	nums, ok := parsePicks(input, len(choices))
+	if !ok {
+		fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
+		return state.CurrentValue, nil
+	}
 	var picks []string
-	for _, f := range strings.FieldsFunc(input, func(r rune) bool { return r == ' ' || r == ',' }) {
-		n, err := strconv.Atoi(f)
-		if err != nil || n < 1 || n > len(choices) {
-			fmt.Println(styles.Dimmed.Render("  Invalid choice, keeping current value."))
-			return state.CurrentValue, nil
-		}
+	for _, n := range nums {
 		picks = append(picks, choices[n-1].Value)
 	}
 	return setup.JoinPicks(picks), nil

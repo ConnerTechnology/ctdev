@@ -51,10 +51,14 @@ GoInstall: SimplePackageInstaller("name"), GoUninstall: SimplePackageUninstaller
 ```
 
 For a CLI published as an npm package, install it globally with the npm helper,
-depend on `node`, and declare `RootNever`. `ctdev update` already upgrades npm
-globals, so it needs no scanner (`codex` and `gemini-cli` in the registry):
+depend on `nodenv`, and declare `RootNever`. The helper runs npm under nodenv's
+global Node whatever the folder pins, and installs the latest LTS as the global
+version first when none is set. Detect it with `npmPackageDetect`, which checks
+the global Node's packages: a nodenv shim on PATH outlives the version it came
+from. `ctdev update` already upgrades npm globals, so it needs no
+scanner (`codex` and `gemini-cli` in the registry):
 ```go
-Dependencies: []string{"node"}, DetectCmd: "name", Root: RootNever,
+Dependencies: []string{"nodenv"}, Detect: npmPackageDetect("name", "@scope/pkg"), Root: RootNever,
 GoInstall: npmGlobalInstaller("name", "@scope/pkg"), GoUninstall: npmGlobalUninstaller("name", "@scope/pkg")
 ```
 
@@ -114,6 +118,9 @@ so it needs its own scanner unless the software updates itself:
 3. In `ctdev/cmd/update_apply.go`, add the item's name to `cliUpdateStep`.
 4. `updateNeedsRoot` in `ctdev/cmd/update.go` assumes a `cli` item needs root.
    Exempt the name there if its update stays inside `$HOME`.
+
+A component installed as a git clone goes in `gitRepos` in
+`ctdev/cmd/update_scan.go` instead (`oh-my-zsh`, `nodenv`), and update pulls it.
 
 An app that updates itself, such as a cask marked `auto_updates`, gets no
 scanner. `ctdev/component/t3code.go` covers every case: a CLI with its own updater, a Linux

@@ -54,12 +54,12 @@ func TestUpdateNeedsRoot(t *testing.T) {
 		{"the T3 Code .deb installs through apt", []checklist.UpdateItem{{Source: "cli", Name: "t3code-desktop"}}, true},
 		{"go runtime replaces /usr/local/go", []checklist.UpdateItem{{Source: "runtime", Name: "go"}}, true},
 		{"bun upgrades in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "bun"}}, false},
-		{"nodenv stays in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "node (nodenv)"}}, false},
 		{"rbenv stays in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "ruby"}}, false},
 		{"pyenv stays in $HOME", []checklist.UpdateItem{{Source: "runtime", Name: "python (pyenv)"}}, false},
 		{"flatpak uses polkit, not our sudo", []checklist.UpdateItem{{Source: "flatpak", Name: "org.x.Y"}}, false},
 		{"npm globals", []checklist.UpdateItem{{Source: "npm", Name: "typescript"}}, false},
 		{"oh-my-zsh git pull", []checklist.UpdateItem{{Source: "git", Name: "oh-my-zsh"}}, false},
+		{"nodenv git pull stays in $HOME", []checklist.UpdateItem{{Source: "git", Name: "nodenv"}, {Source: "git", Name: "node-build"}}, false},
 		{
 			"one privileged item among many is enough",
 			[]checklist.UpdateItem{{Source: "brew", Name: "jq"}, {Source: "brew-cask", Name: "tailscale"}},

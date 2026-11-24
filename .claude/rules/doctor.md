@@ -5,9 +5,8 @@ paths:
 ---
 # ctdev doctor
 
-Why doctor is read-only and `--root` is opt-in:
-`docs/adr/0012-doctor-is-read-only-and-root-is-opt-in.md`. No data leaves the
-machine beyond the diagnostic probes themselves.
+doctor is read-only, and `--root` is opt-in: a health check must be safe to run anywhere, any
+time. No data leaves the machine beyond the diagnostic probes themselves.
 
 - **`--root`:** the prompt belongs to `runDoctor`, before `GatherFacts` settles
   `Facts.Root` — never inside package `diagnose`, so callers that only want facts

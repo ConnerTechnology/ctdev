@@ -4,6 +4,76 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.5.0] - 2026-11-23
+
+### Changed
+- **This repo records its agent sessions with Entire again, and the session is the record.**
+  Each commit made in a session links its checkpoint, and the checkpoints go to the private
+  `ConnerTechnology/ctdev-entire` repo, never to this public one; CI fails if one reaches it.
+  `entire why <file>:<line>` finds the session behind a line. On a clone of this repo, run
+  `entire enable --agent claude-code` once. No change to the `ctdev` binary.
+
+### Removed
+- **Linear, ADRs, the goal loop and the repo's skills are gone from the dev workflow.** The
+  `linear` MCP server, `docs/adr/`, `scripts/goal.sh`, `scripts/prompt-audit.sh`, every skill
+  under `.claude/skills/` and the plugin check hook are removed, and the guidance check no longer
+  holds files to byte ceilings. A change is one branch, `scripts/checks.sh --full`, and a pull
+  request. The old ADRs are in git history.
+
+## [20.4.0] - 2026-11-23
+
+### Added
+- **`ctdev configure node install`, `update` and `uninstall`** manage Node versions through nodenv
+  (ADR-0023).
+  - `install [major|version] [--global|--project]` offers the latest release of each supported
+    major, the list `nodenv install --list` prints. It installs the version you pick and uses it
+    globally or for this project, which writes `.node-version`. Making a version global offers to
+    copy the old global's npm packages.
+  - `update` moves the Node in use here (a project's `.node-version`, else the global one) to the
+    latest release of its major. It reinstalls the old version's global npm packages at the same
+    versions, then deletes the old version unless the global or this folder still uses it. Packages
+    linked with `npm link` are named, not moved.
+  - `uninstall [version]` deletes a version and its npm packages. It never deletes the global one.
+
+### Changed
+- **The `node` component is now `nodenv`.** It installs nodenv and node-build only, and no longer
+  installs Node 24.0.0 or changes your global version. `ctdev install node` no longer exists: use
+  `ctdev install nodenv`, which then offers to install a Node version.
+- **`ctdev update` no longer moves your global Node to the newest LTS.** That move left your global
+  npm packages behind on the old version. It now pulls nodenv and node-build instead (Homebrew
+  updates them on macOS). Use `ctdev configure node update` to update Node itself.
+- **npm components install into your global Node**, even in a project whose `.node-version` pins
+  another one, so `codex`, `gemini`, `ccusage`, `ccstatusline` and `devcontainer` work in every
+  folder. When no Node version is set, they install the latest LTS first, taken from nodejs.org's
+  release index, and make it global. They never change a global you already have. A component counts
+  as installed only when the global Node has its package, not just because a nodenv shim exists.
+
+## [20.3.0] - 2026-11-23
+
+### Added
+- **`ctdev configure ssh` opens a menu** with three entries: Your keys, Create a key, and Server
+  settings.
+  - Your keys lists the key pairs in `~/.ssh`. For one key you can copy it to a server
+    (`ssh-copy-id`), upload it to GitHub for authentication, signing or both, copy it to the
+    clipboard, or delete it. Pick several (`1 3`) to copy, upload or delete each one.
+  - The clipboard is `pbcopy`, `wl-copy` or `xclip`. In an SSH session ctdev uses OSC 52, which
+    puts the key on the clipboard of the terminal you're typing in.
+  - Create a key asks the type (`ed25519`, `ed25519-sk`, `ecdsa` or `rsa` 4096), the file name
+    and the comment, then lets `ssh-keygen` ask for the passphrase. It never overwrites a key. On
+    macOS the key goes into the Keychain.
+  - `--batch` and `--show` work on the server settings as before. `ctdev install ssh` opens the
+    menu after installing.
+
+### Changed
+- **`configure ssh` keeps two server settings: SSH server and key-only login.** Lingering, Mosh
+  support, the vscode.dev tunnel and the LAN-only UFW firewall are gone. The first
+  `ctdev configure ssh` or `ctdev configure` run turns off whichever of them ctdev turned on,
+  once. Lingering and the tunnel are turned off wherever they're on, since nothing recorded who
+  turned them on. `ctdev install mosh` still installs Mosh;
+  [TROUBLESHOOTING.md](TROUBLESHOOTING.md) has the one command it needs afterwards.
+- **`configure git` never overwrites a key.** Its Generate option now asks for the file name
+  and refuses one already in use.
+
 ## [20.2.0] - 2026-11-23
 
 ### Added

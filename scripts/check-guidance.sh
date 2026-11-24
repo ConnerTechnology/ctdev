@@ -2,22 +2,18 @@
 # The unit test for the guidance itself.
 #
 # AGENTS.md, the path-scoped rules and the agent docs are claims about this repo, and nothing
-# compiles them. Two things go wrong on their own: they grow until every session pays for facts
-# it does not need, and they name a path that has since moved. Both are mechanical, so they are
-# a check rather than something a reader is expected to notice. The README and the docs tree
-# make the same kind of claim with every relative link, so those are checked here too.
+# compiles them. The way they go wrong on their own is naming a path that has since moved. That
+# is mechanical, so it is a check rather than something a reader is expected to notice. The
+# README and the docs tree make the same kind of claim with every relative link, so those are
+# checked here too.
 #
 # Checks:
-#   1. session start: the root CLAUDE.md and the AGENTS.md it imports are the only files loaded
-#      before anyone types, so their size is the whole session-start budget
-#   2. each .claude/rules/*.md stays small enough to be cheap when its glob matches
-#   3. each rule is path-scoped — a rule with no paths: key loads at every session start
-#   4. every backticked repo path in AGENTS.md, a rule, or docs/agents/ exists, is gitignored,
+#   1. each rule is path-scoped — a rule with no paths: key loads at every session start
+#   2. every backticked repo path in AGENTS.md, a rule, or docs/agents/ exists, is gitignored,
 #      or is allowlisted because the file names it on purpose to say it is not there
-#   5. every relative Markdown link in README.md or under docs/ points at a file or directory
+#   3. every relative Markdown link in README.md or under docs/ points at a file or directory
 #      that exists, and its heading anchor, where it has one, is a heading in that file
-#   6. the README stays a table of contents rather than growing back into the manual
-#   7. no tracked file but CHANGELOG.md names a real tailnet (a tail<hex>.ts.net MagicDNS name)
+#   4. no tracked file but CHANGELOG.md names a real tailnet (a tail<hex>.ts.net MagicDNS name)
 #
 # Usage: scripts/check-guidance.sh   (exit 1 on any failure, all failures listed)
 
@@ -33,31 +29,9 @@ allowed() { # allowed <kind> <value>
   grep -qxF "$1: $2" "$ALLOW" 2>/dev/null
 }
 
-bytes() { wc -c < "$1" | tr -d ' '; }
-
-# 1. Session start ----------------------------------------------------------------------
-# Measured 2026-09-18, right after CON-37 cut the root file to orientation: 3,121 bytes
-# (it was 34,981). Raised 2026-09-24 by CON-86, which moved the text into AGENTS.md (CLAUDE.md
-# is the one line that imports it) and added the working agreement from repo-template: 5,606
-# bytes. Raised 2026-11-19 by CTD-158, which added "Who decides what" and "Working on a goal"
-# (the human asked for both in AGENTS.md; the detail is in docs/agents/goal-loop.md): 7,746
-# bytes. The ceiling is that plus about 15%. Hitting it means a fact belongs in a path-scoped
-# rule or in docs/ — see the "Where knowledge lives" table. Raising it is allowed, in its own
-# commit, with the new measurement and the reason.
-SESSION_START_CEILING=8900
-root=$(( $(bytes CLAUDE.md) + $(bytes AGENTS.md) ))
-if [ "$root" -gt "$SESSION_START_CEILING" ]; then
-  bad "CLAUDE.md and AGENTS.md are $root bytes; the ceiling is $SESSION_START_CEILING. Move something to the home it belongs in (AGENTS.md, 'Where knowledge lives')"
-fi
-
-# 2 and 3. Rules ------------------------------------------------------------------------
-RULE_CEILING=6000
+# 1. Rules ------------------------------------------------------------------------------
 for f in .claude/rules/*.md; do
   [ -f "$f" ] || continue
-  n=$(bytes "$f")
-  if [ "$n" -gt "$RULE_CEILING" ]; then
-    bad "$f is $n bytes; the ceiling is $RULE_CEILING. Split it into two rules with the same paths:"
-  fi
   # Frontmatter is lines 2 through the closing ---, so a `paths:` mention in the body
   # does not count as scoping.
   if ! sed -n '2,/^---$/p' "$f" | grep -qE '^paths:'; then
@@ -65,7 +39,7 @@ for f in .claude/rules/*.md; do
   fi
 done
 
-# 4. Paths ------------------------------------------------------------------------------
+# 2. Paths ------------------------------------------------------------------------------
 # What counts as a repo path is deliberately narrow, because these files are full of host
 # paths (/etc/default/grub, ~/caddy/), Go identifiers (sysutil.Opts), command lines and
 # URLs that are not files in this tree. A token qualifies only when it is spelled the way a
@@ -97,7 +71,7 @@ for f in $(guidance_files); do
     | sort -u)
 done
 
-# 5. Links ------------------------------------------------------------------------------
+# 3. Links ------------------------------------------------------------------------------
 # The README is a table of contents, so a link that goes nowhere is the one way it can be
 # wrong. Only what this tree can answer is checked: anything with a scheme (https:, mailto:)
 # is skipped, because a run that fails when someone else's site is down is noise. A link
@@ -195,19 +169,7 @@ for f in $(link_files); do
   done < <(links "$f")
 done
 
-# 6. README size ------------------------------------------------------------------------
-# Measured 2026-09-20, right after CON-56 cut the README to a table of contents: 5,597 bytes
-# (it was 23,997). The ceiling is that plus about 15%, the same way the session-start ceiling
-# is set. Hitting it means a section has grown into a page of its own — put it under docs/ and
-# leave a paragraph and a link behind. Raising it is allowed, in its own commit, with the new
-# measurement and the reason.
-README_CEILING=6400
-readme=$(bytes README.md)
-if [ "$readme" -gt "$README_CEILING" ]; then
-  bad "README.md is $readme bytes; the ceiling is $README_CEILING. It is a table of contents: move the detail to a page under docs/ and link it"
-fi
-
-# 7. Tailnet names ----------------------------------------------------------------------
+# 4. Tailnet names ----------------------------------------------------------------------
 # The repo is public and carries no real family or client data (AGENTS.md, "Guardrails"). A
 # real tailnet's MagicDNS suffix is tail<hex>.ts.net, so the pattern catches any tailnet
 # without this script naming ours. Examples use tailnet-example.ts.net, which it does not

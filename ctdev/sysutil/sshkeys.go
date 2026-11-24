@@ -43,3 +43,40 @@ func FindSSHPublicKeysIn(dir string) []SSHPublicKey {
 	}
 	return keys
 }
+
+// SSHKeyPair is a private key with its public half beside it as <name>.pub.
+type SSHKeyPair struct {
+	Private string
+	Public  string
+	Type    string // the public key's algorithm, e.g. ssh-ed25519
+	Comment string
+}
+
+// FindSSHKeyPairs lists the key pairs in ~/.ssh.
+func FindSSHKeyPairs() []SSHKeyPair {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return FindSSHKeyPairsIn(filepath.Join(home, ".ssh"))
+}
+
+// FindSSHKeyPairsIn lists the key pairs in dir. A .pub with no private key
+// beside it is left out: deleting it or adding it to ssh-agent wouldn't work.
+func FindSSHKeyPairsIn(dir string) []SSHKeyPair {
+	var pairs []SSHKeyPair
+	for _, pub := range FindSSHPublicKeysIn(dir) {
+		private := strings.TrimSuffix(pub.Path, ".pub")
+		if fi, err := os.Stat(private); err != nil || !fi.Mode().IsRegular() {
+			continue
+		}
+		pair := SSHKeyPair{Private: private, Public: pub.Path, Type: pub.KeyType}
+		if data, err := os.ReadFile(pub.Path); err == nil {
+			if fields := strings.Fields(string(data)); len(fields) > 2 {
+				pair.Comment = strings.Join(fields[2:], " ")
+			}
+		}
+		pairs = append(pairs, pair)
+	}
+	return pairs
+}

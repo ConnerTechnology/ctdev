@@ -75,6 +75,13 @@ ctdev update --refresh-keys
 
 **Package manager not detected:** Run `ctdev info` to see what was detected.
 
+**Mosh to a Linux machine fails with "mosh-server needs a UTF-8 native locale":** `ctdev configure ssh` no longer offers Mosh support, and removed the `en_US.UTF-8` locale it had added (CTD-178). Plain SSH with tmux replaces it. To keep using Mosh, generate the locale yourself; ctdev won't remove it:
+```bash
+sudo locale-gen en_US.UTF-8
+```
+
+**The vscode.dev tunnel, lingering or the LAN-only firewall went away:** `ctdev configure ssh` no longer offers them and turned off, once, the ones ctdev had turned on (CTD-178). To get one back, set it up yourself and it stays: `code tunnel service install`, `sudo loginctl enable-linger $USER`, or your own `ufw` rules.
+
 ### Desktop Freezes (NVIDIA + Dual GPU)
 
 Repeated system freezes on Linux Mint with Ryzen 7000 series (Raphael iGPU + discrete NVIDIA). The `amdgpu` driver loads for the unused iGPU and fails on suspend/resume cycles.
@@ -122,6 +129,10 @@ sudo nvme smart-log /dev/nvme0n1 | grep unsafe     # Unsafe shutdown count
 ## Node/Ruby
 
 **Version manager not found:** These are configured in `~/.zsh/path.zsh` (deployed by `ctdev install zsh`). Restart your shell after installing.
+
+**`nodenv: version 'X' is not installed`:** a `.node-version` here, or the global version, names a Node that is gone. `ctdev configure node install X` puts it back, or `ctdev configure node install` picks another.
+
+**A global npm command vanished after changing Node:** each Node version has its own global packages. `ctdev configure node install` and `update` offer to copy them; to do it by hand, `NODENV_VERSION=<old> nodenv exec npm ls -g --depth=0` lists them.
 
 **Build failing:** Install dependencies first:
 ```bash

@@ -49,7 +49,7 @@ func TestHelmDependsOnKubectl(t *testing.T) {
 	}
 }
 
-// The npm-global components need npm, which the node component puts in place,
+// The npm-global components need npm, which runs under the Node nodenv manages,
 // and install under $HOME without root.
 func TestNpmGlobalComponentsInstallThroughNode(t *testing.T) {
 	for _, name := range []string{"ccusage", "codex", "gemini-cli"} {
@@ -58,8 +58,8 @@ func TestNpmGlobalComponentsInstallThroughNode(t *testing.T) {
 			t.Errorf("%s component missing from registry", name)
 			continue
 		}
-		if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
-			t.Errorf("expected %s to depend on node, got %v", name, c.Dependencies)
+		if len(c.Dependencies) != 1 || c.Dependencies[0] != "nodenv" {
+			t.Errorf("expected %s to depend on nodenv, got %v", name, c.Dependencies)
 		}
 		if c.Root != RootNever {
 			t.Errorf("%s installs with npm under $HOME and must declare RootNever, got %v", name, c.Root)
@@ -67,13 +67,13 @@ func TestNpmGlobalComponentsInstallThroughNode(t *testing.T) {
 	}
 }
 
-func TestCcstatuslineInstallsThroughNode(t *testing.T) {
+func TestCcstatuslineInstallsThroughNodenv(t *testing.T) {
 	c := FindByName("ccstatusline")
 	if c == nil {
 		t.Fatal("ccstatusline component missing from registry")
 	}
-	if len(c.Dependencies) != 1 || c.Dependencies[0] != "node" {
-		t.Errorf("expected ccstatusline to depend on node, got %v", c.Dependencies)
+	if len(c.Dependencies) != 1 || c.Dependencies[0] != "nodenv" {
+		t.Errorf("expected ccstatusline to depend on nodenv, got %v", c.Dependencies)
 	}
 	if c.Root != RootNever {
 		t.Errorf("ccstatusline installs with npm under $HOME and must declare RootNever, got %v", c.Root)

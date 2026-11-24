@@ -120,7 +120,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 //   - brew formulae don't, but casks do: Homebrew escalates internally for pkg
 //     payloads and system extensions.
 //   - among the runtimes only go is privileged (sudo rm/mv into /usr/local/go);
-//     bun, nodenv, rbenv and pyenv all stay inside $HOME.
+//     bun, rbenv and pyenv all stay inside $HOME.
 //   - the cli tools resolve their destination at run time via `which` and fall
 //     back to /usr/local/bin, so assume root. The exception is the t3code CLI,
 //     which `t3 update` keeps under ~/.t3.
@@ -128,7 +128,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 //   - the ctdev self-update replaces the binary where it lives, so it needs
 //     root only when that directory (say /usr/local/bin) isn't writable.
 //
-// flatpak, npm and oh-my-zsh run unprivileged.
+// flatpak, npm and the git clones (oh-my-zsh, nodenv) run unprivileged.
 func updateNeedsRoot(items []checklist.UpdateItem) bool {
 	for _, item := range items {
 		switch item.Source {

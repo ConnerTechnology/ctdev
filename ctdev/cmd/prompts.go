@@ -197,3 +197,18 @@ func promptYesNoCtx(ctx context.Context, label string, def bool) (bool, error) {
 		return def, nil
 	}
 }
+
+// promptRequiredCtx is like promptWithDefaultCtx but re-asks until a value is
+// given (or the user cancels). def is offered as the suggested value.
+func promptRequiredCtx(ctx context.Context, label, def string) (string, error) {
+	for {
+		v, err := promptWithDefaultCtx(ctx, label, def)
+		if err != nil {
+			return "", err
+		}
+		if v != "" {
+			return v, nil
+		}
+		fmt.Println(styles.Warning.Render("  required — please enter a value"))
+	}
+}

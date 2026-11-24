@@ -3,6 +3,6 @@
 # `link: <target>` — a relative link in the README or docs/ that is dead on purpose, spelled
 # exactly as the link's target is spelled, anchor included.
 
-# docs/agents/triage-labels.md names this to say there is no such folder here — the mattpocock
-# skills' `wontfix` role maps onto Linear's Canceled state instead.
-path: .out-of-scope/
+
+# docs/agents/where-things-go.md points at the ADRs that are now only in git history.
+path: docs/adr/

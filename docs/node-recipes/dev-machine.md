@@ -16,18 +16,19 @@ ctdev install 1password chrome vscode
 ctdev configure keyboard --batch
 ctdev configure desktop --batch  # Dock and Finder on macOS, Nemo on Cinnamon
 
-# Linux (after vscode, so the ssh step can set up the VS Code tunnel)
+# Linux
 ctdev install earlyoom smartmontools
 ctdev configure storage --batch  # weekly TRIM, a swapfile only where there is no swap
-ctdev configure ssh --batch      # SSH server, key-only login, Mosh, keep programs
-                                 # running, VS Code tunnel, LAN-only firewall
+ctdev configure ssh --batch      # SSH server, key-only login
 
 # everything else
 ctdev install                    # pick from the list
 ```
 
-`claude-code` pulls in `ccstatusline`, which pulls in `node`, so Node.js comes
-with the base. Other runtimes (`go`,
+`claude-code` pulls in `ccstatusline`, which pulls in `nodenv`. When no global
+Node version is set yet, the first npm-based component installs the latest LTS and
+makes it global, so Node comes with the base. `ctdev configure node` picks
+other versions, globally or per project. Other runtimes (`go`,
 `python`, `ruby`) and role-specific tools (cloud CLIs, Kubernetes,
 infrastructure stacks) are picked afterward. On Linux, `chrome` and
 `1password` install only on amd64.
@@ -39,7 +40,6 @@ infrastructure stacks) are picked afterward. On Linux, `chrome` and
   Tailscale menu bar app
 - Linux: add your client's SSH public key to `~/.ssh/authorized_keys`, then
   re-run `ctdev configure ssh --batch` (password login turns off only once a
-  key is present), and authenticate the VS Code tunnel once with
-  `code tunnel user login`
+  key is present)
 - If the install ran with `--batch`, run `ctdev configure git` for your name,
   email and signing key

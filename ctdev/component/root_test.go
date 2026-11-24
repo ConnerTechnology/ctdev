@@ -120,7 +120,7 @@ func TestUninstallNeedsRoot(t *testing.T) {
 // The devcontainer case that motivated the gate: a shell-config-only install
 // must not ask for a password, while anything from a package manager still does.
 func TestInstallNeedsRoot_RealRegistry(t *testing.T) {
-	if InstallNeedsRoot("apt", []string{"claude-code", "fonts", "bun", "node", "devcontainer"}, true) {
+	if InstallNeedsRoot("apt", []string{"claude-code", "fonts", "bun", "nodenv", "devcontainer"}, true) {
 		t.Error("home-only components asked for root")
 	}
 	if !InstallNeedsRoot("apt", []string{"claude-code", "docker"}, true) {

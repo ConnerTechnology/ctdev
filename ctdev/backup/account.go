@@ -9,7 +9,7 @@ import (
 	"slices"
 )
 
-// The account actions of ADR-0016. restic gives every key full power, so
+// The account actions on a destination. restic gives every key full power, so
 // the gate is ctdev's: each action is a method of Account, and the only way
 // to get an Account is Unlock, which opens the repository with the account
 // key derived from the master password. The exceptions don't need the
