@@ -310,33 +310,27 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // key passes a key to the step. Any key but a running step's clears the
 // result lines, which have been seen.
 func (m *model) key(k tea.KeyPressMsg) tea.Cmd {
-	if m.step == nil {
-		if k.String() == "ctrl+c" {
+	_, busy := m.step.(*running)
+	if !busy {
+		m.banner, m.logged = nil, false
+	}
+	ctrlC := k.String() == "ctrl+c"
+	switch {
+	case m.step == nil || (m.reply == nil && !busy):
+		// Nothing asks yet, or the step is answered and the flow is busy
+		// until its next request.
+		if ctrlC {
 			return tea.Quit
 		}
 		return nil
-	}
-	if _, ok := m.step.(*running); !ok {
-		m.banner, m.logged = nil, false
-	}
-	if m.reply == nil {
-		if _, ok := m.step.(*running); !ok {
-			// Answered: the flow is busy until its next request.
-			if k.String() == "ctrl+c" {
-				return tea.Quit
-			}
-			return nil
+	case ctrlC:
+		if s, ok := m.step.(ctrlCStep); ok {
+			a, cmd := s.ctrlC()
+			return tea.Batch(cmd, m.answer(a))
 		}
+		return tea.Quit
 	}
-	var a *answer
-	var cmd tea.Cmd
-	if s, ok := m.step.(ctrlCStep); ok && k.String() == "ctrl+c" {
-		a, cmd = s.ctrlC()
-	} else if k.String() == "ctrl+c" {
-		a = &answer{err: errQuit}
-	} else {
-		a, cmd = m.step.update(k)
-	}
+	a, cmd := m.step.update(k)
 	return tea.Batch(cmd, m.answer(a))
 }
 
