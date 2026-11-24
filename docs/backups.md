@@ -172,8 +172,8 @@ set up, and the backups can't be decrypted by anyone, ctdev included.
 ### Connecting to an existing destination
 
 On another computer, choose "Connect to an existing destination (Emergency Kit)", paste the
-Emergency Kit, and type the master password. ctdev opens the repository with them before saving anything; a wrong password
-or kit saves nothing. It then adds this computer's own key.
+Emergency Kit, and type the master password. ctdev opens the repository with them before saving
+anything; a wrong password or kit saves nothing. It then adds this computer's own key.
 
 ## Back up now
 
@@ -432,10 +432,10 @@ under each computer.
 ### Setting up a new computer
 
 On a computer with no destination, `ctdev backup --all` first offers "Connect to an existing
-destination (Emergency Kit)" or "Create a new destination". To connect, paste the Emergency Kit and type the master
-password. ctdev checks them by opening the repository before it saves anything; a wrong password or
-kit saves nothing. It then adds this computer's own key, labeled with its hostname, and saves the
-destination to `~/.config/ctdev/backup/destinations/<name>.env`.
+destination (Emergency Kit)" or "Create a new destination". To connect, paste the Emergency Kit and
+type the master password. ctdev checks them by opening the repository before it saves anything; a
+wrong password or kit saves nothing. It then adds this computer's own key, labeled with its
+hostname, and saves the destination to `~/.config/ctdev/backup/destinations/<name>.env`.
 
 Creating a local destination here needs an absolute path or one starting with `~/`, since `--all`
 runs from any directory: `~/Backups` works, `Backups` doesn't. As in Configure, the path can't be
