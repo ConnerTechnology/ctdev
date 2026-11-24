@@ -93,11 +93,11 @@ func Execute() error {
 	}
 	defer setupAskpass()()
 	setupHomebrewEnv()
-	// Bind SIGINT/SIGTERM to a context so Ctrl-C cancels in-flight installs,
-	// updates, and other long-running shell-outs via the ctx threaded through
-	// sysutil. A second signal aborts hard (signal.NotifyContext stops trapping
+	// Bind SIGINT/SIGTERM/SIGHUP to a context so Ctrl-C, or closing the
+	// terminal, cancels in-flight installs, updates, and other long-running
+	// shell-outs via the ctx threaded through sysutil. A second signal aborts hard (signal.NotifyContext stops trapping
 	// once the context is canceled).
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 	return rootCmd.ExecuteContext(ctx)
 }

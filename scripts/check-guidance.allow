@@ -6,3 +6,7 @@
 
 # docs/agents/where-things-go.md points at the ADRs that are now only in git history.
 path: docs/adr/
+
+# docs/agents/where-things-go.md names .git/hooks, which a clone has but a git worktree (where .git
+# is a file) does not.
+path: .git/hooks

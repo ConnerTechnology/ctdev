@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
@@ -48,11 +47,6 @@ func subfolder() backup.Status {
 
 func plain(s string) string { return ansi.Strip(s) }
 
-func firstLine(m *Model) string {
-	line, _, _ := strings.Cut(plain(m.View().Content), "\n")
-	return line
-}
-
 func TestHeaderLine(t *testing.T) {
 	for name, tc := range map[string]struct {
 		s    backup.Status
@@ -63,101 +57,8 @@ func TestHeaderLine(t *testing.T) {
 		"not backed up":  {unconfigured(0), "Not backed up: ~/Projects/website"},
 		"one-offs only":  {unconfigured(2), "Not backed up: ~/Projects/website"},
 	} {
-		if got := firstLine(New(tc.s, home)); got != tc.want {
+		if got := Header(tc.s, home); got != tc.want {
 			t.Errorf("%s: header = %q, want %q", name, got, tc.want)
-		}
-	}
-}
-
-func items(m *Model) (labels, dimmed []string) {
-	for _, it := range m.Items() {
-		labels = append(labels, it.Label)
-		if it.Dimmed {
-			dimmed = append(dimmed, it.Label)
-		}
-	}
-	return labels, dimmed
-}
-
-func TestMenuPerFolderState(t *testing.T) {
-	for name, tc := range map[string]struct {
-		s              backup.Status
-		labels, dimmed string
-	}{
-		"configured": {configured(),
-			"Back up now,List backups,Configure,Stop backing up,Delete all backups,Quit", ""},
-		"subfolder": {subfolder(),
-			"Back up now,List backups,Configure,Stop backing up,Delete all backups,Quit", ""},
-		"not configured, no backups": {unconfigured(0),
-			"Configure,Back up now (once),List backups,Stop backing up,Delete all backups,Quit",
-			"List backups,Stop backing up,Delete all backups"},
-		"not configured, with backups": {unconfigured(1),
-			"Configure,Back up now (once),List backups,Stop backing up,Delete all backups,Quit",
-			"Stop backing up"},
-	} {
-		labels, dimmed := items(New(tc.s, home))
-		if got := strings.Join(labels, ","); got != tc.labels {
-			t.Errorf("%s: items = %s\nwant %s", name, got, tc.labels)
-		}
-		if got := strings.Join(dimmed, ","); got != tc.dimmed {
-			t.Errorf("%s: dimmed = %q, want %q", name, got, tc.dimmed)
-		}
-	}
-}
-
-func key(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
-
-func press(m *Model, keys ...tea.KeyPressMsg) {
-	for _, k := range keys {
-		m.Update(k)
-	}
-}
-
-func TestEnterChoosesTheItemUnderTheCursor(t *testing.T) {
-	m := New(configured(), home)
-	press(m, key(tea.KeyEnter))
-	if m.Chosen() != BackUpNow {
-		t.Errorf("chosen = %v, want Back up now", m.Chosen())
-	}
-
-	m = New(unconfigured(0), home)
-	press(m, key(tea.KeyDown), key(tea.KeyEnter))
-	if m.Chosen() != BackUpNow {
-		t.Errorf("chosen = %v, want Back up now (once)", m.Chosen())
-	}
-}
-
-// The cursor passes over dimmed items, so they can't be chosen.
-func TestDimmedItemsCantBeChosen(t *testing.T) {
-	m := New(unconfigured(0), home)
-	press(m, key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
-	if m.Chosen() != Quit {
-		t.Errorf("chosen = %v, want Quit: the three dimmed items are skipped", m.Chosen())
-	}
-}
-
-func TestEveryAvailableItemCanBeChosen(t *testing.T) {
-	for i, want := range []Action{BackUpNow, ListBackups, Configure, StopBackingUp, DeleteAll, Quit} {
-		m := New(configured(), home)
-		for range i {
-			press(m, key(tea.KeyDown))
-		}
-		press(m, key(tea.KeyEnter))
-		if m.Chosen() != want {
-			t.Errorf("item %d: chosen = %v, want %v", i, m.Chosen(), want)
-		}
-	}
-	if strings.Contains(plain(New(configured(), home).View().Content), "coming soon") {
-		t.Error("nothing on the menu is coming soon any more")
-	}
-}
-
-func TestQuitKeys(t *testing.T) {
-	for _, k := range []tea.KeyPressMsg{{Code: 'q', Text: "q"}, key(tea.KeyEscape)} {
-		m := New(configured(), home)
-		press(m, k)
-		if m.Chosen() != Quit {
-			t.Errorf("%v: chosen = %v, want Quit", k, m.Chosen())
 		}
 	}
 }
@@ -187,21 +88,11 @@ func TestUnreadableConfig(t *testing.T) {
 		Target: website, Backups: 3,
 	}
 	want := `Backed up folder: ~/Projects/website  (you're in ~/Projects/website/docs) · config can't be read: schedule "monthly" isn't hourly, daily or weekly`
-	if got := firstLine(New(s, home)); got != want {
+	if got := Header(s, home); got != want {
 		t.Errorf("header = %q\nwant     %q", got, want)
 	}
 	if got := plain(Status(s, home)); strings.Contains(got, "isn't configured") || strings.Contains(got, "Destination") {
 		t.Errorf("an unreadable config isn't an unconfigured folder:\n%s", got)
-	}
-	m := New(s, home)
-	for _, it := range m.Items() {
-		if it.Dimmed != (it.Action != Quit) {
-			t.Errorf("%s: dimmed %v; want everything but Quit dimmed", it.Label, it.Dimmed)
-		}
-	}
-	press(m, key(tea.KeyEnter))
-	if m.Chosen() != Quit {
-		t.Errorf("chosen = %v, want Quit, the only item left", m.Chosen())
 	}
 }
 

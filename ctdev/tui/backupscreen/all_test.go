@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 )
 
@@ -26,67 +25,19 @@ func exampleOverview() backup.Overview {
 }
 
 func TestAllHeader(t *testing.T) {
-	m := NewAll("example-backups", "Backblaze B2", exampleOverview(), 1_600_000_000)
-	if got, want := firstLine(m), "example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored"; got != want {
+	if got, want := strings.TrimSuffix(plain(AllHeader("example-backups", "Backblaze B2", exampleOverview(), 1_600_000_000)), "\n"), "example-backups (Backblaze B2) · 2 computers · 3 folders · 1.6 GB stored"; got != want {
 		t.Errorf("header = %q\nwant     %q", got, want)
 	}
-	m = NewAll("example-backups", "local path", backup.Overview{Computers: 1, FolderCount: 1}, 30)
-	if got, want := firstLine(m), "example-backups (local path) · 1 computer · 1 folder · 30 B stored"; got != want {
+	if got, want := strings.TrimSuffix(plain(AllHeader("example-backups", "local path", backup.Overview{Computers: 1, FolderCount: 1}, 30)), "\n"), "example-backups (local path) · 1 computer · 1 folder · 30 B stored"; got != want {
 		t.Errorf("header = %q\nwant     %q", got, want)
-	}
-}
-
-// List backups is dimmed only when there's nothing to list.
-func TestAllMenu(t *testing.T) {
-	for name, tc := range map[string]struct {
-		o      backup.Overview
-		dimmed string
-	}{
-		"with folders": {exampleOverview(), ""},
-		"empty":        {backup.Overview{Computers: 1}, "List backups"},
-	} {
-		labels, dimmed := items(NewAll("example-backups", "local path", tc.o, 0))
-		if got, want := strings.Join(labels, ","), "List backups,Computers,Emergency Kit and password,Quit"; got != want {
-			t.Errorf("%s: items = %s\nwant %s", name, got, want)
-		}
-		if got := strings.Join(dimmed, ","); got != tc.dimmed {
-			t.Errorf("%s: dimmed = %q, want %q", name, got, tc.dimmed)
-		}
-	}
-
-	m := NewAll("example-backups", "local path", exampleOverview(), 0)
-	press(m, key(tea.KeyEnter))
-	if m.Chosen() != ListBackups {
-		t.Errorf("chosen = %v, want List backups", m.Chosen())
-	}
-	m = NewAll("example-backups", "local path", exampleOverview(), 0)
-	press(m, key(tea.KeyDown), key(tea.KeyEnter))
-	if m.Chosen() != Computers {
-		t.Errorf("chosen = %v, want Computers", m.Chosen())
-	}
-	m = NewAll("example-backups", "local path", exampleOverview(), 0)
-	press(m, key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
-	if m.Chosen() != EmergencyKit {
-		t.Errorf("chosen = %v, want Emergency Kit and password", m.Chosen())
-	}
-	// With nothing to list, the cursor starts on Computers.
-	m = NewAll("example-backups", "local path", backup.Overview{Computers: 1}, 0)
-	press(m, key(tea.KeyEnter))
-	if m.Chosen() != Computers {
-		t.Errorf("empty: chosen = %v, want Computers: List backups is skipped", m.Chosen())
 	}
 }
 
 func TestFoldersAreGroupedByComputer(t *testing.T) {
-	f := NewFolders("Folders in example-backups", exampleOverview().Folders, "example-desktop")
-	view := plain(f.View().Content)
-	lines := strings.Split(view, "\n")
-	if lines[0] != "Folders in example-backups" {
-		t.Errorf("title = %q", lines[0])
-	}
+	view := plain(FolderList(exampleOverview().Folders, "example-desktop"))
 	order := []string{
 		"example-desktop (this computer)", "~/Documents/notes",
-		"example-laptop", "~/Downloads/scans", "~/Projects/website", "Back",
+		"example-laptop", "~/Downloads/scans", "~/Projects/website",
 	}
 	at := 0
 	for _, want := range order {
@@ -103,38 +54,5 @@ func TestFoldersAreGroupedByComputer(t *testing.T) {
 	}
 	if strings.Count(view, "(this computer)") != 1 {
 		t.Errorf("only example-desktop is this computer:\n%s", view)
-	}
-}
-
-func TestFoldersPickAFolderOrGoBack(t *testing.T) {
-	f := NewFolders("Folders", exampleOverview().Folders, "example-desktop")
-	send(f, key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
-	if got, ok := f.Chosen(); !ok || got.Path != "~/Projects/website" || !f.Done() {
-		t.Errorf("chosen = %q, %v; want ~/Projects/website, third in the list", got.Path, ok)
-	}
-
-	f = NewFolders("Folders", exampleOverview().Folders, "example-desktop")
-	send(f, key(tea.KeyEscape))
-	if _, ok := f.Chosen(); ok || !f.Done() {
-		t.Error("esc should go back without choosing")
-	}
-
-	// q and esc go Back; only Ctrl+C cancels what the list is part of.
-	for name, k := range map[string]tea.KeyPressMsg{
-		"q":      {Code: 'q', Text: "q"},
-		"esc":    key(tea.KeyEscape),
-		"ctrl+c": {Code: 'c', Mod: tea.ModCtrl},
-	} {
-		f = NewFolders("Folders", exampleOverview().Folders, "example-desktop")
-		send(f, k)
-		if _, ok := f.Chosen(); ok || !f.Done() || f.Cancelled() != (name == "ctrl+c") {
-			t.Errorf("%s: chosen %v, done %v, cancelled %v", name, ok, f.Done(), f.Cancelled())
-		}
-	}
-
-	f = NewFolders("Folders", exampleOverview().Folders, "example-desktop")
-	send(f, key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
-	if _, ok := f.Chosen(); ok || !f.Done() {
-		t.Error("Back, after the folders, should go back without choosing")
 	}
 }

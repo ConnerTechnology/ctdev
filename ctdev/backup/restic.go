@@ -39,9 +39,10 @@ type run struct {
 	keyHint     string // the key to try first; restic otherwise tries each in turn
 	dir         string // working directory
 	args        []string
-	stdin       []byte    // what restic reads on stdin, such as backup --stdin's file
-	stdout      io.Writer // where restic's output goes instead of being returned, such as a dump
-	stderr      io.Writer // also gets restic's stderr, for a caller that reads more than the error
+	stdin       []byte               // what restic reads on stdin, such as backup --stdin's file
+	stdout      io.Writer            // where restic's output goes instead of being returned, such as a dump
+	progress    func(BackupProgress) // gets backup --json's status lines, which restic then doesn't return
+	stderr      io.Writer            // also gets restic's stderr, for a caller that reads more than the error
 }
 
 // restic runs restic as the user (never through sudo) and returns its
@@ -56,10 +57,16 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, bin, r.args...)
 	cmd.Dir = r.dir
 	cmd.Env = d.env(r.password, r.keyHint)
+	resticProcess(cmd, d.m.NoTerminal)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if r.stdout != nil {
+	var status *statusWriter
+	switch {
+	case r.stdout != nil:
 		cmd.Stdout = r.stdout
+	case r.progress != nil:
+		status = &statusWriter{progress: r.progress, kept: &stdout}
+		cmd.Stdout = status
 	}
 	if r.stderr != nil {
 		cmd.Stderr = io.MultiWriter(&stderr, r.stderr)
@@ -80,6 +87,9 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 		}()
 	}
 	err = cmd.Run()
+	if status != nil {
+		status.flush()
+	}
 	if err == nil {
 		return stdout.Bytes(), nil
 	}
@@ -96,6 +106,9 @@ func (d *Destination) restic(ctx context.Context, r run) ([]byte, error) {
 	}
 	return stdout.Bytes(), fmt.Errorf("restic %s: %s", r.args[0], resticMessage(stderr.Bytes(), err))
 }
+
+// maxJSONLine is the longest line of restic's JSON output ctdev reads.
+const maxJSONLine = 4 * 1024 * 1024
 
 // minRestic is the oldest restic whose JSON output ctdev reads: 0.17 added
 // the summary to `snapshots --json` and the backup's start and end times.

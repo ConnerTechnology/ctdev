@@ -44,9 +44,17 @@ var (
 	Unselected lipgloss.Style
 	Cursor     lipgloss.Style
 
+	BadgeOK     lipgloss.Style
 	BadgeInfo   lipgloss.Style
 	BadgeWarn   lipgloss.Style
 	BadgeDanger lipgloss.Style
+
+	// Chip is a focused button in an action bar; Key is a key's letter
+	// beside an action that isn't focused.
+	Chip lipgloss.Style
+	Key  lipgloss.Style
+	// Bold is a value that leads its row, such as a relative time.
+	Bold lipgloss.Style
 
 	// Header is the bold-orange accent shared by section and category headers.
 	Header lipgloss.Style
@@ -107,9 +115,14 @@ func rebuild() {
 
 	// Severity badges. The uppercase label stays inside the colored block so the
 	// meaning survives without color (accessibility); contrast is tuned per bg.
+	BadgeOK = lipgloss.NewStyle().Foreground(lipgloss.Color("#0d1117")).Background(Green).Bold(true).Padding(0, 1)
 	BadgeInfo = lipgloss.NewStyle().Foreground(lipgloss.Color("#0d1117")).Background(Blue).Bold(true).Padding(0, 1)
 	BadgeWarn = lipgloss.NewStyle().Foreground(lipgloss.Color("#0d1117")).Background(Yellow).Bold(true).Padding(0, 1)
 	BadgeDanger = lipgloss.NewStyle().Foreground(fixedBright).Background(Red).Bold(true).Padding(0, 1)
+
+	Chip = lipgloss.NewStyle().Background(borderGray).Foreground(fixedBright)
+	Key = lipgloss.NewStyle().Bold(true).Foreground(Bright)
+	Bold = Key
 
 	Header = lipgloss.NewStyle().Bold(true).Foreground(Orange)
 	CategoryHeader = Header
@@ -143,8 +156,13 @@ func rebuildPlain() {
 	Cursor = plain.Reverse(true)
 
 	BadgeInfo = plain.Bold(true).Padding(0, 1).Reverse(true)
+	BadgeOK = BadgeInfo
 	BadgeWarn = BadgeInfo
 	BadgeDanger = BadgeInfo
+
+	Chip = plain.Reverse(true)
+	Key = plain.Bold(true)
+	Bold = Key
 
 	Header = plain.Bold(true)
 	CategoryHeader = Header

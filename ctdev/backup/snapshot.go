@@ -76,7 +76,7 @@ type Snapshot struct {
 // A destination locked for longer than restic waits (ErrDestinationBusy) is
 // recorded as deferred, not as a failure (coordinator, CTD-122 review).
 func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *Config) (Snapshot, error) {
-	return m.backup(ctx, d, root, cfg, retryLock)
+	return m.backup(ctx, d, root, cfg, retryLock, nil)
 }
 
 // backupNowWait is how long Back up now waits for a locked destination:
@@ -85,12 +85,13 @@ func (m *Machine) Backup(ctx context.Context, d *Destination, root string, cfg *
 const backupNowWait = "1m"
 
 // BackupNow is Backup for someone waiting at the screen: it waits only a
-// minute for a locked destination before returning ErrDestinationBusy.
-func (m *Machine) BackupNow(ctx context.Context, d *Destination, root string, cfg *Config) (Snapshot, error) {
-	return m.backup(ctx, d, root, cfg, backupNowWait)
+// minute for a locked destination before returning ErrDestinationBusy. A
+// non-nil progress is called with each progress report restic makes.
+func (m *Machine) BackupNow(ctx context.Context, d *Destination, root string, cfg *Config, progress func(BackupProgress)) (Snapshot, error) {
+	return m.backup(ctx, d, root, cfg, backupNowWait, progress)
 }
 
-func (m *Machine) backup(ctx context.Context, d *Destination, root string, cfg *Config, wait string) (Snapshot, error) {
+func (m *Machine) backup(ctx context.Context, d *Destination, root string, cfg *Config, wait string, progress func(BackupProgress)) (Snapshot, error) {
 	if root == "" {
 		return Snapshot{}, errors.New("no folder to back up")
 	}
@@ -104,12 +105,18 @@ func (m *Machine) backup(ctx context.Context, d *Destination, root string, cfg *
 		args = append(args, "--tag", tagFolder+ref.FolderID)
 	}
 	r := d.asComputer(root, args...)
+	r.progress = progress
 	if m.Opts.DryRun {
 		d.dryRun(r)
 		return Snapshot{}, nil
 	}
 	started := m.now()
 	out, err := d.restic(ctx, r)
+	if err != nil && ctx.Err() != nil {
+		// Whoever was waiting cancelled it: no backup was made, and none
+		// failed, so the folder's last run stays as it was.
+		return Snapshot{}, ctx.Err()
+	}
 	partial := errors.Is(err, errPartial)
 	if partial {
 		err = nil // the backup was made; Warning says what was skipped
@@ -136,10 +143,73 @@ func (m *Machine) backup(ctx context.Context, d *Destination, root string, cfg *
 	return snap, err
 }
 
+// BackupProgress is how far a backup has got, from restic's status reports.
+type BackupProgress struct {
+	Percent     float64 // 0 to 1
+	FilesDone   int
+	FilesTotal  int
+	BytesDone   int64
+	BytesTotal  int64
+	SecondsLeft int    // 0 until restic has scanned enough to estimate
+	CurrentFile string // a file restic is reading now, if any
+}
+
+// statusWriter takes restic backup --json's output, hands each status line
+// to progress, and keeps every other line, such as the summary, in kept.
+type statusWriter struct {
+	progress func(BackupProgress)
+	kept     *bytes.Buffer
+	line     []byte
+}
+
+func (w *statusWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	for len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
+		if i < 0 {
+			w.line = append(w.line, p...)
+			if len(w.line) > maxJSONLine {
+				w.kept.Write(w.line) // too long to be a status line
+				w.line = w.line[:0]
+			}
+			break
+		}
+		w.line = append(w.line, p[:i+1]...)
+		w.flush()
+		p = p[i+1:]
+	}
+	return n, nil
+}
+
+// flush hands on the line read so far, ended or not.
+func (w *statusWriter) flush() {
+	var s struct {
+		Type         string   `json:"message_type"`
+		Percent      float64  `json:"percent_done"`
+		FilesDone    int      `json:"files_done"`
+		FilesTotal   int      `json:"total_files"`
+		BytesDone    int64    `json:"bytes_done"`
+		BytesTotal   int64    `json:"total_bytes"`
+		SecondsLeft  int      `json:"seconds_remaining"`
+		CurrentFiles []string `json:"current_files"`
+	}
+	if json.Unmarshal(w.line, &s) == nil && s.Type == "status" {
+		p := BackupProgress{Percent: s.Percent, FilesDone: s.FilesDone, FilesTotal: s.FilesTotal,
+			BytesDone: s.BytesDone, BytesTotal: s.BytesTotal, SecondsLeft: s.SecondsLeft}
+		if len(s.CurrentFiles) > 0 {
+			p.CurrentFile = s.CurrentFiles[0]
+		}
+		w.progress(p)
+	} else {
+		w.kept.Write(w.line)
+	}
+	w.line = w.line[:0]
+}
+
 // backupSummary reads the summary line restic backup --json ends with.
 func backupSummary(out []byte) (Snapshot, error) {
 	sc := bufio.NewScanner(bytes.NewReader(out))
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLine)
 	for sc.Scan() {
 		var s struct {
 			Type       string    `json:"message_type"`
@@ -280,6 +350,12 @@ func (d *Destination) files(ctx context.Context, id string) ([]string, error) {
 	return paths, nil
 }
 
+// ErrOneOffsNotTaken is Configure's error once the folder's config is saved
+// and only giving its earlier one-off backups its ID failed or was
+// cancelled. Configuring again finishes it: the one-offs still without an
+// ID are the ones left.
+var ErrOneOffsNotTaken = errors.New("add the folder's earlier backups to its history")
+
 // Configure makes root a backed-up folder: it writes the folder's config
 // file, adds the folder to this computer's list, and gives the folder's
 // earlier one-off backups its new ID so they join its history.
@@ -335,7 +411,7 @@ func (m *Machine) Configure(ctx context.Context, d *Destination, root string, cf
 	}
 	if len(ids) > 0 {
 		if _, err := d.restic(ctx, tag); err != nil {
-			return fmt.Errorf("add the folder's earlier backups to its history: %w", err)
+			return fmt.Errorf("%w: %w", ErrOneOffsNotTaken, err)
 		}
 	}
 	return nil

@@ -40,6 +40,11 @@ type Machine struct {
 	GOOS string
 	// Notifier sends desktop notifications; nil means the desktop's own.
 	Notifier Notifier
+	// NoTerminal runs restic with no controlling terminal, for while a
+	// full-screen program owns it: an SFTP destination's ssh would otherwise
+	// take the terminal's foreground from it. Off, ssh can still ask on the
+	// terminal for a host key or a passphrase.
+	NoTerminal bool
 
 	// run runs the scheduler's systemctl and launchctl commands; nil means
 	// sysutil.Run. Tests set it so they never touch real timers or agents.
