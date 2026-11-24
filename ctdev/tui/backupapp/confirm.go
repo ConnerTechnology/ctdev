@@ -61,13 +61,13 @@ func (cf *confirm) update(msg tea.Msg) (*answer, tea.Cmd) {
 	return nil, nil
 }
 
-func (cf *confirm) view(int, int) stepView {
+func (cf *confirm) view(width, _ int) stepView {
 	c := cf.c
 	var lines []string
 	if c.Warning != "" {
-		lines = append(lines, "  "+styles.Warning.Render(c.Warning), "")
+		lines = append(append(lines, wrap(Line{Warning, c.Warning}, width, 2)...), "")
 	}
-	lines = append(lines, "  "+styles.Header.Render(c.Question))
+	lines = append(lines, wrap(Line{Heading, c.Question}, width, 2)...)
 	if c.Consequence != "" {
 		for _, l := range strings.Split(c.Consequence, "\n") {
 			lines = append(lines, "  "+l)

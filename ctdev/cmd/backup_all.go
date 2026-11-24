@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/backupapp"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/backupscreen"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
@@ -25,12 +26,12 @@ func init() {
 }
 
 // runBackupAll is the --all screen: pick this computer's destination (or set
-// one up), then its header and menu until Quit.
+// one up), then its dashboard until Quit.
 func runBackupAll(ctx context.Context, m *backup.Machine, cwd string, out io.Writer) error {
 	if isBatchMode() {
 		return allStatusOnly(ctx, m, out)
 	}
-	return allSession(ctx, m, cwd)
+	return backupapp.RunAll(ctx, backupapp.Deps{Machine: m, Cwd: cwd, Scheduler: machineScheduler{m}})
 }
 
 // allSession is the interactive --all session, from choosing the destination

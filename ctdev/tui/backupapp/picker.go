@@ -85,7 +85,7 @@ func (pk *picker) view(width, height int) stepView {
 		for _, c := range p.Columns {
 			titles = append(titles, c.Title)
 		}
-		lines = append(lines, "  "+styles.Dimmed.Render(strings.TrimRight(pk.cells(titles, widths), " ")))
+		lines = append(lines, indent+styles.Dimmed.Render(strings.TrimRight(pk.cells(titles, widths), " ")))
 	}
 
 	first, last := pk.window(height)
