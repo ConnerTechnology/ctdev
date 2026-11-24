@@ -104,7 +104,12 @@ func useNodeScope(t *testing.T, global, project bool) {
 // subfolder.
 func gitProject(t *testing.T) (top string) {
 	t.Helper()
-	top = t.TempDir()
+	// Resolved before moving in: on macOS the temp dir is under /var, a link to
+	// /private/var, and ctdev prints the path it was run from.
+	top, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out, err := exec.Command("git", "init", "-q", top).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
@@ -113,7 +118,6 @@ func gitProject(t *testing.T) (top string) {
 		t.Fatal(err)
 	}
 	t.Chdir(sub)
-	top, _ = filepath.EvalSymlinks(top)
 	return top
 }
 
