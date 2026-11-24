@@ -122,5 +122,8 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "pstack@open-pstack": true
   }
 }
