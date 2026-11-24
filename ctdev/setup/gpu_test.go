@@ -122,3 +122,17 @@ func TestGPUSettingsNotNeeded(t *testing.T) {
 		}
 	}
 }
+
+// A module signed with a key that isn't enrolled, as after a CMOS reset clears
+// the MOK list, reads as unsigned, so the setting applies again and re-enrolls.
+func TestModuleSignedNeedsAnEnrolledKey(t *testing.T) {
+	fakeBins(t, map[string]string{
+		"lsmod":   "echo 'nvidia 1 0'",
+		"modinfo": "echo 'example-signing-key'",
+		"mokutil": "exit 0",
+		"openssl": "exit 1",
+	})
+	if got := detectModuleSigned(context.Background()); got != "unsigned" {
+		t.Errorf("signed module, no enrolled key: %q, want unsigned", got)
+	}
+}
