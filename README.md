@@ -31,8 +31,7 @@ resolves its dependencies, installs it and runs its configuration step, and is
 safe to re-run.
 
 **[Configure](docs/configure.md).** System settings, grouped into categories:
-the SSH server and its hardening, Mosh support, the firewall, suspend, automatic
-updates, the GPU driver, your git identity. Interactive by default, or
+the SSH server and its hardening, suspend, automatic updates, the GPU driver, your git identity. Interactive by default, or
 `--batch` for the recommended values.
 
 **[Update](docs/update.md).** One scan across system packages, installed

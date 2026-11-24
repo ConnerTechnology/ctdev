@@ -2,7 +2,7 @@
 
 `ctdev configure` applies system settings. Where [components](components/README.md)
 put software on a machine, `configure` changes how the machine behaves: the SSH
-server, the firewall, whether it sleeps, which upstreams Pi-hole uses.
+server, whether it sleeps, which upstreams Pi-hole uses.
 
 ```bash
 ctdev configure                 # full-screen browser over every category
@@ -69,16 +69,50 @@ If removing those packages would also remove one ctdev didn't install (something
 that depends on them), it refuses and names it. Off leaves the dependencies those
 packages pulled in; `sudo apt autoremove` cleans them up.
 
-`ssh` is the one place for remote access. Its settings are the SSH server
-(started on demand by `ssh.socket`, always running, or off), key-only login,
-keep my programs running after I disconnect (systemd lingering), Mosh support
-(the `en_US.UTF-8` locale), open this machine from vscode.dev (the VS Code
-tunnel, which also turns on lingering), and only allow SSH and Mosh from my
-local network (UFW). Each one can be turned off, which removes what ctdev
-added. The firewall blocks every other incoming service unless you open its
-ports first, so on a DNS or proxy host run `ctdev configure ssh` without
-`--batch` and leave it off. `ctdev install ssh` installs the SSH server and
-then opens this category, like every install that has one.
+`ssh` is the one place for remote access: your SSH keys and this machine's
+SSH server. `ctdev configure ssh` opens a menu with three entries.
+
+- **Your keys** lists the key pairs in `~/.ssh`. Pick one by its number, or
+  several (`1 3`). For one key you can copy it to a server, upload it to
+  GitHub, copy it to the clipboard, or delete it. For several, copy each one
+  to a server, upload each one to GitHub, or delete them; the clipboard holds
+  one key, so it isn't offered.
+  - Copy to a server asks once for `user@host` and an optional port, then runs
+    `ssh-copy-id` for each key, which asks for the server's password itself.
+  - Upload to GitHub asks whether the keys are for authentication, signing, or
+    both, then runs `gh ssh-key add`. Without `gh` signed in, it shows each key
+    and the steps to add it on github.com.
+  - The clipboard is `pbcopy` on macOS, and `wl-copy` or `xclip` on a Linux
+    desktop. In an SSH session with no display, ctdev sends the key to the
+    terminal you're typing in (OSC 52), and prints it too in case the terminal
+    blocks that. Inside tmux, OSC 52 needs `set -g set-clipboard on`.
+  - Delete names the private and the public file and asks first; Enter keeps
+    them. Copies on GitHub and on servers stay.
+- **Create a key** asks the type (`ed25519` by default, `ed25519-sk` for a
+  hardware security key, `ecdsa`, or `rsa` at 4096 bits), the file name
+  (`~/.ssh/id_<type>`, or `id_<type>_<purpose>` after asking what the key is
+  for when that is taken), and the comment (`user@hostname`). Then
+  `ssh-keygen` asks for the passphrase itself, so ctdev never holds it. ctdev
+  never overwrites a key: a name either half of an existing key uses is
+  refused. On macOS the new key goes into the Keychain
+  (`ssh-add --apple-use-keychain`). Then you get the one-key actions for it.
+- **Server settings** are the settings below, asked one at a time.
+
+`--batch` and `--show` skip the menu and apply or show the server settings.
+`--dry-run` prints each command the menu would run and changes nothing.
+Apart from the one-time cleanup below, only Server settings asks for sudo.
+
+The server settings are the SSH server
+(started on demand by `ssh.socket`, always running, or off) and key-only login.
+Earlier versions also offered lingering, Mosh support (the `en_US.UTF-8`
+locale), the VS Code tunnel and a LAN-only UFW firewall. The first `ctdev
+configure ssh` or bare `ctdev configure` run, except with `--show`, turns off
+whichever of those ctdev turned on, once. A locale that was already there stays, and so does a
+firewall without ctdev's rules; a firewall with other rules stays on once
+ctdev's are deleted. Lingering and the tunnel record no owner, so they are
+turned off wherever they are on; turned back on by hand, they stay on
+([ADR-0023](adr/0023-configure-ssh-is-the-ssh-server-and-key-only-login.md)).
+`ctdev install ssh` installs the SSH server and then opens this menu.
 
 `desktop` holds how the desktop looks and behaves, on whichever platform you run
 it. On macOS: an auto-hiding Dock, faster animations, Finder's

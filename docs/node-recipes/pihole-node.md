@@ -9,8 +9,7 @@ DNS-01, nothing exposed to the internet):
 ```bash
 # after SSHing in and installing ctdev — see ../install.md:
 ctdev install zsh git mosh tailscale smartmontools btop   # base tools, disk health, monitoring
-ctdev configure ssh                      # SSH server, key-only login, Mosh, keep programs
-                                         # running; leave the firewall off (see below)
+ctdev configure ssh --batch              # SSH server, key-only login
 ctdev configure power --batch            # never suspend
 sudo tailscale up                        # join the tailnet
 ctdev install pihole                     # network-wide DNS ad blocker, then its settings:
@@ -57,9 +56,6 @@ through Pi-hole so they keep resolving on the node and, as a side effect, on
 every LAN device. `ctdev doctor` then checks that the resolver validates DNSSEC
 and that Unbound reaches the root servers directly (an ISP transparent DNS
 proxy answering in their place is what silently breaks both).
-
-**Leave the `ctdev configure ssh` firewall off on a DNS/proxy host** — UFW's default-deny blocks
-DNS (53) and the proxy (80/443) unless you open those ports first.
 
 **Adding a service:** add the container to `~/caddy/docker-compose.yml` and a
 route snippet in `~/caddy/sites/<svc>.caddy`, then `ctdev install caddy` (or
