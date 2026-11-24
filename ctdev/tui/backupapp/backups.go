@@ -470,8 +470,8 @@ func stopBackingUp(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 		}
 		return err
 	}
-	stops := "removes " + backup.ConfigFileName + " and takes the folder off this computer's schedule."
-	ok, err := ui.Confirm(ctx, Confirm{Question: "Stop backing up " + where + "?", Consequence: styles.Dimmed.Render("R" + stops[1:]),
+	stops := backup.ConfigFileName + " and takes the folder off this computer's schedule."
+	ok, err := ui.Confirm(ctx, Confirm{Question: "Stop backing up " + where + "?", Consequence: styles.Dimmed.Render("Removes " + stops),
 		Yes: "Stop backing up", Destructive: true, Help: "y stops · any other answer keeps it backed up"})
 	if err == nil && !ok {
 		err = ErrBack
@@ -515,7 +515,7 @@ func stopBackingUp(ctx context.Context, ui UI, d Deps, s backup.Status) error {
 		page.Badge = Badge{Busy, "DELETING"}
 		var appeared []backup.Snapshot
 		var freed string
-		err := ui.Run(ctx, Running{Page: page, Label: "Deleting " + backups(len(listed), false) + " of " + where + "…", Detail: "Then " + stops},
+		err := ui.Run(ctx, Running{Page: page, Label: "Deleting " + backups(len(listed), false) + " of " + where + "…", Detail: "Then removes " + stops},
 			func(ctx context.Context, _ func(Progress)) error {
 				var err error
 				if appeared, err = m.StopAndDelete(ctx, dest, s.Root, listed); err != nil {
