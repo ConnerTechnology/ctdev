@@ -286,12 +286,12 @@ func hasAuthorizedKey() bool {
 // lingering, which it relied on.
 var retiredSSHSettings = []struct {
 	name  string
-	added func(context.Context) bool
+	added func(context.Context) (bool, error)
 	off   func(context.Context, sysutil.Opts) error
 }{
-	{"Open this machine from vscode.dev", codeTunnelInstalled, uninstallCodeTunnel},
-	{"Keep my programs running after I disconnect", lingering, disableLinger},
-	{"Mosh support", moshLocaleAdded, removeMoshLocale},
+	{"Open this machine from vscode.dev", known(codeTunnelInstalled), uninstallCodeTunnel},
+	{"Keep my programs running after I disconnect", known(lingering), disableLinger},
+	{"Mosh support", known(moshLocaleAdded), removeMoshLocale},
 	{"Only allow SSH and Mosh from my local network (firewall)", ctdevUFWOn, removeCtdevUFW},
 }
 
@@ -306,7 +306,16 @@ func RetireRemovedSSHSettings(ctx context.Context, o sysutil.Opts) error {
 	}
 	var errs []error
 	for _, s := range retiredSSHSettings {
-		if !s.added(ctx) {
+		added, err := s.added(ctx)
+		if err != nil {
+			// --dry-run skips sudo, so it can't read root-only state; it changes
+			// nothing and writes no marker anyway.
+			if !o.DryRun {
+				errs = append(errs, fmt.Errorf("check %q: %w", s.name, err))
+			}
+			continue
+		}
+		if !added {
 			continue
 		}
 		fmt.Fprintf(o.Stdout, "  Turning off %q, which ctdev no longer offers\n", s.name)
@@ -383,14 +392,33 @@ func removeMoshLocale(ctx context.Context, o sysutil.Opts) error {
 }
 
 // ctdevUFWOn reports whether UFW is on (ufw.conf's ENABLED=yes) with every
-// allow rule ctdev added (`ufw status`, root-only). When the probe can't run
-// (--dry-run skips sudo) it reports false, so nothing is touched.
-func ctdevUFWOn(ctx context.Context) bool {
+// allow rule ctdev added (`ufw status`, root-only). A probe that can't run is
+// an error, not "ctdev didn't add it", so the cleanup isn't marked done
+// without having looked.
+func ctdevUFWOn(ctx context.Context) (bool, error) {
 	if !ufwEnabled() {
-		return false
+		return false, nil
 	}
 	status, err := remoteSudoProbe(ctx, "ufw", "status")
-	return err == nil && ufwHasCtdevRules(status)
+	if err != nil {
+		return false, fmt.Errorf("read UFW's rules (needs sudo): %w", err)
+	}
+	return ufwHasCtdevRules(status), nil
+}
+
+// known adapts a check that can't fail to the retired-settings table.
+func known(added func(context.Context) bool) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) { return added(ctx), nil }
+}
+
+// SSHSettingsRetirePending reports whether RetireRemovedSSHSettings still has
+// to run here, so a caller that hasn't asked for sudo yet can ask first.
+func SSHSettingsRetirePending() bool {
+	if !gateLinux() {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(remoteStateDir(), sshSettingsRetiredMarker))
+	return err != nil
 }
 
 // ufwEnabled reports whether ufw.conf, readable without root, has ENABLED=yes.

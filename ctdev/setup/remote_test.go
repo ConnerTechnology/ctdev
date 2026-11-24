@@ -582,6 +582,28 @@ func TestRetireRemovedSSHSettingsLeavesUFWAloneWhenItCantReadIt(t *testing.T) {
 	}
 }
 
+// Without sudo, UFW's rules can't be read. That isn't "ctdev didn't add it":
+// the pass fails and stays pending, so a firewall ctdev added isn't stranded.
+func TestRetireRemovedSSHSettingsStaysPendingWhenUFWIsUnreadable(t *testing.T) {
+	if !gateLinux() {
+		t.Skip("the retired settings were Linux-only")
+	}
+	f := useFakeRemote(t)
+	if err := os.WriteFile(ufwConfPath, []byte("ENABLED=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := RetireRemovedSSHSettings(context.Background(), quietOpts)
+	if err == nil || !strings.Contains(err.Error(), "UFW") {
+		t.Errorf("err = %v, want one saying UFW's rules couldn't be read", err)
+	}
+	if !SSHSettingsRetirePending() {
+		t.Error("the cleanup was marked done without reading UFW's rules")
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("want UFW untouched, got %q", f.calls)
+	}
+}
+
 // After one clean pass the cleanup is done: lingering turned back on by hand
 // stays on.
 func TestRetireRemovedSSHSettingsRunsOnce(t *testing.T) {

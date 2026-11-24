@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/setup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
@@ -27,7 +28,13 @@ var sshMenuEntries = []struct {
 // runSSHMenu shows the menu until Quit.
 func runSSHMenu(ctx context.Context) error {
 	// The menu skips the settings wizard, which is where the other paths retire
-	// the removed settings, so it retires them on entry too.
+	// the removed settings, so it retires them on entry too. Reading UFW's
+	// rules needs root, and this path hasn't asked for sudo yet.
+	if setup.SSHSettingsRetirePending() && !flagDryRun {
+		if err := ensureSudo(ctx); err != nil {
+			fmt.Printf("  ✗ sudo required to turn off settings ctdev no longer offers: %v\n", err)
+		}
+	}
 	retireRemovedSettings(ctx, "ssh")
 	for {
 		fmt.Println(styles.Title.Render("SSH"))
