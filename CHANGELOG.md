@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [20.6.0] - 2026-11-23
+
+### Changed
+- **`ctdev backup` and `ctdev backup --all` are one full-screen program for every flow.** The
+  status screen, arrow menus and line prompts are gone.
+  - The folder opens on a dashboard with a health badge, relative times and a one-key action bar:
+    `b` back up now, `l` list backups, `c` configure, `s` stop backing up, `D` delete all, `q` quit.
+  - Back up now confirms in place and shows restic's live progress: files, bytes and time left.
+  - Configure is a stepped form; List backups is a table with a detail view for downloading or
+    deleting one backup.
+  - `--all` opens on the destination's dashboard: folders by computer, Computers (remove one, or
+    I lost this computer as a three-step checklist), and Emergency Kit and password.
+  - Secrets go into masked fields, and a pasted Emergency Kit is never echoed. A kit and Recovery
+    Code are shown once, with `c` to copy them, and no longer stay in the terminal's scrollback.
+    Result lines and `--dry-run` commands still print after the program exits.
+  - `--batch`, piped output and the scheduled run print what they did before.
+- **A cancelled backup is no longer recorded as a failed one**, and neither are cancelled keep
+  rules. Cancelling sends restic an interrupt, so it removes its lock, and `ctdev` also cancels
+  when its terminal closes.
+- **Stopping Configure after it saved the folder's settings says what wasn't finished**: earlier
+  one-off backups not taken in, and the folder not scheduled. Configure again finishes it.
+
 ## [20.5.0] - 2026-11-23
 
 ### Changed
