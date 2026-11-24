@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/ConnerTechnology/ctdev/ctdev/backup"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
+	"github.com/ConnerTechnology/ctdev/ctdev/tui/backupapp"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/backupscreen"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/ansi"
@@ -136,38 +137,17 @@ func runBackup(cmd *cobra.Command, _ []string) error {
 	if isBatchMode() {
 		return backupStatusOnly(ctx, m, cwd, cmd.OutOrStdout())
 	}
-	for {
-		s := m.Status(ctx, cwd)
-		screen := backupscreen.New(s, m.Home)
-		if _, err := tea.NewProgram(screen).Run(); err != nil {
-			return err
-		}
-		switch screen.Chosen() {
-		case backupscreen.BackUpNow:
-			err = backupNow(ctx, m, s)
-		case backupscreen.Configure:
-			err = configureFolder(ctx, m, s)
-		case backupscreen.ListBackups:
-			err = listBackups(ctx, m, s)
-		case backupscreen.StopBackingUp:
-			err = stopBackingUp(ctx, m, s)
-		case backupscreen.DeleteAll:
-			err = deleteAllBackups(ctx, m, s)
-		default:
-			return nil
-		}
-		if errors.Is(err, errPromptCancelled) {
-			if ctx.Err() != nil {
-				return nil
-			}
-			fmt.Println("\n  Cancelled.")
-			err = nil
-		}
-		if err != nil {
-			fmt.Println("\n  " + styles.Error.Render(err.Error()))
-		}
-		fmt.Println()
-	}
+	return backupapp.RunFolder(ctx, backupapp.Deps{Machine: m, Cwd: cwd, Scheduler: machineScheduler{m}})
+}
+
+// machineScheduler is this computer's hourly runner for the backup screens,
+// through the hooks tests replace.
+type machineScheduler struct{ m *backup.Machine }
+
+func (s machineScheduler) Install(ctx context.Context) error { return installScheduler(s.m, ctx) }
+
+func (s machineScheduler) RemoveIfIdle(ctx context.Context) (bool, error) {
+	return removeSchedulerIfIdle(s.m, ctx)
 }
 
 // backupStatusOnly prints the status for a pipe or --batch, and fails when
