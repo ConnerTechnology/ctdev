@@ -20,32 +20,30 @@ ctdev install                    # pick the components this machine should have
 ctdev configure                  # walk through the system settings
 ```
 
-The whole first run is in [Getting started](docs/getting-started.md). Installing the binary on its own,
-verifying it, and removing it are in [Install](docs/install.md).
+`ctdev --help` lists every command and flag.
 
 ## What ctdev does
 
-**[Components](docs/components/README.md).** A component is one installable
-thing — a CLI tool, a desktop app, a runtime, a container stack. `ctdev install`
-resolves its dependencies, installs it and runs its configuration step, and is
-safe to re-run.
+**Components.** A component is one installable thing — a CLI tool, a desktop
+app, a runtime, a container stack. `ctdev install` resolves its dependencies,
+installs it and runs its configuration step, and is safe to re-run.
 
-**[Configure](docs/configure.md).** System settings, grouped into categories:
-the SSH server and its hardening, suspend, automatic updates, the GPU driver, your git identity. Interactive by default, or
-`--batch` for the recommended values.
+**Configure.** System settings, grouped into categories: the SSH server and its
+hardening, suspend, automatic updates, the GPU driver, your git identity.
+Interactive by default, or `--batch` for the recommended values.
 
-**[Update](docs/update.md).** One scan across system packages, installed
-components, the runtimes they manage and the container stacks ctdev brought up,
-then you pick what to install.
+**Update.** One scan across system packages, installed components, the runtimes
+they manage and the container stacks ctdev brought up, then you pick what to
+install.
 
-**[Backups](docs/backups.md).** `ctdev backup` shows whether the folder you're in
-is backed up, sets it up with a destination, and backs it up whole with restic.
+**Backups.** `ctdev backup` shows whether the folder you're in is backed up,
+sets it up with a destination, and backs it up whole with restic.
 
-**[Doctor](docs/doctor.md).** A read-only health report for a machine and the
-network it sits on — hardware, OS, DNS, routing, the path out — with a
-plain-English verdict for each finding. It assumes nothing about the machine,
-so it works on one ctdev did not set up, and it can run from a temporary
-directory without installing anything.
+**Doctor.** A read-only health report for a machine and the network it sits
+on — hardware, OS, DNS, routing, the path out — with a plain-English verdict for
+each finding. It assumes nothing about the machine, so it works on one ctdev did
+not set up, and it can run from a temporary directory without installing
+anything.
 
 ctdev's network job is two things. It **diagnoses any network**, including the
 unmanaged devices it cannot be installed on, reading a UniFi, Synology or
@@ -54,20 +52,13 @@ a network** — a DNS node, a reverse proxy, a monitoring stack. It does not
 configure an unmanaged device: it will not log into a router, a switch or an
 access point to change a setting.
 
-## Node recipes
-
-- [Dev machine](docs/node-recipes/dev-machine.md) — the base components and
-  settings every development machine gets, before you pick the rest
-- [Pi-hole / homelab node](docs/node-recipes/pihole-node.md) — Pi-hole behind a
-  Caddy reverse proxy with a Let's Encrypt wildcard cert, nothing exposed to the
-  internet
-
 ## What it does to a device
 
 ctdev runs as you and escalates with `sudo` only for the steps that need it: a
 package manager, a systemd unit, a file under `/etc` or `/usr/local`. Its own
 files live in `~/.local/bin`, `~/.config/ctdev` and `~/.local/state/ctdev`, and
-the uninstaller removes them.
+the uninstaller removes them, along with the scheduled-backup timer. It keeps
+`~/.config/ctdev/backup`, this computer's backup keys, unless you pass `--purge`.
 
 **No secret is ever stored in this repository.** Every secret is entered at its
 `configure` step and written only to the device that needs it, owner-readable
@@ -80,28 +71,10 @@ that would need it is skipped and says so.
 download against the release's `SHA256SUMS` and fails closed if it cannot, which
 proves the file is the one the release page lists — not who built it.
 
-The full account is in [Security](docs/security.md).
+## More
 
-## Roadmap
-
-Ideas, not commitments. Each page says what the idea is and why ctdev wants it;
-there are no dates, on purpose.
-
-- [The fleet](docs/roadmap/fleet.md) — an agent on each managed device,
-  reporting to a dashboard and taking commands from it
-- [The phone app](docs/roadmap/phone-app.md) — so a phone can be a managed device
-- [UniFi network setup](docs/roadmap/unifi-network-setup.md) — ctdev sets a
-  UniFi network up to a standard, not just reads it
-- [AI capabilities](docs/roadmap/ai-capabilities.md) — ctdev reasons about
-  situations it was not programmed for, without a new release
-- [The docs site](docs/roadmap/docs-site.md) — this repository's Markdown,
-  published as a website
-
-## Documentation
-
-- [Documentation index](docs/README.md) — every page, in this order
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — symptoms and fixes on a live machine
-- [CHANGELOG.md](CHANGELOG.md) — what shipped in each version
+- [Releases](https://github.com/ConnerTechnology/ctdev/releases) — what shipped in each version
 
 ## License
 

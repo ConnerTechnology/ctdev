@@ -21,6 +21,18 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 )
 
+// scanAll gathers every update ctdev can offer. `ctdev update` upgrades whatever
+// a package manager installed (APT, Homebrew, Flatpak, npm and bun globals) on
+// its own. A component that bypasses one, such as a downloaded .deb, an upstream
+// install.sh or a release tarball, is invisible to those scans and needs its own
+// scanner here unless the software updates itself (a cask marked auto_updates
+// needs none). A scanner compares the installed version with the vendor's latest
+// stable release (sysutil.GitHubLatestVersion for GitHub) and returns a
+// checklist.UpdateItem with Source "cli" when it is behind; add the item's name
+// to cliUpdateStep in update_apply.go, which prefers the tool's own updater and
+// otherwise re-runs the install. updateNeedsRoot in update.go assumes a "cli"
+// item needs root, so exempt the name there when its update stays inside $HOME.
+// A component installed as a git clone goes in gitRepos instead.
 func scanAll(ctx context.Context) []checklist.UpdateItem {
 	var mu sync.Mutex
 	var allItems []checklist.UpdateItem

@@ -9,6 +9,10 @@ set -euo pipefail
 #
 # Or, to install one exact release system-wide (as root, e.g. a boot script):
 #   CTDEV_VERSION=v1.2.3 INSTALL_DIR=/usr/local/bin bash install.sh
+#
+# `ctdev update` updates ctdev itself by running this script from the new release's
+# tag (ctdev/cmd/update_apply.go), passing INSTALL_DIR (the running binary's
+# directory) and CTDEV_VERSION. A release's install.sh must keep honoring both.
 
 REPO="ConnerTechnology/ctdev"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
@@ -170,29 +174,6 @@ else
         error "Could not determine latest version. Check https://github.com/${REPO}/releases"
     fi
     info "Latest version: $VERSION"
-fi
-
-# Clean up old bash-based install. Skipped entirely when running ephemerally:
-# removing things from someone else's machine is exactly what --doctor
-# promises not to do.
-if [[ $EPHEMERAL -eq 0 ]]; then
-    if [[ -L "$INSTALL_DIR/ctdev" ]]; then
-        old_target=$(readlink "$INSTALL_DIR/ctdev" 2>/dev/null || true)
-        if [[ "$old_target" == */dotfiles/ctdev ]] || [[ "$old_target" == */dotfiles/ctdev.sh ]]; then
-            info "Removing old bash ctdev symlink..."
-            rm -f "$INSTALL_DIR/ctdev"
-        fi
-    fi
-    # /usr/local/bin/ctdev is a leftover only when it isn't the install
-    # target. Root installing system-wide (a cloud node's boot script, or
-    # `ctdev update` of a system install) puts it there on purpose.
-    if [[ "${INSTALL_DIR%/}" != "/usr/local/bin" ]] && { [[ -f "/usr/local/bin/ctdev" ]] || [[ -L "/usr/local/bin/ctdev" ]]; }; then
-        # sudo -n only: a script running from a curl|bash pipe should never sit on a
-        # password prompt (and training people to type sudo passwords into piped
-        # scripts is its own problem).
-        info "Removing old ctdev from /usr/local/bin..."
-        sudo -n rm -f /usr/local/bin/ctdev 2>/dev/null || warn "Could not remove /usr/local/bin/ctdev (needs sudo) — run: sudo rm /usr/local/bin/ctdev"
-    fi
 fi
 
 # Fetch the release's checksum first: it decides both whether the binary
