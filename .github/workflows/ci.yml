@@ -47,9 +47,8 @@ jobs:
           shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
             scripts/checks.sh
 
-      # AGENTS.md, the path-scoped rules and docs/agents/ are claims about the tree that
-      # nothing else compiles — this holds them to paths that exist, and the README and docs/
-      # to relative links that go somewhere.
+      # AGENTS.md is a claim about the tree that nothing else compiles — this holds it to
+      # paths that exist, and the repo to no real tailnet names.
       - name: Check guidance
         run: scripts/check-guidance.sh
 
@@ -371,8 +370,7 @@ jobs:
           # Publish a checksums file so install.sh can verify the binary it
           # downloads. It catches a corrupted or truncated download; it does
           # not defend against tampering, since anyone who can replace a
-          # binary can replace SHA256SUMS too. Signed provenance is on the roadmap
-          # (docs/security.md).
+          # binary can replace SHA256SUMS too.
           ( cd dist && sha256sum ctdev-* > SHA256SUMS )
           gh release create "$TAG_NAME" dist/ctdev-* dist/SHA256SUMS \
             --title "$TAG_NAME" \
