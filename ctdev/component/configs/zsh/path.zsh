@@ -47,6 +47,11 @@ if [[ -d "$HOME/.pyenv" ]]; then
   eval "$(pyenv init - zsh)"
 fi
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# rustup install location (ctdev `rust` component installs here)
+[[ -d "$HOME/.cargo/bin" ]] && path=($HOME/.cargo/bin $path)
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ User Paths ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Prepend last so user binaries take precedence over everything (including shims)

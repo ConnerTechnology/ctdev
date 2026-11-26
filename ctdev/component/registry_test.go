@@ -6,8 +6,8 @@ import (
 )
 
 func TestRegistrySize(t *testing.T) {
-	if len(Registry) != 69 {
-		t.Errorf("expected 69 components, got %d", len(Registry))
+	if len(Registry) != 70 {
+		t.Errorf("expected 70 components, got %d", len(Registry))
 	}
 }
 
