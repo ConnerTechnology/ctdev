@@ -85,6 +85,9 @@ func init() {
 						return fmt.Errorf("--swapfile-size only works with --batch")
 					}
 					gib := flagSwapfileSize
+					if err := setup.CheckSwapfileSize(gib); err != nil {
+						return err
+					}
 					adjust = func(states []setup.SettingState) error {
 						return setup.RequestSwapfileSize(states, gib)
 					}
