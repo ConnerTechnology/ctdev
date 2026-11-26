@@ -3,7 +3,16 @@ package component
 import (
 	"os"
 	"testing"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
+
+func TestMain(m *testing.M) {
+	// Warm platform.Detect() before any test swaps PATH, so -shuffle=on can't
+	// poison the package-manager singleton to "unknown".
+	platform.Detect()
+	os.Exit(m.Run())
+}
 
 func TestFilterByOS(t *testing.T) {
 	comps := []Component{

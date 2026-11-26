@@ -17,7 +17,8 @@ import (
 
 // requireRestic skips a test that needs the restic binary when it isn't
 // installed, except in CI, where CI installs it and a missing binary is a
-// broken job rather than a reason to skip.
+// broken job rather than a reason to skip. Real-restic tests are isolated via
+// per-Machine temp dirs and cacheDir, so they run in parallel.
 func requireRestic(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("restic"); err != nil {
@@ -26,11 +27,11 @@ func requireRestic(t *testing.T) {
 		}
 		t.Skip("restic is not installed; install it (ctdev install restic) to run the backup tests")
 	}
-	// Keep restic's cache out of the developer's home.
-	t.Setenv("RESTIC_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+	t.Parallel()
 }
 
-// testMachine is a machine whose config dir and home are both in a temp dir.
+// testMachine is a machine whose config dir, home and restic cache are all in
+// a temp dir.
 func testMachine(t *testing.T, hostname string) *Machine {
 	t.Helper()
 	home := t.TempDir()
@@ -40,6 +41,7 @@ func testMachine(t *testing.T, hostname string) *Machine {
 		Hostname: hostname,
 		Username: "example",
 		Opts:     sysutil.Opts{Stdout: &bytes.Buffer{}},
+		cacheDir: filepath.Join(home, ".cache", "restic"),
 	}
 }
 
@@ -81,10 +83,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// createExample gives m its own copy of a destination created by an
-// example-laptop machine, saved on m as if m had created it.
-func createExample(t *testing.T, m *Machine) (*Destination, Setup) {
-	t.Helper()
+func initTemplate() error {
 	template.once.Do(func() {
 		if template.dir, template.err = os.MkdirTemp("", "ctdev-backup-test-"); template.err != nil {
 			return
@@ -92,12 +91,20 @@ func createExample(t *testing.T, m *Machine) (*Destination, Setup) {
 		creator := &Machine{
 			Dir: filepath.Join(template.dir, "config"), Home: template.dir,
 			Hostname: "example-laptop", Username: "example", Opts: sysutil.Opts{Stdout: &bytes.Buffer{}},
+			cacheDir: filepath.Join(template.dir, "cache"),
 		}
 		template.setup, template.err = creator.CreateDestination(context.Background(),
 			NewDestination{Name: "example-backups", Address: filepath.Join(template.dir, "repo")}, exampleMaster)
 	})
-	if template.err != nil {
-		t.Fatal(template.err)
+	return template.err
+}
+
+// createExample gives m its own copy of a destination created by an
+// example-laptop machine, saved on m as if m had created it.
+func createExample(t *testing.T, m *Machine) (*Destination, Setup) {
+	t.Helper()
+	if err := initTemplate(); err != nil {
+		t.Fatal(err)
 	}
 	repo := filepath.Join(t.TempDir(), "example-backups")
 	if err := os.CopyFS(repo, os.DirFS(template.setup.Destination.Address)); err != nil {

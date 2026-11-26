@@ -61,6 +61,12 @@ type Machine struct {
 	// tests set it to stand in for another computer claiming meanwhile.
 	jitterFn   func() time.Duration
 	afterClaim func()
+	// cacheDir sets RESTIC_CACHE_DIR per Machine so parallel tests don't share
+	// the process environment via t.Setenv.
+	cacheDir string
+	// linkFile overrides os.Link per Machine in tests simulating filesystems
+	// without hard links.
+	linkFile func(oldname, newname string) error
 
 	lockMu    sync.Mutex
 	lockDepth int

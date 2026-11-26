@@ -5,14 +5,14 @@ import (
 )
 
 func TestParseAWSProfiles(t *testing.T) {
-	content := `[profile developer-access-767828768904]
-sso_session = BlueWaterAutonomy
-sso_account_id = 767828768904
+	content := `[profile developer-access-000000000000]
+sso_session = ExampleOrg
+sso_account_id = 000000000000
 sso_role_name = developer-access
 region = us-east-2
 
-[sso-session BlueWaterAutonomy]
-sso_start_url = https://d-9067c20008.awsapps.com/start
+[sso-session ExampleOrg]
+sso_start_url = https://d-0000000000.awsapps.com/start
 sso_region = us-east-1
 
 [default]
@@ -22,8 +22,8 @@ region = us-east-1
 	if len(profiles) != 2 {
 		t.Fatalf("expected 2 profiles, got %d: %v", len(profiles), profiles)
 	}
-	if profiles[0] != "developer-access-767828768904" {
-		t.Errorf("expected developer-access-767828768904, got %s", profiles[0])
+	if profiles[0] != "developer-access-000000000000" {
+		t.Errorf("expected developer-access-000000000000, got %s", profiles[0])
 	}
 	if profiles[1] != "default" {
 		t.Errorf("expected default, got %s", profiles[1])

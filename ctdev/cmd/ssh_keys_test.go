@@ -33,6 +33,16 @@ func newFakeKeyTools(t *testing.T) *fakeKeyTools {
 	t.Helper()
 	f := &fakeKeyTools{home: t.TempDir(), ghReady: true}
 	t.Setenv("HOME", f.home)
+	stateHome := filepath.Join(f.home, ".local", "state")
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	// Mark removed SSH settings already retired so runSSHMenu never calls
+	// ensureSudo or probes host loginctl/ufw during unit tests.
+	if err := os.MkdirAll(filepath.Join(stateHome, "ctdev"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateHome, "ctdev", "ssh-settings-retired"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for _, v := range []string{"SSH_CONNECTION", "SSH_TTY", "WAYLAND_DISPLAY", "DISPLAY"} {
 		t.Setenv(v, "")
 	}

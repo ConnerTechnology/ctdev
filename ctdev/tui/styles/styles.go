@@ -83,6 +83,13 @@ func Disable() {
 	rebuild()
 }
 
+// Enable restores colored styles after Disable (used by tests to avoid leaking
+// plain-mode state across test cases).
+func Enable() {
+	noColor = false
+	rebuild()
+}
+
 // SetDarkBackground tunes the theme-dependent colors to the terminal background.
 // Call it once at startup (see cmd.Execute) after detecting the background;
 // isDark=true keeps the dark defaults.

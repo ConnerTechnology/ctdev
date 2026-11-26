@@ -31,12 +31,12 @@ func TestParseIPRouteDefault(t *testing.T) {
 }
 
 func TestParseResolvectlLinks(t *testing.T) {
-	// Real `resolvectl dns` output from a machine running Tailscale and Docker.
+	// Representative `resolvectl dns` output for a machine running Tailscale and Docker.
 	const out = `Global:
 Link 2 (enp7s0):
 Link 3 (wlp5s0): 10.2.2.144
 Link 4 (tailscale0): 100.100.100.100 fd7a:115c:a1e0::53
-Link 5 (br-bc39a9c47468):
+Link 5 (br-0123456789ab):
 Link 6 (docker0):`
 
 	links := parseResolvectlLinks(out)

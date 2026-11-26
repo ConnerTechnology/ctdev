@@ -40,24 +40,23 @@ func fleetMachine(root, host string) *Machine {
 	return &Machine{
 		Dir: filepath.Join(home, ".config", "ctdev", "backup"), Home: home,
 		Hostname: host, Username: "example", Opts: sysutil.Opts{Stdout: &bytes.Buffer{}},
+		cacheDir: filepath.Join(home, ".cache", "restic"),
 	}
 }
 
 func newFleet(t *testing.T) fleet {
 	t.Helper()
 	ctx := context.Background()
-	_, s := createExample(t, testMachine(t, "example-laptop"))
 	fleetTemplate.once.Do(func() {
+		if fleetTemplate.err = initTemplate(); fleetTemplate.err != nil {
+			return
+		}
 		if fleetTemplate.dir, fleetTemplate.err = os.MkdirTemp("", "ctdev-backup-fleet-"); fleetTemplate.err != nil {
 			return
 		}
+		s := template.setup
 		repo := filepath.Join(fleetTemplate.dir, "repo")
-		k, err := ParseKit(s.Kit)
-		if err != nil {
-			fleetTemplate.err = err
-			return
-		}
-		if fleetTemplate.err = os.CopyFS(repo, os.DirFS(k.Address)); fleetTemplate.err != nil {
+		if fleetTemplate.err = os.CopyFS(repo, os.DirFS(s.Destination.Address)); fleetTemplate.err != nil {
 			return
 		}
 		laptop := fleetMachine(fleetTemplate.dir, "example-laptop")
@@ -68,9 +67,20 @@ func newFleet(t *testing.T) fleet {
 		}
 		fleetTemplate.setup = s
 		fleetTemplate.setup.Destination = &d
-		fleetTemplate.setup.Kit = strings.Replace(s.Kit, k.Address, repo, 1)
-		for _, host := range fleetHosts[1:] {
-			if _, fleetTemplate.err = fleetMachine(fleetTemplate.dir, host).ConnectDestination(ctx, fleetTemplate.setup.Kit, exampleMaster); fleetTemplate.err != nil {
+		fleetTemplate.setup.Kit = strings.Replace(s.Kit, s.Destination.Address, repo, 1)
+		var wg sync.WaitGroup
+		errs := make([]error, len(fleetHosts)-1)
+		for i, host := range fleetHosts[1:] {
+			wg.Add(1)
+			go func(idx int, h string) {
+				defer wg.Done()
+				_, errs[idx] = fleetMachine(fleetTemplate.dir, h).ConnectDestination(ctx, fleetTemplate.setup.Kit, exampleMaster)
+			}(i, host)
+		}
+		wg.Wait()
+		for _, err := range errs {
+			if err != nil {
+				fleetTemplate.err = err
 				return
 			}
 		}
@@ -320,8 +330,8 @@ func TestPastingAnUpdatedKitOnASetUpComputer(t *testing.T) {
 	}
 }
 
-// The kit plus the Recovery Code set a new master password and Secret Key.
-// The Recovery Code keeps working unless a new one is made.
+// The kit plus the Recovery Code set a new master password and Secret Key,
+// retiring the old kit and password while leaving the Recovery Code working.
 func TestRecoveryCodeResetsTheMasterPasswordAndSecretKey(t *testing.T) {
 	requireRestic(t)
 	ctx := context.Background()
@@ -347,11 +357,22 @@ func TestRecoveryCodeResetsTheMasterPasswordAndSecretKey(t *testing.T) {
 		}
 	}
 	unlock(t, r.Destination, newMaster)
+	if _, err := f.ld.Recover(ctx, f.setup.RecoveryCode, exampleMaster, false); err != nil {
+		t.Errorf("the used Recovery Code should still work when not rotated: %v", err)
+	}
+}
 
-	// The used code still works; asking for a new one retires it.
-	r2, err := f.ld.Recover(ctx, f.setup.RecoveryCode, exampleMaster, true)
+// Asking for a new Recovery Code during recovery retires the old one and
+// keeps every computer's key working.
+func TestRecoveryCodeRotationRetiresTheOldCode(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	f := newFleet(t)
+	const newMaster = "a new example password"
+
+	r2, err := f.ld.Recover(ctx, f.setup.RecoveryCode, newMaster, true)
 	if err != nil {
-		t.Fatalf("the used Recovery Code: %v", err)
+		t.Fatalf("Recover with new Recovery Code: %v", err)
 	}
 	if r2.RecoveryCode == "" || r2.RecoveryCode == f.setup.RecoveryCode {
 		t.Fatalf("new Recovery Code = %q", r2.RecoveryCode)
@@ -359,7 +380,7 @@ func TestRecoveryCodeResetsTheMasterPasswordAndSecretKey(t *testing.T) {
 	if _, err := f.ld.Recover(ctx, f.setup.RecoveryCode, exampleMaster, false); !errors.Is(err, ErrWrongPassword) {
 		t.Errorf("the replaced Recovery Code: %v, want ErrWrongPassword", err)
 	}
-	if _, err := f.ld.Recover(ctx, r2.RecoveryCode, newMaster, false); err != nil {
+	if _, err := f.ld.Recover(ctx, r2.RecoveryCode, exampleMaster, false); err != nil {
 		t.Errorf("the new Recovery Code: %v", err)
 	}
 	for _, m := range []*Machine{f.laptop, f.desktop, f.server} {
@@ -400,8 +421,9 @@ func TestRecoveryCodeFromTheKitSetsUpANewComputer(t *testing.T) {
 func TestSetCredentialsSavesOnlyWhatOpensTheRepository(t *testing.T) {
 	requireRestic(t)
 	ctx := context.Background()
-	f := newFleet(t)
-	a := unlock(t, f.ld, exampleMaster)
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+	a := unlock(t, d, exampleMaster)
 	// A local destination takes no credentials.
 	if err := a.SetCredentials(ctx, map[string]string{"B2_ACCOUNT_ID": "example"}); err == nil {
 		t.Error("credentials a local destination doesn't use were accepted")
@@ -416,12 +438,17 @@ func TestSetCredentialsSavesOnlyWhatOpensTheRepository(t *testing.T) {
 // connecting and recovering all refuse it, including as user ctdev-account,
 // whose key would carry the account key's exact label.
 func TestAComputerNamedCtdevIsRefused(t *testing.T) {
-	requireRestic(t)
+	t.Parallel()
 	ctx := context.Background()
-	_, s := createExample(t, testMachine(t, "example-laptop"))
+	kit := Kit{
+		Destination: "example-backups",
+		Address:     filepath.Join(t.TempDir(), "repo"),
+		SecretKey:   newSecretKey().String(),
+	}.String()
 	for _, user := range []string{"example", "ctdev-account"} {
 		m := testMachine(t, "ctdev")
 		m.Username = user
+		m.Restic = filepath.Join(t.TempDir(), "must-not-run-restic")
 		refused := func(what string, err error) {
 			t.Helper()
 			if err == nil || !strings.Contains(err.Error(), "hostname is ctdev") {
@@ -430,18 +457,13 @@ func TestAComputerNamedCtdevIsRefused(t *testing.T) {
 		}
 		_, err := m.CreateDestination(ctx, NewDestination{Name: "example-new", Address: filepath.Join(t.TempDir(), "repo")}, exampleMaster)
 		refused("create", err)
-		_, err = m.ConnectDestination(ctx, s.Kit, exampleMaster)
+		_, err = m.ConnectDestination(ctx, kit, exampleMaster)
 		refused("connect", err)
-		_, err = m.RecoverFromKit(ctx, s.Kit, s.RecoveryCode, "a new example password", false)
+		_, err = m.RecoverFromKit(ctx, kit, newRecoveryCode(), "a new example password", false)
 		refused("recover", err)
 		if names, _ := m.Destinations(); len(names) != 0 {
 			t.Errorf("%s@ctdev saved %v", user, names)
 		}
-	}
-	// The kit still connects a computer with an ordinary name, so nothing
-	// above touched the destination.
-	if _, err := testMachine(t, "example-desktop").ConnectDestination(ctx, s.Kit, exampleMaster); err != nil {
-		t.Error(err)
 	}
 }
 

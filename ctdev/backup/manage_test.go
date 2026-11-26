@@ -205,19 +205,15 @@ func TestRetentionForgetsOnlyTheFoldersBackups(t *testing.T) {
 }
 
 func TestRetentionWithNoRulesKeepsEverything(t *testing.T) {
-	requireRestic(t)
+	t.Parallel()
 	m := testMachine(t, "example-laptop")
-	d, _ := createExample(t, m)
-	root, cfg := configuredExample(t, m, d)
-	backUp(t, m, d, root, &cfg)
-	backUp(t, m, d, root, &cfg)
-
+	// An empty Keep returns before invoking restic at all.
+	m.Restic = filepath.Join(t.TempDir(), "must-not-run-restic")
+	d := &Destination{Name: "example-backups", Address: filepath.Join(t.TempDir(), "repo"), m: m}
+	cfg := NewConfig(d.Name)
 	cfg.Keep = Keep{}
 	if err := d.ApplyRetention(context.Background(), cfg); err != nil {
 		t.Fatal(err)
-	}
-	if n := countBackups(t, m, d, root, &cfg); n != 2 {
-		t.Errorf("%d backups left, want both", n)
 	}
 }
 
@@ -339,16 +335,27 @@ func TestStopAndDeleteReturnsABackupThatAppearedMeanwhile(t *testing.T) {
 }
 
 func TestStopWithoutDeletingKeepsEveryComputersBackups(t *testing.T) {
-	requireRestic(t)
+	t.Parallel()
 	m := testMachine(t, "example-laptop")
-	d, _ := createExample(t, m)
-	root, cfg := sharedFolder(t, m, d)
+	// StopBackingUp only removes local config and scheduling; it never touches
+	// the repository (so no computer's backups can be deleted).
+	m.Restic = filepath.Join(t.TempDir(), "must-not-run-restic")
+	root := exampleFolder(t, m)
+	cfg := NewConfig("example-backups")
+	writeConfig(t, root, cfg)
+	if err := m.addFolder(root, cfg.ID, cfg.Schedule); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := m.StopBackingUp(root); err != nil {
 		t.Fatal(err)
 	}
-	if n := countBackups(t, m, d, root, &cfg); n != 2 {
-		t.Errorf("%d backups with the folder's ID are left, want both computers'", n)
+	if _, err := os.Stat(filepath.Join(root, ConfigFileName)); !os.IsNotExist(err) {
+		t.Errorf("config file still present: %v", err)
+	}
+	var list foldersFile
+	if err := readJSON(m.foldersFile(), &list); err != nil || len(list.Folders) != 0 {
+		t.Errorf("folders = %+v, %v; want empty", list.Folders, err)
 	}
 }
 

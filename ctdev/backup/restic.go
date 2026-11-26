@@ -115,8 +115,16 @@ const maxJSONLine = 4 * 1024 * 1024
 // Ubuntu 22.04 and 24.04 ship older ones in apt; ctdev install restic installs 0.19.1.
 var minRestic = [3]int{0, 17, 0}
 
-// resticChecked caches the version check per resolved binary for the process.
+// resticChecked caches the version check per resolved binary (path + size +
+// mtime) for the process so overwriting a test script at the same path isn't
+// served a stale result.
 var resticChecked sync.Map
+
+type resticBinaryKey struct {
+	path string
+	size int64
+	mod  int64
+}
 
 // checkRestic finds the binary and makes sure it's new enough, returning its
 // path. The lookup isn't cached, so installing restic mid-run is noticed.
@@ -125,7 +133,11 @@ func checkRestic(ctx context.Context, bin string) (string, error) {
 	if err != nil {
 		return "", ErrNoRestic
 	}
-	if cached, ok := resticChecked.Load(path); ok {
+	key := resticBinaryKey{path: path}
+	if fi, err := os.Stat(path); err == nil {
+		key.size, key.mod = fi.Size(), fi.ModTime().UnixNano()
+	}
+	if cached, ok := resticChecked.Load(key); ok {
 		if cached == nil {
 			return path, nil
 		}
@@ -136,10 +148,10 @@ func checkRestic(ctx context.Context, bin string) (string, error) {
 		return "", fmt.Errorf("run restic version: %w", err)
 	}
 	if err := resticVersionOK(string(out)); err != nil {
-		resticChecked.Store(path, err)
+		resticChecked.Store(key, err)
 		return "", err
 	}
-	resticChecked.Store(path, nil)
+	resticChecked.Store(key, nil)
 	return path, nil
 }
 
@@ -211,6 +223,9 @@ func (d *Destination) env(password, keyHint string) []string {
 	for _, k := range scrubbedEnv {
 		drop[k] = true
 	}
+	if d.m.cacheDir != "" {
+		drop["RESTIC_CACHE_DIR"] = true
+	}
 	var env []string
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
@@ -228,6 +243,9 @@ func (d *Destination) env(password, keyHint string) []string {
 	}
 	// ctdev's own come last, so nothing before them can override them.
 	env = append(env, "RESTIC_REPOSITORY="+d.Address, "RESTIC_PASSWORD="+password)
+	if d.m.cacheDir != "" {
+		env = append(env, "RESTIC_CACHE_DIR="+d.m.cacheDir, "GOMAXPROCS=2")
+	}
 	if keyHint != "" {
 		// Each key restic tries costs a deliberately slow scrypt, so name ours.
 		env = append(env, "RESTIC_KEY_HINT="+keyHint)

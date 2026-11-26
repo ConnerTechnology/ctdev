@@ -1,6 +1,11 @@
 package component
 
-import "testing"
+// testCleanup is the subset of testing.TB RegisterForTest uses. Naming the
+// interface avoids importing "testing" into the production binary.
+type testCleanup interface {
+	Helper()
+	Cleanup(func())
+}
 
 // RegisterForTest appends c to the Registry for the duration of the test and
 // restores the original Registry afterwards. Use this when a test needs
@@ -8,7 +13,7 @@ import "testing"
 // The componentByName index is rebuilt too — Registry and the index are two
 // views of the same data, and leaving the index stale would make
 // alreadyInstalled() disagree with FindByName for the test component.
-func RegisterForTest(t testing.TB, c Component) {
+func RegisterForTest(t testCleanup, c Component) {
 	t.Helper()
 	origRegistry := Registry
 	origIndex := componentByName
