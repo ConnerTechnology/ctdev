@@ -45,7 +45,7 @@ else
     case "${f#./}" in
       ctdev/*) want_go=1 want_ubuntu=1 ;;
       # Changes to the workflow or test tools can affect all container jobs.
-      .github/workflows/*|scripts/checks.sh|scripts/install-test-restic.sh|scripts/ci-go-test.sh) want_shell=1 want_go=1 want_ubuntu=1 want_pwsh=1 ;;
+      .github/workflows/*|.github/actions/*|scripts/checks.sh|scripts/install-test-restic.sh|scripts/ci-go-test.sh) want_shell=1 want_go=1 want_ubuntu=1 want_pwsh=1 ;;
       install.sh|uninstall.sh|devcontainer.sh) want_shell=1 want_ubuntu=1 ;;
       scripts/*|.shellcheckrc) want_shell=1 ;;
       install.ps1) want_pwsh=1 ;;
@@ -63,8 +63,7 @@ shell_job() {
   shellcheck "${present[@]}"
 }
 
-# The Go toolchain CI installs is the toolchain line of ctdev/go.mod (setup-go reads it), so the
-# container uses the same release.
+# Use the same Go toolchain as hosted CI and release builds.
 go_base_image() {
   local v
   v=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2 }' ctdev/go.mod)

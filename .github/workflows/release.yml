@@ -97,10 +97,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version-file: ctdev/go.mod
-          cache-dependency-path: ctdev/go.sum
+        uses: ./.github/actions/setup-ctdev-go
 
       - name: Build binary
         working-directory: ctdev

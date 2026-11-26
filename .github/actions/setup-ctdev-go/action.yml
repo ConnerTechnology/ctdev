@@ -1,0 +1,39 @@
+name: Set up ctdev Go
+description: Install and verify the Go toolchain pinned in ctdev/go.mod
+inputs:
+  cache-dependency-path:
+    description: Files that determine this job's Go cache key
+    default: ctdev/go.sum
+runs:
+  using: composite
+  steps:
+    - name: Read the pinned toolchain
+      id: pin
+      shell: bash
+      run: |
+        version=$(awk '$1 == "toolchain" { print $2 }' ctdev/go.mod)
+        if [[ ! "$version" =~ ^go[1-9][0-9]*\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error file=ctdev/go.mod::Expected one stable Go toolchain version"
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    # With GOTOOLCHAIN=local, setup-go's go-version-file selects the go
+    # directive. Pass the toolchain explicitly to keep the minimum Go version.
+    - name: Install the pinned toolchain
+      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      with:
+        go-version: ${{ steps.pin.outputs.version }}
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Verify the installed toolchain
+      shell: bash
+      env:
+        EXPECTED_GO: ${{ steps.pin.outputs.version }}
+      run: |
+        actual=$(go env GOVERSION)
+        if [[ "$actual" != "$EXPECTED_GO" ]]; then
+          echo "::error::Expected $EXPECTED_GO but found $actual"
+          exit 1
+        fi
+        go version
