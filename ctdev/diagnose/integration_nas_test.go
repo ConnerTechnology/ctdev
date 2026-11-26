@@ -161,19 +161,32 @@ func TestProxmoxSendsTokenAuth(t *testing.T) {
 	}
 }
 
-// Every vendor secret must be unreachable from a rendered report.
+// Every vendor secret must be unreachable from a rendered report, whether the
+// endpoint is unreachable or echoes the secret back in an HTTP error body.
 func TestNASCredentialsNeverReachTheReport(t *testing.T) {
 	const secret = "nas-password-do-not-print"
-	checks, results := CollectIntegrations(context.Background(), Integrations{
-		Synology: SynologyCreds{Endpoint: unreachableController, Username: "u", Password: secret},
-		Proxmox:  ProxmoxCreds{Endpoint: unreachableController, TokenID: "t", Secret: secret},
-	})
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized credential: " + secret))
+	}))
+	defer srv.Close()
 
-	r := Report{Checks: checks, Results: results, Facts: Facts{Hostname: "h"}}
-	if strings.Contains(Markdown(r), secret) {
-		t.Fatal("a credential reached the Markdown report")
-	}
-	if strings.Contains(Render(r, 100), secret) {
-		t.Fatal("a credential reached the terminal report")
+	for name, endpoint := range map[string]string{
+		"unreachable": unreachableController,
+		"http 401":    srv.URL,
+	} {
+		t.Run(name, func(t *testing.T) {
+			checks, results := CollectIntegrations(context.Background(), Integrations{
+				Synology: SynologyCreds{Endpoint: endpoint, Username: "u", Password: secret},
+				Proxmox:  ProxmoxCreds{Endpoint: endpoint, TokenID: "t", Secret: secret},
+			})
+			r := Report{Checks: checks, Results: results, Facts: Facts{Hostname: "h"}}
+			if strings.Contains(Markdown(r), secret) {
+				t.Fatal("a credential reached the Markdown report")
+			}
+			if strings.Contains(Render(r, 100), secret) {
+				t.Fatal("a credential reached the terminal report")
+			}
+		})
 	}
 }

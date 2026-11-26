@@ -3,6 +3,7 @@ package backupapp
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -31,6 +32,29 @@ type fakeUI struct {
 	Requests []any // every Dashboard, Picker, Confirm, Form, Notice, KitScreen and Running, in order
 	Said     []Line
 	Progress []Progress // every report a Run's fn made
+
+	cleanupOnce sync.Once
+}
+
+// record logs a UI request and registers a cleanup check so any scripted
+// answer left unconsumed (e.g., from an unexpected early exit) fails the test.
+func (f *fakeUI) record(req any) {
+	f.Requests = append(f.Requests, req)
+	if f.t == nil {
+		return
+	}
+	f.cleanupOnce.Do(func() {
+		f.t.Cleanup(func() {
+			if f.t.Failed() {
+				return
+			}
+			if len(f.Dashboards) > 0 || len(f.Picks) > 0 || len(f.Confirms) > 0 ||
+				len(f.Forms) > 0 || len(f.Notices) > 0 || len(f.Kits) > 0 || len(f.Runs) > 0 {
+				f.t.Errorf("fakeUI left scripted inputs unconsumed: dashboards=%v picks=%v confirms=%v forms=%d notices=%v kits=%v runs=%v",
+					f.Dashboards, f.Picks, f.Confirms, len(f.Forms), f.Notices, f.Kits, f.Runs)
+			}
+		})
+	})
 }
 
 func pop[T any](q *[]T) (T, bool) {
@@ -57,7 +81,7 @@ func next[T any](q *[]any) (T, error) {
 }
 
 func (f *fakeUI) Dashboard(_ context.Context, d Dashboard) (Action, error) {
-	f.Requests = append(f.Requests, d)
+	f.record(d)
 	for _, a := range d.Actions {
 		if len([]rune(a.Key)) != 1 {
 			f.t.Errorf("action %q has key %q: an action's key is one character", a.Label, a.Key)
@@ -80,7 +104,7 @@ func (f *fakeUI) Dashboard(_ context.Context, d Dashboard) (Action, error) {
 }
 
 func (f *fakeUI) Pick(_ context.Context, p Picker) (int, error) {
-	f.Requests = append(f.Requests, p)
+	f.record(p)
 	i, err := next[int](&f.Picks)
 	if err == nil && (i < 0 || i >= len(p.Items) || p.Items[i].Dimmed) {
 		f.t.Errorf("picked %d of %+v", i, p.Items)
@@ -90,17 +114,17 @@ func (f *fakeUI) Pick(_ context.Context, p Picker) (int, error) {
 }
 
 func (f *fakeUI) Confirm(_ context.Context, c Confirm) (bool, error) {
-	f.Requests = append(f.Requests, c)
+	f.record(c)
 	return next[bool](&f.Confirms)
 }
 
 func (f *fakeUI) Form(_ context.Context, fm Form) (Values, error) {
-	f.Requests = append(f.Requests, fm)
+	f.record(fm)
 	return next[Values](&f.Forms)
 }
 
 func (f *fakeUI) Notice(_ context.Context, n Notice) error {
-	f.Requests = append(f.Requests, n)
+	f.record(n)
 	err, ok := pop(&f.Notices)
 	if !ok {
 		return ErrCancelled
@@ -109,7 +133,7 @@ func (f *fakeUI) Notice(_ context.Context, n Notice) error {
 }
 
 func (f *fakeUI) ShowKit(_ context.Context, k KitScreen) error {
-	f.Requests = append(f.Requests, k)
+	f.record(k)
 	err, ok := pop(&f.Kits)
 	if !ok {
 		return ErrCancelled
@@ -118,7 +142,7 @@ func (f *fakeUI) ShowKit(_ context.Context, k KitScreen) error {
 }
 
 func (f *fakeUI) Run(ctx context.Context, r Running, fn func(context.Context, func(Progress)) error) error {
-	f.Requests = append(f.Requests, r)
+	f.record(r)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	end, _ := pop(&f.Runs)

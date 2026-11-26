@@ -47,9 +47,11 @@ func parseGrubVar(content, varName string) string {
 	return result
 }
 
+var grubDefaultPath = "/etc/default/grub"
+
 // readGrubFile reads /etc/default/grub and returns its content.
 func readGrubFile() string {
-	data, err := os.ReadFile("/etc/default/grub")
+	data, err := os.ReadFile(grubDefaultPath)
 	if err != nil {
 		return ""
 	}

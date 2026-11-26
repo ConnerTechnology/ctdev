@@ -44,13 +44,14 @@ func tailscaleInstall(ctx context.Context, opts ExecOpts) error {
 			distro = "ubuntu"
 		}
 
-		keyring := "/usr/share/keyrings/tailscale-archive-keyring.gpg"
-		keyURL := fmt.Sprintf("https://pkgs.tailscale.com/stable/%s/%s.noarmor.gpg", distro, codename)
+		k := APTRepoKeys["tailscale"]
+		keyring := k.KeyringPath
+		keyURL := fmt.Sprintf("%s/%s/%s.noarmor.gpg", k.RepoURL, distro, codename)
 		if err := sysutil.AddAPTKeyring(ctx, o, keyURL, keyring); err != nil {
 			return fmt.Errorf("add tailscale GPG key: %w", err)
 		}
 
-		repoLine := fmt.Sprintf("deb [signed-by=%s] https://pkgs.tailscale.com/stable/%s %s main", keyring, distro, codename)
+		repoLine := fmt.Sprintf("deb [signed-by=%s] %s/%s %s main", keyring, k.RepoURL, distro, codename)
 		if err := sysutil.AddAPTSource(ctx, o, repoLine, "tailscale.list"); err != nil {
 			return fmt.Errorf("add tailscale repo: %w", err)
 		}
@@ -92,7 +93,7 @@ func tailscaleUninstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.RemovePackage(ctx, o, "tailscale"); err != nil {
 			return err
 		}
-		return sysutil.RemoveAPTRepo(ctx, o, "tailscale.list", "/usr/share/keyrings/tailscale-archive-keyring.gpg")
+		return sysutil.RemoveAPTRepo(ctx, o, "tailscale.list", APTRepoKeys["tailscale"].KeyringPath)
 	default:
 		return ErrUnsupportedOS
 	}

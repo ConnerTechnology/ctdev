@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -155,14 +157,30 @@ func TestSizeNowSkipsWhatItCantRead(t *testing.T) {
 }
 
 func TestAFailedBackupIsRecorded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stand-in requires unix")
+	}
+	t.Parallel()
 	m := testMachine(t, "example-laptop")
 	root := exampleFolder(t, m)
-	d := &Destination{Name: "example-backups", Address: filepath.Join(t.TempDir(), "no-repo"), m: m, computerKey: "example"}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "restic")
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = version ]; then echo 'restic 0.19.1 compiled with go1.26.4 on linux/amd64'; exit 0; fi\n" +
+		"echo 'Fatal: repository does not exist' >&2\nexit 1\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m.Restic = bin
+	d := &Destination{Name: "example-backups", Address: filepath.Join(dir, "no-repo"), m: m, computerKey: "example"}
 	if _, err := m.Backup(context.Background(), d, root, nil); err == nil {
 		t.Fatal("a backup to a missing repository must fail")
 	}
 	s := m.Status(context.Background(), root)
 	if s.Last == nil || !s.Failed() {
-		t.Errorf("last run = %+v, want a failure", s.Last)
+		t.Fatalf("last run = %+v, want a failure", s.Last)
+	}
+	if !strings.Contains(s.Last.Error, "repository does not exist") {
+		t.Errorf("last run error = %q, want restic's failure message", s.Last.Error)
 	}
 }

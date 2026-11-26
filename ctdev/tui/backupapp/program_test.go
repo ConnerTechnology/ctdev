@@ -127,11 +127,53 @@ func (term *terminal) waitFor(s string) {
 
 // runningProgram is the real program on a scripted terminal: keys go to keys, and
 // once it exits done gets run's error and after what it printed.
+type syncBuffer struct {
+	mu      sync.Mutex
+	buf     bytes.Buffer
+	changed chan struct{}
+}
+
+func newSyncBuffer() *syncBuffer {
+	return &syncBuffer{changed: make(chan struct{}, 1)}
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	n, err := b.buf.Write(p)
+	b.mu.Unlock()
+	select {
+	case b.changed <- struct{}{}:
+	default:
+	}
+	return n, err
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *syncBuffer) waitFor(t *testing.T, want string) {
+	t.Helper()
+	deadline := time.After(10 * time.Second)
+	for {
+		if strings.Contains(ansi.Strip(b.String()), want) {
+			return
+		}
+		select {
+		case <-b.changed:
+		case <-deadline:
+			t.Fatalf("after-exit output never showed %q:\n%s", want, ansi.Strip(b.String()))
+		}
+	}
+}
+
 type runningProgram struct {
 	term  *terminal
 	keys  io.Writer
 	done  chan error
-	after *bytes.Buffer
+	after *syncBuffer
 }
 
 // quit presses q until the program exits, and returns its error. The program
@@ -154,7 +196,7 @@ func startProgram(t *testing.T, d Deps, flow func(context.Context, UI, Deps) err
 	t.Helper()
 	in, keys := io.Pipe()
 	t.Cleanup(func() { keys.Close() }) // frees a quit's last key, which nothing reads once the program has exited
-	p := &runningProgram{term: &terminal{t: t, changed: make(chan struct{}, 1)}, keys: keys, done: make(chan error), after: &bytes.Buffer{}}
+	p := &runningProgram{term: &terminal{t: t, changed: make(chan struct{}, 1)}, keys: keys, done: make(chan error), after: newSyncBuffer()}
 	saved := programOptions
 	programOptions = func() []tea.ProgramOption {
 		return []tea.ProgramOption{tea.WithInput(in), tea.WithOutput(p.term), tea.WithWindowSize(96, 40)}

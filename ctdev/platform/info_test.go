@@ -62,19 +62,32 @@ func TestParseMacNetworkSetupEmpty(t *testing.T) {
 }
 
 func TestParseMacNetworkSetupFiltersInactive(t *testing.T) {
-	// All interfaces will be "inactive" since they don't exist
 	input := `Hardware Port: Wi-Fi
-Device: en_fake_wifi_99
+Device: en0
 VLAN Configurations
 
 Hardware Port: Thunderbolt Ethernet
-Device: en_fake_eth_99
+Device: en4
+VLAN Configurations
+
+Hardware Port: Bluetooth PAN
+Device: en5
 VLAN Configurations
 `
-	result := parseMacNetworkSetup(input)
-	// All should be filtered out since macIfaceActive returns false for fake interfaces
-	if len(result) != 0 {
-		t.Errorf("expected 0 adapters for fake interfaces, got %d", len(result))
+	active := map[string]bool{"en0": true, "en5": true}
+	result := parseMacNetworkSetupWith(input, func(iface string) bool { return active[iface] })
+	// Only active Wi-Fi/Ethernet/Thunderbolt ports should be returned; inactive
+	// en4 and non-LAN Bluetooth PAN en5 must be filtered out.
+	if len(result) != 1 {
+		t.Fatalf("expected 1 active adapter, got %d: %+v", len(result), result)
+	}
+	if result[0].Interface != "en0" || result[0].Type != "wifi" || result[0].Name != "Wi-Fi" {
+		t.Errorf("got %+v, want active Wi-Fi on en0", result[0])
+	}
+
+	none := parseMacNetworkSetupWith(input, func(string) bool { return false })
+	if len(none) != 0 {
+		t.Errorf("expected 0 adapters when none active, got %d", len(none))
 	}
 }
 

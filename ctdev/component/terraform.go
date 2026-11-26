@@ -26,11 +26,11 @@ func terraformInstall(ctx context.Context, opts ExecOpts) error {
 		if p.Codename == "" {
 			return fmt.Errorf("could not determine distribution codename for APT repo")
 		}
-		keyring := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
+		k := APTRepoKeys["terraform"]
 		return sysutil.InstallAPTRepoPackage(ctx, o, sysutil.APTRepoPackage{
-			KeyURL:      "https://apt.releases.hashicorp.com/gpg",
-			KeyringPath: keyring,
-			RepoLine:    fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main", keyring, p.Codename),
+			KeyURL:      k.KeyURL,
+			KeyringPath: k.KeyringPath,
+			RepoLine:    fmt.Sprintf("deb [signed-by=%s] %s %s main", k.KeyringPath, k.RepoURL, p.Codename),
 			SourceFile:  "hashicorp.list",
 			Packages:    []string{"terraform"},
 		})
@@ -61,7 +61,7 @@ func terraformUninstall(ctx context.Context, opts ExecOpts) error {
 		}
 		// Clean up the HashiCorp repo regardless, so a dangling source doesn't
 		// linger after the package is gone.
-		return sysutil.RemoveAPTRepo(ctx, o, "hashicorp.list", "/usr/share/keyrings/hashicorp-archive-keyring.gpg")
+		return sysutil.RemoveAPTRepo(ctx, o, "hashicorp.list", APTRepoKeys["terraform"].KeyringPath)
 	default:
 		// Fallback: remove a hand-placed standalone binary at the conventional path.
 		return sysutil.SudoRun(ctx, o, "rm", "-f", "/usr/local/bin/terraform")

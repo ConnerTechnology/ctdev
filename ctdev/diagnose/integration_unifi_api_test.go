@@ -3,6 +3,7 @@ package diagnose
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,18 +19,23 @@ const unreachableController = "https://127.0.0.1:1"
 // would hand the credential to whoever is in the middle. This is the guarantee
 // that makes skipping certificate verification defensible at all.
 func TestUnifiRefusesPublicEndpoints(t *testing.T) {
+	origLookup := lookupHostIP
+	lookupHostIP = func(host string) ([]net.IP, error) {
+		if host == "unifi.example.com" {
+			return []net.IP{net.ParseIP("93.184.216.34")}, nil
+		}
+		return nil, errors.New("unexpected lookup: " + host)
+	}
+	t.Cleanup(func() { lookupHostIP = origLookup })
+
 	for _, endpoint := range []string{
 		"https://203.0.113.9",
 		"https://8.8.8.8:8443",
 		"https://unifi.example.com",
 	} {
 		_, err := newUnifiClient(UnifiCreds{Endpoint: endpoint, APIKey: "secret"})
-		if err == nil {
-			t.Errorf("%s: expected a refusal, got a usable client", endpoint)
-			continue
-		}
-		if !errors.Is(err, errUnifiPublic) && !strings.Contains(err.Error(), "resolve") {
-			t.Errorf("%s: refused for the wrong reason: %v", endpoint, err)
+		if !errors.Is(err, errUnifiPublic) {
+			t.Errorf("%s: err = %v, want errUnifiPublic", endpoint, err)
 		}
 	}
 }
@@ -248,18 +254,31 @@ func TestCollectIntegrationsReportsAccessFailure(t *testing.T) {
 	}
 }
 
-// The API key must never reach a rendered report, whatever else goes in Data.
+// The API key must never reach a rendered report, whether the controller is
+// unreachable or echoes back an HTTP error containing it.
 func TestUnifiCredentialsNeverReachTheReport(t *testing.T) {
 	const key = "unifi-api-key-do-not-print"
-	checks, results := CollectIntegrations(context.Background(), Integrations{
-		UniFi: UnifiCreds{Endpoint: unreachableController, APIKey: key},
-	})
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("invalid X-API-KEY: " + key))
+	}))
+	defer srv.Close()
 
-	r := Report{Checks: checks, Results: results, Facts: Facts{Hostname: "h"}}
-	if strings.Contains(Markdown(r), key) {
-		t.Fatal("the API key reached the Markdown report")
-	}
-	if strings.Contains(Render(r, 100), key) {
-		t.Fatal("the API key reached the terminal report")
+	for name, endpoint := range map[string]string{
+		"unreachable": unreachableController,
+		"http 401":    srv.URL,
+	} {
+		t.Run(name, func(t *testing.T) {
+			checks, results := CollectIntegrations(context.Background(), Integrations{
+				UniFi: UnifiCreds{Endpoint: endpoint, APIKey: key},
+			})
+			r := Report{Checks: checks, Results: results, Facts: Facts{Hostname: "h"}}
+			if strings.Contains(Markdown(r), key) {
+				t.Fatal("the API key reached the Markdown report")
+			}
+			if strings.Contains(Render(r, 100), key) {
+				t.Fatal("the API key reached the terminal report")
+			}
+		})
 	}
 }

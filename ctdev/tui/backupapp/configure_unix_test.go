@@ -56,7 +56,7 @@ init*)
   printf '['; sep=""
   for k in "$repo"/keys/*; do
     id=$(basename "$k")
-    printf '%s{"id":"%s","current":%s,"userName":"%s","hostName":"%s","created":"2026-11-23T11:00:00Z"}' "$sep" "$id" \
+    printf '%s{"id":"%s","current":%s,"userName":"%s","hostName":"%s","created":"2026-11-23 11:00:00"}' "$sep" "$id" \
       "$([ "$id" = "$me" ] && echo true || echo false)" "$(cat "$k/user" 2>/dev/null)" "$(cat "$k/host" 2>/dev/null)"
     sep=","
   done
@@ -277,7 +277,11 @@ func TestConfigureBackupHistory(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			d := linkFixture(t)
-			ui := &fakeUI{t: t, Picks: c.picks, Forms: []any{defaultKeep}}
+			var forms []any
+			if !c.cancelled {
+				forms = []any{defaultKeep}
+			}
+			ui := &fakeUI{t: t, Picks: c.picks, Forms: forms}
 			err := configureFolder(ctx, ui, d, d.Machine.Status(ctx, d.Cwd))
 			cfg, readErr := backup.ReadConfig(d.Cwd)
 			if c.cancelled {

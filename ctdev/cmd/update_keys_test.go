@@ -120,27 +120,3 @@ func TestAPTKeyringTargets(t *testing.T) {
 		}
 	})
 }
-
-func TestAPTKeyRefreshers_RepoURLsMatchInstallers(t *testing.T) {
-	// The RepoURL is how the refresher finds the source files APT actually
-	// reads, whoever wrote them. It must be a prefix of the URI the installer
-	// puts in its repo line, or the lookup misses and the fallback path is
-	// refreshed instead — the exact drift this lookup exists to catch.
-	want := map[string]string{
-		"gh":        "https://cli.github.com/packages",
-		"vscode":    "https://packages.microsoft.com/repos/code",
-		"1password": "https://downloads.1password.com/linux/debian",
-		"terraform": "https://apt.releases.hashicorp.com",
-		"tailscale": "https://pkgs.tailscale.com/stable",
-	}
-	for name, expected := range want {
-		r, ok := aptKeyRefreshers[name]
-		if !ok {
-			t.Errorf("aptKeyRefreshers missing entry for %q", name)
-			continue
-		}
-		if r.RepoURL != expected {
-			t.Errorf("aptKeyRefreshers[%q].RepoURL = %q, want %q", name, r.RepoURL, expected)
-		}
-	}
-}

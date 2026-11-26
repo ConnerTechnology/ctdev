@@ -123,11 +123,9 @@ func TestRunOneComponent_UnknownNameIsNoop(t *testing.T) {
 	}
 }
 
-// A long-running install that exits as soon as ctx is canceled should still
-// reach the "done/fail" path — runOneComponent must wait for the scanner
-// goroutine instead of leaking it.
+// runOneComponent must wait for the output scanner goroutine to finish before
+// returning, so trailing lines are never lost.
 func TestRunOneComponent_ScannerDrainsBeforeReturn(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
 	released := make(chan struct{})
 	comp.RegisterForTest(t, comp.Component{
 		Name: "rc-drain",
@@ -144,13 +142,11 @@ func TestRunOneComponent_ScannerDrainsBeforeReturn(t *testing.T) {
 	sender := &captureSender{}
 	done := make(chan struct{})
 	go func() {
-		runOneComponent(ctx, sender, newTestOp(t, progress.ModeInstall), "rc-drain")
+		runOneComponent(context.Background(), sender, newTestOp(t, progress.ModeInstall), "rc-drain")
 		close(done)
 	}()
 
-	// Let the install goroutine publish its lines then cancel.
 	close(released)
-	cancel()
 	<-done
 
 	seen := map[string]bool{}
@@ -163,6 +159,42 @@ func TestRunOneComponent_ScannerDrainsBeforeReturn(t *testing.T) {
 		if !seen[want] {
 			t.Errorf("expected to see %q streamed through scanner", want)
 		}
+	}
+}
+
+// Cancelling ctx mid-install propagates to GoInstall and reaches the fail path.
+func TestRunOneComponent_CancelPropagatesToInstaller(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	comp.RegisterForTest(t, comp.Component{
+		Name: "rc-cancel",
+		GoInstall: func(ctx context.Context, opts comp.ExecOpts) error {
+			close(started)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		GoUninstall: func(ctx context.Context, opts comp.ExecOpts) error { return nil },
+	})
+
+	sender := &captureSender{}
+	done := make(chan struct{})
+	go func() {
+		runOneComponent(ctx, sender, newTestOp(t, progress.ModeInstall), "rc-cancel")
+		close(done)
+	}()
+
+	<-started
+	cancel()
+	<-done
+
+	var sawFail bool
+	for _, m := range sender.Messages() {
+		if f, ok := m.(progress.InstallFailMsg); ok && f.Name == "rc-cancel" {
+			sawFail = true
+		}
+	}
+	if !sawFail {
+		t.Errorf("expected InstallFailMsg after cancel, got %#v", sender.Messages())
 	}
 }
 
