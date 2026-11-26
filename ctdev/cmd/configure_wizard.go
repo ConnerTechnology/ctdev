@@ -468,7 +468,7 @@ func promptSlider(ctx context.Context, state *setup.SettingState) (string, error
 	if r.Never && err == nil && val == 0 {
 		return setup.SliderNever, nil
 	}
-	if err != nil {
+	if err != nil || math.IsNaN(val) || math.IsInf(val, 0) {
 		fmt.Printf("  %s\n", styles.Dimmed.Render("Invalid number, keeping current value."))
 		return state.CurrentValue, nil
 	}

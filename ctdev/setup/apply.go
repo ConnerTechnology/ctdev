@@ -18,7 +18,7 @@ func grubVarArgs(varName, value string) []string {
 	return []string{
 		"sed", "-i",
 		fmt.Sprintf("s|^%s=.*|%s=%s|", sedEscape(varName), varName, value),
-		"/etc/default/grub",
+		grubDefaultPath,
 	}
 }
 
@@ -44,14 +44,14 @@ func dconfWriteArgs(path, value string) []string {
 // applyGrubVar sets a GRUB variable in /etc/default/grub using sed.
 // If the variable doesn't exist, it appends it.
 func applyGrubVar(ctx context.Context, o sysutil.Opts, varName, value string) error {
-	content, err := os.ReadFile("/etc/default/grub")
+	content, err := os.ReadFile(grubDefaultPath)
 	if err != nil {
-		return fmt.Errorf("read /etc/default/grub: %w", err)
+		return fmt.Errorf("read %s: %w", grubDefaultPath, err)
 	}
 
 	// Backup before modification (-n = no clobber, preserves original across multiple calls)
-	if err := sysutil.SudoRun(ctx, o, "cp", "-n", "/etc/default/grub", "/etc/default/grub.ctdev-backup"); err != nil {
-		return fmt.Errorf("backup /etc/default/grub: %w", err)
+	if err := sysutil.SudoRun(ctx, o, "cp", "-n", grubDefaultPath, grubDefaultPath+".ctdev-backup"); err != nil {
+		return fmt.Errorf("backup %s: %w", grubDefaultPath, err)
 	}
 
 	// Check if variable already exists — if so, replace it; otherwise append.
@@ -72,7 +72,7 @@ func applyGrubVar(ctx context.Context, o sysutil.Opts, varName, value string) er
 	}
 	tmpFile.Close()
 
-	return sysutil.SudoRun(ctx, o, "cp", tmpFile.Name(), "/etc/default/grub")
+	return sysutil.SudoRun(ctx, o, "cp", tmpFile.Name(), grubDefaultPath)
 }
 
 // appendGrubLine returns content with `varName=value` appended as a new line.
@@ -184,6 +184,7 @@ func applyNvidiaSigning(ctx context.Context, o sysutil.Opts) error {
 	return gpu.RunSetup(ctx, gpu.Opts{
 		Stdout:              o.Stdout,
 		Stdin:               os.Stdin,
+		DryRun:              o.DryRun,
 		SecureBootConfirmed: true,
 	})
 }
@@ -196,13 +197,14 @@ func applyNvidiaSuspendServices(ctx context.Context, o sysutil.Opts) error {
 		"nvidia-hibernate.service",
 	}
 	for _, svc := range services {
-		// Skip services that don't exist or are static (no [Install] section).
-		// (systemctl is-enabled output read plainly; no ctx because this is a read-only probe.)
-		out, err := runOutput(ctx, "systemctl", "is-enabled", svc)
-		if err != nil {
+		// systemctl is-enabled exits 1 for disabled units while still printing
+		// "disabled" on stdout; skip units that are already enabled/static/indirect
+		// or missing.
+		state, err := runOutput(ctx, "systemctl", "is-enabled", svc)
+		if state == "static" || state == "enabled" || state == "indirect" {
 			continue
 		}
-		if strings.TrimSpace(out) == "static" {
+		if err != nil && state != "disabled" {
 			continue
 		}
 		if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", svc); err != nil {

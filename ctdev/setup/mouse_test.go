@@ -654,3 +654,37 @@ func TestMiddleClickFormerCtdevConfigAloneIsPartlyInstalled(t *testing.T) {
 		t.Errorf("off left %v", left)
 	}
 }
+
+func TestApplyXbindkeys_DryRunWritesNothing(t *testing.T) {
+	f, home := useFakeMouseSystem(t)
+	var out bytes.Buffer
+	if err := applyXbindkeys(context.Background(), sysutil.Opts{Stdout: &out, DryRun: true}); err != nil {
+		t.Fatalf("applyXbindkeys dry-run: %v", err)
+	}
+	if files := listFiles(t, home); len(files) != 0 {
+		t.Errorf("dry-run wrote files to HOME: %v", files)
+	}
+	if f.starts != 0 {
+		t.Errorf("dry-run started xbindkeys %d times, want 0", f.starts)
+	}
+	if !strings.Contains(out.String(), "[dry-run]") {
+		t.Errorf("expected [dry-run] log output, got %q", out.String())
+	}
+}
+
+func TestApplyLogitechKVMFix_DryRunWritesNothing(t *testing.T) {
+	_, home := useFakeMouseSystem(t)
+	var out bytes.Buffer
+	if err := applyLogitechKVMFix(context.Background(), sysutil.Opts{Stdout: &out, DryRun: true}); err != nil {
+		t.Fatalf("applyLogitechKVMFix dry-run: %v", err)
+	}
+	if files := listFiles(t, home); len(files) != 0 {
+		t.Errorf("dry-run wrote user service files to HOME: %v", files)
+	}
+	if fileExists(logitechUdevRule) {
+		t.Errorf("dry-run wrote udev rule %s", logitechUdevRule)
+	}
+	if !strings.Contains(out.String(), "[dry-run]") {
+		t.Errorf("expected [dry-run] log output, got %q", out.String())
+	}
+}

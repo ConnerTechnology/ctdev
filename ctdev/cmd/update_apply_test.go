@@ -3,6 +3,10 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -125,5 +129,115 @@ func TestUpdateSelf_DryRunSaysAsRoot(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "(as root)") || !strings.Contains(got, "INSTALL_DIR="+dir) {
 		t.Errorf("dry run = %q, want it to say (as root) and INSTALL_DIR=%s", got, dir)
+	}
+}
+
+func TestDownloadVerifiedArchive_ChecksumAndCleanup(t *testing.T) {
+	payload := []byte("example-archive-bytes")
+	sum := sha256.Sum256(payload)
+	goodHash := hex.EncodeToString(sum[:])
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/tool.tar.gz":
+			_, _ = w.Write(payload)
+		case "/good.sha256":
+			_, _ = w.Write([]byte(goodHash + "  tool.tar.gz\n"))
+		case "/bad.sha256":
+			_, _ = w.Write([]byte(strings.Repeat("0", 64) + "  tool.tar.gz\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	t.Run("checksum mismatch skips install", func(t *testing.T) {
+		installed := false
+		err := downloadVerifiedArchive(context.Background(), srv.URL+"/tool.tar.gz", srv.URL+"/bad.sha256",
+			func(cs string) (string, error) { return strings.Fields(cs)[0], nil },
+			func(tmpDir, archivePath string) error { installed = true; return nil })
+		if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+			t.Fatalf("err = %v, want checksum mismatch", err)
+		}
+		if installed {
+			t.Error("install callback ran despite checksum mismatch")
+		}
+	})
+
+	t.Run("checksum match runs install and cleans temp dir", func(t *testing.T) {
+		var capturedDir string
+		err := downloadVerifiedArchive(context.Background(), srv.URL+"/tool.tar.gz", srv.URL+"/good.sha256",
+			func(cs string) (string, error) { return strings.Fields(cs)[0], nil },
+			func(tmpDir, archivePath string) error {
+				capturedDir = tmpDir
+				if _, err := os.Stat(archivePath); err != nil {
+					t.Errorf("archive missing during install: %v", err)
+				}
+				return nil
+			})
+		if err != nil {
+			t.Fatalf("downloadVerifiedArchive: %v", err)
+		}
+		if capturedDir == "" {
+			t.Fatal("install callback did not run")
+		}
+		if _, err := os.Stat(capturedDir); !os.IsNotExist(err) {
+			t.Errorf("temp dir %s was not cleaned up", capturedDir)
+		}
+	})
+}
+
+func TestBuildUpdateSteps_CoversSources(t *testing.T) {
+	items := []checklist.UpdateItem{
+		{Name: "curl", Source: "apt"},
+		{Name: "git", Source: "apt"},
+		{Name: "org.example.App", Source: "flatpak"},
+		{Name: "jq", Source: "brew"},
+		{Name: "visual-studio-code", Source: "brew-cask"},
+		{Name: "zsh-autosuggestions", Source: "git"},
+		{Name: "bun", Source: "runtime", CurrentVer: "1.0", NewVer: "1.1"},
+		{Name: "go", Source: "runtime", CurrentVer: "1.24", NewVer: "1.25"},
+		{Name: "helm", Source: "cli", CurrentVer: "3.15", NewVer: "3.16"},
+		{Name: "pihole", Source: "docker"},
+	}
+	steps := buildUpdateSteps(items)
+	if len(steps) != 9 {
+		t.Fatalf("got %d steps, want 9 (2 apt items batched into 1): %+v", len(steps), steps)
+	}
+	if steps[0].name != "apt (2 packages)" {
+		t.Errorf("steps[0].name = %q, want apt (2 packages)", steps[0].name)
+	}
+}
+
+func TestHTTPVersionFetchers_StatusAndParsing(t *testing.T) {
+	status := http.StatusOK
+	body := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	origGo, origKube := goReleasesURL, kubectlStableURL
+	goReleasesURL, kubectlStableURL = srv.URL, srv.URL
+	t.Cleanup(func() { goReleasesURL, kubectlStableURL = origGo, origKube })
+
+	body = `[{"version":"go1.26.1","stable":true,"files":[]}]`
+	if ver, err := fetchLatestGoVersion(context.Background()); err != nil || ver != "1.26.1" {
+		t.Errorf("fetchLatestGoVersion() = %q, %v; want 1.26.1", ver, err)
+	}
+
+	body = "v1.33.2\n"
+	if ver, err := fetchLatestKubectlVersion(context.Background()); err != nil || ver != "1.33.2" {
+		t.Errorf("fetchLatestKubectlVersion() = %q, %v; want 1.33.2", ver, err)
+	}
+
+	status = http.StatusInternalServerError
+	body = "<html>error</html>"
+	if _, err := fetchLatestGoVersion(context.Background()); err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+		t.Errorf("fetchLatestGoVersion(500) = %v, want HTTP 500 error", err)
+	}
+	if _, err := fetchLatestKubectlVersion(context.Background()); err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+		t.Errorf("fetchLatestKubectlVersion(500) = %v, want HTTP 500 error", err)
 	}
 }

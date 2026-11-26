@@ -117,10 +117,14 @@ func applyPiholeListenMode(ctx context.Context, o sysutil.Opts, value string) er
 
 // detectPiholeBlocking reports whether Pi-hole blocking is active.
 func detectPiholeBlocking(ctx context.Context) string {
-	if piholeConfigRead(ctx, "dns.blocking.active") == "false" {
+	switch piholeConfigRead(ctx, "dns.blocking.active") {
+	case "true":
+		return "enabled"
+	case "false":
 		return "disabled"
+	default:
+		return ValueUnknown
 	}
-	return "enabled"
 }
 
 // applyPiholeBlocking enables or disables Pi-hole blocking via the pihole CLI,

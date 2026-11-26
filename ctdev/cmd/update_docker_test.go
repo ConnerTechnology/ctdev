@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
@@ -192,5 +194,84 @@ func TestDigestMarkerIgnoresOlderFormat(t *testing.T) {
 	writeDigestMarker(path, map[string]string{"caddy:2": "sha256:new"})
 	if got := readDigestMarker(path)["caddy:2"]; got != "sha256:new" {
 		t.Errorf("round-trip = %q, want sha256:new", got)
+	}
+}
+
+func TestBuiltImageHasUpdate_CheckGuardSkipsMarkerWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell stub")
+	}
+	stackDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stackDir, "Dockerfile"), []byte("FROM caddy:2-builder\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	binDir := t.TempDir()
+	// Stub docker buildx imagetools inspect to return a digest.
+	dockerStub := "#!/bin/sh\necho 'Digest: sha256:abc123'\n"
+	if err := os.WriteFile(filepath.Join(binDir, "docker"), []byte(dockerStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+
+	savedCheck, savedDryRun := flagCheck, flagDryRun
+	flagCheck, flagDryRun = true, false
+	t.Cleanup(func() { flagCheck, flagDryRun = savedCheck, savedDryRun })
+
+	changed, _, err := builtImageHasUpdate(context.Background(), dockerStack{Name: "caddy", Dir: stackDir}, "caddy:local")
+	if err != nil {
+		t.Fatalf("builtImageHasUpdate: %v", err)
+	}
+	if changed {
+		t.Error("first sighting should seed baseline without flagging changed")
+	}
+	if _, err := os.Stat(filepath.Join(stackDir, baseDigestMarker)); !os.IsNotExist(err) {
+		t.Error("--check must not write .ctdev-base-digests marker file")
+	}
+}
+
+func TestScanDocker_PartialErrorPreservesFoundUpdates(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux compose stack scan")
+	}
+	dir := t.TempDir()
+	okCompose := filepath.Join(dir, "ok", "docker-compose.yml")
+	badCompose := filepath.Join(dir, "bad", "docker-compose.yml")
+	for _, p := range []string{okCompose, badCompose} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("services: {}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	component.RegisterForTest(t, component.Component{
+		Name: "test-stack-bad", SupportedOS: []component.OS{component.OSLinux}, DetectPath: badCompose,
+	})
+	component.RegisterForTest(t, component.Component{
+		Name: "test-stack-ok", SupportedOS: []component.OS{component.OSLinux}, DetectPath: okCompose,
+	})
+
+	binDir := t.TempDir()
+	// Stub docker: badCompose fails `compose config`, okCompose reports a stale image.
+	dockerStub := `#!/bin/sh
+case "$*" in
+  *"` + badCompose + `"*) exit 1 ;;
+  *"` + okCompose + `"*) echo "example/app:latest" ;;
+  *"image inspect"*) echo '["example/app@sha256:old"]' ;;
+  *"imagetools inspect"*) echo 'Digest: sha256:new' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(binDir, "docker"), []byte(dockerStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+
+	items, err := scanDocker(context.Background())
+	if err != nil {
+		t.Fatalf("scanDocker returned error despite finding an update: %v", err)
+	}
+	if len(items) != 1 || items[0].Name != "test-stack-ok" {
+		t.Errorf("scanDocker items = %+v, want [test-stack-ok]", items)
 	}
 }

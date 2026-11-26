@@ -1,6 +1,10 @@
 package setup
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -50,5 +54,40 @@ func TestMagicDNSForwardRecord(t *testing.T) {
 	}
 	if got := magicDNSForwardRecord(""); got != "" {
 		t.Errorf("no suffix should produce no record, got %q", got)
+	}
+}
+
+func TestDetectPiholeBlocking(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell stub")
+	}
+	tests := []struct {
+		name   string
+		script string // empty means no pihole-FTL binary on PATH
+		want   string
+	}{
+		{"active true", "#!/bin/sh\necho true\n", "enabled"},
+		{"active false", "#!/bin/sh\necho false\n", "disabled"},
+		{"command fails returns unknown", "#!/bin/sh\nexit 1\n", ValueUnknown},
+		{"missing binary returns unknown", "", ValueUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binDir := t.TempDir()
+			// Pass through `sudo -n pihole-FTL ...` when running as non-root.
+			sudoStub := "#!/bin/sh\nif [ \"$1\" = \"-n\" ]; then shift; fi\nexec \"$@\"\n"
+			if err := os.WriteFile(filepath.Join(binDir, "sudo"), []byte(sudoStub), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if tt.script != "" {
+				if err := os.WriteFile(filepath.Join(binDir, "pihole-FTL"), []byte(tt.script), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("PATH", binDir)
+			if got := detectPiholeBlocking(context.Background()); got != tt.want {
+				t.Errorf("detectPiholeBlocking() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

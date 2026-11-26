@@ -11,10 +11,7 @@ import (
 // deliberately because we need stdout as a string, not streamed to a writer.
 func runOutput(ctx context.Context, name string, args ...string) (string, error) {
 	out, err := exec.CommandContext(ctx, name, args...).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(string(out)), err
 }
 
 // startDetached spawns a long-running background process without waiting for

@@ -393,3 +393,50 @@ func TestRetiredConfigureCategoriesAreUnknown(t *testing.T) {
 		})
 	}
 }
+
+func TestPromptSlider_RejectsNaNAndInf(t *testing.T) {
+	ctx := context.Background()
+	slider := &setup.Setting{
+		Name:    "Test slider",
+		Control: setup.ControlSlider,
+		Default: "60",
+		Slider:  &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min"},
+	}
+	for _, bad := range []string{"NaN", "Inf", "-Inf", "+Inf"} {
+		t.Run(bad, func(t *testing.T) {
+			useStdin(t, bad+"\n")
+			st := &setup.SettingState{Setting: slider, CurrentValue: "30", DesiredValue: "60"}
+			var got string
+			captureStdout(t, func() {
+				var err error
+				got, err = promptSlider(ctx, st)
+				if err != nil {
+					t.Errorf("promptSlider(%q): %v", bad, err)
+				}
+			})
+			if got != "30" {
+				t.Errorf("promptSlider(%q) = %q, want current value 30", bad, got)
+			}
+		})
+	}
+}
+
+func TestRunConfigureAll_BatchModeRunsBatchNotWizard(t *testing.T) {
+	savedBatch, savedDryRun, savedShow := flagBatch, flagDryRun, flagConfigShow
+	flagBatch, flagDryRun, flagConfigShow = true, true, false
+	t.Cleanup(func() { flagBatch, flagDryRun, flagConfigShow = savedBatch, savedDryRun, savedShow })
+
+	// Empty stdin would cause runCategoryWizard to hit EOF and cancel if
+	// runConfigureAll accidentally routed --batch through the wizard.
+	useStdin(t, "")
+	var err error
+	out := captureStdout(t, func() {
+		err = runConfigureAll(configureCmd, nil)
+	})
+	if err != nil {
+		t.Fatalf("runConfigureAll(--batch --dry-run) = %v", err)
+	}
+	if strings.Contains(out, "Cancelled") {
+		t.Errorf("batch run hit interactive wizard cancellation:\n%s", out)
+	}
+}

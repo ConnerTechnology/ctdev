@@ -9,10 +9,20 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
+// grubRemoveParamArgs builds the sed invocation that removes a kernel cmdline
+// parameter from GRUB_CMDLINE_LINUX lines regardless of whether it is first,
+// middle, last, or the sole token inside the quotes.
+func grubRemoveParamArgs(param, path string) []string {
+	esc := sedEscape(param)
+	expr := fmt.Sprintf(`/^GRUB_CMDLINE_LINUX/{s| %s||g; s|"%s |"|g; s|"%s"|""|g}`, esc, esc, esc)
+	return []string{"sed", "-i", expr, path}
+}
+
 // removeGrubCmdlineParam removes a kernel cmdline parameter from /etc/default/grub
-// by stripping " <param>" from GRUB_CMDLINE_LINUX lines.
+// on GRUB_CMDLINE_LINUX lines.
 func removeGrubCmdlineParam(ctx context.Context, o sysutil.Opts, param string) error {
-	return sysutil.SudoRun(ctx, o, "sed", "-i", fmt.Sprintf("s| %s||", sedEscape(param)), "/etc/default/grub")
+	args := grubRemoveParamArgs(param, grubDefaultPath)
+	return sysutil.SudoRun(ctx, o, args[0], args[1:]...)
 }
 
 // ResetLinuxDefaults resets Linux Mint system settings back to their defaults.

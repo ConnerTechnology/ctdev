@@ -170,7 +170,13 @@ func runConfigureAll(cmd *cobra.Command, args []string) error {
 			}
 			continue
 		}
-		if err := runCategoryWizard(ctx, slug, flagConfigShow); err != nil {
+		if flagConfigShow {
+			if err := runCategoryWizard(ctx, slug, true); err != nil {
+				return cancelToClean(err)
+			}
+			continue
+		}
+		if err := runCategoryBatch(ctx, slug); err != nil {
 			return cancelToClean(err)
 		}
 	}

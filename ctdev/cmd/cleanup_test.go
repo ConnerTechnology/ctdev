@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/cleanup"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -71,5 +74,41 @@ func TestPrintActionableTotalsOnlySafeTasks(t *testing.T) {
 	}
 	if !strings.Contains(skipped, "Opt-in ≈ 1.0 GB") {
 		t.Errorf("opt-in section should carry its own total:\n%s", out)
+	}
+}
+
+func TestCleanupNeedsRoot(t *testing.T) {
+	tasks := []cleanup.Task{
+		{ID: "thumbs", NeedsRoot: false},
+		{ID: "apt", NeedsRoot: true},
+	}
+	if cleanupNeedsRoot(tasks, map[string]bool{"thumbs": true}) {
+		t.Error("user-only selection should not require root")
+	}
+	if !cleanupNeedsRoot(tasks, map[string]bool{"thumbs": true, "apt": true}) {
+		t.Error("selection containing a root task should require root")
+	}
+}
+
+func TestExecuteCleanupTasks_CountsFailuresAndReclaimed(t *testing.T) {
+	tasks := []cleanup.Task{
+		{ID: "ok", Name: "OK cache", Run: func(context.Context, sysutil.Opts) error { return nil }},
+		{ID: "fail", Name: "Broken cache", Run: func(context.Context, sysutil.Opts) error { return errors.New("boom") }},
+		{ID: "unselected", Name: "Skipped", Run: func(context.Context, sysutil.Opts) error { t.Error("unselected task ran"); return nil }},
+	}
+	results := map[string]cleanup.ScanResult{
+		"ok":   {Bytes: 2048},
+		"fail": {Bytes: 4096},
+	}
+	var out bytes.Buffer
+	reclaimed, failed := executeCleanupTasks(context.Background(), sysutil.Opts{Stdout: &out}, tasks, map[string]bool{"ok": true, "fail": true}, results)
+	if reclaimed != 2048 {
+		t.Errorf("reclaimed = %d, want 2048 (only succeeded task)", reclaimed)
+	}
+	if failed != 1 {
+		t.Errorf("failed = %d, want 1", failed)
+	}
+	if !strings.Contains(out.String(), "warning: boom") {
+		t.Errorf("expected failure warning in output:\n%s", out.String())
 	}
 }

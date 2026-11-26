@@ -107,7 +107,9 @@ func macTasks(info platform.Info) []Task {
 			Run: func(ctx context.Context, o sysutil.Opts) error {
 				home, _ := homeDir()
 				if o.DryRun {
-					fmt.Fprintf(o.Stdout, "  [dry-run] find %s -name .DS_Store -delete\n", home)
+					if o.Stdout != nil {
+						fmt.Fprintf(o.Stdout, "  [dry-run] find %s -name .DS_Store -delete\n", home)
+					}
 					return nil
 				}
 				return sysutil.Run(ctx, o, "find", home, "-name", ".DS_Store", "-type", "f", "-delete")
@@ -115,7 +117,7 @@ func macTasks(info platform.Info) []Task {
 		},
 		Task{
 			ID: "system-caches", Name: "System caches", Group: "Caches",
-			Detail: "/Library/Caches (sudo)", Risk: OptIn,
+			Detail: "/Library/Caches (sudo)", Risk: OptIn, NeedsRoot: true,
 			Scan: func(ctx context.Context) ScanResult {
 				return ScanResult{Bytes: measurePaths(ctx, "/Library/Caches")}
 			},
@@ -126,7 +128,7 @@ func macTasks(info platform.Info) []Task {
 	if commandExists("tmutil") {
 		tasks = append(tasks, Task{
 			ID: "tm-snapshots", Name: "Time Machine local snapshots", Group: "Backups",
-			Detail: "frees purgeable space", Risk: OptIn,
+			Detail: "frees purgeable space", Risk: OptIn, NeedsRoot: true,
 			Scan: func(ctx context.Context) ScanResult {
 				snaps := localSnapshots(ctx)
 				if len(snaps) == 0 {

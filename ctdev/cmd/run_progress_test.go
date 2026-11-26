@@ -284,3 +284,36 @@ func TestRunWithProgressBatch_SkipsDependentOfFailedDependency(t *testing.T) {
 		t.Errorf("err = %v, want \"1 component(s) failed\"", err)
 	}
 }
+
+func TestRunWithProgressBatch_StopsOnCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	secondRan := false
+	comp.RegisterForTest(t, comp.Component{
+		Name: "batch-first",
+		GoInstall: func(context.Context, comp.ExecOpts) error {
+			cancel()
+			return nil
+		},
+	})
+	comp.RegisterForTest(t, comp.Component{
+		Name: "batch-second",
+		GoInstall: func(context.Context, comp.ExecOpts) error {
+			secondRan = true
+			return nil
+		},
+	})
+
+	var err error
+	captureStdout(t, func() {
+		err = runWithProgressBatch(ctx, progressOperation{
+			mode:  progress.ModeInstall,
+			names: []string{"batch-first", "batch-second"},
+		})
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+	if secondRan {
+		t.Error("second component should not have run after ctx cancellation")
+	}
+}

@@ -3,6 +3,8 @@ package cleanup
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"path/filepath"
 	"strings"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
@@ -17,7 +19,7 @@ func linuxTasks(info platform.Info) []Task {
 		tasks = append(tasks,
 			Task{
 				ID: "apt-autoremove", Name: "Orphaned packages & old kernels", Group: "Packages",
-				Detail: "apt autoremove --purge", Risk: Safe,
+				Detail: "apt autoremove --purge", Risk: Safe, NeedsRoot: true,
 				Scan: func(ctx context.Context) ScanResult {
 					return ScanResult{Bytes: parseAptFreed(captureOut(ctx, "apt-get", "-s", "autoremove", "--purge"))}
 				},
@@ -34,7 +36,7 @@ func linuxTasks(info platform.Info) []Task {
 			},
 			Task{
 				ID: "apt-clean", Name: "APT package cache", Group: "Packages",
-				Detail: "/var/cache/apt/archives", Risk: Safe,
+				Detail: "/var/cache/apt/archives", Risk: Safe, NeedsRoot: true,
 				Scan: func(ctx context.Context) ScanResult {
 					return ScanResult{Bytes: measurePaths(ctx, "/var/cache/apt/archives")}
 				},
@@ -44,7 +46,7 @@ func linuxTasks(info platform.Info) []Task {
 			},
 			Task{
 				ID: "apt-rc-purge", Name: "Config of removed packages", Group: "Packages",
-				Detail: "apt-get purge (rc state)", Risk: Safe,
+				Detail: "apt-get purge (rc state)", Risk: Safe, NeedsRoot: true,
 				Scan: func(ctx context.Context) ScanResult {
 					pkgs := rcPackages(ctx)
 					if len(pkgs) == 0 {
@@ -66,7 +68,7 @@ func linuxTasks(info platform.Info) []Task {
 	if commandExists("journalctl") {
 		tasks = append(tasks, Task{
 			ID: "journal", Name: "Systemd journal logs", Group: "Logs & crashes",
-			Detail: "vacuum to 7 days", Risk: Safe,
+			Detail: "vacuum to 7 days", Risk: Safe, NeedsRoot: true,
 			Scan: func(ctx context.Context) ScanResult {
 				return ScanResult{Bytes: parseJournalUsage(captureOut(ctx, "journalctl", "--disk-usage")), Note: "current size"}
 			},
@@ -79,7 +81,7 @@ func linuxTasks(info platform.Info) []Task {
 	if pathExists("/var/crash") || pathExists("/var/lib/systemd/coredump") {
 		tasks = append(tasks, Task{
 			ID: "coredumps", Name: "Crash dumps & coredumps", Group: "Logs & crashes",
-			Detail: "/var/crash, /var/lib/systemd/coredump", Risk: Safe,
+			Detail: "/var/crash, /var/lib/systemd/coredump", Risk: Safe, NeedsRoot: true,
 			Scan: func(ctx context.Context) ScanResult {
 				return ScanResult{Bytes: measurePaths(ctx, "/var/crash", "/var/lib/systemd/coredump")}
 			},
@@ -97,7 +99,7 @@ func linuxTasks(info platform.Info) []Task {
 	if commandExists("snap") {
 		tasks = append(tasks, Task{
 			ID: "snap-old", Name: "Old snap revisions", Group: "Snap & Flatpak",
-			Detail: "disabled revisions", Risk: Safe,
+			Detail: "disabled revisions", Risk: Safe, NeedsRoot: true,
 			Scan: func(ctx context.Context) ScanResult {
 				revs := disabledSnaps(ctx)
 				if len(revs) == 0 {
@@ -177,16 +179,47 @@ func linuxTasks(info platform.Info) []Task {
 	return tasks
 }
 
+var rotatedLogsRoot = "/var/log"
+
+// rotatedLogFiles walks root recursively for rotated/compressed log files
+// (*.gz anywhere under root, plus *.1 and *.old at the top level).
+// filepath.Glob does not support **, so a real walk is needed for nested logs
+// like /var/log/apt/history.log.1.gz.
+func rotatedLogFiles(root string) []string {
+	var files []string
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if strings.HasSuffix(name, ".gz") {
+			files = append(files, p)
+			return nil
+		}
+		if filepath.Dir(p) == root && (strings.HasSuffix(name, ".1") || strings.HasSuffix(name, ".old")) {
+			files = append(files, p)
+		}
+		return nil
+	})
+	return files
+}
+
 func rotatedLogsTask() Task {
-	globs := []string{"/var/log/*.gz", "/var/log/*.1", "/var/log/*.old", "/var/log/**/*.gz"}
 	return Task{
 		ID: "rotated-logs", Name: "Rotated/compressed logs", Group: "Logs & crashes",
-		Detail: "/var/log/*.gz, *.1", Risk: OptIn,
+		Detail: "/var/log/*.gz, *.1", Risk: OptIn, NeedsRoot: true,
 		Scan: func(ctx context.Context) ScanResult {
-			return ScanResult{Bytes: measurePaths(ctx, globs...)}
+			return ScanResult{Bytes: measurePaths(ctx, rotatedLogFiles(rotatedLogsRoot)...)}
 		},
 		Run: func(ctx context.Context, o sysutil.Opts) error {
-			return sudoRemoveGlob(ctx, o, globs...)
+			files := rotatedLogFiles(rotatedLogsRoot)
+			if len(files) == 0 {
+				return nil
+			}
+			return sysutil.SudoRun(ctx, o, "rm", append([]string{"-f", "--"}, files...)...)
 		},
 	}
 }
@@ -232,7 +265,7 @@ func disabledSnaps(ctx context.Context) []snapRev {
 func pinRunningKernel(ctx context.Context, o sysutil.Opts) error {
 	rel := captureOut(ctx, "uname", "-r")
 	if rel == "" {
-		return nil
+		return fmt.Errorf("could not determine running kernel via uname -r; refusing to run autoremove --purge")
 	}
 	for _, pkg := range []string{"linux-image-" + rel, "linux-headers-" + rel} {
 		if !sysutil.IsPackageInstalled(pkg) {
