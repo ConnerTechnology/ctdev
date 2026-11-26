@@ -144,8 +144,7 @@ func TestDoctorFactsCarryTheDataCheck(t *testing.T) {
 // refusing to talk to a controller it had just finished identifying.
 func TestUnifiEndpointDefaultsToGateway(t *testing.T) {
 	t.Setenv("CTDEV_UNIFI_API_KEY", "test-key")
-	flagDoctorUnifi = ""
-	flagDoctorBatch()
+	flagDoctorBatch(t)
 
 	facts := diagnose.Facts{Gateway: netip.MustParseAddr("10.2.2.1")}
 	creds := integrationCreds(context.Background(), facts)
@@ -162,8 +161,7 @@ func TestUnifiEndpointDefaultsToGateway(t *testing.T) {
 func TestUnifiExplicitEndpointWins(t *testing.T) {
 	t.Setenv("CTDEV_UNIFI_API_KEY", "test-key")
 	t.Setenv("CTDEV_UNIFI_HOST", "https://10.9.9.9:8443")
-	flagDoctorUnifi = ""
-	flagDoctorBatch()
+	flagDoctorBatch(t)
 
 	creds := integrationCreds(context.Background(), diagnose.Facts{
 		Gateway: netip.MustParseAddr("10.2.2.1"),
@@ -175,10 +173,14 @@ func TestUnifiExplicitEndpointWins(t *testing.T) {
 
 // Without a key there is nothing to point anywhere, and no probe should run.
 func TestNoKeyMeansNoIntegration(t *testing.T) {
-	t.Setenv("CTDEV_UNIFI_API_KEY", "")
-	t.Setenv("CTDEV_UNIFI_HOST", "")
-	flagDoctorUnifi = ""
-	flagDoctorBatch()
+	for _, k := range []string{
+		"CTDEV_UNIFI_API_KEY", "CTDEV_UNIFI_HOST", "CTDEV_UNIFI_USER", "CTDEV_UNIFI_PASSWORD", "CTDEV_UNIFI_SITE",
+		"CTDEV_SYNOLOGY_HOST", "CTDEV_SYNOLOGY_USER", "CTDEV_SYNOLOGY_PASSWORD",
+		"CTDEV_PROXMOX_HOST", "CTDEV_PROXMOX_TOKEN_ID", "CTDEV_PROXMOX_SECRET",
+	} {
+		t.Setenv(k, "")
+	}
+	flagDoctorBatch(t)
 
 	creds := integrationCreds(context.Background(), diagnose.Facts{
 		Gateway: netip.MustParseAddr("10.2.2.1"),
@@ -188,8 +190,20 @@ func TestNoKeyMeansNoIntegration(t *testing.T) {
 	}
 }
 
-// flagDoctorBatch keeps the one-shot prompt from blocking a test run.
-func flagDoctorBatch() { flagBatch = true }
+// flagDoctorBatch keeps the one-shot prompt from blocking a test run, and
+// restores the package-level flags on cleanup so tests stay order-independent.
+func flagDoctorBatch(t *testing.T) {
+	t.Helper()
+	savedBatch, savedUnifi, savedUser := flagBatch, flagDoctorUnifi, flagDoctorUnifiUser
+	flagBatch = true
+	flagDoctorUnifi = ""
+	flagDoctorUnifiUser = ""
+	t.Cleanup(func() {
+		flagBatch = savedBatch
+		flagDoctorUnifi = savedUnifi
+		flagDoctorUnifiUser = savedUser
+	})
+}
 
 // Doctor is built to diagnose machines we do not manage, so it must never ask a
 // stranger for their password on its own initiative. Root is opt-in, and the

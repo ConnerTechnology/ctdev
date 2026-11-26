@@ -16,7 +16,9 @@ func TestSwapfileSizeNeedsBatch(t *testing.T) {
 	} {
 		name := strings.Join(args, " ")
 		t.Run(name, func(t *testing.T) {
-			t.Cleanup(resetConfigureStorageFlags(t))
+			reset := resetConfigureStorageFlags(t)
+			reset()
+			t.Cleanup(reset)
 			var out bytes.Buffer
 			rootCmd.SetArgs(args)
 			rootCmd.SetOut(&out)

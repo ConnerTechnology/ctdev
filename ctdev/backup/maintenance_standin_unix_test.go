@@ -32,15 +32,22 @@ func maintenanceStandin(t *testing.T, m *Machine, fail map[string]string) (*Dest
 		return ":"
 	}
 	m.Restic = filepath.Join(dir, "restic")
+	seq := filepath.Join(dir, "seq")
 	script := `#!/bin/sh
 echo "$*" >> "` + log + `"
 markers="` + markers + `"
+seq="` + seq + `"
 case "$1" in
 version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
 backup)
+  tag=""
   for a in "$@"; do case "$a" in ctdev-maintenance-data:*) tag="$a" ;; esac; done
-  id="c1a1c1a1c1a1c1a$(ls "$markers" | wc -l | tr -d ' ')"
-  echo '{"id":"'"$id"'","tags":["ctdev-maintenance","'"$tag"'"]}' > "$markers/$id"
+  n=0; [ -f "$seq" ] && n=$(cat "$seq")
+  n=$((n + 1)); echo "$n" > "$seq"
+  id=$(printf "c1a1c1a1c1a1%04x" "$n")
+  if [ -n "$tag" ]; then
+    echo '{"id":"'"$id"'","tags":["ctdev-maintenance","'"$tag"'"]}' > "$markers/$id"
+  fi
   echo '{"message_type":"summary","snapshot_id":"'"$id"'"}' ;;
 snapshots)
   case "$*" in
@@ -469,5 +476,106 @@ func TestALongReasonIsCutOnARuneBoundary(t *testing.T) {
 	}
 	if want := strings.Repeat("a", maxMarkerError-1) + "…"; ms[0].Error != want {
 		t.Errorf("reason = %q, want it cut before the é", ms[0].Error)
+	}
+}
+
+func scheduledStandin(t *testing.T, m *Machine) (*Destination, string) {
+	t.Helper()
+	m.Notifier = &fakeNotifier{}
+	d, _ := maintenanceStandin(t, m, nil)
+	d.computerKey = "example-computer-key"
+	if err := m.save(d); err != nil {
+		t.Fatal(err)
+	}
+	at(m, noon)
+	root, _ := configuredExample(t, m, d)
+	return d, root
+}
+
+// Before any maintenance, the status says the data check hasn't run.
+func TestStatusBeforeAnyDataCheck(t *testing.T) {
+	t.Parallel()
+	m := testMachine(t, "example-laptop")
+	_, root := scheduledStandin(t, m)
+	s := m.Status(context.Background(), root)
+	if s.ReadErr != nil || !s.DataCheckRead || s.DataCheck != nil {
+		t.Errorf("status data check = %+v (read %v, err %v), want read and none yet", s.DataCheck, s.DataCheckRead, s.ReadErr)
+	}
+}
+
+// The losing side of a race: another computer claims between this one's
+// claim and its second look. This one backs off, whichever claim is
+// earlier: it removes its claim, runs nothing, and waits an hour plus its
+// jitter before claiming again.
+func TestARaceForTheMaintenanceBacksOff(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _ := scheduledStandin(t, m)
+	m.jitterFn = func() time.Duration { return 2 * time.Hour }
+	var other string
+	m.afterClaim = func() {
+		// Later than this computer's claim, so it isn't the earliest.
+		id, err := d.writeMarker(ctx, DataCheck{Host: "example-desktop", Started: noon.Add(time.Minute), Slice: 1})
+		if err != nil {
+			t.Error(err)
+		}
+		other = id
+	}
+
+	if got := runAt(t, m, noon); got.Ran || got.Check != nil {
+		t.Errorf("ran despite example-desktop's claim: %+v", got)
+	}
+	ms, _, err := d.markers(ctx)
+	if err != nil || len(ms) != 1 || ms[0].ID != other {
+		t.Errorf("markers = %+v, %v; want only example-desktop's claim", ms, err)
+	}
+	states, err := m.destinationStates()
+	if err != nil || !states[d.Name].RetryAfter.Equal(noon.Add(2*time.Hour)) {
+		t.Errorf("retry after = %v (%v), want noon plus the 2h jitter", states[d.Name].RetryAfter, err)
+	}
+
+	// example-desktop backed off too and removed its claim. This computer
+	// waits out its jitter, then runs.
+	if err := d.forget(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	m.afterClaim = nil
+	if got := runAt(t, m, noon.Add(time.Hour)); got.Ran {
+		t.Errorf("claimed again before the jitter ran out: %+v", got)
+	}
+	if got := runAt(t, m, noon.Add(2*time.Hour)); !got.Ran {
+		t.Errorf("didn't run after the jitter: %+v", got)
+	}
+}
+
+// The slice after 20 is 1 again.
+func TestTheSliceWrapsAfter20(t *testing.T) {
+	t.Parallel()
+	m := testMachine(t, "example-laptop")
+	d, _ := scheduledStandin(t, m)
+	week := noon.Add(-maintenanceInterval)
+	if _, err := d.writeMarker(context.Background(), DataCheck{Host: "example-desktop", Started: week, Finished: week, Slice: Slices, OK: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := runAt(t, m, noon); !got.Ran || got.Check.Slice != 1 {
+		t.Errorf("after slice 20: %+v %+v, want slice 1", got, got.Check)
+	}
+}
+
+// Another computer's run in progress keeps this one from starting a second;
+// a claim that's a day old was abandoned and doesn't.
+func TestAClaimInProgressIsLeftToFinish(t *testing.T) {
+	t.Parallel()
+	m := testMachine(t, "example-laptop")
+	d, _ := scheduledStandin(t, m)
+	if _, err := d.writeMarker(context.Background(), DataCheck{Host: "example-desktop", Started: noon.Add(-time.Hour), Slice: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := runAt(t, m, noon); got.Ran {
+		t.Errorf("ran while example-desktop's run was in progress: %+v", got)
+	}
+	if got := runAt(t, m, noon.Add(claimTTL)); !got.Ran || got.Check.Slice != 1 {
+		t.Errorf("after the claim was abandoned: %+v, want this computer to run slice 1", got)
 	}
 }

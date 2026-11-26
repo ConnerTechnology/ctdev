@@ -312,7 +312,11 @@ func (m *Machine) downloadInto(ctx context.Context, d *Destination, path string,
 		return "", err
 	}
 	// A hard link, unlike a rename, fails when the name is taken.
-	err = linkFile(tmp.Name(), path)
+	link := m.linkFile
+	if link == nil {
+		link = os.Link
+	}
+	err = link(tmp.Name(), path)
 	if errors.Is(err, fs.ErrExist) {
 		return "", exists()
 	}
@@ -328,10 +332,6 @@ func (m *Machine) downloadInto(ctx context.Context, d *Destination, path string,
 	}
 	return path, nil
 }
-
-// linkFile is os.Link; tests replace it to stand in for a filesystem without
-// hard links.
-var linkFile = os.Link
 
 // copyNew copies src to dst, which it creates and must not exist. On an
 // error it removes dst, which it made, so no half-written zip is left.

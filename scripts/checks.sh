@@ -4,8 +4,8 @@
 # ctdev configures the machine it runs on, so nothing here runs ctdev, its installer or its Go
 # tests on the host: the Go jobs and the Ubuntu install jobs run in throwaway containers that copy
 # the tree in, and so does the PowerShell job where pwsh is not installed. Each run gets its own
-# containers, so parallel worktrees never share one; only the Go module and build caches are shared,
-# and Go makes those safe to share.
+# containers, so parallel worktrees never share one; only the Go module/build caches and the base
+# tool images (Go + pinned restic/gpg/zsh, Ubuntu + git/sudo/curl) are cached locally.
 #
 # Only the macOS job needs a runner of its own: it runs on GitHub, on pushes to main and release
 # tags, and a failure there blocks the release.
@@ -34,18 +34,6 @@ done
 cd "$(git -C "${dir:-.}" rev-parse --show-toplevel)"
 
 say() { printf '==> %s\n' "$*"; }
-failed=()
-run() { # run <name> <command...>: time a job and keep going on failure, so one run lists every failure
-  local name=$1 start; shift
-  start=$(date +%s)
-  say "$name"
-  if "$@"; then
-    say "$name: ok ($(( $(date +%s) - start ))s)"
-  else
-    say "$name: FAILED ($(( $(date +%s) - start ))s)"
-    failed+=("$name")
-  fi
-}
 
 # --changed decides which jobs the files can break. Guidance always runs: it takes a second, and a
 # rename anywhere can break a link it checks.
@@ -78,7 +66,7 @@ shell_job() {
 
 # The Go toolchain CI installs is the toolchain line of ctdev/go.mod (setup-go reads it), so the
 # container uses the same release.
-go_image() {
+go_base_image() {
   local v
   v=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2 }' ctdev/go.mod)
   [ -n "$v" ] || v=$(awk '$1 == "go" { print $2 }' ctdev/go.mod)
@@ -98,72 +86,134 @@ restic_pin() {
   printf '%s %s' "$url" "$sum"
 }
 
+ubuntu_versions() {
+  local versions
+  versions=$(sed -n "s/.*ubuntu-version: *\[\(.*\)\].*/\1/p" .github/workflows/ci.yml | head -n1 | tr -d "'" | tr ',' ' ')
+  [ -n "$versions" ] || { echo "could not read the Ubuntu matrix from ci.yml" >&2; return 1; }
+  printf '%s' "$versions"
+}
+
+# Build a cached local Go test image matching ubuntu-latest CI: pinned restic, gpg and zsh
+# installed, and a non-root tester user so permission-boundary tests (which skip under root)
+# actually run pre-merge instead of only failing after push.
+go_test_image=""
+ensure_go_image() {
+  local base pin url sum uid tag
+  base=$(go_base_image)
+  pin=$(restic_pin) || return 1
+  read -r url sum <<<"$pin"
+  uid=$(id -u)
+  [ "$uid" -gt 0 ] || uid=1000
+  tag=$(printf 'v1:%s:%s:%s:%s' "$base" "$url" "$sum" "$uid" | sha256sum | cut -c1-12)
+  go_test_image="ctdev-checks-go:$tag"
+  if docker image inspect "$go_test_image" >/dev/null 2>&1; then
+    return 0
+  fi
+  say "building cached Go test image ($go_test_image)"
+  docker build --quiet -t "$go_test_image" - <<DOCKERFILE >/dev/null
+FROM $base
+RUN apt-get update -qq >/dev/null \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bzip2 gnupg zsh >/dev/null \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSLo /tmp/restic.bz2 "$url" \
+ && echo "$sum  /tmp/restic.bz2" | sha256sum -c - >/dev/null \
+ && bunzip2 /tmp/restic.bz2 \
+ && install -m 0755 /tmp/restic /usr/local/bin/restic \
+ && rm -f /tmp/restic \
+ && useradd -m -u $uid -s /bin/bash tester \
+ && mkdir -p /go/pkg/mod /home/tester/.cache/go-build /w \
+ && chown -R tester:tester /go /home/tester /w
+DOCKERFILE
+}
+
+# Build a cached Ubuntu base image with only the prerequisites ci.yml installs (git, sudo, curl),
+# so each smoke run starts fresh without paying apt-get update/install overhead every time.
+ensure_ubuntu_image() {
+  local version=$1 img
+  img="ctdev-checks-ubuntu-base:$version"
+  if docker image inspect "$img" >/dev/null 2>&1; then
+    return 0
+  fi
+  say "building cached Ubuntu base image ($img)"
+  docker build --quiet -t "$img" - <<DOCKERFILE >/dev/null
+FROM ubuntu:$version
+RUN apt-get update -qq >/dev/null \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git sudo curl >/dev/null
+DOCKERFILE
+}
+
 bin_dir=""
-cleanup() { [ -z "$bin_dir" ] || rm -rf "$bin_dir"; }
+logs_dir=""
+cleanup() {
+  [ -z "$bin_dir" ] || rm -rf "$bin_dir"
+  [ -z "$logs_dir" ] || rm -rf "$logs_dir"
+}
 trap cleanup EXIT
 
-# The go-test job, plus a static build the Ubuntu jobs reuse. The golang image has no bunzip2, so
-# a few lines of Go's compress/bzip2 unpack restic. The container scripts use no && lists: under -e
-# a failure before the last && does not stop the script.
-go_job() {
-  local pin
-  pin=$(restic_pin) || return 1
+# Build the static Linux binary first (~1-2s with warm caches) and run the quick CLI checks, so
+# the Ubuntu smoke jobs can start immediately in parallel with go test.
+go_build_job() {
   bin_dir=$(mktemp -d) || return 1
-  docker run --rm --quiet --name "ctdev-checks-go-$$" \
+  docker run --rm --quiet --name "ctdev-checks-build-$$" \
     -v "$PWD":/src:ro -v "$bin_dir":/out \
-    -v ctdev-checks-gomod:/go/pkg/mod -v ctdev-checks-gocache:/root/.cache/go-build \
-    -e RESTIC_PIN="$pin" -e HOST_UID="$(id -u)" \
-    "$(go_image)" bash -euo pipefail -c '
-      read -r url sum <<<"$RESTIC_PIN"
-      curl -fsSLo /tmp/restic.bz2 "$url"
-      echo "$sum  /tmp/restic.bz2" | sha256sum -c - >/dev/null
-      mkdir /tmp/bunzip2
-      cat >/tmp/bunzip2/main.go <<"GO"
-package main
-
-import (
-	"compress/bzip2"
-	"io"
-	"os"
-)
-
-func main() {
-	if _, err := io.Copy(os.Stdout, bzip2.NewReader(os.Stdin)); err != nil {
-		os.Stderr.WriteString("bunzip2: " + err.Error() + "\n")
-		os.Exit(1)
-	}
-}
-GO
-      go run /tmp/bunzip2/main.go </tmp/restic.bz2 >/tmp/restic
-      install -m 0755 /tmp/restic /usr/local/bin/restic
-      restic version
-      cp -a /src /w
-      cd /w/ctdev
-      go test -race -timeout 20m ./...
-      go vet ./...
-      for t in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-        GOOS="${t%/*}" GOARCH="${t#*/}" go vet ./...
-      done
-      version=$(cat ../VERSION)
-      # No VCS stamp: the copied .git belongs to the host user, so git refuses it as root here,
-      # and the version comes from -ldflags anyway.
-      CGO_ENABLED=0 go build -buildvcs=false -ldflags "-X main.version=$version" -o ctdev .
-      ./ctdev --help >/dev/null
-      ./ctdev --version
-      ./ctdev info >/dev/null
-      ./ctdev --dry-run install jq >/dev/null
-      install -m 0755 -o "$HOST_UID" ctdev /out/ctdev
+    -v ctdev-checks-gomod:/go/pkg/mod -v ctdev-checks-gocache:/home/tester/.cache/go-build \
+    -e GOCACHE=/home/tester/.cache/go-build \
+    -e GOMODCACHE=/go/pkg/mod \
+    "$go_test_image" bash -euo pipefail -c '
+      tuid=$(id -u tester)
+      [ "$(stat -c %u /go/pkg/mod)" = "$tuid" ] || chown -R tester:tester /go/pkg/mod
+      [ "$(stat -c %u /home/tester/.cache/go-build)" = "$tuid" ] || chown -R tester:tester /home/tester/.cache/go-build
+      chown tester:tester /out
+      su -s /bin/bash tester -c '\''
+        set -euo pipefail
+        export PATH=/usr/local/go/bin:/go/bin:/usr/local/bin:/usr/bin:/bin
+        export GOCACHE=/home/tester/.cache/go-build GOMODCACHE=/go/pkg/mod
+        version=$(cat /src/VERSION)
+        cd /src/ctdev
+        CGO_ENABLED=0 go build -buildvcs=false -ldflags "-X main.version=$version" -o /out/ctdev .
+        /out/ctdev --help >/dev/null
+        /out/ctdev --version
+        /out/ctdev info >/dev/null
+        /out/ctdev --dry-run install jq >/dev/null
+      '\''
     '
 }
 
-# The test-ubuntu jobs: install two components into a stock Ubuntu container.
+# The go-test + vet + cross-compile vet job, run as non-root tester with CI=1 and -shuffle=on.
+go_test_job() {
+  docker run --rm --quiet --name "ctdev-checks-go-$$" \
+    -v "$PWD":/src:ro \
+    -v ctdev-checks-gomod:/go/pkg/mod -v ctdev-checks-gocache:/home/tester/.cache/go-build \
+    "$go_test_image" bash -euo pipefail -c '
+      cp -a /src /w/repo
+      chown -R tester:tester /w/repo
+      tuid=$(id -u tester)
+      [ "$(stat -c %u /go/pkg/mod)" = "$tuid" ] || chown -R tester:tester /go/pkg/mod
+      [ "$(stat -c %u /home/tester/.cache/go-build)" = "$tuid" ] || chown -R tester:tester /home/tester/.cache/go-build
+      su -s /bin/bash tester -c '\''
+        set -euo pipefail
+        export PATH=/usr/local/go/bin:/go/bin:/usr/local/bin:/usr/bin:/bin
+        export GOCACHE=/home/tester/.cache/go-build GOMODCACHE=/go/pkg/mod CI=1
+        restic version
+        cd /w/repo/ctdev
+        go test -race -shuffle=on -timeout 20m ./...
+        go vet ./...
+        pids=()
+        for t in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+          GOOS="${t%/*}" GOARCH="${t#*/}" go vet ./... &
+          pids+=("$!")
+        done
+        for p in "${pids[@]}"; do wait "$p"; done
+      '\''
+    '
+}
+
+# The test-ubuntu job: install two components into a fresh Ubuntu container.
 ubuntu_job() {
   local version=$1
-  [ -x "$bin_dir/ctdev" ] || { echo "no ctdev build: the Go job failed" >&2; return 1; }
+  [ -x "$bin_dir/ctdev" ] || { echo "no ctdev build: the build job failed" >&2; return 1; }
   docker run --rm --quiet --name "ctdev-checks-ubuntu-$version-$$" -v "$bin_dir":/bin-ctdev:ro \
-    "ubuntu:$version" bash -euo pipefail -c '
-      apt-get update -qq >/dev/null
-      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git sudo curl >/dev/null
+    "ctdev-checks-ubuntu-base:$version" bash -euo pipefail -c '
       cp /bin-ctdev/ctdev /usr/local/bin/ctdev
       ctdev --force install zsh >/dev/null
       command -v zsh >/dev/null
@@ -172,27 +222,6 @@ ubuntu_job() {
       command -v jq >/dev/null
       ctdev info >/dev/null
     '
-}
-
-# Every release in ci.yml's test-ubuntu matrix, side by side; each one's output is printed whole.
-ubuntu_both() {
-  local versions v rc=0 logs pids=()
-  versions=$(sed -n "s/.*ubuntu-version: *\[\(.*\)\].*/\1/p" .github/workflows/ci.yml | head -n1 | tr -d "'" | tr ',' ' ')
-  [ -n "$versions" ] || { echo "could not read the Ubuntu matrix from ci.yml" >&2; return 1; }
-  logs=$(mktemp -d)
-  for v in $versions; do
-    ubuntu_job "$v" >"$logs/$v" 2>&1 &
-    pids+=("$!:$v")
-  done
-  for p in "${pids[@]}"; do
-    if wait "${p%%:*}"; then
-      say "ubuntu ${p#*:}: ok"
-    else
-      say "ubuntu ${p#*:}: FAILED"; cat "$logs/${p#*:}"; rc=1
-    fi
-  done
-  rm -rf "$logs"
-  return "$rc"
 }
 
 # The powershell-lint job: install.ps1 parses, and declares the -Doctor and -DoctorArgs parameters
@@ -227,19 +256,78 @@ needs_docker() {
 [ "$want_go$want_ubuntu" = "00" ] || needs_docker
 [ "$want_pwsh" = 0 ] || command -v pwsh >/dev/null || needs_docker
 
-[ "$want_shell" = 0 ] || run shellcheck shell_job
-run guidance scripts/check-guidance.sh
-[ "$want_pwsh" = 0 ] || run powershell pwsh_job
+total_start=$(date +%s)
+logs_dir=$(mktemp -d)
+failed=()
+
+# Prepare cached images and build the static binary before fanning out jobs in parallel.
 if [ "$want_go" = 1 ] || [ "$want_ubuntu" = 1 ]; then
-  run go go_job
+  ensure_go_image
 fi
+ubuntu_list=""
 if [ "$want_ubuntu" = 1 ]; then
-  # The two releases ci.yml's test-ubuntu matrix covers, run side by side.
-  run ubuntu ubuntu_both
+  ubuntu_list=$(ubuntu_versions)
+  for v in $ubuntu_list; do
+    ensure_ubuntu_image "$v"
+  done
 fi
 
+build_ok=1
+if [ "$want_go" = 1 ] || [ "$want_ubuntu" = 1 ]; then
+  bstart=$(date +%s)
+  say "go-build"
+  if go_build_job; then
+    say "go-build: ok ($(( $(date +%s) - bstart ))s)"
+  else
+    say "go-build: FAILED ($(( $(date +%s) - bstart ))s)"
+    failed+=("go-build")
+    build_ok=0
+  fi
+fi
+
+# Fan out every remaining check in parallel; each records its own elapsed time and captures logs.
+job_names=()
+job_pids=()
+launch() {
+  local name=$1; shift
+  local safe=${name// /_}
+  job_names+=("$name")
+  (
+    start=$(date +%s)
+    rc=0
+    "$@" >"$logs_dir/$safe" 2>&1 || rc=$?
+    printf '%d\n' "$(( $(date +%s) - start ))" >"$logs_dir/$safe.secs"
+    exit "$rc"
+  ) &
+  job_pids+=("$!")
+}
+
+[ "$want_shell" = 0 ] || launch "shellcheck" shell_job
+launch "guidance" scripts/check-guidance.sh
+[ "$want_pwsh" = 0 ] || launch "powershell" pwsh_job
+[ "$want_go" = 0 ] || launch "go" go_test_job
+if [ "$want_ubuntu" = 1 ] && [ "$build_ok" = 1 ]; then
+  for v in $ubuntu_list; do
+    launch "ubuntu $v" ubuntu_job "$v"
+  done
+fi
+
+for i in "${!job_pids[@]}"; do
+  name="${job_names[$i]}"
+  safe=${name// /_}
+  if wait "${job_pids[$i]}"; then
+    secs=$(cat "$logs_dir/$safe.secs" 2>/dev/null || echo "?")
+    say "$name: ok (${secs}s)"
+  else
+    secs=$(cat "$logs_dir/$safe.secs" 2>/dev/null || echo "?")
+    say "$name: FAILED (${secs}s)"
+    cat "$logs_dir/$safe"
+    failed+=("$name")
+  fi
+done
+
 if [ ${#failed[@]} -gt 0 ]; then
-  say "failed: ${failed[*]}"
+  say "failed: ${failed[*]} ($(( $(date +%s) - total_start ))s total)"
   exit 1
 fi
-say "all checks passed"
+say "all checks passed ($(( $(date +%s) - total_start ))s total)"

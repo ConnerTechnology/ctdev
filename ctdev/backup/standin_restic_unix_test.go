@@ -42,14 +42,11 @@ esac
 }
 
 // noHardLinks stands in for a filesystem without hard links, such as an
-// exFAT USB drive, for the rest of the test.
-func noHardLinks(t *testing.T) {
-	t.Helper()
-	saved := linkFile
-	linkFile = func(oldname, newname string) error {
+// exFAT USB drive, on m.
+func noHardLinks(m *Machine) {
+	m.linkFile = func(oldname, newname string) error {
 		return &os.LinkError{Op: "link", Old: oldname, New: newname, Err: syscall.EPERM}
 	}
-	t.Cleanup(func() { linkFile = saved })
 }
 
 func noPartials(t *testing.T, dir string) {
@@ -81,8 +78,9 @@ func TestDownloadNeverOverwritesAFileThatAppearsMeanwhile(t *testing.T) {
 // Where hard links aren't supported, the zip is copied into a file created
 // only if the name is free.
 func TestDownloadWorksWithoutHardLinks(t *testing.T) {
-	noHardLinks(t)
+	t.Parallel()
 	m := testMachine(t, "example-laptop")
+	noHardLinks(m)
 	d, root, snap, final := downloadStandin(t, m, false)
 
 	path, err := m.Download(context.Background(), d, root, snap)
@@ -99,8 +97,9 @@ func TestDownloadWorksWithoutHardLinks(t *testing.T) {
 }
 
 func TestDownloadWithoutHardLinksNeverOverwritesEither(t *testing.T) {
-	noHardLinks(t)
+	t.Parallel()
 	m := testMachine(t, "example-laptop")
+	noHardLinks(m)
 	d, root, snap, final := downloadStandin(t, m, true)
 
 	if _, err := m.Download(context.Background(), d, root, snap); err == nil {

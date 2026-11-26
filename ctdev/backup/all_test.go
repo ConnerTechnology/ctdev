@@ -231,14 +231,25 @@ func TestDownloadUnderAllPicksWhereTheZipGoes(t *testing.T) {
 // retention and deletes. A stopped or deleted folder's ID is offered, and
 // one-offs, which have no ID, never are.
 func TestLinkableLeavesOutFoldersStillBackedUpHere(t *testing.T) {
-	requireRestic(t)
-	ctx := context.Background()
+	t.Parallel()
 	m := testMachine(t, "example-laptop")
-	d, _ := createExample(t, m)
-	website, cfg := configuredExample(t, m, d)
-	backUp(t, m, d, website, &cfg)
-	notes, notesCfg := otherFolder(t, m, d)
-	backUp(t, m, d, notes, &notesCfg)
+	m.Restic = filepath.Join(t.TempDir(), "must-not-run-restic")
+	const destName = "example-backups"
+	website := exampleFolder(t, m)
+	cfg := NewConfig(destName)
+	writeConfig(t, website, cfg)
+	if err := m.addFolder(website, cfg.ID, cfg.Schedule); err != nil {
+		t.Fatal(err)
+	}
+	notes := filepath.Join(m.Home, "Documents", "notes")
+	if err := os.MkdirAll(notes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	notesCfg := NewConfig(destName)
+	writeConfig(t, notes, notesCfg)
+	if err := m.addFolder(notes, notesCfg.ID, notesCfg.Schedule); err != nil {
+		t.Fatal(err)
+	}
 	if err := m.StopBackingUp(notes); err != nil {
 		t.Fatal(err)
 	}
@@ -246,19 +257,22 @@ func TestLinkableLeavesOutFoldersStillBackedUpHere(t *testing.T) {
 	if err := os.MkdirAll(gone, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	goneCfg := NewConfig(d.Name)
-	if err := m.Configure(ctx, d, gone, goneCfg); err != nil {
+	goneCfg := NewConfig(destName)
+	writeConfig(t, gone, goneCfg)
+	if err := m.addFolder(gone, goneCfg.ID, goneCfg.Schedule); err != nil {
 		t.Fatal(err)
 	}
-	backUp(t, m, d, gone, &goneCfg)
 	if err := os.RemoveAll(filepath.Join(m.Home, "Old")); err != nil {
 		t.Fatal(err)
 	}
-	oneOffFolder(t, m, d)
 
-	o, err := d.Overview(ctx)
-	if err != nil {
-		t.Fatal(err)
+	o := Overview{
+		Folders: []FoundFolder{
+			{Path: DisplayPath(m.Home, website), Ref: Ref{FolderID: cfg.ID}},
+			{Path: DisplayPath(m.Home, notes), Ref: Ref{FolderID: notesCfg.ID}},
+			{Path: DisplayPath(m.Home, gone), Ref: Ref{FolderID: goneCfg.ID}},
+			{Path: "~/OneOff/scratch", Ref: Ref{Host: m.Hostname, Path: filepath.Join(m.Home, "OneOff", "scratch")}},
+		},
 	}
 	linkable, err := m.Linkable(o)
 	if err != nil {
@@ -276,17 +290,22 @@ func TestLinkableLeavesOutFoldersStillBackedUpHere(t *testing.T) {
 // A listed path whose config now holds another folder's ID isn't that
 // listed folder any more, so the listed ID is offered again.
 func TestLinkableOffersAListedIDWhoseConfigNowHoldsAnother(t *testing.T) {
-	requireRestic(t)
-	ctx := context.Background()
+	t.Parallel()
 	m := testMachine(t, "example-laptop")
-	d, _ := createExample(t, m)
-	website, cfg := configuredExample(t, m, d)
-	backUp(t, m, d, website, &cfg)
-	writeConfig(t, website, NewConfig(d.Name)) // a different UUID, as from a clone of another folder
-
-	o, err := d.Overview(ctx)
-	if err != nil {
+	m.Restic = filepath.Join(t.TempDir(), "must-not-run-restic")
+	const destName = "example-backups"
+	website := exampleFolder(t, m)
+	cfg := NewConfig(destName)
+	writeConfig(t, website, cfg)
+	if err := m.addFolder(website, cfg.ID, cfg.Schedule); err != nil {
 		t.Fatal(err)
+	}
+	writeConfig(t, website, NewConfig(destName)) // a different UUID, as from a clone of another folder
+
+	o := Overview{
+		Folders: []FoundFolder{
+			{Path: DisplayPath(m.Home, website), Ref: Ref{FolderID: cfg.ID}},
+		},
 	}
 	linkable, err := m.Linkable(o)
 	if err != nil {

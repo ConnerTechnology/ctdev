@@ -5,10 +5,10 @@ import (
 )
 
 func TestParseIWLink(t *testing.T) {
-	// Real `iw dev wlp5s0 link` output from a Wi-Fi 7 association. Note the
-	// fractional frequency, which older iw did not print.
-	const out = `Connected to 22:0b:8b:c2:7d:db (on wlp5s0)
-	SSID: Conner Trusted
+	// Representative `iw dev wlp5s0 link` output for a Wi-Fi 7 association. Note
+	// the fractional frequency, which older iw did not print.
+	const out = `Connected to 00:00:5e:00:53:01 (on wlp5s0)
+	SSID: Example WiFi
 	freq: 5785.0
 	RX: 2352163431 bytes (1700886 packets)
 	TX: 154056729 bytes (699876 packets)
@@ -23,10 +23,10 @@ func TestParseIWLink(t *testing.T) {
 	if !w.Associated {
 		t.Fatal("expected an association")
 	}
-	if w.SSID != "Conner Trusted" {
-		t.Errorf("SSID = %q, want %q (SSIDs contain spaces)", w.SSID, "Conner Trusted")
+	if w.SSID != "Example WiFi" {
+		t.Errorf("SSID = %q, want %q (SSIDs contain spaces)", w.SSID, "Example WiFi")
 	}
-	if w.BSSID != "22:0b:8b:c2:7d:db" {
+	if w.BSSID != "00:00:5e:00:53:01" {
 		t.Errorf("BSSID = %q", w.BSSID)
 	}
 	if w.RSSI != -59 {
@@ -53,7 +53,7 @@ func TestParseNetshWlan(t *testing.T) {
     Description            : Intel(R) Wi-Fi 6 AX201 160MHz
     Physical address       : aa:bb:cc:dd:ee:ff
     State                  : connected
-    SSID                   : Conner Trusted
+    SSID                   : Example WiFi
     BSSID                  : 11:22:33:44:55:66
     Network type           : Infrastructure
     Radio type             : 802.11ax
@@ -62,13 +62,13 @@ func TestParseNetshWlan(t *testing.T) {
     Receive rate (Mbps)    : 780
     Transmit rate (Mbps)   : 780
     Signal                 : 84%
-    Profile                : Conner Trusted`
+    Profile                : Example WiFi`
 
 	w := parseNetshWlan(out)
 	if !w.Associated {
 		t.Fatal("expected an association")
 	}
-	if w.SSID != "Conner Trusted" || w.BSSID != "11:22:33:44:55:66" {
+	if w.SSID != "Example WiFi" || w.BSSID != "11:22:33:44:55:66" {
 		t.Errorf("SSID/BSSID = %q/%q", w.SSID, w.BSSID)
 	}
 	if w.Channel != 157 || w.Band != "5 GHz" {
@@ -116,7 +116,7 @@ func TestParseAirportData(t *testing.T) {
           Card Type: Wi-Fi
           Status: Connected
           Current Network Information:
-            Conner Trusted:
+            Example WiFi:
               PHY Mode: 802.11ax
               Channel: 157 (5GHz, 80MHz)
               Country Code: US
@@ -136,8 +136,8 @@ func TestParseAirportData(t *testing.T) {
 	}
 	// The SSID contains a space, and the parser must not stop at the first
 	// neighbouring network's numbers.
-	if w.SSID != "Conner Trusted" {
-		t.Errorf("SSID = %q, want %q", w.SSID, "Conner Trusted")
+	if w.SSID != "Example WiFi" {
+		t.Errorf("SSID = %q, want %q", w.SSID, "Example WiFi")
 	}
 	if w.RSSI != -58 || w.Noise != -92 {
 		t.Errorf("signal/noise = %d/%d, want -58/-92", w.RSSI, w.Noise)

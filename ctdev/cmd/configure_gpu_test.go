@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"os"
 	"path/filepath"
@@ -141,7 +140,7 @@ func TestGPUWizard_NotNeededDefaultsToSkip(t *testing.T) {
 	ctx := context.Background()
 	st := &setup.InitStates(ctx, settings)[0]
 
-	stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+	typeLines(t, "")
 	var changed bool
 	out := plain(captureStdout(t, func() {
 		var err error
@@ -161,7 +160,7 @@ func TestGPUWizard_NotNeededDefaultsToSkip(t *testing.T) {
 
 	// Answering yes queues it; TestGPUWizard_ApplyAnywayAsksOnce follows it
 	// through the real apply.
-	stdinScanner = bufio.NewScanner(strings.NewReader("y\n"))
+	typeLines(t, "y")
 	st = &setup.InitStates(ctx, settings)[0]
 	captureStdout(t, func() {
 		var err error
@@ -183,7 +182,7 @@ func TestGPUWizard_NeededSaysWhyNoOffSwitch(t *testing.T) {
 	ctx := context.Background()
 	st := &setup.InitStates(ctx, settings)[0]
 
-	stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+	typeLines(t, "")
 	out := plain(captureStdout(t, func() {
 		if _, err := promptSetting(ctx, st); err != nil {
 			t.Errorf("promptSetting: %v", err)
@@ -223,7 +222,7 @@ func TestGPUWizard_ApplyAnywayAsksOnce(t *testing.T) {
 	os.Stdin = r
 	t.Cleanup(func() { os.Stdin = oldStdin })
 
-	stdinScanner = bufio.NewScanner(strings.NewReader("y\n"))
+	typeLines(t, "y")
 	out := plain(captureStdout(t, func() {
 		if _, err := promptSetting(ctx, &states[0]); err != nil {
 			t.Errorf("promptSetting: %v", err)

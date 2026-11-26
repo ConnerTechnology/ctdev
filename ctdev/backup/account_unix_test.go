@@ -58,10 +58,9 @@ func TestAMasterPasswordChangeThatFailsMidwayLeavesAWorkingKey(t *testing.T) {
 	unlock(t, d, newMaster+" again")
 }
 
-// A new Secret Key whose old account key can't be removed is still saved
-// and its kit returned; one that can't be saved here is taken back out, so
-// the old kit and Secret Key go on working.
-func TestARegeneratedSecretKeyThatFailsMidwayLeavesAWorkingKit(t *testing.T) {
+// A regenerated Secret Key that can't be saved here is taken back out, so the
+// old kit and Secret Key go on working.
+func TestARegeneratedSecretKeyThatFailsToSaveIsTakenBack(t *testing.T) {
 	requireRestic(t)
 	ctx := context.Background()
 	m := testMachine(t, "example-laptop")
@@ -92,8 +91,16 @@ func TestARegeneratedSecretKeyThatFailsMidwayLeavesAWorkingKit(t *testing.T) {
 	if _, err := testMachine(t, "example-tablet").ConnectDestination(ctx, s.Kit, exampleMaster); err != nil {
 		t.Errorf("the old kit after the failed regeneration: %v", err)
 	}
+}
 
-	// Removing the old account key fails: the new kit is in force anyway.
+// A new Secret Key whose old account key can't be removed is still saved and
+// its kit returned, so the new kit is in force anyway.
+func TestARegeneratedSecretKeyThatFailsMidwayLeavesAWorkingKit(t *testing.T) {
+	requireRestic(t)
+	ctx := context.Background()
+	m := testMachine(t, "example-laptop")
+	d, _ := createExample(t, m)
+
 	failKeyRemove(t, m)
 	kit, err := unlock(t, d, exampleMaster).RegenerateSecretKey(ctx)
 	m.Restic = ""

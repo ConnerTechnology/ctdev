@@ -7,6 +7,7 @@ import (
 )
 
 func TestStateDir(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "")
 	dir := StateDir()
 	home, _ := os.UserHomeDir()
 	expected := filepath.Join(home, ".local", "state", "ctdev")

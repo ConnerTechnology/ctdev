@@ -65,6 +65,7 @@ func TestHeaderLine(t *testing.T) {
 
 func TestStatusLines(t *testing.T) {
 	styles.Disable()
+	t.Cleanup(styles.Enable)
 	got := Status(configured(), home)
 	for _, want := range []string{
 		"Backed up folder: ~/Projects/website",
