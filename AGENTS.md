@@ -1,10 +1,9 @@
 # ctdev
 
-`ctdev` is Conner Technology's internal tool for managing and maintaining devices and the networks
-they sit on: our own today, clients' later. It is a single Go CLI that installs components,
-configures system settings, runs backups, and diagnoses devices, including unmanaged devices it can
-see but not install on. The Go module is `ctdev/`; everything else at the root is the installer,
-the CI and the installers.
+`ctdev` is Conner Technology's internal tool for managing and maintaining devices: our own today,
+clients' later. It is a single Go CLI that installs and uninstalls components, updates the device,
+configures system settings, manages backups, diagnoses issues, and cleans up disk space. The Go
+module is `ctdev/`; everything else at the root is the installers and CI.
 
 ## Guardrails
 
@@ -26,7 +25,6 @@ Change the behavior and the comment that explains it together.
 | `ctdev/` | Each package opens with a package comment saying what it owns. A helper's doc comment says when to use it. A comment says why, where the code acts on it. Read the package before changing it |
 | `ctdev/cmd/` | Every command and flag, in the Cobra definitions that `--help` prints |
 | `ctdev/component/registry.go` | Every component, with its dependencies, detection and `Root` need |
-| `CONTEXT.md` | The vocabulary |
 | `TROUBLESHOOTING.md` | Symptoms and fixes on a live machine |
 | GitHub Releases, git history | What shipped in each version: see "What changed" below |
 
@@ -76,8 +74,8 @@ counts. Without Entire on PATH the agent hooks do nothing and sessions aren't re
   force-push `main`. Delete the branch when it merges.
 - The Bash tool runs zsh here: quote globs in arguments (`--include='*.go'`), or an unmatched one
   fails the whole command.
-- Build the simplest solution that solves the problem, in the domain's words (`CONTEXT.md`).
-  DRY where it removes real duplication, not for its own sake.
+- Build the simplest solution that solves the problem. DRY where it removes real duplication, not
+  for its own sake.
 - Concise and direct, in American English.
 
 ## Git
