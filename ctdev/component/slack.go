@@ -26,7 +26,7 @@ func slackInstall(ctx context.Context, opts ExecOpts) error {
 
 	if p.PackageManager == "apt" {
 		if p.Arch != "amd64" {
-			return fmt.Errorf("slack not available on %s architecture", p.Arch)
+			return fmt.Errorf("slack not available on %s architecture: %w", p.Arch, ErrUnsupportedOS)
 		}
 		if o.DryRun {
 			fmt.Fprintln(o.Stdout, "[dry-run] download and install slack-desktop .deb")

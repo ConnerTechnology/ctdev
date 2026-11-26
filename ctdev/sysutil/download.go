@@ -278,6 +278,8 @@ func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (s
 	case "":
 		// Raw binary, no extraction needed
 		return ver, install(ctx, o, archivePath, spec.InstallDest)
+	default:
+		return ver, fmt.Errorf("unsupported archive format %q for %s", spec.ArchFormat, spec.Repo)
 	}
 
 	binaryPath := filepath.Join(tmpDir, spec.BinaryPath(goos, goarch))

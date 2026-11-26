@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 // Opts controls the behavior of GPU setup actions.
@@ -440,33 +442,37 @@ func RunRecover(ctx context.Context, opts Opts) error {
 	return nil
 }
 
-// sudoRun executes a command with sudo, honoring ctx for cancellation.
+// sudoRun executes a command with root privileges via sysutil.SudoRun.
 func sudoRun(ctx context.Context, opts Opts, name string, args ...string) error {
-	allArgs := append([]string{name}, args...)
-	cmd := exec.CommandContext(ctx, "sudo", allArgs...)
-	cmd.Stdout = opts.Stdout
-	cmd.Stderr = opts.Stdout
-	if opts.Verbose {
-		fmt.Fprintf(opts.Stdout, "  $ sudo %s %s\n", name, strings.Join(args, " "))
+	if opts.Verbose && opts.Stdout != nil {
+		fmt.Fprintf(opts.Stdout, "  $ %s %s\n", name, strings.Join(args, " "))
 	}
-	return cmd.Run()
+	return sysutil.SudoRun(ctx, sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}, name, args...)
 }
 
-// sudoTeeAppend appends a line to a file using sudo tee -a.
+// sudoTeeAppend appends a line to a file with root privileges (skipping sudo when already root).
 func sudoTeeAppend(ctx context.Context, opts Opts, path, line string) error {
-	cmd := exec.CommandContext(ctx, "sudo", "tee", "-a", path)
+	o := sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}
+	if o.DryRun {
+		if o.Stdout != nil {
+			fmt.Fprintf(o.Stdout, "[dry-run] append to %s: %s\n", path, line)
+		}
+		return nil
+	}
+	var cmd *exec.Cmd
+	if sysutil.IsRoot() {
+		cmd = exec.CommandContext(ctx, "tee", "-a", path)
+	} else {
+		cmd = exec.CommandContext(ctx, "sudo", "tee", "-a", path)
+	}
 	cmd.Stdin = strings.NewReader(line + "\n")
 	cmd.Stderr = opts.Stdout
-	// Suppress stdout from tee (it echoes back)
 	return cmd.Run()
 }
 
-// sudoTeeWrite writes content to a file using sudo tee (overwrite).
+// sudoTeeWrite writes content to a file with root privileges via sysutil.SudoWriteFileMode.
 func sudoTeeWrite(ctx context.Context, opts Opts, path, content string) error {
-	cmd := exec.CommandContext(ctx, "sudo", "tee", path)
-	cmd.Stdin = strings.NewReader(content)
-	cmd.Stderr = opts.Stdout
-	return cmd.Run()
+	return sysutil.SudoWriteFileMode(ctx, sysutil.Opts{Stdout: opts.Stdout, DryRun: opts.DryRun}, content, path, "0644")
 }
 
 // promptYesNo asks a yes/no question and returns the user's answer.

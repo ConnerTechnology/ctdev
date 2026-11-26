@@ -1,6 +1,10 @@
 package component
 
-import "github.com/ConnerTechnology/ctdev/ctdev/nodenv"
+import (
+	"context"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/nodenv"
+)
 
 // Registry lists every component ctdev can install. Root is omitted on most
 // entries: the zero value (RootWhenMissing) describes a package-manager
@@ -38,11 +42,11 @@ var Registry = []Component{
 	{Name: "antigravity-cli", Description: "Google Antigravity CLI coding agent (agy)", Category: CategoryCLI, SupportedOS: []OS{OSAny}, DetectCmd: "agy", Root: RootNever, GoInstall: antigravityInstall, GoUninstall: antigravityUninstall, Tags: []string{"ai", "google"}},
 	{Name: "gh", Description: "GitHub CLI", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: ghInstall, GoUninstall: ghUninstall, Tags: []string{"github", "git"}},
 	{Name: "git", Description: "Git configuration and aliases", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, GoInstall: gitInstall, GoUninstall: gitUninstall, Tags: []string{"vcs", "version"}},
-	{Name: "git-spice", Description: "Git Spice stacked branches tool", Category: CategoryCLI, SupportedOS: []OS{OSAny}, DetectCmd: "gs", GoInstall: gitSpiceInstall, GoUninstall: gitSpiceUninstall, Tags: []string{"git", "stacked"}},
-	// No DetectPath: goInstall already treats any `go` on PATH as installed, so
-	// pinning detection to the tarball location made a distro-packaged Go read
-	// as missing. Falling through to a PATH lookup keeps the two in agreement.
-	{Name: "go", Description: "Go toolchain (official tarball)", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, GoInstall: goInstall, GoUninstall: goUninstall, Tags: []string{"golang", "runtime"}},
+	{Name: "git-spice", Description: "Git Spice stacked branches tool", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Detect: func() bool { return isGitSpiceInstalled(context.Background()) }, GoInstall: gitSpiceInstall, GoUninstall: gitSpiceUninstall, Tags: []string{"git", "stacked"}},
+	// No DetectPath: DetectPath is exclusive in IsInstalled, so pinning it to
+	// the tarball location made a distro-packaged Go read as missing. goInstalled
+	// checks both /usr/local/go/bin/go and PATH, matching goInstall.
+	{Name: "go", Description: "Go toolchain (official tarball)", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, Detect: goInstalled, GoInstall: goInstall, GoUninstall: goUninstall, Tags: []string{"golang", "runtime"}},
 	{Name: "gws", Description: "Google Workspace CLI (Drive, Gmail, Calendar, and more)", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: gwsInstall, GoUninstall: gwsUninstall, Tags: []string{"google", "workspace"}},
 	{Name: "helm", Description: "Kubernetes package manager", Category: CategoryCLI, SupportedOS: []OS{OSAny}, Dependencies: []string{"kubectl"}, GoInstall: helmInstall, GoUninstall: helmUninstall, Tags: []string{"kubernetes", "k8s"}},
 	{Name: "herdr", Description: "Background runtime for coding agents: sessions keep running when you disconnect", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: herdrInstall, GoUninstall: herdrUninstall, Tags: []string{"agents", "sessions"}},

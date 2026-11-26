@@ -57,3 +57,51 @@ func TestWriteAtomic(t *testing.T) {
 		t.Errorf("temp files left behind: %d entries", len(entries))
 	}
 }
+
+func TestParseEdgeCases(t *testing.T) {
+	input := "export\tTAB=hello\r\n=emptykey\r\n  =spaces\r\nURL=https://example.invalid/?a=1&b=2\r\nQUOTED=\"a=b=c\"\r\n"
+	got := Parse([]byte(input))
+	if _, hasEmpty := got[""]; hasEmpty {
+		t.Errorf("Parse accepted empty key: %v", got)
+	}
+	want := map[string]string{
+		"TAB":    "hello",
+		"URL":    "https://example.invalid/?a=1&b=2",
+		"QUOTED": "a=b=c",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Parse() = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestWritePrivateTightensExistingPermissionsAndReplacesSymlink(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "creds")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chmod(dir, 0o755)
+	target := filepath.Join(t.TempDir(), "target")
+	_ = os.WriteFile(target, []byte("untouched"), 0o644)
+	path := filepath.Join(dir, "secret.env")
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WritePrivate(path, []byte("K=V\n")); err != nil {
+		t.Fatalf("WritePrivate: %v", err)
+	}
+	assertMode(t, dir, 0o700)
+	assertMode(t, path, 0o600)
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("expected symlink replaced with regular file, mode=%v err=%v", fi.Mode(), err)
+	}
+	if data, _ := os.ReadFile(target); string(data) != "untouched" {
+		t.Errorf("symlink target modified: %q", data)
+	}
+}

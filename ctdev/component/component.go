@@ -161,14 +161,23 @@ func InstallNeedsRoot(pm string, names []string, force bool) bool {
 	return false
 }
 
-// UninstallNeedsRoot reports whether removing these components needs root:
-// anything that didn't install into $HOME took a package or a system path with
-// it, and that has to be undone as root.
-func UninstallNeedsRoot(names []string) bool {
+// UninstallNeedsRoot reports whether removing these components needs root on
+// package manager pm: Homebrew uninstalls into a user-owned prefix unless the
+// component is marked BrewNeedsRoot or RootAlways, whereas apt/system installs
+// need root for anything other than RootNever.
+func UninstallNeedsRoot(pm string, names []string) bool {
 	for _, name := range names {
-		if c := FindByName(name); c != nil && c.Root != RootNever {
-			return true
+		c := FindByName(name)
+		if c == nil || c.Root == RootNever {
+			continue
 		}
+		if pm == "brew" {
+			if c.BrewNeedsRoot || c.Root == RootAlways {
+				return true
+			}
+			continue
+		}
+		return true
 	}
 	return false
 }

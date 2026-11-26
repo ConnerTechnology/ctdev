@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
+
+var kubectlStableURL = "https://dl.k8s.io/release/stable.txt"
 
 func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
@@ -27,7 +30,7 @@ func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	// Fetch latest stable version
-	ver, err := fetchKubectlStableVersion()
+	ver, err := fetchKubectlStableVersion(ctx)
 	if err != nil {
 		return err
 	}
@@ -69,13 +72,20 @@ func kubectlInstall(ctx context.Context, opts ExecOpts) error {
 	return sysutil.InstallBinary(ctx, o, binaryPath, "/usr/local/bin/kubectl")
 }
 
-func fetchKubectlStableVersion() (string, error) {
-	resp, err := sysutil.HTTPClient().Get("https://dl.k8s.io/release/stable.txt")
+func fetchKubectlStableVersion(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kubectlStableURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := sysutil.HTTPClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch kubectl stable version: %w", err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fetch kubectl stable version: HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
 	if err != nil {
 		return "", err
 	}

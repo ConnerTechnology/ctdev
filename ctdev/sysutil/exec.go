@@ -25,6 +25,7 @@ func RunEnv(ctx context.Context, o Opts, env []string, name string, args ...stri
 		return nil
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureProcessGroup(cmd)
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}

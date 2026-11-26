@@ -44,7 +44,7 @@ func tradingviewInstall(ctx context.Context, opts ExecOpts) error {
 		return nil
 	case "apt":
 		if p.Arch != "amd64" {
-			return fmt.Errorf("tradingview .deb only available on amd64 (got %s)", p.Arch)
+			return fmt.Errorf("tradingview .deb only available on amd64 (got %s): %w", p.Arch, ErrUnsupportedOS)
 		}
 		if o.DryRun {
 			fmt.Fprintln(o.Stdout, "[dry-run] download and install tradingview .deb")

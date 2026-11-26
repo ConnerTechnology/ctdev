@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 )
@@ -131,5 +133,54 @@ func TestCommandLabel(t *testing.T) {
 		if got := commandLabel(tt.name, tt.args); got != tt.want {
 			t.Errorf("commandLabel(%q, %v) = %q, want %q", tt.name, tt.args, got, tt.want)
 		}
+	}
+}
+
+type syncBuf struct {
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	n, err := s.buf.Write(p)
+	s.mu.Unlock()
+	s.once.Do(func() { close(s.ready) })
+	return n, err
+}
+
+// Cancelling a command writing into a non-*os.File io.Writer (like bytes.Buffer)
+// must also terminate background grandchildren holding stdout open so cmd.Run
+// returns promptly instead of blocking until the grandchild exits.
+func TestRun_CancelWithBufferStdoutKillsProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix process-group cancellation test")
+	}
+	sb := &syncBuf{ready: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, Opts{Stdout: sb}, "sh", "-c", "sleep 30 & echo started; wait")
+	}()
+
+	select {
+	case <-sb.ready:
+	case <-time.After(3 * time.Second):
+		cancel()
+		t.Fatal("child never wrote output")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("expected error after ctx cancellation")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run hung after ctx cancellation with buffered stdout (grandchild kept pipe open)")
 	}
 }

@@ -61,7 +61,8 @@ func privateAPIClient(endpoint string) (*http.Client, error) {
 		return nil, errUnifiPublic
 	}
 	return &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout:       10 * time.Second,
+		CheckRedirect: refuseCrossHostRedirect(parsed),
 		Transport: &http.Transport{
 			//nolint:gosec // Self-signed by design; gated to private addresses above.
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
@@ -287,13 +288,13 @@ func collectProxmox(ctx context.Context, creds ProxmoxCreds) (*ProxmoxSnapshot, 
 func proxmoxGet(ctx context.Context, client *http.Client, target, auth string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return err
+		return sanitizeAPIError(err)
 	}
 	req.Header.Set("Authorization", auth)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return sanitizeAPIError(err)
 	}
 	defer resp.Body.Close()
 

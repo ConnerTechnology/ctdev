@@ -101,7 +101,7 @@ func parseSizeSuffixKB(s string) int64 {
 	if err != nil {
 		return 0
 	}
-	return int64(v) * mult
+	return int64(v * float64(mult))
 }
 
 func macGateway(ctx context.Context) netip.Addr {

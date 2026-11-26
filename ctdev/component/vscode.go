@@ -12,7 +12,7 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	if !opts.Force && sysutil.CommandExists("code") {
+	if !opts.Force && alreadyInstalled("vscode") {
 		fmt.Fprintln(opts.Stdout, "VS Code already installed")
 		return nil
 	}

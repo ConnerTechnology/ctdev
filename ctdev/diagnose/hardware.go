@@ -604,6 +604,7 @@ func checkSMART(ctx context.Context, f Facts) Result {
 	}
 
 	var failing, aging []string
+	var readable int
 	for _, dev := range devices {
 		out, gotRoot := sudoCapture(ctx, "smartctl", "-H", "-A", dev)
 		if !gotRoot {
@@ -611,9 +612,13 @@ func checkSMART(ctx context.Context, f Facts) Result {
 		}
 		switch smartVerdict(out) {
 		case smartFailing:
+			readable++
 			failing = append(failing, dev)
 		case smartAging:
+			readable++
 			aging = append(aging, dev)
+		case smartHealthy:
+			readable++
 		}
 	}
 
@@ -624,22 +629,27 @@ func checkSMART(ctx context.Context, f Facts) Result {
 	case len(aging) > 0:
 		return warnf("Reallocated or pending sectors mean the drive is quietly working around damage. Make sure backups are current.",
 			"%s has reallocated or pending sectors", strings.Join(aging, ", "))
+	case readable == 0:
+		return skipf("could not read SMART health from %d drive(s)", len(devices))
 	default:
-		return okf("%d drive(s) report healthy", len(devices))
+		return okf("%d drive(s) report healthy", readable)
 	}
 }
 
 type smartHealth int
 
 const (
-	smartHealthy smartHealth = iota
+	smartUnknown smartHealth = iota
+	smartHealthy
 	smartAging
 	smartFailing
 )
 
 // smartVerdict reads `smartctl -H -A` output. The overall self-assessment is
 // the headline, but a PASSED drive with growing reallocated or pending sectors
-// is already on its way out — that's the early warning worth having.
+// is already on its way out — that's the early warning worth having. Output
+// without a recognized health assessment returns smartUnknown rather than
+// reporting a drive healthy when smartctl failed to read it.
 func smartVerdict(out string) smartHealth {
 	lower := strings.ToLower(out)
 	if strings.Contains(lower, "self-assessment test result: failed") ||
@@ -660,7 +670,11 @@ func smartVerdict(out string) smartHealth {
 			}
 		}
 	}
-	return smartHealthy
+	if strings.Contains(lower, "self-assessment test result: passed") ||
+		strings.Contains(lower, "smart health status: ok") {
+		return smartHealthy
+	}
+	return smartUnknown
 }
 
 // smartDevices lists block devices worth asking about, skipping partitions,

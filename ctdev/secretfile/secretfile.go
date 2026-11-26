@@ -16,21 +16,31 @@ import (
 func Parse(data []byte) map[string]string {
 	vals := map[string]string{}
 	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		line = strings.TrimPrefix(line, "export ")
+		if strings.HasPrefix(line, "export ") || strings.HasPrefix(line, "export\t") {
+			line = strings.TrimSpace(line[len("export"):])
+		}
 		key, val, ok := strings.Cut(line, "=")
 		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
 			continue
 		}
 		val = strings.TrimSpace(val)
 		if len(val) >= 2 && (val[0] == '"' || val[0] == '\'') && val[len(val)-1] == val[0] {
 			val = val[1 : len(val)-1]
 		}
-		vals[strings.TrimSpace(key)] = val
+		vals[key] = val
+	}
+	if sc.Err() != nil {
+		return map[string]string{}
 	}
 	return vals
 }

@@ -1,6 +1,7 @@
 package diagnose
 
 import (
+	"net/netip"
 	"regexp"
 	"strings"
 )
@@ -13,39 +14,51 @@ var macPattern = regexp.MustCompile(`\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b`)
 
 const masked = "[redacted]"
 
-// Redact returns a copy of the report with the identifiers that would locate
-// or identify this network removed: the SSID, any MAC or BSSID, and the
-// connection's public address.
-//
-// It deliberately does not mask every public address it sees. Naming 1.1.1.1
-// and 8.8.8.8 is what makes "your DNS server is down, the public ones work"
-// legible, and scrubbing them would leave a report nobody can act on. Only
-// *this connection's* public address — which identifies the subscriber line —
-// is removed.
-//
-// The hostname is also kept. It isn't a secret to whoever owns the machine,
-// and when you're carrying reports from several machines it's the only thing
-// telling them apart.
+type redactor struct {
+	literals []string
+	patterns []*regexp.Regexp
+}
+
+func (rd redactor) scrub(s string) string {
+	if s == "" {
+		return s
+	}
+	for _, secret := range rd.literals {
+		s = strings.ReplaceAll(s, secret, masked)
+	}
+	for _, pat := range rd.patterns {
+		s = pat.ReplaceAllString(s, masked)
+	}
+	return macPattern.ReplaceAllString(s, masked)
+}
+
 func Redact(r Report) Report {
-	secrets := collectIdentifiers(r)
+	rd := collectIdentifiers(r)
 
 	out := r
+	if out.Facts.LocalIP.IsValid() && !IsPrivate(out.Facts.LocalIP) {
+		out.Facts.LocalIP = netip.Addr{}
+	}
 	out.Findings = make([]Finding, len(r.Findings))
 	for i, fd := range r.Findings {
-		fd.Title = scrub(fd.Title, secrets)
-		fd.Detail = scrub(fd.Detail, secrets)
-		fd.Action = scrub(fd.Action, secrets)
+		fd.Title = rd.scrub(fd.Title)
+		fd.Detail = rd.scrub(fd.Detail)
+		fd.Action = rd.scrub(fd.Action)
 		out.Findings[i] = fd
 	}
 
 	out.Results = make(map[string]Result, len(r.Results))
 	for id, res := range r.Results {
-		res.Detail = scrub(res.Detail, secrets)
-		res.Advice = scrub(res.Advice, secrets)
+		res.Detail = rd.scrub(res.Detail)
+		res.Advice = rd.scrub(res.Advice)
 		if len(res.Data) > 0 {
 			data := make(map[string]string, len(res.Data))
 			for k, v := range res.Data {
-				data[k] = scrub(v, secrets)
+				if id == "link.wifi" && k == "ssid" && v != "" {
+					data[k] = masked
+					continue
+				}
+				data[k] = rd.scrub(v)
 			}
 			res.Data = data
 		}
@@ -56,31 +69,40 @@ func Redact(r Report) Report {
 
 // collectIdentifiers gathers the exact strings worth removing, taken from the
 // checks that know them rather than guessed from the text.
-func collectIdentifiers(r Report) []string {
-	var secrets []string
-	add := func(s string) {
-		// Very short values would match far too much prose.
+func collectIdentifiers(r Report) redactor {
+	var rd redactor
+	addLiteral := func(s string) {
 		if len(s) > 2 {
-			secrets = append(secrets, s)
+			rd.literals = append(rd.literals, s)
 		}
+	}
+	addSSID := func(s string) {
+		if s == "" {
+			return
+		}
+		// Short SSIDs (e.g. "net", "lan") would corrupt normal words like
+		// "internet" if replaced by bare substring; use word boundaries instead.
+		if len(s) < 5 {
+			if len(s) > 2 {
+				rd.patterns = append(rd.patterns, regexp.MustCompile(`\b`+regexp.QuoteMeta(s)+`\b`))
+			}
+			return
+		}
+		rd.literals = append(rd.literals, s)
 	}
 
 	if wifi, present := r.Results["link.wifi"]; present {
-		add(wifi.Data["ssid"])
-		add(wifi.Data["bssid"])
+		addSSID(wifi.Data["ssid"])
+		addLiteral(wifi.Data["bssid"])
 	}
 	if pub, present := r.Results["net.public"]; present {
-		add(pub.Data["public_ip"])
+		addLiteral(pub.Data["public_ip"])
 	}
-	return secrets
-}
-
-func scrub(s string, secrets []string) string {
-	if s == "" {
-		return s
+	if wan, present := r.Results["unifi.health"]; present {
+		addLiteral(wan.Data["wan_ip"])
 	}
-	for _, secret := range secrets {
-		s = strings.ReplaceAll(s, secret, masked)
+	if r.Facts.LocalIP.IsValid() && !IsPrivate(r.Facts.LocalIP) {
+		addLiteral(r.Facts.LocalIP.String())
 	}
-	return macPattern.ReplaceAllString(s, masked)
+	return rd
 }
