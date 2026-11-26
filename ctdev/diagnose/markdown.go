@@ -150,7 +150,7 @@ func writeMarkdownData(b *strings.Builder, r Report) {
 // puts a credential in Data today, and the vendor integrations must not either
 // — but a report is a file people forward, so this is enforced at the render
 // boundary rather than left to everyone who ever adds a check.
-var secretishKeys = []string{"key", "token", "secret", "password", "passwd", "credential", "auth"}
+var secretishKeys = []string{"key", "token", "secret", "password", "passwd", "credential", "auth", "cookie", "session", "bearer", "csrf", "private"}
 
 func visibleData(data map[string]string) map[string]string {
 	if len(data) == 0 {
@@ -176,8 +176,10 @@ func isSecretish(key string) bool {
 	return false
 }
 
-// escapePipes keeps a stray "|" in a detail string from breaking the table.
+// escapePipes keeps a stray "|" or newline in a detail string from breaking the table.
 func escapePipes(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
 	return strings.ReplaceAll(s, "|", `\|`)
 }
 

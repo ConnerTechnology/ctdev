@@ -12,7 +12,7 @@ func dbeaverInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	if !opts.Force && (sysutil.CommandExists("dbeaver") || sysutil.CommandExists("dbeaver-ce")) {
+	if !opts.Force && (alreadyInstalled("dbeaver") || sysutil.CommandExists("dbeaver-ce")) {
 		fmt.Fprintln(opts.Stdout, "DBeaver already installed")
 		return nil
 	}

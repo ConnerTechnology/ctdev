@@ -156,8 +156,34 @@ func newUnifiClient(creds UnifiCreds) (*unifiClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.http = &http.Client{Timeout: 10 * time.Second, Transport: transport, Jar: jar}
+	origin, err := url.Parse(creds.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	c.http = &http.Client{
+		Timeout:       10 * time.Second,
+		Transport:     transport,
+		Jar:           jar,
+		CheckRedirect: refuseCrossHostRedirect(origin),
+	}
 	return c, nil
+}
+
+// refuseCrossHostRedirect blocks redirects to a different host or non-private
+// address so credentials and InsecureSkipVerify can never be bounced off-box.
+func refuseCrossHostRedirect(origin *url.URL) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		if !strings.EqualFold(req.URL.Host, origin.Host) {
+			return fmt.Errorf("refusing cross-host redirect to %s: %w", req.URL.Host, errUnifiPublic)
+		}
+		if addr, err := netip.ParseAddr(req.URL.Hostname()); err == nil && !IsPrivate(addr) {
+			return errUnifiPublic
+		}
+		return nil
+	}
 }
 
 // apiPath builds the request path for whichever controller generation this is.
@@ -358,16 +384,18 @@ func collectUnifi(ctx context.Context, creds UnifiCreds) (*UnifiSnapshot, error)
 		return nil, err
 	}
 
-	snap := &UnifiSnapshot{
-		TLSVerified:     client.TLSVerified,
-		CertFingerprint: client.CertFingerprint,
-	}
+	snap := &UnifiSnapshot{}
 
 	// The device list is the one that must succeed; the rest are enrichment,
 	// and a controller that withholds one of them shouldn't cost us the lot.
 	if err := client.get(ctx, "/stat/device", &snap.Devices); err != nil {
 		return nil, err
 	}
+	// Copy TLS verification state after the first request: API-key auth skips
+	// login(), so VerifyConnection only runs once get() completes its handshake.
+	snap.TLSVerified = client.TLSVerified
+	snap.CertFingerprint = client.CertFingerprint
+
 	_ = client.get(ctx, "/stat/health", &snap.Health)
 	_ = client.get(ctx, "/rest/wlanconf", &snap.WLANs)
 	// Events are capped by the controller; the recent ones are what matter.

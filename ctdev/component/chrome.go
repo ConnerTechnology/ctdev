@@ -13,7 +13,7 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	if !opts.Force && sysutil.CommandExists("google-chrome") {
+	if !opts.Force && alreadyInstalled("chrome") {
 		fmt.Fprintln(opts.Stdout, "Chrome already installed")
 		return nil
 	}
@@ -25,7 +25,7 @@ func chromeInstall(ctx context.Context, opts ExecOpts) error {
 		return sysutil.BrewCaskInstall(ctx, o, "google-chrome")
 	case "apt":
 		if p.Arch != "amd64" {
-			return fmt.Errorf("chrome .deb only available on amd64 (got %s)", p.Arch)
+			return fmt.Errorf("chrome .deb only available on amd64 (got %s): %w", p.Arch, ErrUnsupportedOS)
 		}
 		if o.DryRun {
 			fmt.Fprintln(o.Stdout, "[dry-run] download and install google-chrome-stable .deb")

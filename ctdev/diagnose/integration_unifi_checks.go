@@ -233,7 +233,9 @@ func unifiHealthVerdict(health []UnifiHealth) Result {
 				"the gateway reports WAN status %q", h.Status)
 		}
 		if h.WANIP != "" {
-			return okf("WAN up, public address %s", h.WANIP)
+			res := okf("WAN up, public address %s", h.WANIP)
+			res.Data = map[string]string{"wan_ip": h.WANIP}
+			return res
 		}
 		return okf("WAN up")
 	}

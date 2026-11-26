@@ -41,6 +41,9 @@ func PiholeAvailable() bool {
 // "pihole-FTL","--config",…) against the active Pi-hole: via `docker exec` when
 // containerized, else with sudo on the host.
 func PiholeRun(ctx context.Context, o Opts, args ...string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("pihole command requires at least one argument")
+	}
 	if PiholeContainerized() {
 		return Run(ctx, o, "docker", append([]string{"exec", PiholeContainer}, args...)...)
 	}
@@ -50,6 +53,9 @@ func PiholeRun(ctx context.Context, o Opts, args ...string) error {
 // PiholeCapture runs a Pi-hole family command and returns its stdout, targeting
 // the container when containerized, else sudo on the host.
 func PiholeCapture(ctx context.Context, args ...string) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf("pihole command requires at least one argument")
+	}
 	var cmd *exec.Cmd
 	if PiholeContainerized() {
 		cmd = exec.CommandContext(ctx, "docker", append([]string{"exec", PiholeContainer}, args...)...)
@@ -108,5 +114,6 @@ func PiholeWriteDnsmasq(ctx context.Context, o Opts, name, content string) error
 		}
 		return os.WriteFile(dest, []byte(content), 0o644)
 	}
-	return SudoWriteFile(ctx, o, content, dest)
+	// Native dnsmasq runs as a non-root user, so the drop-in must be world-readable.
+	return SudoWriteFileMode(ctx, o, content, dest, "0644")
 }

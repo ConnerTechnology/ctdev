@@ -110,8 +110,32 @@ func TestUninstallNeedsRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := UninstallNeedsRoot(tt.names); got != tt.want {
-				t.Errorf("UninstallNeedsRoot(%v) = %v, want %v", tt.names, got, tt.want)
+			if got := UninstallNeedsRoot("apt", tt.names); got != tt.want {
+				t.Errorf("UninstallNeedsRoot(apt, %v) = %v, want %v", tt.names, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUninstallNeedsRootOnBrew(t *testing.T) {
+	registerRootFixtures(t)
+
+	tests := []struct {
+		name  string
+		names []string
+		want  bool
+	}{
+		{"plain brew package needs no root", []string{"test-pkg-present"}, false},
+		{"home-only stays home-only", []string{"test-home-only"}, false},
+		{"escalating cask needs root", []string{"test-brew-escalates-present"}, true},
+		{"RootAlways needs root even on brew", []string{"test-always"}, true},
+		{"mixed with escalating cask needs root", []string{"test-pkg-present", "test-brew-escalates"}, true},
+		{"nothing selected", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := UninstallNeedsRoot("brew", tt.names); got != tt.want {
+				t.Errorf("UninstallNeedsRoot(brew, %v) = %v, want %v", tt.names, got, tt.want)
 			}
 		})
 	}
@@ -128,7 +152,7 @@ func TestInstallNeedsRoot_RealRegistry(t *testing.T) {
 	}
 	// restic's Linux binary goes to ~/.local/bin, so even a forced install
 	// and its uninstall need no password.
-	if InstallNeedsRoot("apt", []string{"restic"}, true) || UninstallNeedsRoot([]string{"restic"}) {
+	if InstallNeedsRoot("apt", []string{"restic"}, true) || UninstallNeedsRoot("apt", []string{"restic"}) {
 		t.Error("restic installs into ~/.local/bin and must not need root")
 	}
 	if !InstallNeedsRoot("apt", []string{"caddy"}, false) {
@@ -151,5 +175,11 @@ func TestInstallNeedsRoot_RealRegistryOnBrew(t *testing.T) {
 	}
 	if InstallNeedsRoot("brew", []string{"chrome", "slack", "vscode"}, true) {
 		t.Error("drag-to-Applications casks must not ask for a password")
+	}
+	if UninstallNeedsRoot("brew", []string{"jq", "chrome", "vscode"}) {
+		t.Error("uninstalling plain Homebrew formulae/casks must not ask for a password")
+	}
+	if !UninstallNeedsRoot("brew", []string{"tailscale"}) {
+		t.Error("uninstalling an escalating macOS cask must pre-authorize sudo")
 	}
 }

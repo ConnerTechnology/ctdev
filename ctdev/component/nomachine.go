@@ -38,7 +38,7 @@ func nomachineInstall(ctx context.Context, opts ExecOpts) error {
 		return unsupportedPMError("nomachine", p.PackageManager)
 	}
 	if p.Arch != "amd64" {
-		return fmt.Errorf("nomachine .deb only available on amd64 (got %s)", p.Arch)
+		return fmt.Errorf("nomachine .deb only available on amd64 (got %s): %w", p.Arch, ErrUnsupportedOS)
 	}
 
 	// Phase 1: install the .deb (skip if already present unless --force).

@@ -54,7 +54,7 @@ func dockerInstall(ctx context.Context, opts ExecOpts) error {
 	p := platform.Detect()
 	o := execOpts(opts)
 
-	if !opts.Force && sysutil.CommandExists("docker") {
+	if !opts.Force && alreadyInstalled("docker") {
 		fmt.Fprintln(opts.Stdout, "Docker already installed")
 		return nil
 	}

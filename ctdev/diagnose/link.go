@@ -240,23 +240,24 @@ func parseAirportData(out string) WiFiInfo {
 		if !inCurrent {
 			continue
 		}
+		// Inside the block, a heading with no value is the network name —
+		// and the next one after that starts "Other Local Wi-Fi Networks",
+		// so it marks the end of what we care about. SSIDs routinely contain
+		// spaces and colons, so checking for a trailing ":" preserves colons
+		// inside the SSID instead of splitting at the first one.
+		trimmed := strings.TrimSpace(line)
+		if strings.HasSuffix(trimmed, ":") {
+			if w.SSID != "" {
+				break
+			}
+			w.SSID, w.Associated = strings.TrimSuffix(trimmed, ":"), true
+			continue
+		}
 		key, value, found := strings.Cut(line, ":")
 		if !found {
 			continue
 		}
 		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
-
-		// Inside the block, a heading with no value is the network name —
-		// and the next one after that starts "Other Local Wi-Fi Networks",
-		// so it marks the end of what we care about. SSIDs routinely contain
-		// spaces and colons, so the position is the only reliable signal.
-		if value == "" {
-			if w.SSID != "" {
-				break
-			}
-			w.SSID, w.Associated = key, true
-			continue
-		}
 		switch key {
 		case "Channel":
 			// "44 (5GHz, 80MHz)"
