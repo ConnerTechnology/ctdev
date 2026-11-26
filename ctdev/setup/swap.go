@@ -256,6 +256,19 @@ func swapfileNotNeeded(ctx context.Context) string {
 // SwapfileSizeSetting is the swapfile setting's Name in Registry.
 const SwapfileSizeSetting = "Swapfile size"
 
+// CheckSwapfileSize rejects a --swapfile-size outside the setting's range in
+// Registry. It reads Registry, not a machine's states, so it answers the same
+// on a machine without the setting (macOS), where the storage category has
+// nothing to apply and a size would otherwise pass unchecked.
+func CheckSwapfileSize(gib int) error {
+	for i := range Registry {
+		if r := Registry[i].Slider; Registry[i].Name == SwapfileSizeSetting && r != nil && (float64(gib) < r.Min || float64(gib) > r.Max) {
+			return fmt.Errorf("--swapfile-size %d is outside %g to %g GiB", gib, r.Min, r.Max)
+		}
+	}
+	return nil
+}
+
 // RequestSwapfileSize sets the swapfile's desired size in states to gib, for
 // `configure storage --batch --swapfile-size`. A server's boot script names
 // the size its node needs, which the default can't know, so a size asked for
@@ -263,13 +276,13 @@ const SwapfileSizeSetting = "Swapfile size"
 // ctdev didn't set up is still left alone, and so is a filesystem that can't
 // hold a swapfile: both stay not needed.
 func RequestSwapfileSize(states []SettingState, gib int) error {
+	if err := CheckSwapfileSize(gib); err != nil {
+		return err
+	}
 	for i := range states {
 		st := &states[i]
 		if st.Setting == nil || st.Setting.Name != SwapfileSizeSetting {
 			continue
-		}
-		if r := st.Setting.Slider; r != nil && (float64(gib) < r.Min || float64(gib) > r.Max) {
-			return fmt.Errorf("--swapfile-size %d is outside %g to %g GiB", gib, r.Min, r.Max)
 		}
 		if st.NotNeeded != "" && ownsSwapfile() {
 			st.NotNeeded = ""

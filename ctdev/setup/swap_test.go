@@ -562,3 +562,15 @@ func TestSwappiness(t *testing.T) {
 		t.Error("applySwappiness(101) = nil, want an error")
 	}
 }
+
+func TestCheckSwapfileSize(t *testing.T) {
+	if err := CheckSwapfileSize(-2); err == nil {
+		t.Error("CheckSwapfileSize(-2) = nil, want a range error")
+	}
+	if err := CheckSwapfileSize(33); err == nil {
+		t.Error("CheckSwapfileSize(33) = nil, want a range error")
+	}
+	if err := CheckSwapfileSize(0); err != nil {
+		t.Errorf("CheckSwapfileSize(0) = %v, want nil: 0 removes the swapfile", err)
+	}
+}
