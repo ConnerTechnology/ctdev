@@ -209,8 +209,10 @@ func TestPinRunningKernel_FailsSafeWhenUnameFails(t *testing.T) {
 }
 
 func TestPinRunningKernel_PinsInstalledKernelOnly(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX shell stub")
+	// Package lookups go through the detected package manager, so the
+	// dpkg-query stub only answers where that is apt.
+	if runtime.GOOS != "linux" {
+		t.Skip("apt kernel pinning is Linux-only")
 	}
 	binDir := t.TempDir()
 	writeExec := func(name, body string) {

@@ -262,14 +262,19 @@ const SwapfileSizeSetting = "Swapfile size"
 // by name also resizes ctdev's own swapfile, which a default never does. Swap
 // ctdev didn't set up is still left alone, and so is a filesystem that can't
 // hold a swapfile: both stay not needed.
+//
+// The size is checked against the setting's range in Registry, not in states,
+// so a machine without the setting (macOS) still rejects a bad size.
 func RequestSwapfileSize(states []SettingState, gib int) error {
+	for i := range Registry {
+		if r := Registry[i].Slider; Registry[i].Name == SwapfileSizeSetting && r != nil && (float64(gib) < r.Min || float64(gib) > r.Max) {
+			return fmt.Errorf("--swapfile-size %d is outside %g to %g GiB", gib, r.Min, r.Max)
+		}
+	}
 	for i := range states {
 		st := &states[i]
 		if st.Setting == nil || st.Setting.Name != SwapfileSizeSetting {
 			continue
-		}
-		if r := st.Setting.Slider; r != nil && (float64(gib) < r.Min || float64(gib) > r.Max) {
-			return fmt.Errorf("--swapfile-size %d is outside %g to %g GiB", gib, r.Min, r.Max)
 		}
 		if st.NotNeeded != "" && ownsSwapfile() {
 			st.NotNeeded = ""

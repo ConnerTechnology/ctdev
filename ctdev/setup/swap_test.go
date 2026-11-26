@@ -562,3 +562,14 @@ func TestSwappiness(t *testing.T) {
 		t.Error("applySwappiness(101) = nil, want an error")
 	}
 }
+
+// With no swapfile setting among the states, as on macOS, a size outside the
+// setting's range is still refused.
+func TestRequestSwapfileSize_RangeCheckedWithoutTheSetting(t *testing.T) {
+	if err := RequestSwapfileSize(nil, -2); err == nil {
+		t.Error("RequestSwapfileSize(nil, -2) = nil, want a range error")
+	}
+	if err := RequestSwapfileSize(nil, 0); err != nil {
+		t.Errorf("RequestSwapfileSize(nil, 0) = %v, want nil: 0 removes the swapfile", err)
+	}
+}
