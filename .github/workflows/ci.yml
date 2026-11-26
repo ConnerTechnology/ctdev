@@ -194,7 +194,11 @@ jobs:
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: ctdev/go.mod
-          cache-dependency-path: ctdev/go.sum
+          # This fast job finishes first. Give it a separate key so it cannot
+          # claim the immutable cache used for race builds and cross-platform vet.
+          cache-dependency-path: |
+            ctdev/go.mod
+            ctdev/go.sum
 
       - name: Build and exercise the CLI
         working-directory: ctdev
@@ -214,6 +218,7 @@ jobs:
           name: linux-smoke-binary
           path: ctdev/ctdev
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   test-ubuntu:

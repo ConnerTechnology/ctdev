@@ -119,6 +119,7 @@ jobs:
           name: ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           if-no-files-found: error
+          overwrite: true
           retention-days: 7
 
   publish:
