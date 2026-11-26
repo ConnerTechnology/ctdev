@@ -2,7 +2,7 @@ module github.com/ConnerTechnology/ctdev/ctdev
 
 go 1.26.1
 
-toolchain go1.27.1
+toolchain go1.27.4
 
 require (
 	charm.land/bubbles/v2 v2.2.1

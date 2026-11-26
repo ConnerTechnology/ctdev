@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# Re-running validation for main and publishing a tag are independent.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  verify:
+    name: Verify tagged commit passed main CI
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify version and exact main CI run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ||
+                "$TAG_NAME" != "v$(cat VERSION)" ]]; then
+            echo "::error::Release tag $TAG_NAME must match VERSION ($(cat VERSION)) and use vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+
+          sha=$(git rev-parse HEAD)
+          runs=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+            -f branch=main -f event=push -f head_sha="$sha" -f per_page=10)
+          run=$(jq -r --arg sha "$sha" --arg repo "$GITHUB_REPOSITORY" '
+            [.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and
+              .head_repository.full_name == $repo and .event == "push")]
+            | first | .id // empty' <<< "$runs")
+          if [[ -z "$run" ]]; then
+            echo "::error::No CI run on main for $sha. Push the release commit to main and wait for CI before tagging."
+            exit 1
+          fi
+          # Require the aggregate check as well as the overall conclusion. An
+          # older workflow without the new gate cannot authorize publication.
+          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100")
+          if ! jq -e '.jobs | any(.name == "Required CI" and .conclusion == "success")' <<< "$jobs" >/dev/null ||
+             ! jq -e --argjson id "$run" '.workflow_runs | any(.id == $id and .conclusion == "success")' <<< "$runs" >/dev/null; then
+            echo "::error::CI run $run on main must finish successfully with Required CI passing for $sha. Re-run this release after it passes."
+            exit 1
+          fi
+          echo "Main CI run $run passed for $sha"
+
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            ext: ''
+          - os: linux
+            arch: arm64
+            ext: ''
+          - os: darwin
+            arch: amd64
+            ext: ''
+          - os: darwin
+            arch: arm64
+            ext: ''
+          # Windows ships the diagnostic command only — see cmd/root.go.
+          - os: windows
+            arch: amd64
+            ext: '.exe'
+          - os: windows
+            arch: arm64
+            ext: '.exe'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: ctdev/go.mod
+          cache-dependency-path: ctdev/go.sum
+
+      - name: Build binary
+        working-directory: ctdev
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+          ASSET: ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+        run: |
+          VERSION=$(cat ../VERSION)
+          go build -ldflags "-X main.version=$VERSION" -o "$ASSET" .
+
+      - name: Upload binary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  publish:
+    name: Create Release
+    needs: [verify, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download release binaries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          pattern: ctdev-*
+          merge-multiple: true
+
+      - name: Verify assets and publish
+        working-directory: dist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          assets=(
+            ctdev-darwin-amd64 ctdev-darwin-arm64
+            ctdev-linux-amd64 ctdev-linux-arm64
+            ctdev-windows-amd64.exe ctdev-windows-arm64.exe
+          )
+          for asset in "${assets[@]}"; do
+            if [[ ! -s "$asset" ]]; then
+              echo "::error::Missing or empty asset $asset"
+              exit 1
+            fi
+          done
+          chmod +x "${assets[@]}"
+          sha256sum "${assets[@]}" > SHA256SUMS
+          gh release create "$TAG_NAME" "${assets[@]}" SHA256SUMS \
+            --title "$TAG_NAME" --generate-notes --verify-tag

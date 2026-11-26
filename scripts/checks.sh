@@ -7,8 +7,8 @@
 # containers, so parallel worktrees never share one; only the Go module/build caches and the base
 # tool images (Go + pinned restic/gpg/zsh, Ubuntu + git/sudo/curl) are cached locally.
 #
-# Only the macOS job needs a runner of its own: it runs on GitHub, on pushes to main and release
-# tags, and a failure there blocks the release.
+# GitHub CI adds native macOS coverage on applicable PRs and all main pushes.
+# A release requires successful CI on the exact tagged main commit.
 #
 # Usage:
 #   scripts/checks.sh --full                 every Linux job in ci.yml
@@ -44,9 +44,8 @@ else
   for f in "${files[@]}"; do
     case "${f#./}" in
       ctdev/*) want_go=1 want_ubuntu=1 ;;
-      # ci.yml holds the shellcheck list, the restic pin and the Ubuntu matrix the jobs read, and a
-      # change to this script can break any job it runs: both run every container job.
-      .github/workflows/*|scripts/checks.sh) want_shell=1 want_go=1 want_ubuntu=1 want_pwsh=1 ;;
+      # Changes to the workflow or test tools can affect all container jobs.
+      .github/workflows/*|scripts/checks.sh|scripts/install-test-restic.sh|scripts/ci-go-test.sh) want_shell=1 want_go=1 want_ubuntu=1 want_pwsh=1 ;;
       install.sh|uninstall.sh|devcontainer.sh) want_shell=1 want_ubuntu=1 ;;
       scripts/*|.shellcheckrc) want_shell=1 ;;
       install.ps1) want_pwsh=1 ;;
@@ -55,7 +54,7 @@ else
 fi
 
 # The shell scripts ci.yml lints. Keep in step with its shellcheck job.
-shell_files=(install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh scripts/checks.sh)
+shell_files=(install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh scripts/checks.sh scripts/install-test-restic.sh scripts/ci-go-test.sh)
 
 shell_job() {
   local f present=()
@@ -73,19 +72,6 @@ go_base_image() {
   printf 'golang:%s' "$v"
 }
 
-# restic: the backup tests need a real one. ci.yml pins the release and its checksum; read both
-# from there rather than keep a second copy that could drift.
-restic_pin() {
-  local url sum
-  url=$(grep -o 'https://github.com/restic/restic/releases/download/[^ ]*_linux_amd64\.bz2' \
-    .github/workflows/ci.yml | head -n1)
-  sum=$(grep -oE '[0-9a-f]{64}  /tmp/restic\.bz2' .github/workflows/ci.yml | head -n1 | cut -d' ' -f1)
-  if [ -z "$url" ] || [ -z "$sum" ]; then
-    echo "could not read the restic pin from ci.yml" >&2; return 1
-  fi
-  printf '%s %s' "$url" "$sum"
-}
-
 ubuntu_versions() {
   local versions
   versions=$(sed -n "s/.*ubuntu-version: *\[\(.*\)\].*/\1/p" .github/workflows/ci.yml | head -n1 | tr -d "'" | tr ',' ' ')
@@ -93,33 +79,30 @@ ubuntu_versions() {
   printf '%s' "$versions"
 }
 
-# Build a cached local Go test image matching ubuntu-latest CI: pinned restic, gpg and zsh
+# Build a cached local Go test image with the same tools as the hosted Linux tests: pinned restic, gpg and zsh
 # installed, and a non-root tester user so permission-boundary tests (which skip under root)
 # actually run pre-merge instead of only failing after push.
 go_test_image=""
 ensure_go_image() {
-  local base pin url sum uid tag
+  local base restic_script uid tag
   base=$(go_base_image)
-  pin=$(restic_pin) || return 1
-  read -r url sum <<<"$pin"
+  restic_script=$(sha256sum scripts/install-test-restic.sh) || return 1
   uid=$(id -u)
   [ "$uid" -gt 0 ] || uid=1000
-  tag=$(printf 'v1:%s:%s:%s:%s' "$base" "$url" "$sum" "$uid" | sha256sum | cut -c1-12)
+  tag=$(printf 'v2:%s:%s:%s' "$base" "$restic_script" "$uid" | sha256sum | cut -c1-12)
   go_test_image="ctdev-checks-go:$tag"
   if docker image inspect "$go_test_image" >/dev/null 2>&1; then
     return 0
   fi
   say "building cached Go test image ($go_test_image)"
-  docker build --quiet -t "$go_test_image" - <<DOCKERFILE >/dev/null
+  docker build --quiet -t "$go_test_image" -f - scripts <<DOCKERFILE >/dev/null
 FROM $base
+COPY install-test-restic.sh /tmp/install-test-restic.sh
 RUN apt-get update -qq >/dev/null \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bzip2 gnupg zsh >/dev/null \
  && rm -rf /var/lib/apt/lists/* \
- && curl -fsSLo /tmp/restic.bz2 "$url" \
- && echo "$sum  /tmp/restic.bz2" | sha256sum -c - >/dev/null \
- && bunzip2 /tmp/restic.bz2 \
- && install -m 0755 /tmp/restic /usr/local/bin/restic \
- && rm -f /tmp/restic \
+ && /tmp/install-test-restic.sh /tmp/ctdev-restic /usr/local/bin \
+ && rm -rf /tmp/ctdev-restic /tmp/install-test-restic.sh \
  && useradd -m -u $uid -s /bin/bash tester \
  && mkdir -p /go/pkg/mod /home/tester/.cache/go-build /w \
  && chown -R tester:tester /go /home/tester /w
@@ -196,8 +179,7 @@ go_test_job() {
         export GOCACHE=/home/tester/.cache/go-build GOMODCACHE=/go/pkg/mod CI=1
         restic version
         cd /w/repo/ctdev
-        go test -race -shuffle=on -timeout 20m ./...
-        go vet ./...
+        go test -race -vet=all -shuffle=on -timeout 20m ./...
         pids=()
         for t in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
           GOOS="${t%/*}" GOARCH="${t#*/}" go vet ./... &

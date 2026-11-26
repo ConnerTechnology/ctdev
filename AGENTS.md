@@ -69,7 +69,7 @@ counts. Without Entire on PATH the agent hooks do nothing and sessions aren't re
 
 - The human asks for a change in a session; the session takes it to `main` and a release.
 - One branch per change, cut from `origin/main`. `scripts/checks.sh --full` passes on this
-  machine, then push, open a pull request, and merge it with
+  machine, then push and open a pull request. Wait for GitHub's Required CI check, then use
   `gh pr merge --merge --match-head-commit <sha>`. Never merge around a failing check or
   force-push `main`. Delete the branch when it merges.
 - The Bash tool runs zsh here: quote globs in arguments (`--include='*.go'`), or an unmatched one
@@ -86,11 +86,11 @@ or two, says why. The release commit has no body. Attribution is off, set in
 
 ## Releases
 
-1. Bump VERSION
-2. Commit straight to `main`: `chore: release vX.Y.Z`
-3. Tag: `git tag vX.Y.Z`
-4. Push: `git push && git push --tags`
-5. CI builds and creates the GitHub Release automatically via `.github/workflows/ci.yml`
+1. Bump `VERSION` in a PR titled `chore: release vX.Y.Z` and merge it after Required CI passes.
+2. Wait for the full CI run on the release commit pushed to `main` to pass.
+3. Tag that exact commit: `git tag vX.Y.Z <sha>`.
+4. Push the one tag: `git push origin refs/tags/vX.Y.Z`.
+5. `.github/workflows/release.yml` verifies the main CI run and publishes the GitHub Release.
 
 ## What changed
 
