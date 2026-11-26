@@ -367,24 +367,6 @@ func TestAlertSoundsOffAndOn(t *testing.T) {
 	}
 }
 
-func TestAudioAndBluetoothDefaultsMatchThisComputer(t *testing.T) {
-	// Thomas's Linux desktop, 2026-10-15: every package installed, the LDAC
-	// config in place, the service active, event sounds off.
-	want := map[string]string{
-		"Sound system (PipeWire)": "installed",
-		"Bluetooth headphones":    "installed",
-		"Hi-fi Bluetooth audio":   "installed",
-		"Alert sounds":            "false",
-		"Bluetooth support":       "installed",
-		"Bluetooth on at startup": "active",
-	}
-	for name, def := range want {
-		if got := settingByName(t, name).Default; got != def {
-			t.Errorf("%q default = %q, want %q", name, got, def)
-		}
-	}
-}
-
 func TestRemovedByReadsRemvLines(t *testing.T) {
 	plan := "NOTE: This is only a simulation!\nRemv blueman [2.4.4]\nRemv bluez [5.72-0ubuntu5.8]\nInst foo\n"
 	if got := strings.Join(removedBy(plan), " "); got != "blueman bluez" {

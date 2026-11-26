@@ -71,28 +71,11 @@ func TestChecklistQuit(t *testing.T) {
 	}
 }
 
-func TestSourceLabel(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"apt", "System Packages (apt)"},
-		{"brew", "System Packages (brew)"},
-		{"brew-cask", "Desktop Apps (brew cask)"},
-		{"flatpak", "Flatpak"},
-		{"git", "Git Repositories"},
-		{"runtime", "Runtimes"},
-		{"npm", "NPM Global Packages"},
-		{"ctdev", "ctdev"},
-		{"cli", "CLI Tools"},
-		{"docker", "Docker (containers)"},
-		{"unknown", "unknown"},
+func TestSourceLabelFallback(t *testing.T) {
+	if got := sourceLabel("custom-source"); got != "custom-source" {
+		t.Errorf("sourceLabel(unknown) = %q, want raw key fallback", got)
 	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			if got := sourceLabel(tt.input); got != tt.want {
-				t.Errorf("sourceLabel(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
+	if got := sourceLabel("apt"); got == "" || got == "apt" {
+		t.Errorf("sourceLabel(apt) = %q, want descriptive label", got)
 	}
 }

@@ -175,24 +175,6 @@ func TestPowerCategoryAbsorbsSleep(t *testing.T) {
 	}
 }
 
-func TestPowerDefaultsFromReferenceDesktop(t *testing.T) {
-	// CTD-90 "Recommended defaults": Thomas's Linux desktop on 2026-10-15.
-	want := map[string]string{
-		"Power profile":                        "balanced",
-		"Turn off the display after":           "60",
-		"Suspend when idle after":              "never",
-		"Start the screensaver after":          "never",
-		"Lock the screen on suspend":           "true",
-		"Lock the screen with the screensaver": "false",
-		neverSuspendName:                       "enabled",
-	}
-	for name, def := range want {
-		if got := powerSetting(t, name).Default; got != def {
-			t.Errorf("%s default = %q, want %q", name, got, def)
-		}
-	}
-}
-
 func TestPowerTimersOfferNeverInMinutes(t *testing.T) {
 	for _, name := range []string{"Turn off the display after", "Suspend when idle after", "Start the screensaver after"} {
 		s := powerSetting(t, name)

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"strings"
 	"testing"
@@ -24,9 +23,6 @@ func multiPickSetting() *setup.Setting {
 }
 
 func TestPromptMultiPick(t *testing.T) {
-	orig := stdinScanner
-	t.Cleanup(func() { stdinScanner = orig })
-
 	tests := []struct {
 		name    string
 		current string
@@ -43,7 +39,7 @@ func TestPromptMultiPick(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stdinScanner = bufio.NewScanner(strings.NewReader(tt.input + "\n"))
+			useStdin(t, tt.input+"\n")
 			st := &setup.SettingState{Setting: multiPickSetting(), CurrentValue: tt.current}
 			var got string
 			out := captureStdout(t, func() {
@@ -64,9 +60,7 @@ func TestPromptMultiPick(t *testing.T) {
 }
 
 func TestPromptMultiPick_MarksChecked(t *testing.T) {
-	orig := stdinScanner
-	t.Cleanup(func() { stdinScanner = orig })
-	stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+	useStdin(t, "\n")
 	st := &setup.SettingState{Setting: multiPickSetting(), CurrentValue: "BBBB-2222"}
 	out := captureStdout(t, func() { _, _ = promptMultiPick(context.Background(), st) })
 	if !strings.Contains(out, "[x] 2)") || !strings.Contains(out, "[ ] 1)") {

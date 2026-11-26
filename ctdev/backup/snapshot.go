@@ -327,27 +327,6 @@ func (d *Destination) Stored(ctx context.Context, snaps []Snapshot) (int64, erro
 	return s.TotalSize, nil
 }
 
-// files lists the paths in a backup.
-func (d *Destination) files(ctx context.Context, id string) ([]string, error) {
-	out, err := d.restic(ctx, d.asComputer("", "ls", "--json", "--retry-lock", retryLock, id))
-	if err != nil {
-		return nil, err
-	}
-	var paths []string
-	sc := bufio.NewScanner(bytes.NewReader(out))
-	for sc.Scan() {
-		var n struct {
-			Type string `json:"message_type"`
-			Path string `json:"path"`
-		}
-		if json.Unmarshal(sc.Bytes(), &n) == nil && n.Type == "node" {
-			paths = append(paths, n.Path)
-		}
-	}
-	sort.Strings(paths)
-	return paths, nil
-}
-
 // ErrOneOffsNotTaken is Configure's error once the folder's config is saved
 // and only giving its earlier one-off backups its ID failed or was
 // cancelled. Configuring again finishes it: the one-offs still without an

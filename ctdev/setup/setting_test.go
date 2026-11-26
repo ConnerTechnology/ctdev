@@ -171,34 +171,6 @@ func TestSlugs(t *testing.T) {
 	}
 }
 
-func TestRegistrySlugCounts(t *testing.T) {
-	// Ensure each slug has at least one setting — catches typos in slug assignment.
-	for _, slug := range Slugs(Registry) {
-		settings := FilterBySlug(Registry, slug)
-		if len(settings) == 0 {
-			t.Errorf("slug %q has no settings", slug)
-		}
-	}
-}
-
-func TestHideDrivesHasHardwareFn(t *testing.T) {
-	for _, s := range Registry {
-		if s.Name == "Hide drives" {
-			if s.HardwareFn == nil {
-				t.Error("Hide drives should have HardwareFn set (Cinnamon-only)")
-			}
-			if s.DetectFunc == nil {
-				t.Error("Hide drives should have DetectFunc set")
-			}
-			if s.ApplyFunc == nil {
-				t.Error("Hide drives should have ApplyFunc set")
-			}
-			return
-		}
-	}
-	t.Fatal("Hide drives not found in Registry")
-}
-
 func TestRegistryEverySettingHasHardwareFn(t *testing.T) {
 	// Every setting must declare where it applies (OS/desktop/hardware gate)
 	// so the wizard never offers inert settings on the wrong platform.

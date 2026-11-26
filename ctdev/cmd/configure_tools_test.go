@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"strings"
 	"testing"
@@ -27,13 +26,6 @@ func useFakeTool(t *testing.T, installed bool) *fakeTool {
 	}
 	t.Cleanup(func() { toolInstalled, installTool = origInstalled, origInstall })
 	return f
-}
-
-func useStdin(t *testing.T, input string) {
-	t.Helper()
-	orig := stdinScanner
-	stdinScanner = bufio.NewScanner(strings.NewReader(input))
-	t.Cleanup(func() { stdinScanner = orig })
 }
 
 func TestEnsureToolInstalledDoesNothing(t *testing.T) {

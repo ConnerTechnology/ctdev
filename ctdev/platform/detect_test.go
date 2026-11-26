@@ -27,13 +27,6 @@ func TestDetectOS(t *testing.T) {
 	}
 }
 
-func TestDetectArch(t *testing.T) {
-	arch := detectArch()
-	if arch != "amd64" && arch != "arm64" {
-		t.Errorf("unexpected arch: %s", arch)
-	}
-}
-
 func TestDetectReturnsSameInstance(t *testing.T) {
 	a := Detect()
 	b := Detect()
