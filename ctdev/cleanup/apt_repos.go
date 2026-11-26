@@ -95,6 +95,7 @@ func parseListRepos(content string) []string {
 // parseSourcesRepos extracts "uri suite" keys from a deb822 .sources file,
 // expanding the cross-product of URIs and Suites in each enabled stanza.
 func parseSourcesRepos(content string) []string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
 	var keys []string
 	for _, stanza := range strings.Split(content, "\n\n") {
 		var uris, suites []string

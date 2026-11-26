@@ -230,6 +230,14 @@ func applyXbindkeys(ctx context.Context, o sysutil.Opts) error {
 
 	// Use DeployFileFromFS so any pre-existing user-customized file gets
 	// backed up on diff instead of silently overwritten.
+	if o.DryRun {
+		if o.Stdout != nil {
+			fmt.Fprintf(o.Stdout, "[dry-run] deploy %s\n", rc)
+			fmt.Fprintf(o.Stdout, "[dry-run] deploy %s\n", autostart)
+		}
+		_ = mouseRun(ctx, o, "killall", "xbindkeys")
+		return nil
+	}
 	if err := sysutil.DeployFileFromFS(Configs, xbindkeysrcSrc, rc); err != nil {
 		return fmt.Errorf("deploy .xbindkeysrc: %w", err)
 	}
@@ -347,15 +355,21 @@ func applyLogitechKVMFix(ctx context.Context, o sysutil.Opts) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(serviceDst), 0o755); err != nil {
-		return fmt.Errorf("mkdir systemd user dir: %w", err)
-	}
-	serviceContent, err := Configs.ReadFile(solaarServiceSrc)
-	if err != nil {
-		return fmt.Errorf("read embedded service file: %w", err)
-	}
-	if err := os.WriteFile(serviceDst, serviceContent, 0o644); err != nil {
-		return fmt.Errorf("write service file: %w", err)
+	if o.DryRun {
+		if o.Stdout != nil {
+			fmt.Fprintf(o.Stdout, "[dry-run] write %s\n", serviceDst)
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(serviceDst), 0o755); err != nil {
+			return fmt.Errorf("mkdir systemd user dir: %w", err)
+		}
+		serviceContent, err := Configs.ReadFile(solaarServiceSrc)
+		if err != nil {
+			return fmt.Errorf("read embedded service file: %w", err)
+		}
+		if err := os.WriteFile(serviceDst, serviceContent, 0o644); err != nil {
+			return fmt.Errorf("write service file: %w", err)
+		}
 	}
 
 	// Enable the user service and reload udev

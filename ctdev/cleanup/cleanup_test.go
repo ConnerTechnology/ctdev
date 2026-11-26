@@ -1,12 +1,25 @@
 package cleanup
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
+
+// Warm platform.Detect() before any test swaps PATH under -shuffle=on, so
+// PackageManager detection never caches "unknown" from an empty stub PATH.
+func TestMain(m *testing.M) {
+	platform.Detect()
+	os.Exit(m.Run())
+}
 
 func TestParseSize(t *testing.T) {
 	cases := map[string]int64{
@@ -152,5 +165,227 @@ func write(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRotatedLogFiles_FindsNestedGzAndTopLevelRotated(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "apt", "deep")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "syslog.1", "a")
+	write(t, root, "kern.old", "b")
+	write(t, root, "auth.log.2.gz", "c")
+	write(t, root, "syslog", "keep")
+	write(t, sub, "history.log.1.gz", "d")
+	write(t, sub, "term.log.1", "nested-not-gz")
+
+	got := rotatedLogFiles(root)
+	slices.Sort(got)
+	want := []string{
+		filepath.Join(sub, "history.log.1.gz"),
+		filepath.Join(root, "auth.log.2.gz"),
+		filepath.Join(root, "kern.old"),
+		filepath.Join(root, "syslog.1"),
+	}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("rotatedLogFiles() = %v, want %v", got, want)
+	}
+}
+
+func TestPinRunningKernel_FailsSafeWhenUnameFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell stub")
+	}
+	// Empty PATH: uname fails -> pinRunningKernel must return an error rather
+	// than letting apt autoremove --purge proceed without pinning the kernel.
+	t.Setenv("PATH", t.TempDir())
+	err := pinRunningKernel(context.Background(), sysutil.Opts{Stdout: &bytes.Buffer{}, DryRun: true})
+	if err == nil {
+		t.Fatal("expected error when uname -r fails, got nil")
+	}
+}
+
+func TestPinRunningKernel_PinsInstalledKernelOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell stub")
+	}
+	binDir := t.TempDir()
+	writeExec := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeExec("uname", "#!/bin/sh\necho 6.8.0-test\n")
+	writeExec("dpkg-query", "#!/bin/sh\ncase \"$3\" in linux-image-6.8.0-test) echo 'installed 6.8.0'; exit 0 ;; *) exit 1 ;; esac\n")
+	t.Setenv("PATH", binDir)
+
+	var out bytes.Buffer
+	if err := pinRunningKernel(context.Background(), sysutil.Opts{Stdout: &out, DryRun: true}); err != nil {
+		t.Fatalf("pinRunningKernel: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "apt-mark manual linux-image-6.8.0-test") {
+		t.Errorf("expected linux-image to be pinned; got:\n%s", got)
+	}
+	if strings.Contains(got, "linux-headers-6.8.0-test") {
+		t.Errorf("uninstalled linux-headers should not be pinned; got:\n%s", got)
+	}
+}
+
+func TestRemoveAllAndEmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, sub, "a.txt", "hi")
+
+	// DryRun with nil Stdout must not panic and must not delete anything.
+	if err := removeAll(sysutil.Opts{DryRun: true}, sub); err != nil {
+		t.Fatalf("removeAll dry-run nil stdout: %v", err)
+	}
+	if err := emptyDir(sysutil.Opts{DryRun: true}, sub); err != nil {
+		t.Fatalf("emptyDir dry-run nil stdout: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sub, "a.txt")); err != nil {
+		t.Fatalf("dry-run deleted file: %v", err)
+	}
+
+	// emptyDir deletes contents while preserving the directory itself.
+	if err := emptyDir(sysutil.Opts{}, sub, filepath.Join(dir, "nonexistent")); err != nil {
+		t.Fatalf("emptyDir: %v", err)
+	}
+	entries, err := os.ReadDir(sub)
+	if err != nil || len(entries) != 0 {
+		t.Errorf("expected empty existing dir, got entries=%v err=%v", entries, err)
+	}
+
+	// removeAll removes the directory itself.
+	if err := removeAll(sysutil.Opts{}, sub); err != nil {
+		t.Fatalf("removeAll: %v", err)
+	}
+	if _, err := os.Stat(sub); !os.IsNotExist(err) {
+		t.Errorf("expected %s removed, stat err=%v", sub, err)
+	}
+}
+
+func TestSudoRemoveGlob_InsertsDoubleDash(t *testing.T) {
+	dir := t.TempDir()
+	dashFile := filepath.Join(dir, "-weird.gz")
+	if err := os.WriteFile(dashFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := sudoRemoveGlob(context.Background(), sysutil.Opts{Stdout: &out, DryRun: true}, filepath.Join(dir, "*.gz")); err != nil {
+		t.Fatalf("sudoRemoveGlob: %v", err)
+	}
+	if !strings.Contains(out.String(), "rm -f -- "+dashFile) {
+		t.Errorf("expected -- separator before glob matches, got:\n%s", out.String())
+	}
+}
+
+func TestParsersWithStubCommands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell stub")
+	}
+	binDir := t.TempDir()
+	writeExec := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeExec("docker", "#!/bin/sh\nprintf '1.5GB (50%%)\\n512MB (100%%)\\n'\n")
+	writeExec("snap", "#!/bin/sh\nprintf 'Name Version Rev Tracking Publisher Notes\\nfirefox 120 100 latest/stable mozilla -\\nfirefox 119 99 latest/stable mozilla disabled\\n'\n")
+	writeExec("dpkg", "#!/bin/sh\nprintf 'ii  curl 8.0 amd64\\nrc  old-pkg 1.0 amd64 removed\\n'\n")
+	writeExec("tmutil", "#!/bin/sh\nprintf 'Snapshots for disk /:\\ncom.apple.TimeMachine.2026-06-26-120000.local\\n'\n")
+	t.Setenv("PATH", binDir)
+
+	ctx := context.Background()
+	wantDocker := int64(1.5*float64(1<<30)) + 512*(1<<20)
+	if got := dockerReclaimable(ctx); got != wantDocker {
+		t.Errorf("dockerReclaimable() = %d, want %d", got, wantDocker)
+	}
+	if snaps := disabledSnaps(ctx); len(snaps) != 1 || snaps[0].name != "firefox" || snaps[0].rev != "99" {
+		t.Errorf("disabledSnaps() = %+v, want [{firefox 99}]", snaps)
+	}
+	if pkgs := rcPackages(ctx); !slices.Equal(pkgs, []string{"old-pkg"}) {
+		t.Errorf("rcPackages() = %v, want [old-pkg]", pkgs)
+	}
+	if tm := localSnapshots(ctx); !slices.Equal(tm, []string{"2026-06-26-120000"}) {
+		t.Errorf("localSnapshots() = %v, want [2026-06-26-120000]", tm)
+	}
+
+	// Unreachable docker returns -1.
+	t.Setenv("PATH", t.TempDir())
+	if got := dockerReclaimable(ctx); got != -1 {
+		t.Errorf("dockerReclaimable without docker = %d, want -1", got)
+	}
+}
+
+func TestParseSourcesAndListReposEdgeCases(t *testing.T) {
+	crlf := "Types: deb\r\nURIs: https://a.example.invalid https://b.example.invalid\r\nSuites: s1 s2\r\nEnabled: yes\r\n\r\n" +
+		"Types: deb\r\nURIs: https://c.example.invalid\r\nSuites: s3\r\nEnabled: false\r\n"
+	got := parseSourcesRepos(crlf)
+	want := []string{
+		"https://a.example.invalid s1",
+		"https://a.example.invalid s2",
+		"https://b.example.invalid s1",
+		"https://b.example.invalid s2",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseSourcesRepos(CRLF) = %v, want %v", got, want)
+	}
+
+	list := "# comment\ndeb-src [signed-by=/etc/apt/key.gpg arch=amd64] https://a.example.invalid noble main\nbadline\n"
+	if got := parseListRepos(list); !slices.Equal(got, []string{"https://a.example.invalid noble"}) {
+		t.Errorf("parseListRepos() = %v", got)
+	}
+
+	// Error paths for size/apt/journal parsers.
+	for _, bad := range []string{"", "100 XB", "abc MB"} {
+		if got := parseSize(bad); got != -1 {
+			t.Errorf("parseSize(%q) = %d, want -1", bad, got)
+		}
+	}
+	if got := parseJournalUsage("no marker here"); got != -1 {
+		t.Errorf("parseJournalUsage(invalid) = %d, want -1", got)
+	}
+}
+
+func TestScanAll_RespectsContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	tasks := []Task{
+		{ID: "a", Scan: func(c context.Context) ScanResult {
+			if c.Err() != nil {
+				return ScanResult{Bytes: -1, Note: "cancelled"}
+			}
+			return ScanResult{Bytes: 100}
+		}},
+		{ID: "nil-scan"},
+	}
+	res := ScanAll(ctx, tasks)
+	if res["a"].Note != "cancelled" {
+		t.Errorf("ScanAll did not forward cancelled ctx: %+v", res)
+	}
+	if _, ok := res["nil-scan"]; ok {
+		t.Error("task with nil Scan should be omitted from results")
+	}
+}
+
+func TestCatalogNeedsRootMetadata(t *testing.T) {
+	tasks := Catalog(platform.Info{OS: platform.Linux, PackageManager: "apt"})
+	byID := map[string]Task{}
+	for _, tk := range tasks {
+		byID[tk.ID] = tk
+	}
+	if tk, ok := byID["thumbnails"]; !ok || tk.NeedsRoot {
+		t.Errorf("thumbnails should be a non-root task: %+v", tk)
+	}
+	if tk, ok := byID["rotated-logs"]; !ok || !tk.NeedsRoot {
+		t.Errorf("rotated-logs should require root: %+v", tk)
 	}
 }

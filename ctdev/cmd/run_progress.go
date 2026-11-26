@@ -298,6 +298,9 @@ func runWithProgressBatch(ctx context.Context, op progressOperation) error {
 	notInstalled := map[string]string{}
 
 	for _, name := range op.names {
+		if ctx != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		c := comp.FindByName(name)
 		if c == nil {
 			continue

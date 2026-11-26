@@ -52,3 +52,19 @@ func TestWindowsCommandsExist(t *testing.T) {
 		}
 	}
 }
+
+func TestIsBatchMode_FlagsAndAccessible(t *testing.T) {
+	saved := flagBatch
+	t.Cleanup(func() { flagBatch = saved })
+
+	flagBatch = true
+	if !isBatchMode() {
+		t.Error("isBatchMode() = false when flagBatch is true")
+	}
+
+	flagBatch = false
+	t.Setenv("ACCESSIBLE", "1")
+	if !isBatchMode() {
+		t.Error("isBatchMode() = false when ACCESSIBLE is set")
+	}
+}

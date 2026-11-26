@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -116,28 +117,55 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := ensureSudo(cmdContext(cmd)); err != nil {
-		return fmt.Errorf("sudo required for cleanup: %w", err)
+	if cleanupNeedsRoot(actionable, selected) {
+		if err := ensureSudo(cmdContext(cmd)); err != nil {
+			return fmt.Errorf("sudo required for cleanup: %w", err)
+		}
 	}
 
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
-	var reclaimed int64
-	for _, t := range actionable {
+	reclaimed, failed := executeCleanupTasks(ctx, o, actionable, selected, results)
+	if failed > 0 {
+		fmt.Println(styles.Warning.Render(fmt.Sprintf("\nCleanup finished with %d failure(s) — reclaimed ≈ %s.", failed, cleanup.Humanize(reclaimed))))
+		return fmt.Errorf("%d cleanup task(s) failed", failed)
+	}
+
+	fmt.Println(styles.Success.Render(fmt.Sprintf("\nCleanup complete — reclaimed ≈ %s.", cleanup.Humanize(reclaimed))))
+	return nil
+}
+
+// cleanupNeedsRoot reports whether any selected cleanup task requires root.
+func cleanupNeedsRoot(tasks []cleanup.Task, selected map[string]bool) bool {
+	for _, t := range tasks {
+		if selected[t.ID] && t.NeedsRoot {
+			return true
+		}
+	}
+	return false
+}
+
+// executeCleanupTasks runs every selected task in order, returning the
+// approximate bytes reclaimed by successful tasks and the count of failures.
+func executeCleanupTasks(ctx context.Context, o sysutil.Opts, tasks []cleanup.Task, selected map[string]bool, results map[string]cleanup.ScanResult) (reclaimed int64, failed int) {
+	w := o.Stdout
+	if w == nil {
+		w = os.Stdout
+	}
+	for _, t := range tasks {
 		if !selected[t.ID] {
 			continue
 		}
-		fmt.Println(styles.Dimmed.Render(fmt.Sprintf("Cleaning: %s…", t.Name)))
+		fmt.Fprintln(w, styles.Dimmed.Render(fmt.Sprintf("Cleaning: %s…", t.Name)))
 		if err := t.Run(ctx, o); err != nil {
-			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("warning: %v", err)))
+			fmt.Fprintf(w, "  %s\n", styles.Warning.Render(fmt.Sprintf("warning: %v", err)))
+			failed++
 			continue
 		}
 		if b := results[t.ID].Bytes; b > 0 {
 			reclaimed += b
 		}
 	}
-
-	fmt.Println(styles.Success.Render(fmt.Sprintf("\nCleanup complete — reclaimed ≈ %s.", cleanup.Humanize(reclaimed))))
-	return nil
+	return reclaimed, failed
 }
 
 // hasWork reports whether a scan found anything worth offering.

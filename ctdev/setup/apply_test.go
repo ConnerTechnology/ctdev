@@ -1,8 +1,16 @@
 package setup
 
 import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/gpu"
+	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 func TestDconfWriteArgs(t *testing.T) {
@@ -201,5 +209,73 @@ func TestSplitLines(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestApplyNvidiaSigning_DryRunDoesNotExecuteRealSetup(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only GPU signing setup")
+	}
+	gpu.SetEFIDirForTest(t, t.TempDir())
+	binDir := t.TempDir()
+	writeStub := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeStub("mokutil", "#!/bin/sh\necho 'SecureBoot enabled'\n")
+	writeStub("dkms", "#!/bin/sh\necho 'nvidia/570.00, 6.8.0-test, x86_64: installed'\n")
+	writeStub("uname", "#!/bin/sh\necho '6.8.0-test'\n")
+	// If DryRun were dropped, gpu.RunSetup would invoke sudo to generate MOK keys.
+	writeStub("sudo", "#!/bin/sh\necho 'sudo invoked during dry-run' >&2\nexit 1\n")
+	t.Setenv("PATH", binDir)
+
+	var out bytes.Buffer
+	err := applyNvidiaSigning(context.Background(), sysutil.Opts{Stdout: &out, DryRun: true})
+	if err != nil {
+		t.Fatalf("applyNvidiaSigning(DryRun: true) returned error: %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "[dry-run]") {
+		t.Errorf("expected [dry-run] output from forwarded DryRun flag, got:\n%s", out.String())
+	}
+}
+
+func TestApplyNvidiaSuspendServices_EnablesDisabledSkipsStaticAndMissing(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd is Linux-only")
+	}
+	dir := t.TempDir()
+	// Stub systemctl:
+	//   nvidia-suspend.service   -> "disabled" + exit 1 (must be enabled)
+	//   nvidia-resume.service    -> "static"   + exit 0 (must be skipped)
+	//   nvidia-hibernate.service -> ""         + exit 4 (missing unit, must be skipped)
+	script := `#!/bin/sh
+if [ "$1" = "is-enabled" ]; then
+  case "$2" in
+    nvidia-suspend.service) echo "disabled"; exit 1 ;;
+    nvidia-resume.service) echo "static"; exit 0 ;;
+    nvidia-hibernate.service) exit 4 ;;
+  esac
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "systemctl"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	var out bytes.Buffer
+	if err := applyNvidiaSuspendServices(context.Background(), sysutil.Opts{Stdout: &out, DryRun: true}); err != nil {
+		t.Fatalf("applyNvidiaSuspendServices: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "systemctl enable nvidia-suspend.service") {
+		t.Errorf("disabled nvidia-suspend.service was not enabled; got:\n%s", got)
+	}
+	if strings.Contains(got, "nvidia-resume.service") {
+		t.Errorf("static nvidia-resume.service should be skipped; got:\n%s", got)
+	}
+	if strings.Contains(got, "nvidia-hibernate.service") {
+		t.Errorf("missing nvidia-hibernate.service should be skipped; got:\n%s", got)
 	}
 }

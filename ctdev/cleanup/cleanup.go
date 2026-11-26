@@ -33,11 +33,12 @@ const (
 
 // Task is one cleanup action.
 type Task struct {
-	ID     string
-	Name   string
-	Group  string // category header (e.g. "Packages", "Caches", "Developer")
-	Detail string // dimmed note (e.g. a path), shown after the name
-	Risk   Risk
+	ID        string
+	Name      string
+	Group     string // category header (e.g. "Packages", "Caches", "Developer")
+	Detail    string // dimmed note (e.g. a path), shown after the name
+	Risk      Risk
+	NeedsRoot bool // true when Run invokes sudo/root-owned cleanup
 
 	// Scan measures reclaimable bytes without changing anything. A negative
 	// byte count means "unknown" (omitted from the reclaimable total).

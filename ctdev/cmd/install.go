@@ -82,17 +82,18 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			len(requested), len(deps), strings.Join(deps, ", "))
 	}
 
-	if err := ensureSudoForInstall(cmdContext(cmd), resolved, flagForce); err != nil {
+	ctx := cmdContext(cmd)
+	if err := ensureSudoForInstall(ctx, resolved, flagForce); err != nil {
 		return err
 	}
-	installErr := runWithProgress(cmd.Context(), progressOperation{
+	installErr := runWithProgress(ctx, progressOperation{
 		mode:  progress.ModeInstall,
 		names: resolved,
 	})
 	// claude-code's drift review runs whenever it was part of this install, in
 	// every mode: it's how --dry-run shows the diff and --force says where the
 	// backup went, which the progress screen above can't.
-	if err := reviewClaudeCodeAfterInstall(cmd.Context(), resolved); err != nil {
+	if err := reviewClaudeCodeAfterInstall(ctx, resolved); err != nil {
 		return cancelToClean(err)
 	}
 	if installErr != nil {
@@ -117,7 +118,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if hasCfg {
-			if err := runComponentConfigure(cmd.Context(), name); err != nil {
+			if err := runComponentConfigure(ctx, name); err != nil {
 				fmt.Printf("  configure %s: %v\n", name, err)
 			}
 		}

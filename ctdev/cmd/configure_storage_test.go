@@ -44,11 +44,51 @@ func resetConfigureStorageFlags(t *testing.T) func() {
 		t.Fatal(err)
 	}
 	return func() {
-		flagBatch, flagConfigShow, flagSwapfileSize = false, false, 0
-		for _, f := range []string{"batch", "show", "swapfile-size"} {
+		flagBatch, flagDryRun, flagConfigShow, flagSwapfileSize = false, false, false, 0
+		for _, f := range []string{"batch", "dry-run", "show", "swapfile-size"} {
 			if fl := storage.Flags().Lookup(f); fl != nil {
+				fl.Changed = false
+			}
+			if fl := rootCmd.PersistentFlags().Lookup(f); fl != nil {
 				fl.Changed = false
 			}
 		}
 	}
+}
+
+func TestSwapfileSizeBatchValidation(t *testing.T) {
+	t.Run("non-positive size rejected", func(t *testing.T) {
+		reset := resetConfigureStorageFlags(t)
+		reset()
+		t.Cleanup(reset)
+		var out bytes.Buffer
+		rootCmd.SetArgs([]string{"configure", "storage", "--batch", "--dry-run", "--swapfile-size", "-2"})
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&out)
+		err := rootCmd.Execute()
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		if err == nil {
+			t.Fatal("expected error for negative --swapfile-size")
+		}
+	})
+
+	t.Run("valid positive size in batch dry-run", func(t *testing.T) {
+		reset := resetConfigureStorageFlags(t)
+		reset()
+		t.Cleanup(reset)
+		var out bytes.Buffer
+		rootCmd.SetArgs([]string{"configure", "storage", "--batch", "--dry-run", "--swapfile-size", "4"})
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&out)
+		var err error
+		captureStdout(t, func() { err = rootCmd.Execute() })
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		if err != nil {
+			t.Fatalf("unexpected error for valid --batch --dry-run --swapfile-size 4: %v", err)
+		}
+	})
 }

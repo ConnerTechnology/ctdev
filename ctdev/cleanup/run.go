@@ -15,7 +15,9 @@ import (
 func removeAll(o sysutil.Opts, paths ...string) error {
 	for _, p := range expandAll(paths) {
 		if o.DryRun {
-			fmt.Fprintf(o.Stdout, "  [dry-run] rm -rf %s\n", p)
+			if o.Stdout != nil {
+				fmt.Fprintf(o.Stdout, "  [dry-run] rm -rf %s\n", p)
+			}
 			continue
 		}
 		if err := os.RemoveAll(p); err != nil {
@@ -36,7 +38,9 @@ func emptyDir(o sysutil.Opts, dirs ...string) error {
 		for _, e := range entries {
 			p := filepath.Join(dir, e.Name())
 			if o.DryRun {
-				fmt.Fprintf(o.Stdout, "  [dry-run] rm -rf %s\n", p)
+				if o.Stdout != nil {
+					fmt.Fprintf(o.Stdout, "  [dry-run] rm -rf %s\n", p)
+				}
 				continue
 			}
 			if err := os.RemoveAll(p); err != nil {
@@ -62,7 +66,7 @@ func sudoRemoveGlob(ctx context.Context, o sysutil.Opts, globs ...string) error 
 	if len(matches) == 0 {
 		return nil
 	}
-	return sysutil.SudoRun(ctx, o, "rm", append([]string{"-f"}, matches...)...)
+	return sysutil.SudoRun(ctx, o, "rm", append([]string{"-f", "--"}, matches...)...)
 }
 
 // countLines counts the non-empty lines in s.

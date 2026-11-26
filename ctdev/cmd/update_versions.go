@@ -109,26 +109,42 @@ type goRelease struct {
 	} `json:"files"`
 }
 
-// httpGetJSON issues a GET with ctx so Ctrl-C cancels in-flight requests.
+// goReleasesURL and kubectlStableURL are vars so tests can redirect requests
+// to an httptest server without hitting the network.
+var (
+	goReleasesURL    = "https://go.dev/dl/?mode=json"
+	kubectlStableURL = "https://dl.k8s.io/release/stable.txt"
+)
+
+// httpGetJSON issues a GET with ctx so Ctrl-C cancels in-flight requests, and
+// rejects non-200 responses before callers parse error pages as data.
 // Callers are expected to close the response body.
 func httpGetJSON(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	return sysutil.HTTPClient().Do(req)
+	resp, err := sysutil.HTTPClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+	}
+	return resp, nil
 }
 
 // fetchGoReleases returns the list of published Go releases (newest first).
 // Each release includes per-OS/arch archive metadata with SHA256 hashes.
 func fetchGoReleases(ctx context.Context) ([]goRelease, error) {
-	resp, err := httpGetJSON(ctx, "https://go.dev/dl/?mode=json")
+	resp, err := httpGetJSON(ctx, goReleasesURL)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	var releases []goRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&releases); err != nil {
 		return nil, err
 	}
 	return releases, nil
@@ -221,12 +237,12 @@ func latestPythonPatch(list, current string) string {
 }
 
 func fetchLatestKubectlVersion(ctx context.Context) (string, error) {
-	resp, err := httpGetJSON(ctx, "https://dl.k8s.io/release/stable.txt")
+	resp, err := httpGetJSON(ctx, kubectlStableURL)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
 	if err != nil {
 		return "", err
 	}

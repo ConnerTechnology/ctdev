@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -196,5 +197,53 @@ func TestDoctorRootFlagDefaultsOff(t *testing.T) {
 	}
 	if f.DefValue != "false" {
 		t.Errorf("--root default = %q, want %q", f.DefValue, "false")
+	}
+}
+
+func TestWriteDoctorReport_StdoutAndFile(t *testing.T) {
+	saved := flagDoctorReport
+	t.Cleanup(func() { flagDoctorReport = saved })
+
+	rep := diagnose.Report{
+		Version: "20.10.0",
+		Started: time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC),
+		Facts:   diagnose.Facts{Hostname: "example-host"},
+	}
+
+	// --report=- writes Markdown to stdout without creating a file.
+	flagDoctorReport = reportToStdout
+	out := captureStdout(t, func() {
+		if err := writeDoctorReport(rep); err != nil {
+			t.Errorf("writeDoctorReport(-): %v", err)
+		}
+	})
+	if !strings.Contains(out, "# Diagnostic report — example-host") {
+		t.Errorf("expected markdown report on stdout, got:\n%s", out)
+	}
+
+	// Explicit path writes Markdown to disk.
+	outPath := filepath.Join(t.TempDir(), "report.md")
+	flagDoctorReport = outPath
+	if err := writeDoctorReport(rep); err != nil {
+		t.Fatalf("writeDoctorReport(file): %v", err)
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read written report: %v", err)
+	}
+	if !strings.Contains(string(data), "example-host") {
+		t.Errorf("written report missing hostname:\n%s", data)
+	}
+}
+
+func TestOnlyNetworkGroups(t *testing.T) {
+	checks := []diagnose.Check{
+		{ID: "net.gw", Group: diagnose.GroupNetwork},
+		{ID: "dns.pub", Group: diagnose.GroupInternet},
+		{ID: "hw.cpu", Group: diagnose.GroupHardware},
+	}
+	got := onlyNetworkGroups(checks)
+	if len(got) != 2 || got[0].ID != "net.gw" || got[1].ID != "dns.pub" {
+		t.Errorf("onlyNetworkGroups() = %+v, want [net.gw dns.pub]", got)
 	}
 }

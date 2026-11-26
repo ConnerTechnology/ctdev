@@ -51,5 +51,5 @@ func runConfigureGPU(cmd *cobra.Command, args []string) error {
 	if isBatchMode() {
 		return runCategoryBatch(ctx, "gpu")
 	}
-	return runCategoryWizard(ctx, "gpu", false)
+	return cancelToClean(runCategoryWizard(ctx, "gpu", false))
 }
