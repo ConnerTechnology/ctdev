@@ -47,7 +47,8 @@ func (m *Machine) runLock() (func(), error) {
 		m.lockMu.Lock()
 		m.runHeld = nil
 		m.lockMu.Unlock()
-		f.Close() // closing the file releases the flock
+		funlock(f)
+		f.Close()
 	}, nil
 }
 
@@ -77,6 +78,7 @@ func (m *Machine) stateUnlock() {
 	m.lockMu.Lock()
 	defer m.lockMu.Unlock()
 	if m.lockDepth--; m.lockDepth == 0 && m.lockHeld != nil {
+		funlock(m.lockHeld)
 		m.lockHeld.Close()
 		m.lockHeld = nil
 	}

@@ -23,11 +23,11 @@ func vscodeInstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.BrewCaskInstall(ctx, o, "visual-studio-code")
 	case "apt":
-		keyring := "/usr/share/keyrings/microsoft-archive-keyring.gpg"
+		k := APTRepoKeys["vscode"]
 		return sysutil.InstallAPTRepoPackage(ctx, o, sysutil.APTRepoPackage{
-			KeyURL:      "https://packages.microsoft.com/keys/microsoft.asc",
-			KeyringPath: keyring,
-			RepoLine:    fmt.Sprintf("deb [arch=amd64,arm64,armhf signed-by=%s] https://packages.microsoft.com/repos/code stable main", keyring),
+			KeyURL:      k.KeyURL,
+			KeyringPath: k.KeyringPath,
+			RepoLine:    fmt.Sprintf("deb [arch=amd64,arm64,armhf signed-by=%s] %s stable main", k.KeyringPath, k.RepoURL),
 			SourceFile:  "vscode.list",
 			Packages:    []string{"code"},
 		})
@@ -48,7 +48,7 @@ func vscodeUninstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.RemovePackage(ctx, o, "code"); err != nil {
 			return err
 		}
-		return sysutil.RemoveAPTRepo(ctx, o, "vscode.list", "/usr/share/keyrings/microsoft-archive-keyring.gpg")
+		return sysutil.RemoveAPTRepo(ctx, o, "vscode.list", APTRepoKeys["vscode"].KeyringPath)
 	}
 	return ErrUnsupportedOS
 }

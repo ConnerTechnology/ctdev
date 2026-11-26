@@ -28,3 +28,10 @@ func flock(f *os.File, wait bool) error {
 		return err
 	}
 }
+
+// funlock explicitly releases the flock on f's open file description before
+// Close. Relying on Close alone leaves the lock held briefly if another
+// goroutine forked a child process (before execve applies O_CLOEXEC).
+func funlock(f *os.File) {
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+}

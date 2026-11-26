@@ -34,13 +34,14 @@ func onePasswordInstall(ctx context.Context, opts ExecOpts) error {
 
 	fmt.Fprintln(opts.Stdout, "Installing 1Password...")
 
-	keyURL := "https://downloads.1password.com/linux/keys/1password.asc"
-	keyring := "/usr/share/keyrings/1password-archive-keyring.gpg"
+	k := APTRepoKeys["1password"]
+	keyURL := k.KeyURL
+	keyring := k.KeyringPath
 	if err := sysutil.AddAPTKeyring(ctx, o, keyURL, keyring); err != nil {
 		return fmt.Errorf("add 1password GPG key: %w", err)
 	}
 
-	repoLine := fmt.Sprintf("deb [arch=amd64 signed-by=%s] https://downloads.1password.com/linux/debian/amd64 stable main", keyring)
+	repoLine := fmt.Sprintf("deb [arch=amd64 signed-by=%s] %s/amd64 stable main", keyring, k.RepoURL)
 	if err := sysutil.AddAPTSource(ctx, o, repoLine, "1password.list"); err != nil {
 		return fmt.Errorf("add 1password repo: %w", err)
 	}
@@ -93,7 +94,7 @@ func onePasswordUninstall(ctx context.Context, opts ExecOpts) error {
 		// Remove the debsig policy + keyring dirs the installer created.
 		_ = sysutil.SudoRun(ctx, o, "rm", "-rf", "/etc/debsig/policies/AC2D62742012EA22")
 		_ = sysutil.SudoRun(ctx, o, "rm", "-rf", "/usr/share/debsig/keyrings/AC2D62742012EA22")
-		return sysutil.RemoveAPTRepo(ctx, o, "1password.list", "/usr/share/keyrings/1password-archive-keyring.gpg")
+		return sysutil.RemoveAPTRepo(ctx, o, "1password.list", APTRepoKeys["1password"].KeyringPath)
 	}
 	return ErrUnsupportedOS
 }

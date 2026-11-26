@@ -84,24 +84,38 @@ func TestDetectFileExistsNotInstalled(t *testing.T) {
 	}
 }
 
-func TestDetectGrubOSProberTranslation(t *testing.T) {
-	// Test the value translation logic that detectGrubOSProber uses
-	// "false" means os-prober is enabled (GRUB_DISABLE_OS_PROBER=false means don't disable)
+func TestDetectGrubOSProber(t *testing.T) {
+	// GRUB_DISABLE_OS_PROBER=false means os-prober is enabled; true or omitted
+	// means disabled; a missing grub file reports unknown.
+	orig := grubDefaultPath
+	t.Cleanup(func() { grubDefaultPath = orig })
+
+	dir := t.TempDir()
 	tests := []struct {
-		grubValue string
-		expected  string
+		name    string
+		content string
+		missing bool
+		want    string
 	}{
-		{"false", "enabled"},
-		{"true", "disabled"},
-		{"", "disabled"},
+		{"false means enabled", "GRUB_DISABLE_OS_PROBER=false\n", false, "enabled"},
+		{"quoted false means enabled", "GRUB_DISABLE_OS_PROBER=\"false\"\n", false, "enabled"},
+		{"true means disabled", "GRUB_DISABLE_OS_PROBER=true\n", false, "disabled"},
+		{"omitted means disabled", "GRUB_TIMEOUT=5\n", false, "disabled"},
+		{"commented false means disabled", "# GRUB_DISABLE_OS_PROBER=false\nGRUB_TIMEOUT=5\n", false, "disabled"},
+		{"missing file reports unknown", "", true, "unknown"},
 	}
 	for _, tt := range tests {
-		got := "disabled"
-		if tt.grubValue == "false" {
-			got = "enabled"
-		}
-		if got != tt.expected {
-			t.Errorf("grub value %q: got %q, want %q", tt.grubValue, got, tt.expected)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(dir, tt.name)
+			if !tt.missing {
+				if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			grubDefaultPath = path
+			if got := detectGrubOSProber(t.Context()); got != tt.want {
+				t.Errorf("detectGrubOSProber() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

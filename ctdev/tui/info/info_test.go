@@ -1,29 +1,37 @@
 package info
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestRenderDiskBar(t *testing.T) {
 	tests := []struct {
-		name    string
-		percent int
-		width   int
+		name       string
+		percent    int
+		width      int
+		wantFilled int
+		wantEmpty  int
 	}{
-		{"0 percent", 0, 10},
-		{"50 percent", 50, 10},
-		{"70 percent yellow", 70, 10},
-		{"90 percent red", 90, 10},
-		{"100 percent", 100, 10},
-		{"over 100 clamped", 200, 10},
+		{"0 percent", 0, 10, 0, 10},
+		{"50 percent", 50, 10, 5, 5},
+		{"70 percent yellow", 70, 10, 7, 3},
+		{"90 percent red", 90, 10, 9, 1},
+		{"100 percent", 100, 10, 10, 0},
+		{"over 100 clamped", 200, 10, 10, 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := renderDiskBar(tt.percent, tt.width)
-			if result == "" {
-				t.Errorf("renderDiskBar(%d, %d) returned empty string", tt.percent, tt.width)
+			plain := ansi.Strip(renderDiskBar(tt.percent, tt.width))
+			if got := strings.Count(plain, "█"); got != tt.wantFilled {
+				t.Errorf("renderDiskBar(%d, %d) filled = %d, want %d (%q)", tt.percent, tt.width, got, tt.wantFilled, plain)
+			}
+			if got := strings.Count(plain, "░"); got != tt.wantEmpty {
+				t.Errorf("renderDiskBar(%d, %d) empty = %d, want %d (%q)", tt.percent, tt.width, got, tt.wantEmpty, plain)
 			}
 		})
 	}
@@ -33,27 +41,28 @@ func TestRenderComponentEntry(t *testing.T) {
 	tests := []struct {
 		name      string
 		component ComponentInfo
+		wantGlyph string
 	}{
 		{
 			"installed component",
 			ComponentInfo{Name: "docker", Category: "CLI", Installed: true},
+			"✓",
 		},
 		{
 			"not installed component",
 			ComponentInfo{Name: "btop", Category: "CLI", Installed: false},
+			"○",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := renderComponentEntry(tt.component, 20)
-			if result == "" {
-				t.Error("renderComponentEntry returned empty string")
+			plain := ansi.Strip(renderComponentEntry(tt.component, 20))
+			if !strings.Contains(plain, tt.component.Name) {
+				t.Errorf("rendered entry %q missing component name %q", plain, tt.component.Name)
 			}
-			// The rendered string should contain the component name somewhere
-			// (lipgloss may add ANSI codes, but the name text should be present)
-			if len(result) == 0 {
-				t.Errorf("expected non-empty result for component %q", tt.component.Name)
+			if !strings.Contains(plain, tt.wantGlyph) {
+				t.Errorf("rendered entry %q missing glyph %q", plain, tt.wantGlyph)
 			}
 		})
 	}

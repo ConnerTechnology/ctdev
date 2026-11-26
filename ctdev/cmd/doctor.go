@@ -177,7 +177,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	started := time.Now()
-	facts := gatherDoctorFacts(ctx, info, diagnose.GatherFacts, component.InstalledSet)
+	facts := diagnose.GatherFacts(ctx, info)
+	facts.Components = component.InstalledSet()
 	if m, err := backup.ThisMachine(sysutil.Opts{}); err == nil {
 		facts.Backups, facts.BackupsErr = doctorBackupFacts(m)
 		if facts.BackupsErr == "" {
@@ -251,17 +252,6 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
-}
-
-// gatherDoctorFacts is GatherFacts plus what only ctdev knows: the components
-// it installed, which gate the tool and service rows. They are filled here,
-// not in GatherFacts, so package diagnose never depends on the registry.
-func gatherDoctorFacts(ctx context.Context, info platform.Info,
-	gather func(context.Context, platform.Info) diagnose.Facts,
-	installed func() map[string]bool) diagnose.Facts {
-	f := gather(ctx, info)
-	f.Components = installed()
-	return f
 }
 
 // doctorBackupFacts is the Backups section's facts: each folder on this

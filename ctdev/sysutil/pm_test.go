@@ -3,8 +3,13 @@ package sysutil
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
 func TestInstallPackageDryRun(t *testing.T) {
@@ -15,8 +20,8 @@ func TestInstallPackageDryRun(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	out := buf.String()
-	if out == "" {
-		t.Error("expected dry-run output, got empty")
+	if !strings.Contains(out, "[dry-run]") || !strings.Contains(out, "testpkg") {
+		t.Errorf("expected dry-run preview naming testpkg, got %q", out)
 	}
 }
 
@@ -28,21 +33,40 @@ func TestRemovePackageDryRun(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	out := buf.String()
-	if out == "" {
-		t.Error("expected dry-run output, got empty")
+	if !strings.Contains(out, "[dry-run]") || !strings.Contains(out, "testpkg") {
+		t.Errorf("expected dry-run preview naming testpkg, got %q", out)
 	}
 }
 
-func TestIsPackageInstalledKnown(t *testing.T) {
-	// "go" should be installed since we're running Go tests
-	if !CommandExists("go") {
-		t.Skip("go not on PATH")
+func TestIsPackageInstalled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs require unix")
 	}
-}
+	pm := platform.Detect().PackageManager
+	if pm != "apt" && pm != "brew" {
+		t.Skipf("IsPackageInstalled stubbed for apt/brew, not %q", pm)
+	}
 
-func TestIsPackageInstalledUnknown(t *testing.T) {
-	if CommandExists("nonexistent-package-xyz-12345") {
-		t.Error("expected nonexistent command to not exist")
+	bin := t.TempDir()
+	switch pm {
+	case "apt":
+		script := "#!/bin/sh\nif [ \"$3\" = installed-pkg ]; then echo 'installed 1.0.0'; exit 0; fi\nexit 1\n"
+		if err := os.WriteFile(filepath.Join(bin, "dpkg-query"), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	case "brew":
+		script := "#!/bin/sh\nif [ \"$2\" = installed-pkg ]; then exit 0; fi\nexit 1\n"
+		if err := os.WriteFile(filepath.Join(bin, "brew"), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+
+	if !IsPackageInstalled("installed-pkg") {
+		t.Error("expected IsPackageInstalled(installed-pkg) == true")
+	}
+	if IsPackageInstalled("missing-pkg") {
+		t.Error("expected IsPackageInstalled(missing-pkg) == false")
 	}
 }
 

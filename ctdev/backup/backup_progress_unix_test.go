@@ -236,19 +236,36 @@ func TestCancelledBackupIsNotRecordedAsFailed(t *testing.T) {
 	}
 }
 
-// Cancelling the keep rules after a Back up now isn't a retention failure.
+// Cancelling the keep rules mid-flight after a Back up now isn't a retention failure.
 func TestCancelledRetainIsNotRecorded(t *testing.T) {
 	m, root, _ := failingMachine(t)
 	if err := m.recordRun(root, noon.Add(-time.Hour), nil); err != nil {
 		t.Fatal(err)
 	}
-	standinDestination(t, m, `forget) echo "Fatal: example failure" >&2; exit 1 ;;`)
+	fifo := filepath.Join(t.TempDir(), "started")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	go func() {
+		_, _ = os.ReadFile(fifo)
+		close(started)
+	}()
+	standinDestination(t, m, `forget)
+  echo started > "`+fifo+`"
+  trap 'exit 130' INT TERM
+  sleep 60 >/dev/null 2>&1 &
+  wait $! ;;`)
 	d, err := m.Destination("example-backups")
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	defer cancel()
+	go func() {
+		<-started
+		cancel()
+	}()
 	if err := m.Retain(ctx, d, root, NewConfig("example-backups")); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}

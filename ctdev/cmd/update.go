@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/checklist"
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
@@ -240,40 +241,12 @@ func itemNames(items []checklist.UpdateItem) []string {
 // themselves (vscode's package migrates vscode.list to a .sources file naming
 // microsoft.gpg; GitHub's install instructions use /etc/apt/keyrings). Writing
 // only the installer's path on such a machine leaves APT reading the stale key.
-type aptKeyRefresher struct {
-	KeyURL      string
-	KeyringPath string
-	RepoURL     string
-}
+// aptKeyRefresher is an alias for component.APTRepoKey so update --refresh-keys
+// and the component installers share a single source of truth for keyring paths
+// and repo URLs.
+type aptKeyRefresher = component.APTRepoKey
 
-var aptKeyRefreshers = map[string]aptKeyRefresher{
-	"gh": {
-		KeyURL:      "https://cli.github.com/packages/githubcli-archive-keyring.gpg",
-		KeyringPath: "/usr/share/keyrings/githubcli-archive-keyring.gpg",
-		RepoURL:     "https://cli.github.com/packages",
-	},
-	// KeyringPath must match what vscodeInstall writes.
-	"vscode": {
-		KeyURL:      "https://packages.microsoft.com/keys/microsoft.asc",
-		KeyringPath: "/usr/share/keyrings/microsoft-archive-keyring.gpg",
-		RepoURL:     "https://packages.microsoft.com/repos/code",
-	},
-	"1password": {
-		KeyURL:      "https://downloads.1password.com/linux/keys/1password.asc",
-		KeyringPath: "/usr/share/keyrings/1password-archive-keyring.gpg",
-		RepoURL:     "https://downloads.1password.com/linux/debian",
-	},
-	"terraform": {
-		KeyURL:      "https://apt.releases.hashicorp.com/gpg",
-		KeyringPath: "/usr/share/keyrings/hashicorp-archive-keyring.gpg",
-		RepoURL:     "https://apt.releases.hashicorp.com",
-	},
-	"tailscale": {
-		KeyURL:      "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg",
-		KeyringPath: "/usr/share/keyrings/tailscale-archive-keyring.gpg",
-		RepoURL:     "https://pkgs.tailscale.com/stable",
-	},
-}
+var aptKeyRefreshers = component.APTRepoKeys
 
 const aptSourcesDir = "/etc/apt/sources.list.d"
 

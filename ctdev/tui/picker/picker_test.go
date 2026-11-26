@@ -61,9 +61,13 @@ func TestUninstallSelectsInstalled(t *testing.T) {
 
 func TestQuitReturnsNoSelection(t *testing.T) {
 	m := New(testComponents(), map[string]bool{}, component.OSLinux, ModeInstall, false)
-	send(&m, key('q'))
-	if !m.GetResult().Quit {
+	send(&m, key('a'), key('q'))
+	res := m.GetResult()
+	if !res.Quit {
 		t.Error("expected quit result")
+	}
+	if len(res.Selected) != 0 {
+		t.Errorf("quit must discard selections, got %v", res.Selected)
 	}
 }
 

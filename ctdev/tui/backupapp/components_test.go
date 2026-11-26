@@ -34,12 +34,14 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "ctrl+c":
 		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+	case "ctrl+u":
+		return tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Code: []rune(s)[0], Text: s}
 }
 
 func TestKeyNames(t *testing.T) {
-	for _, s := range []string{"enter", "esc", "tab", "shift+tab", "up", "down", "left", "right", "backspace", "ctrl+c", "b", "D"} {
+	for _, s := range []string{"enter", "esc", "tab", "shift+tab", "up", "down", "left", "right", "backspace", "ctrl+c", "ctrl+u", "b", "D"} {
 		if got := key(s).String(); got != s {
 			t.Errorf("key(%q) reads %q", s, got)
 		}
@@ -220,9 +222,11 @@ func TestForm(t *testing.T) {
 		t.Errorf("bad number:\n%s", got)
 	}
 	press(fm, "ctrl+u")
-	fm.values["keep"] = "7"
-	a := press(fm, "enter")
-	if a == nil || a.value.(Values)["key"] != "K000x" || a.value.(Values)["name"] != "example-backups" {
+	if fm.values["keep"] != "" {
+		t.Fatalf("ctrl+u should clear the focused field, got %q", fm.values["keep"])
+	}
+	a := press(fm, "7", "enter")
+	if a == nil || a.value.(Values)["key"] != "K000x" || a.value.(Values)["name"] != "example-backups" || a.value.(Values)["keep"] != "7" {
 		t.Fatalf("submit → %+v", a)
 	}
 

@@ -23,11 +23,11 @@ func ghInstall(ctx context.Context, opts ExecOpts) error {
 	case "brew":
 		return sysutil.InstallPackage(ctx, o, "gh")
 	case "apt":
-		keyring := "/usr/share/keyrings/githubcli-archive-keyring.gpg"
+		k := APTRepoKeys["gh"]
 		return sysutil.InstallAPTRepoPackage(ctx, o, sysutil.APTRepoPackage{
-			KeyURL:      "https://cli.github.com/packages/githubcli-archive-keyring.gpg",
-			KeyringPath: keyring,
-			RepoLine:    fmt.Sprintf("deb [arch=%s signed-by=%s] https://cli.github.com/packages stable main", p.Arch, keyring),
+			KeyURL:      k.KeyURL,
+			KeyringPath: k.KeyringPath,
+			RepoLine:    fmt.Sprintf("deb [arch=%s signed-by=%s] %s stable main", p.Arch, k.KeyringPath, k.RepoURL),
 			SourceFile:  "github-cli.list",
 			Packages:    []string{"gh"},
 		})
@@ -48,7 +48,7 @@ func ghUninstall(ctx context.Context, opts ExecOpts) error {
 		if err := sysutil.RemovePackage(ctx, o, "gh"); err != nil {
 			return err
 		}
-		return sysutil.RemoveAPTRepo(ctx, o, "github-cli.list", "/usr/share/keyrings/githubcli-archive-keyring.gpg")
+		return sysutil.RemoveAPTRepo(ctx, o, "github-cli.list", APTRepoKeys["gh"].KeyringPath)
 	default:
 		return ErrUnsupportedOS
 	}

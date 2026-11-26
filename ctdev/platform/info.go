@@ -426,6 +426,10 @@ func readEthernetName(iface string) string {
 }
 
 func parseMacNetworkSetup(output string) []NetworkAdapter {
+	return parseMacNetworkSetupWith(output, macIfaceActive)
+}
+
+func parseMacNetworkSetupWith(output string, active func(string) bool) []NetworkAdapter {
 	var adapters []NetworkAdapter
 	var current NetworkAdapter
 	for _, line := range strings.Split(output, "\n") {
@@ -441,7 +445,7 @@ func parseMacNetworkSetup(output string) []NetworkAdapter {
 		}
 		if strings.HasPrefix(line, "Device:") && current.Name != "" {
 			current.Interface = strings.TrimPrefix(line, "Device: ")
-			if current.Type != "" && macIfaceActive(current.Interface) {
+			if current.Type != "" && active(current.Interface) {
 				adapters = append(adapters, current)
 			}
 			current = NetworkAdapter{}

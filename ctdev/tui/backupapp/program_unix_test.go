@@ -44,8 +44,13 @@ func TestDryRunCommandsArePrintedAfterExit(t *testing.T) {
 // FIFO. Ctrl-C waits for that, because the screen shows the backup running
 // before restic has started.
 func TestQuittingWhileResticStopsSaysSo(t *testing.T) {
-	fifo := filepath.Join(t.TempDir(), "ready")
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "ready")
+	release := filepath.Join(dir, "release")
 	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(release, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ready := make(chan []byte, 1)
@@ -53,7 +58,7 @@ func TestQuittingWhileResticStopsSaysSo(t *testing.T) {
 		data, _ := os.ReadFile(fifo)
 		ready <- data
 	}()
-	d, _ := standinFolder(t, true, `trap 'sleep 1; exit 130' INT
+	d, _ := standinFolder(t, true, `trap 'cat "`+release+`" >/dev/null; exit 130' INT
   { ps -o pgid= -p $$ | tr -d ' '; echo $$; } > "`+fifo+`"
   sleep 60 >/dev/null 2>&1 &
   wait $!`, forgets, "example-backups")
@@ -71,11 +76,12 @@ func TestQuittingWhileResticStopsSaysSo(t *testing.T) {
 	io.WriteString(p.keys, "\x03")
 	p.term.waitFor("Cancelling…")
 	io.WriteString(p.keys, "\x03")
-	if err := <-p.done; err != nil {
+	p.after.waitFor(t, "Waiting for restic to stop…")
+	if err := os.WriteFile(release, []byte("go\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if after := ansi.Strip(p.after.String()); !strings.Contains(after, "Waiting for restic to stop…") {
-		t.Errorf("after exit: %q, want the wait said", after)
+	if err := <-p.done; err != nil {
+		t.Fatal(err)
 	}
 	if f := strings.Fields(string(session)); len(f) != 2 || f[0] != f[1] {
 		t.Errorf("restic's session and pid: %q, want restic to lead its own session", session)

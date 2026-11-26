@@ -16,9 +16,11 @@ import (
 // Root commands are recorded with a leading "sudo".
 type fakeRemote struct {
 	calls    [][]string
+	files    map[string]string // path → content passed to remoteWriteFile
 	probes   map[string]string // "name args..." → stdout
 	commands map[string]bool   // binaries on PATH
 	sudoOut  map[string]string // root-only probes: "name args..." → stdout
+	sudoErr  map[string]error  // optional error for "name args..." in remoteSudo
 	stateDir string
 	home     string
 	onSudo   func(cmd []string) // optional side effect of a root command
@@ -27,9 +29,11 @@ type fakeRemote struct {
 func useFakeRemote(t *testing.T) *fakeRemote {
 	t.Helper()
 	f := &fakeRemote{
+		files:    map[string]string{},
 		probes:   map[string]string{},
 		commands: map[string]bool{"code": true, "ufw": true},
 		sudoOut:  map[string]string{},
+		sudoErr:  map[string]error{},
 		stateDir: t.TempDir(),
 		home:     t.TempDir(),
 	}
@@ -44,6 +48,9 @@ func useFakeRemote(t *testing.T) *fakeRemote {
 		if f.onSudo != nil {
 			f.onSudo(cmd)
 		}
+		if err, ok := f.sudoErr[strings.Join(append([]string{name}, args...), " ")]; ok {
+			return err
+		}
 		return nil
 	}
 	remoteInstall = func(ctx context.Context, o sysutil.Opts, pkgs []string) error {
@@ -53,8 +60,9 @@ func useFakeRemote(t *testing.T) *fakeRemote {
 		f.calls = append(f.calls, append([]string{name}, args...))
 		return nil
 	}
-	remoteWriteFile = func(_ context.Context, _ sysutil.Opts, _, path string) error {
+	remoteWriteFile = func(_ context.Context, _ sysutil.Opts, content, path string) error {
 		f.calls = append(f.calls, []string{"write", path})
+		f.files[path] = content
 		return nil
 	}
 	remoteProbe = func(_ context.Context, name string, args ...string) (string, error) {
@@ -373,6 +381,54 @@ func TestApplySSHKeyOnlyRemovesLegacyDropIn(t *testing.T) {
 	if !f.ran("sudo", "rm", "-f", sshdLegacyDropIn) {
 		t.Errorf("legacy 99-ctdev.conf not removed: %q", f.calls)
 	}
+}
+
+// Anti-lockout invariant: PasswordAuthentication no is written to 00-ctdev.conf
+// only when ~/.ssh/authorized_keys holds a key; without one, sshd hardening
+// still applies while password login stays enabled.
+func TestApplySSHKeyOnlyDropInContent(t *testing.T) {
+	t.Run("without authorized_keys omits PasswordAuthentication no", func(t *testing.T) {
+		f := useFakeRemote(t)
+		var out strings.Builder
+		if err := applySSHKeyOnly(context.Background(), sysutil.Opts{Stdout: &out}, "enabled"); err != nil {
+			t.Fatal(err)
+		}
+		got := f.files[sshdDropIn]
+		if !strings.Contains(got, "PubkeyAuthentication yes") || !strings.Contains(got, "KbdInteractiveAuthentication no") {
+			t.Errorf("drop-in missing hardening config:\n%s", got)
+		}
+		if strings.Contains(got, "PasswordAuthentication no") {
+			t.Errorf("anti-lockout violated: PasswordAuthentication no written without authorized_keys:\n%s", got)
+		}
+		if !strings.Contains(out.String(), "leaving password auth enabled") {
+			t.Errorf("expected lockout warning, got %q", out.String())
+		}
+	})
+
+	t.Run("with authorized_keys writes PasswordAuthentication no", func(t *testing.T) {
+		f := useFakeRemote(t)
+		writeAuthorizedKey(t, f)
+		if err := applySSHKeyOnly(context.Background(), quietOpts, "enabled"); err != nil {
+			t.Fatal(err)
+		}
+		got := f.files[sshdDropIn]
+		if !strings.Contains(got, "PasswordAuthentication no") {
+			t.Errorf("drop-in missing PasswordAuthentication no when key is present:\n%s", got)
+		}
+	})
+
+	t.Run("sshd -t failure stops before reloading sshd", func(t *testing.T) {
+		f := useFakeRemote(t)
+		writeAuthorizedKey(t, f)
+		f.sudoErr["sshd -t"] = errors.New("syntax error")
+		err := applySSHKeyOnly(context.Background(), quietOpts, "enabled")
+		if err == nil || !strings.Contains(err.Error(), "sshd config validation failed") {
+			t.Fatalf("err = %v, want sshd validation error", err)
+		}
+		if f.ran("sudo", "systemctl", "try-reload-or-restart", "ssh.service") {
+			t.Errorf("reloaded sshd despite failed sshd -t: %v", f.calls)
+		}
+	})
 }
 
 func TestApplySSHKeyOnlyWarnsWhenOverridden(t *testing.T) {

@@ -1,7 +1,12 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/ConnerTechnology/ctdev/ctdev/component"
 )
 
 func TestParseAPTUpgradable(t *testing.T) {
@@ -262,6 +267,14 @@ func TestParseBrewOutdatedJSONUnmanagedCask(t *testing.T) {
 // Casks that track "latest" report it as both installed and current version.
 // It must survive as-is rather than being mistaken for a missing field.
 func TestParseBrewOutdatedJSONCaskLatest(t *testing.T) {
+	// Put a stub tailscale executable on PATH so component detection always
+	// sees tailscale as installed regardless of the test host.
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "tailscale"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
 	data := []byte(`{"formulae":[],"casks":[
 	  {"name":"tailscale","installed_versions":["latest"],"current_version":"latest","pinned":false}
 	]}`)
@@ -270,15 +283,15 @@ func TestParseBrewOutdatedJSONCaskLatest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// tailscale is in managedCasks, so it appears only when the component is
-	// installed on this machine — assert the shape, whichever way that lands.
-	for _, it := range items {
-		if it.Source != "brew-cask" {
-			t.Errorf("cask item has source %q, want brew-cask", it.Source)
-		}
-		if it.NewVer != "latest" || it.CurrentVer != "latest" {
-			t.Errorf(`expected "latest" preserved, got %+v`, it)
-		}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 cask item for installed tailscale, got %d: %+v", len(items), items)
+	}
+	it := items[0]
+	if it.Source != "brew-cask" {
+		t.Errorf("cask item has source %q, want brew-cask", it.Source)
+	}
+	if it.NewVer != "latest" || it.CurrentVer != "latest" {
+		t.Errorf(`expected "latest" preserved, got %+v`, it)
 	}
 }
 
@@ -363,26 +376,22 @@ func TestGoArchiveSHA256(t *testing.T) {
 	})
 }
 
-func TestAPTKeyRefreshers_PathsMatchInstallers(t *testing.T) {
-	// If these drift from the keyring paths embedded in the component
-	// installers, `ctdev update --refresh-keys` silently updates a file
-	// APT's signed-by doesn't read. Any change to an installer's keyring
-	// path must be mirrored here, and vice versa.
-	want := map[string]string{
-		"gh":        "/usr/share/keyrings/githubcli-archive-keyring.gpg",
-		"vscode":    "/usr/share/keyrings/microsoft-archive-keyring.gpg",
-		"1password": "/usr/share/keyrings/1password-archive-keyring.gpg",
-		"terraform": "/usr/share/keyrings/hashicorp-archive-keyring.gpg",
-		"tailscale": "/usr/share/keyrings/tailscale-archive-keyring.gpg",
+func TestAPTKeyRefreshers_ValidEntries(t *testing.T) {
+	if len(aptKeyRefreshers) == 0 {
+		t.Fatal("aptKeyRefreshers is empty")
 	}
-	for name, expected := range want {
-		r, ok := aptKeyRefreshers[name]
-		if !ok {
-			t.Errorf("aptKeyRefreshers missing entry for %q", name)
-			continue
+	for name, r := range aptKeyRefreshers {
+		if component.FindByName(name) == nil {
+			t.Errorf("aptKeyRefreshers entry %q does not match any registered component", name)
 		}
-		if r.KeyringPath != expected {
-			t.Errorf("aptKeyRefreshers[%q].KeyringPath = %q, want %q", name, r.KeyringPath, expected)
+		if !strings.HasPrefix(r.KeyURL, "https://") {
+			t.Errorf("aptKeyRefreshers[%q].KeyURL = %q, want https:// URL", name, r.KeyURL)
+		}
+		if !strings.HasPrefix(r.RepoURL, "https://") {
+			t.Errorf("aptKeyRefreshers[%q].RepoURL = %q, want https:// URL", name, r.RepoURL)
+		}
+		if !strings.HasPrefix(r.KeyringPath, "/usr/share/keyrings/") {
+			t.Errorf("aptKeyRefreshers[%q].KeyringPath = %q, want path under /usr/share/keyrings/", name, r.KeyringPath)
 		}
 	}
 }

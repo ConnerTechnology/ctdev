@@ -78,6 +78,8 @@ type unifiClient struct {
 // has to be skippable for this to work at all. That is only defensible one hop
 // away on a LAN you were invited onto — never across the internet — so the
 // address is checked before a single credential is assembled.
+var lookupHostIP = net.LookupIP
+
 func newUnifiClient(creds UnifiCreds) (*unifiClient, error) {
 	if !creds.usable() {
 		return nil, errUnifiNoCreds
@@ -94,7 +96,7 @@ func newUnifiClient(creds UnifiCreds) (*unifiClient, error) {
 		// A hostname could resolve anywhere. Resolve it and check every
 		// answer, so "controller.example.com" pointing at the internet is
 		// refused just as an IP literal would be.
-		ips, lookupErr := net.LookupIP(host)
+		ips, lookupErr := lookupHostIP(host)
 		if lookupErr != nil || len(ips) == 0 {
 			return nil, fmt.Errorf("cannot resolve controller host %q", host)
 		}
