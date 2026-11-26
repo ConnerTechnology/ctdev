@@ -100,11 +100,11 @@ func Find(cwd string) (Folder, error) {
 // config file, or "".
 func nearestConfig(dir string) (string, error) {
 	for {
-		_, err := os.Stat(filepath.Join(dir, ConfigFileName))
-		if err == nil {
+		fi, err := os.Stat(filepath.Join(dir, ConfigFileName))
+		if err == nil && !fi.IsDir() {
 			return dir, nil
 		}
-		if !errors.Is(err, fs.ErrNotExist) {
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return "", err
 		}
 		parent := filepath.Dir(dir)

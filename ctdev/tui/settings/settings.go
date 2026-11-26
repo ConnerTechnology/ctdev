@@ -92,8 +92,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		styles.SetDarkBackground(msg.IsDark())
 	case tea.KeyPressMsg:
 		if m.filtering {
-			m.updateFilter(msg)
-			return m, nil
+			return m, m.updateFilter(msg)
 		}
 		switch {
 		case key.Matches(msg, m.keys.Quit):
@@ -132,6 +131,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // --- editing ---
 
 func (m *Model) current() *setup.SettingState {
+	if m.cursor < 0 || m.cursor >= len(m.rows) || !m.landable(m.cursor) {
+		return nil
+	}
 	r := m.rows[m.cursor]
 	if r.header {
 		return nil
@@ -267,8 +269,11 @@ func (m *Model) snapCursor() {
 	m.cursor = m.firstSetting()
 }
 
-func (m *Model) updateFilter(msg tea.KeyPressMsg) {
+func (m *Model) updateFilter(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
+	case "ctrl+c":
+		m.applied = false
+		return tea.Quit
 	case "enter":
 		m.filtering = false
 		m.snapCursor()
@@ -290,6 +295,7 @@ func (m *Model) updateFilter(msg tea.KeyPressMsg) {
 			m.snapCursor()
 		}
 	}
+	return nil
 }
 
 // --- view ---

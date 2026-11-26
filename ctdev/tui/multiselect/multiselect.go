@@ -156,8 +156,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		styles.SetDarkBackground(msg.IsDark())
 	case tea.KeyPressMsg:
 		if m.filtering {
-			m.updateFilter(msg)
-			return nil
+			return m.updateFilter(msg)
 		}
 		switch {
 		case key.Matches(msg, m.keys.Quit):
@@ -217,6 +216,9 @@ func (m *Model) Result() Result {
 // --- selection / navigation ---
 
 func (m *Model) toggle() {
+	if m.cursor < 0 || m.cursor >= len(m.rows) || !m.landable(m.cursor) {
+		return
+	}
 	r := m.rows[m.cursor]
 	if r.header {
 		m.toggleGroup(r.group)
@@ -266,6 +268,9 @@ func (m *Model) bulk(fn func(cur bool) bool) {
 
 // collapse toggles the current row's group and parks the cursor on its header.
 func (m *Model) collapse() {
+	if m.cursor < 0 || m.cursor >= len(m.rows) || !m.visibleRow(m.cursor) {
+		return
+	}
 	g := m.rows[m.cursor].group
 	m.collapsed[g] = !m.collapsed[g]
 	for i, r := range m.rows {
@@ -410,8 +415,11 @@ func (m *Model) groupCounts(key string) (total, selected int) {
 
 // --- filter input ---
 
-func (m *Model) updateFilter(msg tea.KeyPressMsg) {
+func (m *Model) updateFilter(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
+	case "ctrl+c":
+		m.quitting = true
+		return tea.Quit
 	case "enter":
 		m.filtering = false
 		m.onFilterChanged()
@@ -437,6 +445,7 @@ func (m *Model) updateFilter(msg tea.KeyPressMsg) {
 			m.onFilterChanged()
 		}
 	}
+	return nil
 }
 
 // onFilterChanged lands the cursor on the first visible item after the filter

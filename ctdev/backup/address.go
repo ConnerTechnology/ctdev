@@ -29,10 +29,10 @@ func isLocal(address string) bool {
 // be inside folder (the one being set up, if any) or inside any backed-up
 // folder, which would back the repository up into itself.
 func (m *Machine) CheckAddress(address, folder string) (string, error) {
-	if !isLocal(address) {
-		return address, nil
-	}
 	p := strings.TrimSpace(address)
+	if !isLocal(p) {
+		return p, nil
+	}
 	if p == "" {
 		return "", fmt.Errorf("the path can't be empty")
 	}

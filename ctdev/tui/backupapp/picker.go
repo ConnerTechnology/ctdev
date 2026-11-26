@@ -193,13 +193,16 @@ func (pk *picker) cells(cells []string, widths []int) string {
 // the height isn't known.
 func (pk *picker) window(height int) (first, last int) {
 	n := len(pk.p.Items)
+	if n == 0 {
+		return 0, 0
+	}
 	room := height - 16
 	if height <= 0 || n <= room {
 		return 0, n
 	}
 	room = max(room, 3)
 	first = max(0, min(pk.cursor-room/2, n-room))
-	return first, first + room
+	return first, min(first+room, n)
 }
 
 func orDefault(s, def string) string {

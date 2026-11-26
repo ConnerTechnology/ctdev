@@ -234,7 +234,7 @@ func parseDiskInfo(out string) []DiskInfo {
 		}
 		usedKB, _ := strconv.ParseInt(fields[2], 10, 64)
 		pct, _ := strconv.Atoi(strings.TrimSuffix(fields[4], "%"))
-		disks = append(disks, DiskInfo{Mount: fields[5], TotalKB: totalKB, UsedKB: usedKB, Percent: pct})
+		disks = append(disks, DiskInfo{Mount: strings.Join(fields[5:], " "), TotalKB: totalKB, UsedKB: usedKB, Percent: pct})
 	}
 	sort.Slice(disks, func(i, j int) bool {
 		if (disks[i].Mount == "/") != (disks[j].Mount == "/") {
@@ -296,7 +296,13 @@ func humanUptime(d time.Duration) string {
 }
 
 func renderDiskBar(percent, width int) string {
+	if width <= 0 {
+		return ""
+	}
 	filled := width * percent / 100
+	if filled < 0 {
+		filled = 0
+	}
 	if filled > width {
 		filled = width
 	}
