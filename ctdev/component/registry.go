@@ -83,6 +83,7 @@ var Registry = []Component{
 	{Name: "tmux", Description: "Terminal multiplexer", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: tmuxInstall, GoUninstall: tmuxUninstall, Tags: []string{"terminal", "session"}},
 	{Name: "tradingview", Description: "TradingView desktop charts", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, DetectCmd: "tradingview", DetectApps: []string{"/Applications/TradingView.app"}, GoInstall: tradingviewInstall, GoUninstall: tradingviewUninstall, Tags: []string{"trading", "charts", "finance"}},
 	{Name: "vscode", Description: "Visual Studio Code", Category: CategoryDesktop, SupportedOS: []OS{OSAny}, DetectCmd: "code", DetectApps: []string{"/Applications/Visual Studio Code.app"}, GoInstall: vscodeInstall, GoUninstall: vscodeUninstall, Tags: []string{"editor", "ide"}},
+	{Name: "weston", Description: "Weston Wayland compositor", Category: CategorySystem, SupportedOS: []OS{OSLinux}, GoInstall: SimplePackageInstaller("weston"), GoUninstall: SimplePackageUninstaller("weston"), Tags: []string{"wayland", "compositor"}},
 	{Name: "zoxide", Description: "Smarter cd that learns your directories", Category: CategoryCLI, SupportedOS: []OS{OSAny}, GoInstall: SimplePackageInstaller("zoxide"), GoUninstall: SimplePackageUninstaller("zoxide"), Tags: []string{"cd", "shell"}},
 	{Name: "zsh", Description: "Zsh, Oh My Zsh, Pure prompt, plugins", Category: CategoryRuntime, SupportedOS: []OS{OSAny}, DetectPath: "$HOME/.oh-my-zsh", GoInstall: zshInstall, GoUninstall: zshUninstall, Tags: []string{"shell", "ohmyzsh"}},
 }
