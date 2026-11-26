@@ -149,10 +149,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version-file: ctdev/go.mod
-          cache-dependency-path: ctdev/go.sum
+        uses: ./.github/actions/setup-ctdev-go
 
       - name: Cache the pinned restic archive
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -167,6 +164,22 @@ jobs:
 
       - name: Run race tests and vet
         run: scripts/ci-go-test.sh
+
+  cross-vet:
+    name: Vet cross-platform source and tests
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-ctdev-go
+        with:
+          cache-dependency-path: ctdev/go.mod
 
       # Windows only ships doctor. Vet every target to catch platform-specific
       # source and test errors even though the release cross-links only the CLI.
@@ -191,9 +204,8 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        uses: ./.github/actions/setup-ctdev-go
         with:
-          go-version-file: ctdev/go.mod
           # This fast job finishes first. Give it a separate key so it cannot
           # claim the immutable cache used for race builds and cross-platform vet.
           cache-dependency-path: |
@@ -255,11 +267,24 @@ jobs:
           ./ctdev info
 
   test-macos:
-    name: Test on macOS
+    name: Test on macOS (${{ matrix.suite }})
     needs: plan
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: backup
+            packages: ./backup
+            cache-dependency-path: ctdev/go.sum
+          - suite: application
+            packages: --exclude=./backup
+            cache-dependency-path: |
+              ctdev/go.mod
+              ctdev/go.sum
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -267,10 +292,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        uses: ./.github/actions/setup-ctdev-go
         with:
-          go-version-file: ctdev/go.mod
-          cache-dependency-path: ctdev/go.sum
+          cache-dependency-path: ${{ matrix.cache-dependency-path }}
 
       - name: Cache the pinned restic archive
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -284,15 +308,19 @@ jobs:
           echo "$RUNNER_TEMP/ctdev-tools" >> "$GITHUB_PATH"
 
       - name: Run race tests and vet
-        run: scripts/ci-go-test.sh
+        env:
+          GO_TEST_PACKAGES: ${{ matrix.packages }}
+        run: scripts/ci-go-test.sh "$GO_TEST_PACKAGES"
 
       - name: Build ctdev
+        if: matrix.suite == 'application'
         working-directory: ctdev
         run: |
           VERSION=$(cat ../VERSION)
           go build -ldflags "-X main.version=$VERSION" -o ctdev .
 
       - name: Test CLI commands
+        if: matrix.suite == 'application'
         working-directory: ctdev
         run: |
           ./ctdev --version
@@ -301,20 +329,23 @@ jobs:
 
       # Exercises the Homebrew scan path end to end (brew outdated --json=v2).
       - name: Check for updates
+        if: matrix.suite == 'application'
         working-directory: ctdev
         run: ./ctdev update --check
 
       - name: Install jq component
+        if: matrix.suite == 'application'
         working-directory: ctdev
         run: ./ctdev install jq
 
       - name: Verify jq installation
+        if: matrix.suite == 'application'
         run: command -v jq || exit 1
 
   required:
     name: Required CI
     if: always()
-    needs: [plan, shellcheck, powershell-lint, go-test, linux-build, test-ubuntu, test-macos]
+    needs: [plan, shellcheck, powershell-lint, go-test, cross-vet, linux-build, test-ubuntu, test-macos]
     runs-on: ubuntu-24.04
     steps:
       - name: Check that all selected jobs passed
@@ -325,6 +356,7 @@ jobs:
           SHELLCHECK: ${{ needs.shellcheck.result }}
           POWERSHELL: ${{ needs.powershell-lint.result }}
           LINUX_TEST: ${{ needs.go-test.result }}
+          CROSS_VET: ${{ needs.cross-vet.result }}
           LINUX_BUILD: ${{ needs.linux-build.result }}
           UBUNTU: ${{ needs.test-ubuntu.result }}
           MACOS: ${{ needs.test-macos.result }}
@@ -338,8 +370,9 @@ jobs:
             false) expected=skipped ;;
             *) echo "::error::Missing or invalid test plan"; exit 1 ;;
           esac
-          if [[ "$LINUX_TEST" != "$expected" || "$LINUX_BUILD" != "$expected" ||
+          if [[ "$LINUX_TEST" != "$expected" || "$CROSS_VET" != "$expected" ||
+                "$LINUX_BUILD" != "$expected" ||
                 "$UBUNTU" != "$expected" || "$MACOS" != "$expected" ]]; then
-            echo "::error::Expected $expected (linux tests=$LINUX_TEST, linux build=$LINUX_BUILD, ubuntu=$UBUNTU, macos=$MACOS)"
+            echo "::error::Expected $expected (linux tests=$LINUX_TEST, cross vet=$CROSS_VET, linux build=$LINUX_BUILD, ubuntu=$UBUNTU, macos=$MACOS)"
             exit 1
           fi
