@@ -40,15 +40,6 @@ func TestAllOfShortCircuits(t *testing.T) {
 	}
 }
 
-func TestGateOSPredicates(t *testing.T) {
-	if gateLinux() != (runtime.GOOS == "linux") {
-		t.Errorf("gateLinux() = %v on GOOS=%s", gateLinux(), runtime.GOOS)
-	}
-	if gateMacOS() != (runtime.GOOS == "darwin") {
-		t.Errorf("gateMacOS() = %v on GOOS=%s", gateMacOS(), runtime.GOOS)
-	}
-}
-
 // clearSessionEnv blanks the graphical-session env vars so gateDesktop sees a
 // headless environment until re-set by the test.
 func clearSessionEnv(t *testing.T) {

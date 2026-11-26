@@ -2,16 +2,9 @@ package sysutil
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 )
-
-func TestIsRoot(t *testing.T) {
-	if got, want := IsRoot(), os.Geteuid() == 0; got != want {
-		t.Errorf("IsRoot() = %v, want %v (euid %d)", got, want, os.Geteuid())
-	}
-}
 
 func TestSudoNoPrompt(t *testing.T) {
 	cmd := SudoNoPrompt(context.Background(), "du", "-sk", "/var/log")

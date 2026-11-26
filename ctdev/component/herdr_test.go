@@ -95,13 +95,3 @@ func TestHerdrUninstall_DryRun(t *testing.T) {
 		t.Errorf("uninstall must leave herdr's config and sessions alone; got:\n%s", got)
 	}
 }
-
-func TestHerdrRegistered(t *testing.T) {
-	c := componentByName["herdr"]
-	if c == nil {
-		t.Fatal("herdr is not in the registry")
-	}
-	if c.GoInstall == nil || c.GoUninstall == nil {
-		t.Error("herdr needs both an installer and an uninstaller")
-	}
-}

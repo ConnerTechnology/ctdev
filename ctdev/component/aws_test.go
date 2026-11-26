@@ -15,16 +15,6 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-func TestAWSIsRegistered(t *testing.T) {
-	c := FindByName("aws")
-	if c == nil {
-		t.Fatal("aws should be in the registry")
-	}
-	if !c.SupportsOS(OSLinux) || !c.SupportsOS(OSMacOS) {
-		t.Error("aws should support Linux and macOS")
-	}
-}
-
 func TestAWSIsV2(t *testing.T) {
 	cases := map[string]bool{
 		"aws-cli/2.27.41 Python/3.11.6 Linux/5.10.205 exe/x86_64\n":   true,

@@ -79,10 +79,7 @@ func TestRunCategoryWizardOn_EmptySettingsPrintsNotice(t *testing.T) {
 }
 
 func TestReadLineCtx_ReadsFromStdinScanner(t *testing.T) {
-	orig := stdinScanner
-	t.Cleanup(func() { stdinScanner = orig })
-
-	stdinScanner = bufio.NewScanner(strings.NewReader("  hello world  \nnext line\n"))
+	useStdin(t, "  hello world  \nnext line\n")
 	ctx := context.Background()
 
 	if got, ok := readLineCtx(ctx); !ok || got != "hello world" {
@@ -137,8 +134,6 @@ func TestRunCategoryWizardOn_ShowOnlyRendersSetting(t *testing.T) {
 }
 
 func TestPromptSlider_EnterDefaults(t *testing.T) {
-	orig := stdinScanner
-	t.Cleanup(func() { stdinScanner = orig })
 	ctx := context.Background()
 	slider := &setup.Setting{
 		Name:    "Test slider",
@@ -159,7 +154,7 @@ func TestPromptSlider_EnterDefaults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+			useStdin(t, "\n")
 			st := &setup.SettingState{Setting: slider, CurrentValue: tt.current, DesiredValue: tt.desired}
 			var got string
 			out := captureStdout(t, func() {
@@ -179,7 +174,7 @@ func TestPromptSlider_EnterDefaults(t *testing.T) {
 	}
 
 	// Through promptSetting, an unset slider plus Enter is queued for apply.
-	stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+	useStdin(t, "\n")
 	st := &setup.SettingState{Setting: slider, CurrentValue: "", DesiredValue: "195", Enabled: true}
 	var changed bool
 	captureStdout(t, func() {
@@ -231,8 +226,6 @@ func TestApplySettings_MacKeyRepeatNotePrintsOnce(t *testing.T) {
 }
 
 func TestPromptPicker_EnterDefault(t *testing.T) {
-	orig := stdinScanner
-	t.Cleanup(func() { stdinScanner = orig })
 	picker := &setup.Setting{
 		Name:    "Test picker",
 		Control: setup.ControlPicker,
@@ -249,7 +242,7 @@ func TestPromptPicker_EnterDefault(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+			useStdin(t, "\n")
 			st := &setup.SettingState{Setting: picker, CurrentValue: tt.current}
 			var got string
 			out := captureStdout(t, func() {
@@ -270,8 +263,6 @@ func TestPromptPicker_EnterDefault(t *testing.T) {
 }
 
 func TestPromptSlider_Never(t *testing.T) {
-	orig := stdinScanner
-	t.Cleanup(func() { stdinScanner = orig })
 	ctx := context.Background()
 	slider := &setup.Setting{
 		Name:    "Test timer",
@@ -290,7 +281,7 @@ func TestPromptSlider_Never(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			stdinScanner = bufio.NewScanner(strings.NewReader(tt.input + "\n"))
+			useStdin(t, tt.input+"\n")
 			st := &setup.SettingState{Setting: slider, CurrentValue: "60", DesiredValue: setup.SliderNever}
 			var got string
 			out := captureStdout(t, func() {
@@ -339,15 +330,13 @@ func TestShowSetting_NotNeeded(t *testing.T) {
 }
 
 func TestPromptSetting_NotNeededDefaultsToSkip(t *testing.T) {
-	orig := stdinScanner
-	t.Cleanup(func() { stdinScanner = orig })
 	ctx := context.Background()
 	s := &setup.Setting{Name: "Suspend timer", Control: setup.ControlSlider, Default: setup.SliderNever,
 		Slider: &setup.SliderRange{Min: 5, Max: 120, Step: 5, Unit: "min", Never: true}}
 	reason := "suspend is turned off, so this has no effect"
 
 	// Enter keeps it out of the apply set.
-	stdinScanner = bufio.NewScanner(strings.NewReader("\n"))
+	useStdin(t, "\n")
 	st := &setup.SettingState{Setting: s, CurrentValue: "30", DesiredValue: s.Default, NotNeeded: reason}
 	var changed bool
 	out := ansi.Strip(captureStdout(t, func() {
@@ -368,7 +357,7 @@ func TestPromptSetting_NotNeededDefaultsToSkip(t *testing.T) {
 	}
 
 	// Yes, then a value, changes it anyway.
-	stdinScanner = bufio.NewScanner(strings.NewReader("y\nnever\n"))
+	useStdin(t, "y\nnever\n")
 	st = &setup.SettingState{Setting: s, CurrentValue: "30", DesiredValue: s.Default, NotNeeded: reason}
 	captureStdout(t, func() {
 		var err error
@@ -382,18 +371,25 @@ func TestPromptSetting_NotNeededDefaultsToSkip(t *testing.T) {
 	}
 }
 
-// The macos category was split by topic (CTD-94, CTD-95), so `configure
-// macos` is an unknown category, not silently a full sweep.
-func TestConfigureMacOSCategoryGone(t *testing.T) {
+// Retired categories (merged into ssh, split by topic, or moved into storage/mouse)
+// must fail as unknown categories rather than silently running a full sweep.
+func TestRetiredConfigureCategoriesAreUnknown(t *testing.T) {
 	configure := childCommand(t, rootCmd, "configure")
-	if hasSubcommand(configure, "macos") {
-		t.Error("configure macos should be gone (split into audio, desktop, keyboard and power)")
+	if !hasSubcommand(configure, "ssh") {
+		t.Fatal("configure should have an ssh subcommand")
 	}
-	err := runConfigureAll(configure, []string{"macos"})
-	if err == nil || !strings.Contains(err.Error(), "unknown configure category") {
-		t.Errorf("configure macos: got %v, want an unknown configure category error", err)
-	}
-	if _, ok := slugDescriptions["macos"]; ok {
-		t.Error("slugDescriptions still names macos")
+	for _, gone := range []string{"linger", "locale", "tunnel", "ufw", "system", "macos"} {
+		t.Run(gone, func(t *testing.T) {
+			if hasSubcommand(configure, gone) {
+				t.Errorf("configure %s should be retired", gone)
+			}
+			err := runConfigureAll(configure, []string{gone})
+			if err == nil || !strings.Contains(err.Error(), "unknown configure category") {
+				t.Errorf("configure %s: got %v, want an unknown configure category error", gone, err)
+			}
+			if _, ok := slugDescriptions[gone]; ok {
+				t.Errorf("slugDescriptions still names retired category %q", gone)
+			}
+		})
 	}
 }

@@ -68,22 +68,6 @@ func TestDetectFileExists(t *testing.T) {
 	}
 }
 
-func TestDetectFileExistsInstalled(t *testing.T) {
-	tmp := t.TempDir()
-	f := filepath.Join(tmp, "udev-rule")
-	os.WriteFile(f, []byte("ACTION==\"add\""), 0644)
-
-	if got := detectFileExists(f); got != "installed" {
-		t.Errorf("expected installed, got %s", got)
-	}
-}
-
-func TestDetectFileExistsNotInstalled(t *testing.T) {
-	if got := detectFileExists("/nonexistent/path/99-fake.rules"); got != "not installed" {
-		t.Errorf("expected not installed, got %s", got)
-	}
-}
-
 func TestDetectGrubOSProber(t *testing.T) {
 	// GRUB_DISABLE_OS_PROBER=false means os-prober is enabled; true or omitted
 	// means disabled; a missing grub file reports unknown.

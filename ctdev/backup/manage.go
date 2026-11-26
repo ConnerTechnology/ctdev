@@ -69,19 +69,6 @@ func (d *Destination) Delete(ctx context.Context, snap Snapshot) error {
 	return d.forget(ctx, snap.ID)
 }
 
-// deleteAll forgets every backup of a folder, as Snapshots finds them, and
-// says how many it forgot. Like Delete, it doesn't prune.
-func (d *Destination) deleteAll(ctx context.Context, ref Ref) (int, error) {
-	snaps, err := d.Snapshots(ctx, ref)
-	if err != nil {
-		return 0, err
-	}
-	if err := d.DeleteBackups(ctx, snaps); err != nil {
-		return 0, err
-	}
-	return len(snaps), nil
-}
-
 // DeleteBackups forgets exactly these backups, such as a listing just shown
 // to someone confirming its count. Like Delete, it doesn't prune.
 func (d *Destination) DeleteBackups(ctx context.Context, snaps []Snapshot) error {

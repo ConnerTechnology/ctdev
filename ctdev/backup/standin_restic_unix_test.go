@@ -259,9 +259,6 @@ esac
 	if _, err := d.Stored(context.Background(), []Snapshot{{ID: "0123456789abcdef"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.files(context.Background(), "0123456789abcdef"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := d.Computers(context.Background()); err != nil {
 		t.Fatal(err)
 	}

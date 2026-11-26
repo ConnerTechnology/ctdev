@@ -23,8 +23,9 @@ import (
 // opens only when B2_ACCOUNT_KEY isn't "wrong". snapshots prints the
 // repository's snapshots.json, and each call is logged to <root>/restic.log.
 const keyStandinScript = `#!/bin/sh
-echo "$*" >> "$STANDIN_ROOT/restic.log"
-repo="$STANDIN_ROOT/$(printf '%s' "$RESTIC_REPOSITORY" | tr '/:' '__')"
+root="${STANDIN_ROOT:-$HOME}"
+echo "$*" >> "$root/restic.log"
+repo="$root/$(printf '%s' "$RESTIC_REPOSITORY" | tr '/:' '__')"
 auth() {
   if [ "$B2_ACCOUNT_KEY" = wrong ]; then echo "Fatal: unable to open B2 bucket: unauthorized" >&2; exit 1; fi
   for f in "$repo"/keys/*; do
@@ -45,12 +46,14 @@ init)
   mkdir -p "$repo/keys"; addkey "$RESTIC_PASSWORD" init init > /dev/null
   echo '{"message_type":"initialized","id":"0123456789abcdef","repository":"example"}' ;;
 key)
+  if [ "$2" = list ] && [ ! -d "$repo/keys" ]; then echo '[]'; exit 0; fi
   auth
   if [ -e "$repo/fail-$2" ]; then echo "Fatal: example failure" >&2; exit 1; fi
   case "$2" in
   list)
     sep=''; printf '['
     for f in "$repo"/keys/*; do
+      [ -f "$f" ] || continue
       id=$(basename "$f"); c=false; [ "$id" = "$cur" ] && c=true
       printf '%s{"id":"%s","current":%s,"userName":"%s","hostName":"%s","created":"%s"}' "$sep" "$id" "$c" "$(sed -n 2p "$f")" "$(sed -n 3p "$f")" "$(sed -n 4p "$f")"
       sep=,
@@ -66,10 +69,36 @@ key)
     if [ "$id" = "$cur" ]; then echo "Fatal: refusing to remove the key currently used" >&2; exit 1; fi
     rm "$repo/keys/$id" ;;
   esac ;;
-snapshots) auth; cat "$repo/snapshots.json" 2>/dev/null || echo '[]' ;;
-stats) auth; echo '{"total_size": 2048}' ;;
+snapshots)
+  if [ -d "$repo/keys" ]; then auth; fi
+  if [ -f "$repo/snapshots.json" ]; then
+    cat "$repo/snapshots.json"
+  elif [ -f "$HOME/snapshots.json" ]; then
+    case "$*" in *--tag*) echo '[]' ;; *) cat "$HOME/snapshots.json" ;; esac
+  else
+    echo '[]'
+  fi ;;
+stats)
+  if [ -d "$repo/keys" ]; then auth; fi
+  echo '{"total_size": 2048}' ;;
 esac
 `
+
+// removeStandinHostKey removes any key belonging to hostname from address's stand-in repository.
+func removeStandinHostKey(t *testing.T, root, address, hostname string) {
+	t.Helper()
+	keys, _ := filepath.Glob(filepath.Join(standinRepo(root, address), "keys", "*"))
+	for _, k := range keys {
+		data, err := os.ReadFile(k)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		if len(lines) >= 3 && strings.TrimSpace(lines[2]) == hostname {
+			_ = os.Remove(k)
+		}
+	}
+}
 
 // keyStandin writes the stand-in and returns where it keeps repositories.
 func keyStandin(t *testing.T) (bin, root string) {

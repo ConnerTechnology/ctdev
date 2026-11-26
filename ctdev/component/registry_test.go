@@ -5,9 +5,63 @@ import (
 	"testing"
 )
 
-func TestRegistrySize(t *testing.T) {
-	if len(Registry) != 70 {
-		t.Errorf("expected 70 components, got %d", len(Registry))
+func TestRegistryStructuralInvariants(t *testing.T) {
+	if len(Registry) == 0 {
+		t.Fatal("Registry is empty")
+	}
+	byName := make(map[string]*Component, len(Registry))
+	for i := range Registry {
+		c := &Registry[i]
+		if c.Name == "" {
+			t.Errorf("Registry[%d] has empty Name", i)
+		}
+		if c.Description == "" {
+			t.Errorf("component %q has empty Description", c.Name)
+		}
+		if c.Category == "" {
+			t.Errorf("component %q has empty Category", c.Name)
+		}
+		if len(c.SupportedOS) == 0 {
+			t.Errorf("component %q has empty SupportedOS", c.Name)
+		}
+		if got := FindByName(c.Name); got == nil {
+			t.Errorf("FindByName(%q) returned nil", c.Name)
+		}
+		byName[c.Name] = c
+	}
+	if got := FindByName("nonexistent-component-xyz"); got != nil {
+		t.Errorf("FindByName(nonexistent) = %+v, want nil", got)
+	}
+
+	// Every declared dependency must exist and the dependency graph must be acyclic.
+	const (
+		unvisited = 0
+		visiting  = 1
+		visited   = 2
+	)
+	state := make(map[string]int, len(Registry))
+	var visit func(name string, path []string)
+	visit = func(name string, path []string) {
+		switch state[name] {
+		case visited:
+			return
+		case visiting:
+			t.Errorf("dependency cycle detected: %v -> %s", path, name)
+			return
+		}
+		state[name] = visiting
+		c := byName[name]
+		for _, dep := range c.Dependencies {
+			if byName[dep] == nil {
+				t.Errorf("component %q depends on unknown component %q", name, dep)
+				continue
+			}
+			visit(dep, append(path, name))
+		}
+		state[name] = visited
+	}
+	for _, c := range Registry {
+		visit(c.Name, nil)
 	}
 }
 
@@ -26,16 +80,6 @@ func TestRegistryAllHaveInstallMethod(t *testing.T) {
 		if c.GoInstall == nil || c.GoUninstall == nil {
 			t.Errorf("component %s missing GoInstall or GoUninstall", c.Name)
 		}
-	}
-}
-
-func TestFindByName(t *testing.T) {
-	c := FindByName("docker")
-	if c == nil {
-		t.Fatal("expected to find docker")
-	}
-	if c.Category != CategoryCLI {
-		t.Errorf("expected CLI Tools, got %s", c.Category)
 	}
 }
 

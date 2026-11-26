@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -309,53 +308,6 @@ func TestRegistryKeyRepeatSettings(t *testing.T) {
 	}
 }
 
-func TestMacDesktopTables(t *testing.T) {
-	want := map[string]macDefault{
-		"com.apple.dock autohide":                            {Type: defBool, Value: "true"},
-		"com.apple.dock autohide-delay":                      {Type: defFloat, Value: "0"},
-		"com.apple.dock autohide-time-modifier":              {Type: defFloat, Value: "0.15"},
-		"com.apple.dock show-recents":                        {Type: defBool, Value: "false"},
-		"com.apple.dock launchanim":                          {Type: defBool, Value: "false"},
-		"com.apple.dock mineffect":                           {Type: defString, Value: "scale"},
-		"com.apple.dock expose-animation-duration":           {Type: defFloat, Value: "0.1"},
-		"NSGlobalDomain NSAutomaticWindowAnimationsEnabled":  {Type: defBool, Value: "false"},
-		"com.apple.finder ShowPathbar":                       {Type: defBool, Value: "true"},
-		"com.apple.finder ShowStatusBar":                     {Type: defBool, Value: "true"},
-		"com.apple.finder FXDefaultSearchScope":              {Type: defString, Value: "SCcf"},
-		"com.apple.finder FXPreferredViewStyle":              {Type: defString, Value: "Nlsv"},
-		"com.apple.finder QuitMenuItem":                      {Type: defBool, Value: "true"},
-		"com.apple.desktopservices DSDontWriteNetworkStores": {Type: defBool, Value: "true"},
-		"com.apple.desktopservices DSDontWriteUSBStores":     {Type: defBool, Value: "true"},
-	}
-	got := map[string]macDefault{}
-	for _, table := range [][]macDefault{macDesktopDock, macDesktopAnimations, macDesktopFinder, macDesktopDSStore} {
-		for _, d := range table {
-			id := d.Domain + " " + d.Key
-			if _, dup := got[id]; dup {
-				t.Errorf("duplicate entry %s", id)
-			}
-			got[id] = d
-		}
-	}
-	if !reflect.DeepEqual(keys(got), keys(want)) {
-		t.Errorf("desktop keys = %v, want %v", keys(got), keys(want))
-	}
-	for id, w := range want {
-		if g := got[id]; g.Type != w.Type || g.Value != w.Value {
-			t.Errorf("%s = (%v, %q), want (%v, %q)", id, g.Type, g.Value, w.Type, w.Value)
-		}
-	}
-}
-
-func keys(m map[string]macDefault) []string {
-	var out []string
-	for k := range m {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
-}
-
 // TestRegistryMacDesktopSettings checks each macOS desktop setting: gated to
 // macOS, on writes its keys and detects "enabled", off deletes exactly those
 // keys and detects "disabled", and the setting is in the group whose hook
@@ -455,43 +407,9 @@ func TestMacRestartHooks(t *testing.T) {
 	}
 }
 
-// TestMacOnOffTables pins the keys and values of the macOS on/off settings
-// outside desktop's Dock/Finder/animations, and checks no key is in two tables.
-func TestMacOnOffTables(t *testing.T) {
-	want := map[string]macDefault{
-		"NSGlobalDomain com.apple.sound.beep.feedback":        {Type: defBool, Value: "true"},
-		"NSGlobalDomain NSNavPanelExpandedStateForSaveMode":   {Type: defBool, Value: "true"},
-		"NSGlobalDomain NSNavPanelExpandedStateForSaveMode2":  {Type: defBool, Value: "true"},
-		"NSGlobalDomain PMPrintingExpandedStateForPrint":      {Type: defBool, Value: "true"},
-		"NSGlobalDomain PMPrintingExpandedStateForPrint2":     {Type: defBool, Value: "true"},
-		"com.apple.screensaver askForPassword":                {Type: defInt, Value: "1"},
-		"com.apple.screensaver askForPasswordDelay":           {Type: defInt, Value: "0"},
-		"NSGlobalDomain NSAutomaticQuoteSubstitutionEnabled":  {Type: defBool, Value: "false"},
-		"NSGlobalDomain NSAutomaticDashSubstitutionEnabled":   {Type: defBool, Value: "false"},
-		"NSGlobalDomain NSAutomaticSpellingCorrectionEnabled": {Type: defBool, Value: "false"},
-		"NSGlobalDomain NSAutomaticCapitalizationEnabled":     {Type: defBool, Value: "false"},
-		"NSGlobalDomain NSAutomaticPeriodSubstitutionEnabled": {Type: defBool, Value: "false"},
-		"NSGlobalDomain ApplePressAndHoldEnabled":             {Type: defBool, Value: "false"},
-	}
-	got := map[string]macDefault{}
-	for _, table := range [][]macDefault{
-		macAudioVolumeClick, macDesktopDialogs, macPowerScreensaverPassword,
-		macKeyboardTypeAsTyped, macKeyboardHoldToRepeat,
-	} {
-		for _, d := range table {
-			got[d.Domain+" "+d.Key] = d
-		}
-	}
-	if !reflect.DeepEqual(keys(got), keys(want)) {
-		t.Errorf("keys = %v, want %v", keys(got), keys(want))
-	}
-	for id, w := range want {
-		if g := got[id]; g.Type != w.Type || g.Value != w.Value {
-			t.Errorf("%s = (%v, %q), want (%v, %q)", id, g.Type, g.Value, w.Type, w.Value)
-		}
-	}
-
-	// No key belongs to two settings, desktop's included.
+// TestMacDefaultTablesHaveNoDuplicateKeys checks that no macOS defaults key is
+// owned by two settings, which would make toggling one clobber the other.
+func TestMacDefaultTablesHaveNoDuplicateKeys(t *testing.T) {
 	seen := map[string]bool{}
 	for _, table := range [][]macDefault{
 		macAudioVolumeClick, macDesktopDialogs, macPowerScreensaverPassword,

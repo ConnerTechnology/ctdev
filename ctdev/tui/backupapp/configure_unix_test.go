@@ -19,58 +19,12 @@ import (
 
 const masterPassword = "correct horse example staple"
 
-// resticKeyring replaces the folder's stand-in restic with one that keeps a
-// repository's keys: init makes one for RESTIC_PASSWORD, key add, list and
-// remove need a password a key holds (exit 12 otherwise, as restic's wrong
-// password), and the new key's password arrives on fd 3. A repository with
-// no keys lists none. Key IDs count up. snapshots lists ~/snapshots.json, or none when asked
-// by tag.
+// resticKeyring replaces the folder's stand-in restic with keyStandinScript,
+// rooted under the folder's temporary HOME.
 func resticKeyring(t *testing.T, d Deps) {
 	t.Helper()
-	script := `#!/bin/sh
-echo "$*" >> "$HOME/restic.log"
-repo="$RESTIC_REPOSITORY"
-current() {
-  for k in "$repo"/keys/*; do
-    [ -f "$k/password" ] && [ "$(cat "$k/password")" = "$RESTIC_PASSWORD" ] && { basename "$k"; return 0; }
-  done
-  echo "Fatal: wrong password or no key found" >&2; exit 12
-}
-case "$1 $2" in
-version*) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
-init*)
-  [ -e "$repo/config" ] && { echo "Fatal: config file already exists" >&2; exit 1; }
-  mkdir -p "$repo/keys/00000000" && touch "$repo/config"
-  printf '%s' "$RESTIC_PASSWORD" > "$repo/keys/00000000/password"
-  echo '{"message_type":"initialized"}' ;;
-"key add")
-  current > /dev/null || exit 12
-  n=$(( $(cat "$repo/last" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$repo/last"
-  id=$(printf '%08x' "$n")
-  mkdir "$repo/keys/$id" && cat <&3 > "$repo/keys/$id/password" || exit 1
-  while [ $# -gt 0 ]; do case "$1" in --user) echo "$2" > "$repo/keys/$id/user" ;; --host) echo "$2" > "$repo/keys/$id/host" ;; esac; shift; done
-  echo "saved new key with ID $id" ;;
-"key list")
-  [ -d "$repo/keys" ] || { echo '[]'; exit 0; }
-  me=$(current) || exit 12
-  printf '['; sep=""
-  for k in "$repo"/keys/*; do
-    id=$(basename "$k")
-    printf '%s{"id":"%s","current":%s,"userName":"%s","hostName":"%s","created":"2026-11-23 11:00:00"}' "$sep" "$id" \
-      "$([ "$id" = "$me" ] && echo true || echo false)" "$(cat "$k/user" 2>/dev/null)" "$(cat "$k/host" 2>/dev/null)"
-    sep=","
-  done
-  echo ']' ;;
-"key remove")
-  current > /dev/null || exit 12
-  for a in "$@"; do last="$a"; done
-  rm -r "$repo/keys/$last" ;;
-snapshots*)
-  case "$*" in *--tag*) echo '[]' ;; *) cat "$HOME/snapshots.json" 2>/dev/null || echo '[]' ;; esac ;;
-stats*) echo '{"total_size": 0}' ;;
-esac
-`
-	if err := os.WriteFile(filepath.Join(d.Machine.Home, ".local", "bin", "restic"), []byte(script), 0o755); err != nil {
+	t.Setenv("STANDIN_ROOT", d.Machine.Home)
+	if err := os.WriteFile(filepath.Join(d.Machine.Home, ".local", "bin", "restic"), []byte(keyStandinScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -438,12 +392,7 @@ func TestConnectWithAKitThisComputerIsOnUpdatesIt(t *testing.T) {
 
 	// With this computer's key gone, the kit is refused under the field,
 	// for another paste.
-	keys, _ := filepath.Glob(filepath.Join(dest.Address, "keys", "*"))
-	for _, k := range keys {
-		if host, _ := os.ReadFile(filepath.Join(k, "host")); strings.TrimSpace(string(host)) == d.Machine.Hostname {
-			os.RemoveAll(k)
-		}
-	}
+	removeStandinHostKey(t, d.Machine.Home, dest.Address, d.Machine.Hostname)
 	ui = &fakeUI{t: t, Forms: []any{Values{"kit": setup.Kit}}}
 	if _, err := pasteUpdatedKit(context.Background(), ui, d); !errors.Is(err, ErrCancelled) {
 		t.Errorf("want the script to end at the next paste, got %v", err)

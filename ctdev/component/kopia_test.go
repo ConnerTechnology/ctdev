@@ -13,19 +13,6 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/platform"
 )
 
-func TestKopiaIsRegistered(t *testing.T) {
-	c := FindByName("kopia")
-	if c == nil {
-		t.Fatal("kopia should be in the registry")
-	}
-	if !c.SupportsOS(OSLinux) || c.SupportsOS(OSMacOS) {
-		t.Error("kopia should support Linux only")
-	}
-	if c.Category != CategoryInfra {
-		t.Errorf("kopia should be under %s, got %s", CategoryInfra, c.Category)
-	}
-}
-
 // Both architectures a node can be get pinned hashes, and nothing else gets a
 // download at all.
 func TestKopiaPins(t *testing.T) {

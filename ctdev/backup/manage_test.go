@@ -124,6 +124,17 @@ func TestDeleteRemovesOnlyThatBackup(t *testing.T) {
 	}
 }
 
+func deleteAllBackups(ctx context.Context, d *Destination, ref Ref) (int, error) {
+	snaps, err := d.Snapshots(ctx, ref)
+	if err != nil {
+		return 0, err
+	}
+	if err := d.DeleteBackups(ctx, snaps); err != nil {
+		return 0, err
+	}
+	return len(snaps), nil
+}
+
 func TestDeleteAllRemovesOnlyThatFoldersBackups(t *testing.T) {
 	requireRestic(t)
 	ctx := context.Background()
@@ -135,7 +146,7 @@ func TestDeleteAllRemovesOnlyThatFoldersBackups(t *testing.T) {
 	backUp(t, m, d, root, &cfg)
 	backUp(t, m, d, other, &otherCfg)
 
-	n, err := d.deleteAll(ctx, m.Ref(root, &cfg))
+	n, err := deleteAllBackups(ctx, d, m.Ref(root, &cfg))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,9 +172,9 @@ func TestDeleteAllOfAnUnconfiguredFolderRemovesItsOneOffs(t *testing.T) {
 	backUp(t, m, d, root, nil)
 	backUp(t, m, d, other, &otherCfg)
 
-	n, err := d.deleteAll(ctx, m.Ref(root, nil))
+	n, err := deleteAllBackups(ctx, d, m.Ref(root, nil))
 	if err != nil || n != 1 {
-		t.Fatalf("deleteAll() = %d, %v; want 1 one-off deleted", n, err)
+		t.Fatalf("deleteAllBackups() = %d, %v; want 1 one-off deleted", n, err)
 	}
 	if n := countBackups(t, m, d, root, nil); n != 0 {
 		t.Errorf("the folder still has %d one-offs", n)
@@ -397,9 +408,9 @@ func TestANewFolderAtAMovedFoldersOldPathLeavesItsBackupsAlone(t *testing.T) {
 	if err != nil || len(snaps) != 1 || snaps[0].ID != oneOff.ID {
 		t.Fatalf("the new folder lists %v (%v), want only its one-off", snaps, err)
 	}
-	n, err := d.deleteAll(ctx, newRef)
+	n, err := deleteAllBackups(ctx, d, newRef)
 	if err != nil || n != 1 {
-		t.Fatalf("deleteAll() = %d, %v; want only the one-off", n, err)
+		t.Fatalf("deleteAllBackups() = %d, %v; want only the one-off", n, err)
 	}
 	if n := countBackups(t, m, d, moved, &cfg); n != 2 {
 		t.Errorf("the moved folder has %d backups, want its 2 untouched", n)

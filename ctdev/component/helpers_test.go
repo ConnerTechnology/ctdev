@@ -48,11 +48,6 @@ func TestAlreadyInstalled_UsesRegistryIsInstalled(t *testing.T) {
 		Name:       "rc-already-test",
 		DetectApps: []string{present},
 	})
-	// componentByName is populated from Registry at package init, so we need
-	// to refresh it for the test-registered entry to show up.
-	old := componentByName
-	t.Cleanup(func() { componentByName = old })
-	componentByName = rebuildComponentIndex()
 
 	if alreadyInstalled("rc-already-test") {
 		t.Error("expected not-installed before path is created")
@@ -69,16 +64,6 @@ func TestAlreadyInstalled_UnknownNameFalse(t *testing.T) {
 	if alreadyInstalled("does-not-exist-xyz") {
 		t.Error("expected false for name absent from registry")
 	}
-}
-
-// rebuildComponentIndex re-populates componentByName from the current Registry.
-// Exposed for tests that dynamically register components.
-func rebuildComponentIndex() map[string]*Component {
-	m := make(map[string]*Component, len(Registry))
-	for i := range Registry {
-		m[Registry[i].Name] = &Registry[i]
-	}
-	return m
 }
 
 func TestUnsupportedPMError_ExecutorMapsToSkipped(t *testing.T) {

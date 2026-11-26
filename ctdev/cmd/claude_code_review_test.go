@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"os"
 	"path/filepath"
@@ -10,14 +9,6 @@ import (
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
 )
-
-// feedStdin makes the next prompts read input, as if typed.
-func feedStdin(t *testing.T, input string) {
-	t.Helper()
-	orig := stdinScanner
-	stdinScanner = bufio.NewScanner(strings.NewReader(input))
-	t.Cleanup(func() { stdinScanner = orig })
-}
 
 const driftedSettings = `{"model": "sonnet"}` + "\n"
 
@@ -60,7 +51,7 @@ func dotBaks(path string) []string {
 
 func TestReviewClaudeCodeDeclineLeavesFile(t *testing.T) {
 	_, settings := driftedClaudeHome(t)
-	feedStdin(t, "n\n")
+	useStdin(t, "n\n")
 
 	out, err := runReview(t, claudeCodeReview{interactive: true})
 	if err != nil {
@@ -79,7 +70,7 @@ func TestReviewClaudeCodeDeclineLeavesFile(t *testing.T) {
 
 func TestReviewClaudeCodeAcceptBacksUpAndReplaces(t *testing.T) {
 	_, settings := driftedClaudeHome(t)
-	feedStdin(t, "y\n")
+	useStdin(t, "y\n")
 
 	out, err := runReview(t, claudeCodeReview{interactive: true})
 	if err != nil {
@@ -100,7 +91,7 @@ func TestReviewClaudeCodeAcceptBacksUpAndReplaces(t *testing.T) {
 
 func TestReviewClaudeCodeForceReplacesWithoutAsking(t *testing.T) {
 	_, settings := driftedClaudeHome(t)
-	feedStdin(t, "") // any prompt would read EOF and cancel
+	useStdin(t, "") // any prompt would read EOF and cancel
 
 	out, err := runReview(t, claudeCodeReview{force: true, interactive: true})
 	if err != nil {
@@ -186,7 +177,7 @@ func TestReviewClaudeCodeCancelWritesNothing(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "CLAUDE.md")); err != nil {
 		t.Fatal(err)
 	}
-	feedStdin(t, "") // EOF at the prompt
+	useStdin(t, "") // EOF at the prompt
 
 	if _, err := runReview(t, claudeCodeReview{interactive: true}); err == nil {
 		t.Fatal("expected the prompt to be cancelled")

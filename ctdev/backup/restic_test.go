@@ -1,8 +1,10 @@
 package backup
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -201,13 +203,34 @@ func TestCreateDestinationBackUpAndFindByFolderID(t *testing.T) {
 	}
 
 	// The backup holds the folder's contents with relative paths.
-	files, err := d.files(ctx, got.ID)
+	files, err := snapshotFiles(ctx, d, got.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Join(files, ",") != "/.ctdev-backup.json,/docs,/docs/readme.txt,/index.html" {
 		t.Errorf("backup contents = %v, want paths relative to the folder", files)
 	}
+}
+
+// snapshotFiles lists the paths recorded in a snapshot.
+func snapshotFiles(ctx context.Context, d *Destination, id string) ([]string, error) {
+	out, err := d.restic(ctx, d.asComputer("", "ls", "--json", "--retry-lock", retryLock, id))
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		var n struct {
+			Type string `json:"message_type"`
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(sc.Bytes(), &n) == nil && n.Type == "node" {
+			paths = append(paths, n.Path)
+		}
+	}
+	sort.Strings(paths)
+	return paths, nil
 }
 
 func TestSecondComputerConnectsWithKitAndMasterPassword(t *testing.T) {
