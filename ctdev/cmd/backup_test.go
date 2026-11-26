@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -346,4 +347,147 @@ func TestRemovedBackupCommandsAreUnknown(t *testing.T) {
 			t.Errorf("ctdev %s: want an unknown-command error, got %v", name, err)
 		}
 	}
+}
+
+// Per the --batch check contract, backupStatusOnly must exit non-zero on every
+// backup health problem: failed data checks, overdue data checks, and retention
+// failures in addition to failed/overdue backups.
+func TestBackupStatusOnly_FailsOnDataCheckAndRetentionProblems(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX stand-in restic")
+	}
+
+	setupHealthy := func(t *testing.T, stateJSON, maintJSON string) (*backup.Machine, string) {
+		t.Helper()
+		home := t.TempDir()
+		dir := filepath.Join(home, "Projects", "website")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("hi"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+		cfg := backup.Config{
+			ID:          "11111111-1111-4111-8111-111111111111",
+			Destination: "example-backups",
+			Schedule:    backup.Daily,
+			Keep:        backup.DefaultKeep,
+		}
+		if err := backup.WriteConfig(dir, cfg); err != nil {
+			t.Fatal(err)
+		}
+		confDir := filepath.Join(home, ".config", "ctdev", "backup")
+		destDir := filepath.Join(confDir, "destinations")
+		if err := os.MkdirAll(destDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(destDir, "example-backups.env"),
+			[]byte("RESTIC_REPOSITORY="+filepath.Join(home, "repo")+"\nCTDEV_COMPUTER_KEY=pw\nCTDEV_COMPUTER_KEY_ID=k1\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(confDir, "folders.json"),
+			[]byte(`{"folders":[{"path":"`+dir+`","id":"11111111-1111-4111-8111-111111111111","schedule":"daily","destination":"example-backups","added":"2026-10-01T00:00:00Z"}]}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(confDir, "state.json"), []byte(stateJSON), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		// Stand-in restic: returns 1 snapshot, stats, and optional maintenance marker.
+		maintSnap := "[]"
+		if maintJSON != "" {
+			enc := base64.RawURLEncoding.EncodeToString([]byte(maintJSON))
+			maintSnap = `[{"id":"cccccccccccccccc","short_id":"cccccccc","time":"2026-11-25T00:00:00Z","hostname":"example-laptop","tags":["ctdev-maintenance","ctdev-maintenance-data:` + enc + `"]}]`
+		}
+		bin := filepath.Join(home, "restic")
+		script := `#!/bin/sh
+case "$1" in
+version) echo "restic 0.19.1 compiled with go1.26.4 on linux/amd64" ;;
+snapshots)
+  case "$*" in
+    *ctdev-maintenance*)
+      printf '%s\n' '` + maintSnap + `' ;;
+    *)
+      echo '[{"id":"aaaaaaaaaaaaaaaa","short_id":"aaaaaaaa","time":"2026-11-26T10:00:00Z","hostname":"example-laptop","tags":["ctdev-folder:11111111-1111-4111-8111-111111111111","ctdev-path:~/Projects/website","ctdev-host:example-laptop"],"summary":{"total_files_processed":1,"total_bytes_processed":2,"data_added":2}}]' ;;
+  esac ;;
+stats) echo '{"total_size": 100}' ;;
+esac
+`
+		if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Fake systemd user service, timer, and wants link so SchedulerInstalled == true.
+		unitDir := filepath.Join(home, ".config", "systemd", "user")
+		wantsDir := filepath.Join(unitDir, "timers.target.wants")
+		if err := os.MkdirAll(wantsDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(unitDir, "ctdev-backup.service"), []byte("[Service]\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(unitDir, "ctdev-backup.timer"), []byte("[Timer]\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(unitDir, "ctdev-backup.timer"), filepath.Join(wantsDir, "ctdev-backup.timer")); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("HOME", home)
+
+		m := &backup.Machine{
+			Dir:      confDir,
+			Home:     home,
+			Hostname: "example-laptop",
+			Username: "example",
+			Restic:   bin,
+			GOOS:     "linux",
+			Now:      func() time.Time { return now },
+		}
+		return m, dir
+	}
+
+	okRun := func(dir, retErr string) string {
+		return `{"folders":{"` + dir + `":{"destination":"example-backups","last_attempt":"2026-11-26T10:00:00Z","last_success":"2026-11-26T10:00:00Z","retention_error":"` + retErr + `"}}}`
+	}
+
+	t.Run("healthy exits zero", func(t *testing.T) {
+		m, dir := setupHealthy(t, "", `{"started":"2026-11-24T23:55:00Z","finished":"2026-11-25T00:00:00Z","host":"example-laptop","slice":1,"ok":true}`)
+		_ = os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(okRun(dir, "")), 0o600)
+		var out bytes.Buffer
+		if err := backupStatusOnly(context.Background(), m, dir, &out); err != nil {
+			t.Errorf("backupStatusOnly(healthy) = %v, want nil\nout:\n%s", err, out.String())
+		}
+	})
+
+	t.Run("failed data check exits non-zero", func(t *testing.T) {
+		m, dir := setupHealthy(t, "", `{"started":"2026-11-24T23:55:00Z","finished":"2026-11-25T00:00:00Z","host":"example-laptop","slice":1,"ok":false,"step":"check","error":"pack corrupt"}`)
+		_ = os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(okRun(dir, "")), 0o600)
+		var out bytes.Buffer
+		err := backupStatusOnly(context.Background(), m, dir, &out)
+		if err == nil || !strings.Contains(err.Error(), "data check") {
+			t.Errorf("backupStatusOnly(failed data check) = %v, want data check error\nout:\n%s", err, out.String())
+		}
+	})
+
+	t.Run("overdue data check exits non-zero", func(t *testing.T) {
+		// No maintenance snapshot ever run, and folder added 2026-10-01 (>2 weeks before 2026-11-26).
+		m, dir := setupHealthy(t, "", "")
+		_ = os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(okRun(dir, "")), 0o600)
+		var out bytes.Buffer
+		err := backupStatusOnly(context.Background(), m, dir, &out)
+		if err == nil || !strings.Contains(err.Error(), "data check") || !strings.Contains(err.Error(), "overdue") {
+			t.Errorf("backupStatusOnly(overdue data check) = %v, want overdue data check error\nout:\n%s", err, out.String())
+		}
+	})
+
+	t.Run("retention error exits non-zero", func(t *testing.T) {
+		m, dir := setupHealthy(t, "", `{"started":"2026-11-24T23:55:00Z","finished":"2026-11-25T00:00:00Z","host":"example-laptop","slice":1,"ok":true}`)
+		_ = os.WriteFile(filepath.Join(m.Dir, "state.json"), []byte(okRun(dir, "forget failed")), 0o600)
+		var out bytes.Buffer
+		err := backupStatusOnly(context.Background(), m, dir, &out)
+		if err == nil || !strings.Contains(err.Error(), "retention") {
+			t.Errorf("backupStatusOnly(retention error) = %v, want retention error\nout:\n%s", err, out.String())
+		}
+	})
 }

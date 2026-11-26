@@ -155,6 +155,12 @@ func backupStatusOnly(ctx context.Context, m *backup.Machine, cwd string, out io
 		return fmt.Errorf("backups for %s are not scheduled on this computer: run ctdev backup in a terminal and choose Configure", where)
 	case !s.HasBackups():
 		return fmt.Errorf("no backups of %s are stored in %s yet", where, s.Destination)
+	case s.DataCheckRead && s.DataCheck != nil && s.DataCheck.Failed():
+		return fmt.Errorf("the last data check of %s failed: %s", s.Destination, s.DataCheck.Reason())
+	case s.DataCheckRead && s.DataCheckOverdue:
+		return fmt.Errorf("the weekly data check of %s is overdue", s.Destination)
+	case s.Last != nil && s.Last.RetentionError != "":
+		return fmt.Errorf("retention cleanup for %s failed: %s", where, s.Last.RetentionError)
 	}
 	return nil
 }
