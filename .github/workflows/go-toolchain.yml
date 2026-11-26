@@ -1,12 +1,12 @@
 name: Go toolchain freshness
 
-# Every setup-go step in ci.yml installs the `toolchain` line of ctdev/go.mod,
+# Every setup-go step in CI and Release installs the `toolchain` line of ctdev/go.mod,
 # so that line is the Go that builds releases. Dependabot's gomod ecosystem
 # does not bump it (dependabot/dependabot-core#13520), so this fails when
 # go.dev ships a newer stable release and the line needs a manual bump.
 on:
   schedule:
-    - cron: '0 13 * * 1'
+    - cron: '17 13 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -19,13 +19,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Compare go.mod toolchain with go.dev
         shell: bash
         run: |
           pinned=$(awk '$1 == "toolchain" { print $2 }' ctdev/go.mod)
-          latest=$(curl -fsSL 'https://go.dev/dl/?mode=json' |
+          latest=$(curl -fsSL --retry 3 --max-time 30 'https://go.dev/dl/?mode=json' |
             jq -r '.[] | select(.stable) | .version' | sort -V | tail -n1)
           if [ -z "$pinned" ] || [ -z "$latest" ]; then
             echo "::error::could not read a version (go.mod toolchain: '$pinned', go.dev: '$latest')"

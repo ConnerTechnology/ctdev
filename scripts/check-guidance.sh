@@ -24,29 +24,45 @@ bad() { fail=1; say "FAIL  $*"; }
 # only when it is spelled the way a path in this repo is spelled: allowed characters only, no
 # leading / or ./, no placeholder ellipsis, and either rooted at one of our top-level
 # directories, a dot-directory, or a bare Markdown filename.
-# SC2016: the backticks in the grep pattern are the literal character we are matching on,
-# so the single quotes are the point.
-# shellcheck disable=SC2016
-while read -r p; do
+if [ ! -r AGENTS.md ]; then
+  echo "FAIL  could not read AGENTS.md" >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # awk splits on literal backticks
+paths=$(awk -F '`' '
+  {
+    for (i = 2; i < NF; i += 2) {
+      p = $i
+      if (p ~ /^[A-Za-z0-9._\/-]+$/ && p !~ /^\.?\/|\.\.\./ &&
+          p ~ /^(ctdev|scripts)\/|^\.[^/]*\/|^[^/]+\.md$/) {
+        print p
+      }
+    }
+  }
+' AGENTS.md | sort -u) || exit 1
+while IFS= read -r p; do
   [ -z "$p" ] && continue
   bare=${p%/}
   [ -e "$bare" ] && continue
   git check-ignore -q "$bare" && continue
   bad "AGENTS.md names $p, which does not exist"
-done < <(grep -oE '`[^`]+`' AGENTS.md | tr -d '`' \
-  | grep -vE '[^A-Za-z0-9._/-]' \
-  | grep -vE '^/|^\./|\.\.\.' \
-  | grep -E '^(ctdev|scripts)/|^\.[^/]*/|^[^/]+\.md$' \
-  | sort -u)
+done <<< "$paths"
 
 # 2. Tailnet names ----------------------------------------------------------------------
 # The repo is public and carries no real family or client data (AGENTS.md, "Guardrails"). A
 # real tailnet's MagicDNS suffix is tail<hex>.ts.net, so the pattern catches any tailnet
 # without this script naming ours. Examples use tailnet-example.ts.net, which it does not
 # match. A hit is reported by file and line only, so a real name never reaches the public CI log.
+# git grep exits 1 for no matches. A scan error must fail the check.
+hits=$(git grep -nIE 'tail[0-9a-f]+\.ts\.net') || {
+  status=$?
+  [ "$status" -eq 1 ] || exit "$status"
+}
+locations=$(cut -d: -f1,2 <<< "$hits") || exit 1
 while IFS= read -r hit; do
+  [ -z "$hit" ] && continue
   bad "$hit names a real tailnet (tail<hex>.ts.net); use tailnet-example.ts.net instead"
-done < <(git grep -nIE 'tail[0-9a-f]+\.ts\.net' | cut -d: -f1,2)
+done <<< "$locations"
 
 if [ "$fail" -eq 0 ]; then say "guidance check: ok"; fi
 exit "$fail"

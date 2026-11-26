@@ -1,51 +1,86 @@
 name: CI
 
-# No pull_request trigger: a change runs these jobs locally (scripts/checks.sh --full) and its
-# pull request merges when they pass. main and release tags still run here, for the macOS job, which only GitHub
-# can run; build-release needs every job, so a macOS failure blocks the release and is fixed forward.
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
-    tags:
-      - 'v*'
   workflow_dispatch:
 
-# Group by ref, not SHA: a release pushes main and a tag at the same commit,
-# and with a SHA-keyed group whichever run starts first gets cancelled — when
-# that's the tag run, the release never builds (bit v12.4.0). Per-ref groups
-# keep branch and tag runs independent, while rapid successive pushes to the
-# same branch still supersede each other.
+# New pushes supersede earlier runs on the same ref. PR test-merge refs are
+# independent of main and of one another.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Default to read-only; write perms are granted per-job where actually needed.
 permissions:
   contents: read
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
+  plan:
+    name: Select checks
+    runs-on: ubuntu-24.04
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # Every main push gets full verification for the release workflow. Only
+      # prose-only and VERSION-only PRs skip the platform jobs.
+      - id: scope
+        shell: bash
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          full=true
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            if git diff --quiet --no-renames "$PR_BASE" HEAD -- . \
+              ':!README.md' ':!TROUBLESHOOTING.md' ':!AGENTS.md' ':!VERSION'; then
+              full=false
+            else
+              status=$?
+              [[ "$status" == 1 ]] || exit "$status"
+            fi
+          fi
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+
   shellcheck:
     name: Shell Script Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Check syntax
         run: |
           for f in install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh; do
+            scripts/checks.sh scripts/install-test-restic.sh scripts/ci-go-test.sh; do
             bash -n "$f" || exit 1
           done
 
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Check version format
+        shell: bash
+        run: |
+          version=$(cat VERSION)
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error file=VERSION::Expected MAJOR.MINOR.PATCH"
+            exit 1
+          fi
 
       - name: Run ShellCheck
         run: |
           shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh
+            scripts/checks.sh scripts/install-test-restic.sh scripts/ci-go-test.sh
 
       # AGENTS.md is a claim about the tree that nothing else compiles — this holds it to
       # paths that exist, and the repo to no real tailnet names.
@@ -70,10 +105,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # install.ps1 is the Windows half of the installer, and no Linux or macOS
-      # runner can parse it — without this job a syntax error would ship.
+      # Parse the Windows installer and check its documented parameter contract.
       - name: Parse install.ps1
         shell: pwsh
         run: |
@@ -101,156 +137,149 @@ jobs:
           Write-Host "install.ps1 exposes the expected parameters"
 
   go-test:
-    name: Go Tests
-    runs-on: ubuntu-latest
-
+    name: Go tests on Linux
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
 
-      # The backup tests run against a real restic and fail without one in CI.
-      # Ubuntu's apt restic is older than the 0.17 ctdev needs, so take the
-      # pinned official release and check it against its published checksum.
-      - name: Install restic
+      - name: Cache the pinned restic archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ctdev-restic
+          key: test-restic-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/install-test-restic.sh') }}
+
+      - name: Install and verify restic
         run: |
-          curl -fsSLo /tmp/restic.bz2 https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2
-          echo "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c  /tmp/restic.bz2" | sha256sum -c -
-          bunzip2 /tmp/restic.bz2
-          sudo install -m 0755 /tmp/restic /usr/local/bin/restic
-          restic version
+          scripts/install-test-restic.sh "$RUNNER_TEMP/ctdev-restic" "$RUNNER_TEMP/ctdev-tools"
+          echo "$RUNNER_TEMP/ctdev-tools" >> "$GITHUB_PATH"
 
-      - name: Run tests
-        working-directory: ctdev
-        run: go test -race -shuffle=on -timeout 20m ./...
+      - name: Run race tests and vet
+        run: scripts/ci-go-test.sh
 
-      - name: Vet
+      # Windows only ships doctor. Vet every target to catch platform-specific
+      # source and test errors even though the release cross-links only the CLI.
+      - name: Vet cross-platform source and tests
         working-directory: ctdev
-        run: go vet ./...
-
-      # ctdev only ships `doctor` on Windows, but it has to compile there —
-      # and nothing else in CI would catch a Unix-only syscall creeping in.
-      - name: Cross-compile check
-        working-directory: ctdev
+        shell: bash
         run: |
           for target in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             echo "==> $target"
             GOOS="${target%/*}" GOARCH="${target#*/}" go vet ./...
           done
 
-      - name: Build
+  linux-build:
+    name: Build Linux smoke-test binary
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: ctdev/go.mod
+          cache-dependency-path: ctdev/go.sum
+
+      - name: Build and exercise the CLI
         working-directory: ctdev
+        env:
+          CGO_ENABLED: '0'
         run: |
           VERSION=$(cat ../VERSION)
           go build -ldflags "-X main.version=$VERSION" -o ctdev .
+          ./ctdev --help
+          ./ctdev --version
+          ./ctdev info
+          ./ctdev --dry-run install jq
 
-      - name: Test --help flag
-        working-directory: ctdev
-        run: ./ctdev --help
-
-      - name: Test --version flag
-        working-directory: ctdev
-        run: ./ctdev --version
-
-      - name: Test info command
-        working-directory: ctdev
-        run: ./ctdev info
-
-      - name: Test dry-run install
-        working-directory: ctdev
-        run: ./ctdev --dry-run install jq
+      - name: Upload the binary for both Ubuntu smoke tests
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-smoke-binary
+          path: ctdev/ctdev
+          if-no-files-found: error
+          retention-days: 1
 
   test-ubuntu:
     name: Test on Ubuntu ${{ matrix.ubuntu-version }}
-    needs: go-test
-    runs-on: ubuntu-latest
+    needs: linux-build
+    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         ubuntu-version: ['22.04', '24.04']
-      fail-fast: false
 
     container:
       image: ubuntu:${{ matrix.ubuntu-version }}
 
     steps:
+      - name: Download the smoke-test binary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-smoke-binary
+
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y git sudo curl
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git sudo curl ca-certificates
+          chmod +x ctdev
 
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Configure git safe directory
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: ctdev/go.mod
-          cache-dependency-path: ctdev/go.sum
-
-      - name: Build ctdev
-        working-directory: ctdev
+      - name: Exercise component installation and the CLI
         run: |
-          VERSION=$(cat ../VERSION)
-          go build -ldflags "-X main.version=$VERSION" -o ctdev .
-
-      - name: Install zsh component
-        working-directory: ctdev
-        run: ./ctdev --force install zsh
-
-      - name: Verify zsh installation
-        run: |
-          command -v zsh || exit 1
-          [ -d ~/.oh-my-zsh ] || exit 1
-
-      - name: Install jq component
-        working-directory: ctdev
-        run: ./ctdev --force install jq
-
-      - name: Verify jq installation
-        run: command -v jq || exit 1
-
-      - name: Test info command
-        working-directory: ctdev
-        run: ./ctdev info
+          ./ctdev --force install zsh
+          command -v zsh
+          test -d ~/.oh-my-zsh
+          ./ctdev --force install jq
+          command -v jq
+          ./ctdev info
 
   test-macos:
     name: Test on macOS
-    needs: go-test
-    runs-on: macos-latest
-
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: ctdev/go.mod
           cache-dependency-path: ctdev/go.sum
 
-      # The backup tests run against a real restic and fail without one in CI.
-      - name: Install restic
+      - name: Cache the pinned restic archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ctdev-restic
+          key: test-restic-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/install-test-restic.sh') }}
+
+      - name: Install and verify restic
         run: |
-          brew install restic
-          restic version
+          scripts/install-test-restic.sh "$RUNNER_TEMP/ctdev-restic" "$RUNNER_TEMP/ctdev-tools"
+          echo "$RUNNER_TEMP/ctdev-tools" >> "$GITHUB_PATH"
 
-      # The unit tests only ran on Ubuntu, so darwin-only breakage (sudo
-      # pre-auth, the brew scanners) shipped unnoticed. Run them here too.
-      - name: Run tests
-        working-directory: ctdev
-        run: go test -race -shuffle=on -timeout 20m ./...
-
-      - name: Run go vet
-        working-directory: ctdev
-        run: go vet ./...
+      - name: Run race tests and vet
+        run: scripts/ci-go-test.sh
 
       - name: Build ctdev
         working-directory: ctdev
@@ -277,101 +306,35 @@ jobs:
       - name: Verify jq installation
         run: command -v jq || exit 1
 
-  build-release:
-    name: Build ${{ matrix.os }}-${{ matrix.arch }}
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [shellcheck, powershell-lint, go-test, test-ubuntu, test-macos]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-            ext: ''
-          - os: linux
-            arch: arm64
-            ext: ''
-          - os: darwin
-            arch: amd64
-            ext: ''
-          - os: darwin
-            arch: arm64
-            ext: ''
-          # Windows ships the diagnostic command only — see cmd/root.go.
-          - os: windows
-            arch: amd64
-            ext: '.exe'
-          - os: windows
-            arch: arm64
-            ext: '.exe'
-
+  required:
+    name: Required CI
+    if: always()
+    needs: [plan, shellcheck, powershell-lint, go-test, linux-build, test-ubuntu, test-macos]
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      # Guard against tag/VERSION drift — otherwise the built binary's
-      # --version output silently disagrees with the release tag.
-      - name: Verify VERSION matches tag
+      - name: Check that all selected jobs passed
+        shell: bash
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          FULL: ${{ needs.plan.outputs.full }}
+          PLAN: ${{ needs.plan.result }}
+          SHELLCHECK: ${{ needs.shellcheck.result }}
+          POWERSHELL: ${{ needs.powershell-lint.result }}
+          LINUX_TEST: ${{ needs.go-test.result }}
+          LINUX_BUILD: ${{ needs.linux-build.result }}
+          UBUNTU: ${{ needs.test-ubuntu.result }}
+          MACOS: ${{ needs.test-macos.result }}
         run: |
-          want="v$(cat VERSION)"
-          if [ "$want" != "$TAG_NAME" ]; then
-            echo "VERSION file says $want but tag is $TAG_NAME — refusing to release a mismatched binary."
+          if [[ "$PLAN" != success || "$SHELLCHECK" != success || "$POWERSHELL" != success ]]; then
+            echo "::error::Planning or lint did not pass (plan=$PLAN, shell=$SHELLCHECK, powershell=$POWERSHELL)"
             exit 1
           fi
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: ctdev/go.mod
-          cache-dependency-path: ctdev/go.sum
-
-      - name: Build binary
-        working-directory: ctdev
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-          CGO_ENABLED: '0'
-        run: |
-          VERSION=$(cat ../VERSION)
-          go build -ldflags "-X main.version=$VERSION" -o ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
-          path: ctdev/ctdev-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
-
-  release:
-    name: Create Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          chmod +x dist/ctdev-*
-          # Publish a checksums file so install.sh can verify the binary it
-          # downloads. It catches a corrupted or truncated download; it does
-          # not defend against tampering, since anyone who can replace a
-          # binary can replace SHA256SUMS too.
-          ( cd dist && sha256sum ctdev-* > SHA256SUMS )
-          gh release create "$TAG_NAME" dist/ctdev-* dist/SHA256SUMS \
-            --title "$TAG_NAME" \
-            --generate-notes
+          case "$FULL" in
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) echo "::error::Missing or invalid test plan"; exit 1 ;;
+          esac
+          if [[ "$LINUX_TEST" != "$expected" || "$LINUX_BUILD" != "$expected" ||
+                "$UBUNTU" != "$expected" || "$MACOS" != "$expected" ]]; then
+            echo "::error::Expected $expected (linux tests=$LINUX_TEST, linux build=$LINUX_BUILD, ubuntu=$UBUNTU, macos=$MACOS)"
+            exit 1
+          fi
