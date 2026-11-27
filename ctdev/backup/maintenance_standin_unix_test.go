@@ -161,6 +161,27 @@ esac
 	return log
 }
 
+// A folder whose config file came from elsewhere (a git clone) isn't on this
+// computer's list until Configure adds it.
+func TestStatusOfACloneIsNotScheduledHere(t *testing.T) {
+	t.Parallel()
+	m := testMachine(t, "example-laptop")
+	standinDestination(t, m, `snapshots) echo "[]" ;; *) exit 1 ;;`)
+	root := exampleFolder(t, m)
+	writeConfig(t, root, NewConfig("example-backups"))
+
+	s := m.Status(context.Background(), root)
+	if s.ReadErr != nil {
+		t.Fatal(s.ReadErr)
+	}
+	if s.Config == nil || s.Scheduled || s.DestinationMissing {
+		t.Errorf("config %v, scheduled %v, destination missing %v", s.Config, s.Scheduled, s.DestinationMissing)
+	}
+	if s.HasBackups() {
+		t.Error("a fresh clone has no backups yet")
+	}
+}
+
 // A scheduled backup that finds the destination locked is deferred: no
 // error, no notification, and its last attempt and success stand. Only the
 // overdue rule turns it red.

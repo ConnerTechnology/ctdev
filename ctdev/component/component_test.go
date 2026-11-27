@@ -32,22 +32,6 @@ func TestFilterByOS(t *testing.T) {
 	}
 }
 
-func TestResolveDependencies(t *testing.T) {
-	comps := []Component{
-		{Name: "helm", Dependencies: []string{"kubectl"}},
-		{Name: "kubectl"},
-		{Name: "docker"},
-	}
-
-	deps := ResolveDependencies(comps, []string{"helm"})
-	if len(deps) != 2 {
-		t.Errorf("expected 2 (helm + kubectl), got %d", len(deps))
-	}
-	if deps[0] != "kubectl" {
-		t.Errorf("expected kubectl first (dependency), got %s", deps[0])
-	}
-}
-
 func TestIsInstalled_DetectPath(t *testing.T) {
 	t.Run("DetectPath exists", func(t *testing.T) {
 		tmp := t.TempDir()

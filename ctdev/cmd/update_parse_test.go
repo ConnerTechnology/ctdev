@@ -308,7 +308,7 @@ func TestParseAPTUpgradableMalformedLine(t *testing.T) {
 }
 
 func TestParseAPTUpgradableNoUpgradableKeyword(t *testing.T) {
-	items := parseAPTUpgradable("some random line\nanother line\n")
+	items := parseAPTUpgradable("pkg/noble 2.0 amd64 [installed]\n")
 	if len(items) != 0 {
 		t.Errorf("expected 0 items, got %d", len(items))
 	}

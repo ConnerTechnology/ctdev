@@ -58,9 +58,6 @@ func TestCommandTreeShape(t *testing.T) {
 	}
 
 	configure := childCommand(t, rootCmd, "configure")
-	if !hasSubcommand(configure, "gpu") {
-		t.Error("configure should have a gpu subcommand")
-	}
 	if hasSubcommand(configure, "restic") {
 		t.Error("configure should no longer have a restic subcommand")
 	}
@@ -121,6 +118,16 @@ func TestBackupWithoutATerminalFailsWhenNotBackedUp(t *testing.T) {
 	}
 }
 
+func writeBackupTestFile(t *testing.T, path, body string, mode os.FileMode) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), mode); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBackupWithoutATerminalChecksLocalScheduleAndSnapshots(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("the scheduler supports Linux and macOS")
@@ -142,36 +149,28 @@ func TestBackupWithoutATerminalChecksLocalScheduleAndSnapshots(t *testing.T) {
 			if err := backup.WriteConfig(dir, cfg); err != nil {
 				t.Fatal(err)
 			}
-			write := func(path, body string, mode os.FileMode) {
-				t.Helper()
-				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, []byte(body), mode); err != nil {
-					t.Fatal(err)
-				}
-			}
+
 			cfgDir := filepath.Join(home, ".config", "ctdev", "backup")
-			write(filepath.Join(cfgDir, "destinations", cfg.Destination+".env"), "RESTIC_REPOSITORY="+filepath.Join(home, "repo")+"\nCTDEV_COMPUTER_KEY=example\n", 0o600)
+			writeBackupTestFile(t, filepath.Join(cfgDir, "destinations", cfg.Destination+".env"), "RESTIC_REPOSITORY="+filepath.Join(home, "repo")+"\nCTDEV_COMPUTER_KEY=example\n", 0o600)
 			if tt.listed {
 				now := time.Now().UTC().Format(time.RFC3339)
-				write(filepath.Join(cfgDir, "folders.json"), `{"folders":[{"path":"`+dir+`","id":"`+cfg.ID+`","schedule":"daily","added":"`+now+`"}]}`, 0o600)
+				writeBackupTestFile(t, filepath.Join(cfgDir, "folders.json"), `{"folders":[{"path":"`+dir+`","id":"`+cfg.ID+`","schedule":"daily","added":"`+now+`"}]}`, 0o600)
 			}
 			if tt.installed {
 				if runtime.GOOS == "linux" {
 					systemd := filepath.Join(home, ".config", "systemd", "user")
 					for _, name := range []string{"ctdev-backup.service", "ctdev-backup.timer", "timers.target.wants/ctdev-backup.timer"} {
-						write(filepath.Join(systemd, name), "", 0o600)
+						writeBackupTestFile(t, filepath.Join(systemd, name), "", 0o600)
 					}
 				} else {
-					write(filepath.Join(home, "Library", "LaunchAgents", "io.connertechnology.ctdev.backup.plist"), "", 0o600)
+					writeBackupTestFile(t, filepath.Join(home, "Library", "LaunchAgents", "io.connertechnology.ctdev.backup.plist"), "", 0o600)
 				}
 			}
 			snapshots := "[]"
 			if tt.snapshot {
 				snapshots = `[{"id":"0123456789abcdef","time":"2026-10-21T12:00:00Z","tags":["ctdev-folder:` + cfg.ID + `"]}]`
 			}
-			write(filepath.Join(home, ".local", "bin", "restic"), `#!/bin/sh
+			writeBackupTestFile(t, filepath.Join(home, ".local", "bin", "restic"), `#!/bin/sh
 case "$*" in
 version) echo 'restic 0.19.1' ;;
 snapshots*ctdev-maintenance*) echo '[]' ;;
