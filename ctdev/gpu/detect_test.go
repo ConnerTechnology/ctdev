@@ -289,6 +289,11 @@ func TestParseDKMSStatus(t *testing.T) {
 		},
 		{"empty", "", ""},
 		{
+			"open module after another driver",
+			"virtualbox/7.0.10, 6.8.0: installed\nNVIDIA-open/570.00, 6.8.0: built\n",
+			"NVIDIA-open/570.00",
+		},
+		{
 			"multiple modules",
 			"virtualbox/7.0.14, 6.8.0-51-generic, x86_64: installed\nnvidia/550.120, 6.8.0-51-generic, x86_64: installed\n",
 			"nvidia/550.120",
@@ -321,6 +326,8 @@ func TestParseOpenSSLSubjectCN(t *testing.T) {
 			"Custom NVIDIA Module Signing",
 		},
 		{"empty", "", ""},
+		{"slash form", "subject= /CN=Custom NVIDIA Module Signing\n", "Custom NVIDIA Module Signing"},
+		{"CN after organization", "subject=O = Example Vendor, CN = Example Signing Key\n", "Example Signing Key"},
 		{"no CN", "subject=O = Foo\n", ""},
 	}
 	for _, tt := range tests {

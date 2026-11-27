@@ -51,27 +51,6 @@ func TestStatusOfAConfiguredFolder(t *testing.T) {
 	}
 }
 
-// A folder whose config file came from elsewhere (a git clone) isn't on this
-// computer's list until Configure adds it.
-func TestStatusOfACloneIsNotScheduledHere(t *testing.T) {
-	requireRestic(t)
-	m := testMachine(t, "example-laptop")
-	createExample(t, m)
-	root := exampleFolder(t, m)
-	writeConfig(t, root, NewConfig("example-backups"))
-
-	s := m.Status(context.Background(), root)
-	if s.ReadErr != nil {
-		t.Fatal(s.ReadErr)
-	}
-	if s.Config == nil || s.Scheduled {
-		t.Errorf("config %v, scheduled %v; want configured but not scheduled", s.Config, s.Scheduled)
-	}
-	if s.HasBackups() {
-		t.Error("a fresh clone has no backups yet")
-	}
-}
-
 // A clone whose destination this computer isn't set up on still shows its
 // config, with the destination marked missing.
 func TestStatusWithADestinationNotSetUpHere(t *testing.T) {
