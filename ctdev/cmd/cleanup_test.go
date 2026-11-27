@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -110,5 +111,45 @@ func TestExecuteCleanupTasks_CountsFailuresAndReclaimed(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "warning: boom") {
 		t.Errorf("expected failure warning in output:\n%s", out.String())
+	}
+}
+
+func TestCleanupBatchSelection(t *testing.T) {
+	oldBatch, oldDryRun := flagBatch, flagDryRun
+	t.Cleanup(func() { flagBatch, flagDryRun = oldBatch, oldDryRun })
+	flagBatch = true
+
+	for _, tc := range []struct {
+		name   string
+		dryRun bool
+		want   []string
+	}{
+		{"apply", false, []string{"safe"}},
+		{"preview", true, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			flagDryRun = tc.dryRun
+			var ran []string
+			task := func(id string, risk cleanup.Risk, size int64) cleanup.Task {
+				return cleanup.Task{
+					ID: id, Risk: risk,
+					Scan: func(context.Context) cleanup.ScanResult { return cleanup.ScanResult{Bytes: size} },
+					Run: func(context.Context, sysutil.Opts) error {
+						ran = append(ran, id)
+						return nil
+					},
+				}
+			}
+			tasks := []cleanup.Task{
+				task("safe", cleanup.Safe, 1), task("empty", cleanup.Safe, 0),
+				task("opt-in", cleanup.OptIn, 1), task("report-only", cleanup.ReportOnly, 1),
+			}
+			if err := runCleanupTasks(t.Context(), tasks); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(ran, tc.want) {
+				t.Errorf("ran %v, want %v", ran, tc.want)
+			}
+		})
 	}
 }
