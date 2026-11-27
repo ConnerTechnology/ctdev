@@ -100,7 +100,8 @@ jobs:
           fi
 
   powershell-lint:
-    name: PowerShell Lint
+    name: Windows installer and doctor
+    needs: plan
     runs-on: windows-latest
 
     steps:
@@ -135,6 +136,26 @@ jobs:
             if ($names -notcontains $required) { throw "install.ps1 is missing the -$required parameter" }
           }
           Write-Host "install.ps1 exposes the expected parameters"
+
+      - name: Set up Go
+        if: needs.plan.outputs.full == 'true'
+        uses: ./.github/actions/setup-ctdev-go
+
+      - name: Smoke-test Windows doctor
+        if: needs.plan.outputs.full == 'true'
+        working-directory: ctdev
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'doctor.md'
+          go run . doctor --network --redact "--report=$report" | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $markdown = Get-Content -Raw -LiteralPath $report
+          if ($markdown -notmatch '(?m)^# Diagnostic report ' -or
+              $markdown -notmatch '\(windows/[^)]+\)' -or
+              $markdown -notmatch '(?m)^## What needs attention') {
+            throw "doctor did not produce a Windows diagnostic report"
+          }
 
   go-test:
     name: Go tests on Linux

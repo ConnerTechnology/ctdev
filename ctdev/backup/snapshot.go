@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -155,26 +154,35 @@ type BackupProgress struct {
 // statusWriter takes restic backup --json's output, hands each status line
 // to progress, and keeps every other line, such as the summary, in kept.
 type statusWriter struct {
-	progress func(BackupProgress)
-	kept     *bytes.Buffer
-	line     []byte
+	progress  func(BackupProgress)
+	kept      *bytes.Buffer
+	line      []byte
+	oversized bool // pass the remainder through until the next newline
 }
 
 func (w *statusWriter) Write(p []byte) (int, error) {
 	n := len(p)
 	for len(p) > 0 {
-		i := bytes.IndexByte(p, '\n')
-		if i < 0 {
-			w.line = append(w.line, p...)
-			if len(w.line) > maxJSONLine {
-				w.kept.Write(w.line) // too long to be a status line
-				w.line = w.line[:0]
-			}
-			break
+		part, rest, ended := bytes.Cut(p, []byte{'\n'})
+		if !w.oversized && len(part) > maxJSONLine-len(w.line) {
+			w.kept.Write(w.line)
+			w.line = w.line[:0]
+			w.oversized = true
 		}
-		w.line = append(w.line, p[:i+1]...)
-		w.flush()
-		p = p[i+1:]
+		if w.oversized {
+			w.kept.Write(part)
+			if ended {
+				w.kept.WriteByte('\n')
+				w.oversized = false
+			}
+		} else {
+			w.line = append(w.line, part...)
+			if ended {
+				w.line = append(w.line, '\n')
+				w.flush()
+			}
+		}
+		p = rest
 	}
 	return n, nil
 }
@@ -206,9 +214,11 @@ func (w *statusWriter) flush() {
 
 // backupSummary reads the summary line restic backup --json ends with.
 func backupSummary(out []byte) (Snapshot, error) {
-	sc := bufio.NewScanner(bytes.NewReader(out))
-	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLine)
-	for sc.Scan() {
+	// An oversized progress line can precede a valid summary.
+	for line := range bytes.SplitSeq(out, []byte{'\n'}) {
+		if len(line) > maxJSONLine {
+			continue
+		}
 		var s struct {
 			Type       string    `json:"message_type"`
 			SnapshotID string    `json:"snapshot_id"`
@@ -217,7 +227,7 @@ func backupSummary(out []byte) (Snapshot, error) {
 			Added      int64     `json:"data_added"`
 			End        time.Time `json:"backup_end"`
 		}
-		if json.Unmarshal(sc.Bytes(), &s) == nil && s.Type == "summary" {
+		if json.Unmarshal(line, &s) == nil && s.Type == "summary" {
 			return Snapshot{ID: s.SnapshotID, ShortID: short(s.SnapshotID), Time: s.End, Files: s.Files, Size: s.Bytes, Added: s.Added}, nil
 		}
 	}

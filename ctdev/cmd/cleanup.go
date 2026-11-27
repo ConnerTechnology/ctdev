@@ -35,8 +35,10 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	if len(tasks) == 0 {
 		return fmt.Errorf("cleanup is not supported on %s", info.OS)
 	}
-	ctx := cmdContext(cmd)
+	return runCleanupTasks(cmdContext(cmd), tasks)
+}
 
+func runCleanupTasks(ctx context.Context, tasks []cleanup.Task) error {
 	fmt.Println(styles.Dimmed.Render("Scanning for reclaimable space…"))
 	results := cleanup.ScanAll(ctx, tasks)
 
@@ -118,7 +120,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	}
 
 	if cleanupNeedsRoot(actionable, selected) {
-		if err := ensureSudo(cmdContext(cmd)); err != nil {
+		if err := ensureSudo(ctx); err != nil {
 			return fmt.Errorf("sudo required for cleanup: %w", err)
 		}
 	}

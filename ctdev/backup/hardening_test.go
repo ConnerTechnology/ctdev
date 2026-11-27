@@ -144,7 +144,7 @@ func TestInstallLaunchd_RollsBackPlistOnFailedBootstrap(t *testing.T) {
 	}
 }
 
-func TestStatusWriter_ChunkedAndOversizedLines(t *testing.T) {
+func TestStatusWriter_ChunkedLines(t *testing.T) {
 	var seen []BackupProgress
 	var kept bytes.Buffer
 	w := &statusWriter{
@@ -166,13 +166,30 @@ func TestStatusWriter_ChunkedAndOversizedLines(t *testing.T) {
 	if !strings.Contains(kept.String(), `"message_type":"summary"`) {
 		t.Errorf("summary line missing from kept: %q", kept.String())
 	}
+}
 
-	// Oversized line (> maxJSONLine) without newline flushes directly into kept.
-	kept.Reset()
-	big := bytes.Repeat([]byte("x"), maxJSONLine+16)
-	_, _ = w.Write(big)
-	if kept.Len() != len(big) {
-		t.Errorf("oversized line kept len = %d, want %d", kept.Len(), len(big))
+func TestOversizedResticLinePreservesSummary(t *testing.T) {
+	// Leading whitespace keeps this a valid status line even when split
+	// immediately before its JSON object.
+	prefix := bytes.Repeat([]byte(" "), maxJSONLine+1)
+	status := []byte(`{"message_type":"status"}` + "\n")
+	summary := []byte(`{"message_type":"summary","snapshot_id":"abc"}`)
+	stream := bytes.Join([][]byte{prefix, status, summary}, nil)
+	for _, split := range []int{0, maxJSONLine, len(prefix)} {
+		var kept bytes.Buffer
+		w := statusWriter{kept: &kept, progress: func(BackupProgress) {
+			t.Errorf("split %d: parsed part of an oversized line", split)
+		}}
+		w.Write(stream[:split])
+		w.Write(stream[split:])
+		w.flush()
+		if !bytes.Equal(kept.Bytes(), stream) {
+			t.Errorf("split %d: oversized line or summary changed", split)
+		}
+		snap, err := backupSummary(kept.Bytes())
+		if err != nil || snap.ID != "abc" {
+			t.Errorf("split %d: snapshot ID %q, error %v", split, snap.ID, err)
+		}
 	}
 }
 
