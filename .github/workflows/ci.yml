@@ -162,8 +162,10 @@ jobs:
           scripts/install-test-restic.sh "$RUNNER_TEMP/ctdev-restic" "$RUNNER_TEMP/ctdev-tools"
           echo "$RUNNER_TEMP/ctdev-tools" >> "$GITHUB_PATH"
 
+      # Six workers on the four-core runner keep more tests moving while
+      # others wait on restic. Keep the same race and shuffle flags.
       - name: Run race tests and vet
-        run: scripts/ci-go-test.sh
+        run: scripts/ci-go-test.sh -parallel=6 ./...
 
   cross-vet:
     name: Vet cross-platform source and tests
@@ -277,10 +279,8 @@ jobs:
       matrix:
         include:
           - suite: backup
-            packages: ./backup
             cache-dependency-path: ctdev/go.sum
           - suite: application
-            packages: --exclude=./backup
             cache-dependency-path: |
               ctdev/go.mod
               ctdev/go.sum
@@ -307,10 +307,35 @@ jobs:
           scripts/install-test-restic.sh "$RUNNER_TEMP/ctdev-restic" "$RUNNER_TEMP/ctdev-tools"
           echo "$RUNNER_TEMP/ctdev-tools" >> "$GITHUB_PATH"
 
-      - name: Run race tests and vet
+      # Give maintenance integration tests to the faster application job.
+      # Use the same pattern for -run and -skip so the macOS jobs together
+      # still cover every backup test, including tests added to other files.
+      - name: Select real-restic maintenance tests
+        id: maintenance
+        shell: bash
+        run: |
+          names=$(sed -n -E 's/^func (Test[[:alnum:]_]+)\(.*/\1/p' ctdev/backup/maintenance_test.go)
+          if [[ -z "$names" ]]; then
+            echo "::error::No backup maintenance tests found"
+            exit 1
+          fi
+          echo "pattern=^($(paste -sd '|' - <<< "$names"))$" >> "$GITHUB_OUTPUT"
+
+      - name: Run backup race tests and vet
+        if: matrix.suite == 'backup'
         env:
-          GO_TEST_PACKAGES: ${{ matrix.packages }}
-        run: scripts/ci-go-test.sh "$GO_TEST_PACKAGES"
+          MAINTENANCE_TESTS: ${{ steps.maintenance.outputs.pattern }}
+        run: scripts/ci-go-test.sh ./backup "-skip=$MAINTENANCE_TESTS"
+
+      - name: Run application race tests and vet
+        if: matrix.suite == 'application'
+        run: scripts/ci-go-test.sh --exclude=./backup
+
+      - name: Run maintenance race tests and vet
+        if: matrix.suite == 'application'
+        env:
+          MAINTENANCE_TESTS: ${{ steps.maintenance.outputs.pattern }}
+        run: scripts/ci-go-test.sh ./backup "-run=$MAINTENANCE_TESTS"
 
       - name: Build ctdev
         if: matrix.suite == 'application'
