@@ -39,12 +39,8 @@ func unifiResults(snap *UnifiSnapshot) map[string]Result {
 		out["unifi.health"] = health
 	}
 
-	// The certificate story rides along with the data it protected, so a
-	// report never quietly implies the connection was verified when it wasn't.
-	if !snap.TLSVerified && snap.CertFingerprint != "" {
-		out["unifi.tls"] = infof(
-			"controller certificate is self-signed (sha256 %s…) — verification was skipped, as it must be for UniFi",
-			snap.CertFingerprint[:16])
+	if snap.CertPinned {
+		out["unifi.tls"] = infof("controller certificate matched the configured SHA-256 fingerprint (%s)", snap.CertFingerprint)
 	}
 	return out
 }

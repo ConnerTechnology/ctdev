@@ -175,25 +175,24 @@ func TestUnifiHealthVerdict(t *testing.T) {
 	}
 }
 
-// A self-signed controller certificate is the norm, and the report has to say
-// verification was skipped rather than quietly implying it wasn't.
-func TestUnifiResultsReportsUnverifiedTLS(t *testing.T) {
+// Operators can see which certificate matched the appliance pin.
+func TestUnifiResultsReportsPinnedTLS(t *testing.T) {
 	snap := &UnifiSnapshot{
 		Devices:         []UnifiDevice{{Name: "AP", State: unifiStateConnected, Type: "uap", Uplink: uplink("wire")}},
-		TLSVerified:     false,
+		CertPinned:      true,
 		CertFingerprint: "abcdef0123456789abcdef0123456789",
 	}
 	results := unifiResults(snap)
 	tlsRow, present := results["unifi.tls"]
 	if !present {
-		t.Fatal("expected a row noting the unverified certificate")
+		t.Fatal("expected a row naming the pinned certificate")
 	}
-	if !strings.Contains(tlsRow.Detail, "verification was skipped") {
-		t.Errorf("row should state plainly that verification was skipped: %q", tlsRow.Detail)
+	if !strings.Contains(tlsRow.Detail, "matched the configured SHA-256") {
+		t.Errorf("row should describe the configured pin: %q", tlsRow.Detail)
 	}
 
 	// A properly verified controller needs no such note.
-	snap.TLSVerified = true
+	snap.CertPinned = false
 	if _, present := unifiResults(snap)["unifi.tls"]; present {
 		t.Error("a verified certificate should not produce a note")
 	}

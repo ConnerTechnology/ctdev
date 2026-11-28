@@ -3,20 +3,14 @@ package diagnose
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
-	"net/netip"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // UnifiCreds is how to reach a controller. It is passed in and never persisted
@@ -24,6 +18,8 @@ import (
 type UnifiCreds struct {
 	// Endpoint is the controller base URL, e.g. https://192.168.1.1.
 	Endpoint string
+	// CertSHA256 optionally pins the complete DER-encoded leaf certificate.
+	CertSHA256 string
 	// APIKey authenticates against UniFi OS consoles (Settings → Control
 	// Plane → Integrations).
 	APIKey string
@@ -46,13 +42,7 @@ func (c UnifiCreds) site() string {
 	return c.Site
 }
 
-var (
-	errUnifiNoCreds = errors.New("no controller credentials")
-	// errUnifiPublic is a refusal, not a failure. Sending an API key to a
-	// public address over a connection we can't verify would be handing the
-	// credential to whoever is in the middle.
-	errUnifiPublic = errors.New("refusing to send credentials to a public address")
-)
+var errUnifiNoCreds = errors.New("no controller credentials")
 
 // unifiClient talks to one controller, read-only.
 type unifiClient struct {
@@ -63,127 +53,24 @@ type unifiClient struct {
 	legacy bool
 	csrf   string
 
-	// TLSVerified records whether the controller's certificate chained to a
-	// real CA. Almost none do — they ship self-signed — so this is reported
-	// rather than enforced, and the fingerprint goes in the report so it can
-	// be compared against what the controller shows in its own UI.
-	TLSVerified     bool
 	CertFingerprint string
 }
-
-// newUnifiClient prepares a client, refusing outright to authenticate against
-// anything that isn't on a private network.
-//
-// The certificate on a UniFi console is self-signed by design, so verification
-// has to be skippable for this to work at all. That is only defensible one hop
-// away on a LAN you were invited onto — never across the internet — so the
-// address is checked before a single credential is assembled.
-var lookupHostIP = net.LookupIP
 
 func newUnifiClient(creds UnifiCreds) (*unifiClient, error) {
 	if !creds.usable() {
 		return nil, errUnifiNoCreds
 	}
-
-	parsed, err := url.Parse(creds.Endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("bad controller URL %q: %w", creds.Endpoint, err)
-	}
-	host := parsed.Hostname()
-
-	addr, err := netip.ParseAddr(host)
-	if err != nil {
-		// A hostname could resolve anywhere. Resolve it and check every
-		// answer, so "controller.example.com" pointing at the internet is
-		// refused just as an IP literal would be.
-		ips, lookupErr := lookupHostIP(host)
-		if lookupErr != nil || len(ips) == 0 {
-			return nil, fmt.Errorf("cannot resolve controller host %q", host)
-		}
-		for _, ip := range ips {
-			a, ok := netip.AddrFromSlice(ip)
-			if !ok || !IsPrivate(a.Unmap()) {
-				return nil, errUnifiPublic
-			}
-		}
-	} else if !IsPrivate(addr) {
-		return nil, errUnifiPublic
-	}
-
-	c := &unifiClient{
-		creds:  creds,
-		legacy: parsed.Port() == "8443",
-	}
-
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			// Self-signed by design; the private-address check above is what
-			// makes this defensible, and the fingerprint is surfaced in the
-			// report so a swapped certificate is at least visible.
-			//nolint:gosec // Gated to private addresses; see the doc comment.
-			InsecureSkipVerify: true,
-			// Verification still happens — its result is recorded rather than
-			// enforced. Doing it here costs nothing, where a second probe
-			// connection would double setup and stall on an unreachable host.
-			VerifyConnection: func(cs tls.ConnectionState) error {
-				if len(cs.PeerCertificates) == 0 {
-					return nil
-				}
-				leaf := cs.PeerCertificates[0]
-				sum := sha256.Sum256(leaf.Raw)
-				c.CertFingerprint = hex.EncodeToString(sum[:])[:32]
-
-				intermediates := x509.NewCertPool()
-				for _, cert := range cs.PeerCertificates[1:] {
-					intermediates.AddCert(cert)
-				}
-				roots, _ := x509.SystemCertPool()
-				_, err := leaf.Verify(x509.VerifyOptions{
-					Roots:         roots,
-					Intermediates: intermediates,
-					DNSName:       cs.ServerName,
-				})
-				c.TLSVerified = err == nil
-				return nil
-			},
-		},
-	}
-	// A cookie jar is required, not optional: a legacy controller authenticates
-	// by session cookie, and without a jar every request after login would go
-	// out unauthenticated.
-	jar, err := cookiejar.New(nil)
+	client, err := privateAPIClient(creds.Endpoint, creds.CertSHA256)
 	if err != nil {
 		return nil, err
 	}
-	origin, err := url.Parse(creds.Endpoint)
+	// A legacy controller authenticates subsequent requests by session cookie.
+	client.Jar, err = cookiejar.New(nil)
 	if err != nil {
 		return nil, err
 	}
-	c.http = &http.Client{
-		Timeout:       10 * time.Second,
-		Transport:     transport,
-		Jar:           jar,
-		CheckRedirect: refuseCrossHostRedirect(origin),
-	}
-	return c, nil
-}
-
-// refuseCrossHostRedirect blocks redirects to a different host or non-private
-// address so credentials and InsecureSkipVerify can never be bounced off-box.
-func refuseCrossHostRedirect(origin *url.URL) func(*http.Request, []*http.Request) error {
-	return func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return errors.New("stopped after 10 redirects")
-		}
-		if !strings.EqualFold(req.URL.Host, origin.Host) {
-			return fmt.Errorf("refusing cross-host redirect to %s: %w", req.URL.Host, errUnifiPublic)
-		}
-		if addr, err := netip.ParseAddr(req.URL.Hostname()); err == nil && !IsPrivate(addr) {
-			return errUnifiPublic
-		}
-		return nil
-	}
+	origin, _ := url.Parse(creds.Endpoint) // validated by privateAPIClient
+	return &unifiClient{creds: creds, http: client, legacy: origin.Port() == "8443"}, nil
 }
 
 // apiPath builds the request path for whichever controller generation this is.
@@ -276,6 +163,8 @@ func (inst *unifiClient) get(ctx context.Context, suffix string, out any) error 
 		return err
 	}
 	defer resp.Body.Close()
+	fingerprint := sha256.Sum256(resp.TLS.PeerCertificates[0].Raw)
+	inst.CertFingerprint = fmt.Sprintf("%x", fingerprint)
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -369,7 +258,7 @@ type UnifiSnapshot struct {
 	Health  []UnifiHealth
 	WLANs   []UnifiWLAN
 
-	TLSVerified     bool
+	CertPinned      bool
 	CertFingerprint string
 }
 
@@ -391,9 +280,7 @@ func collectUnifi(ctx context.Context, creds UnifiCreds) (*UnifiSnapshot, error)
 	if err := client.get(ctx, "/stat/device", &snap.Devices); err != nil {
 		return nil, err
 	}
-	// Copy TLS verification state after the first request: API-key auth skips
-	// login(), so VerifyConnection only runs once get() completes its handshake.
-	snap.TLSVerified = client.TLSVerified
+	snap.CertPinned = creds.CertSHA256 != ""
 	snap.CertFingerprint = client.CertFingerprint
 
 	_ = client.get(ctx, "/stat/health", &snap.Health)
