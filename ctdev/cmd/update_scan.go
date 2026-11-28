@@ -195,12 +195,9 @@ func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
 
 // brewManages reports whether Homebrew owns this formula on this machine.
 //
-// The runtime updaters install upstream tarballs into /usr/local (go) or drive
-// rbenv, which is right on Linux but actively harmful on a Mac where the
-// same tool came from brew: `updateGo` would `sudo rm -rf /usr/local/go` on top
-// of a Homebrew install, and the tool would show up twice in the same update
-// list. The installers already defer to brew here (see component/go.go,
-// component/ruby.go); the scanners have to as well.
+// Homebrew updates the runtimes it owns. Offering the upstream Go archive
+// or rbenv path as well would update a different installation and list the
+// same tool twice.
 //
 // `brew list --versions` exits non-zero when the formula isn't installed, which
 // is exactly the question being asked.

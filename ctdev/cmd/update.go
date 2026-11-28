@@ -126,7 +126,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 //   - apt shells out through SudoRun.
 //   - brew formulae don't, but casks do: Homebrew escalates internally for pkg
 //     payloads and system extensions.
-//   - among the runtimes only go is privileged (sudo rm/mv into /usr/local/go);
+//   - among the runtimes only go is privileged (replaces /usr/local/go);
 //     bun, rbenv and pyenv all stay inside $HOME.
 //   - the cli tools resolve their destination at run time via `which` and fall
 //     back to /usr/local/bin, so assume root. The exception is the t3code CLI,

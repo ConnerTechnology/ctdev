@@ -252,7 +252,10 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-smoke-binary
-          path: ctdev/ctdev
+          path: |
+            ctdev/ctdev
+            uninstall.sh
+            scripts/test-uninstall.sh
           if-no-files-found: error
           overwrite: true
           retention-days: 1
@@ -279,16 +282,19 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git sudo curl ca-certificates
-          chmod +x ctdev
+          chmod +x ctdev/ctdev
+
+      - name: Check uninstall preserves backup keys until purged
+        run: bash scripts/test-uninstall.sh
 
       - name: Exercise component installation and the CLI
         run: |
-          ./ctdev --force install zsh
+          ./ctdev/ctdev --force install zsh
           command -v zsh
           test -d ~/.oh-my-zsh
-          ./ctdev --force install jq
+          ./ctdev/ctdev --force install jq
           command -v jq
-          ./ctdev info
+          ./ctdev/ctdev info
 
   test-macos:
     name: Test on macOS (${{ matrix.suite }})
@@ -349,8 +355,10 @@ jobs:
           MAINTENANCE_TESTS: ${{ steps.maintenance.outputs.pattern }}
         run: scripts/ci-go-test.sh ./backup "-skip=$MAINTENANCE_TESTS"
 
-      - name: Run application race tests and vet
+      - name: Run application race tests, native Homebrew scan and vet
         if: matrix.suite == 'application'
+        env:
+          CTDEV_TEST_NATIVE_BREW: '1'
         run: scripts/ci-go-test.sh --exclude=./backup
 
       - name: Run maintenance race tests and vet
@@ -377,12 +385,6 @@ jobs:
           ./ctdev --version
           ./ctdev install --help
           ./ctdev info
-
-      # Exercises the Homebrew scan path end to end (brew outdated --json=v2).
-      - name: Check for updates
-        if: matrix.suite == 'application'
-        working-directory: ctdev
-        run: ./ctdev update --check
 
       - name: Install jq component
         if: matrix.suite == 'application'
