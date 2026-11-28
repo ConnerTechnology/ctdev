@@ -28,7 +28,7 @@ func claudeDesktopInstall(ctx context.Context, opts ExecOpts) error {
 			return unsupportedPMError("Claude Desktop", p.PackageManager)
 		}
 		if p.Arch != "amd64" && p.Arch != "arm64" {
-			return fmt.Errorf("Claude Desktop only available for amd64/arm64 (got %s): %w", p.Arch, ErrUnsupportedOS)
+			return fmt.Errorf("no Claude Desktop build for %s (requires amd64 or arm64): %w", p.Arch, ErrUnsupportedOS)
 		}
 	default:
 		return ErrUnsupportedOS

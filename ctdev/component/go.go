@@ -12,10 +12,6 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-// goInstallDir is where the official tarball lands on Linux. The matching
-// PATH entry is added by configs/zsh/path.zsh.
-const goInstallDir = "/usr/local/go"
-
 type goFile struct {
 	Filename string `json:"filename"`
 	OS       string `json:"os"`
@@ -46,46 +42,28 @@ func goInstall(ctx context.Context, opts ExecOpts) error {
 	}
 
 	// Linux: install the official tarball — apt's Go lags well behind upstream.
+	if err := sysutil.RecoverGoArchive(ctx, o); err != nil {
+		return err
+	}
 	ver, file, err := latestGoArchive(ctx, "linux", p.Arch)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(opts.Stdout, "Installing Go %s (official tarball)...\n", ver)
 
-	if o.DryRun {
-		fmt.Fprintf(o.Stdout, "[dry-run] download https://go.dev/dl/%s, verify sha256, extract to %s\n", file.Filename, goInstallDir)
-		return nil
-	}
-
-	tmp, err := os.CreateTemp("", "go-*.tar.gz")
-	if err != nil {
+	if err := sysutil.InstallGoArchive(ctx, o, "https://go.dev/dl/"+file.Filename, file.SHA256); err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
-	tmp.Close()
-
-	if err := sysutil.DownloadFile(ctx, "https://go.dev/dl/"+file.Filename, tmp.Name()); err != nil {
-		return fmt.Errorf("download go: %w", err)
+	if o.DryRun {
+		return nil
 	}
-	if err := sysutil.VerifyChecksum(tmp.Name(), file.SHA256); err != nil {
-		return fmt.Errorf("verify go tarball: %w", err)
-	}
-
-	// Replace any existing install so versions don't accumulate under /usr/local/go.
-	if err := sysutil.SudoRun(ctx, o, "rm", "-rf", goInstallDir); err != nil {
-		return fmt.Errorf("remove old go: %w", err)
-	}
-	if err := sysutil.SudoRun(ctx, o, "tar", "-C", "/usr/local", "-xzf", tmp.Name()); err != nil {
-		return fmt.Errorf("extract go: %w", err)
-	}
-
-	fmt.Fprintf(opts.Stdout, "Go %s installed to %s (PATH wired via path.zsh)\n", ver, goInstallDir)
+	fmt.Fprintf(opts.Stdout, "Go %s installed to %s (PATH wired via path.zsh)\n", ver, sysutil.GoInstallDir)
 	return nil
 }
 
 // goInstalled reports whether the tarball install exists or `go` is on PATH.
 func goInstalled() bool {
-	if _, err := os.Stat(filepath.Join(goInstallDir, "bin", "go")); err == nil {
+	if _, err := os.Stat(filepath.Join(sysutil.GoInstallDir, "bin", "go")); err == nil {
 		return true
 	}
 	return sysutil.CommandExists("go")
@@ -132,7 +110,7 @@ func goUninstall(ctx context.Context, opts ExecOpts) error {
 	if p.PackageManager == "brew" {
 		return sysutil.Run(ctx, o, "brew", "uninstall", "go")
 	}
-	if err := sysutil.SudoRun(ctx, o, "rm", "-rf", goInstallDir); err != nil {
+	if err := sysutil.SudoRun(ctx, o, "rm", "-rf", sysutil.GoInstallDir); err != nil {
 		return err
 	}
 	// Only the tarball install is ours to remove. Say so when a distro-packaged

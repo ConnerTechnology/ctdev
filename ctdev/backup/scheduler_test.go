@@ -451,3 +451,102 @@ func TestRemoveSchedulerIfIdle(t *testing.T) {
 		t.Errorf("with none listed: removed %v, err %v, output %q", removed, err, out)
 	}
 }
+
+func TestSystemdCustomConfigMigratesLegacyUnits(t *testing.T) {
+	m, _, _ := realMachine(t, "linux")
+	writeSchedulerFiles(t, m)
+	enableTimer(t, m)
+	oldUnits := m.schedulerFiles()
+	oldLink := m.timerWants()
+	m.configHome = filepath.Join(m.Home, "custom config")
+	if err := m.InstallScheduler(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range oldUnits {
+		if _, err := os.Stat(f.path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("old unit %s: %v", f.path, err)
+		}
+	}
+	if _, err := os.Lstat(oldLink); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("old enable link: %v", err)
+	}
+	for _, f := range m.schedulerFiles() {
+		if !strings.HasPrefix(f.path, m.configHome+string(os.PathSeparator)) {
+			t.Fatalf("unexpected unit path %s", f.path)
+		}
+		if _, err := os.Stat(f.path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An alternate spelling of the default root must keep the active units.
+	alias := filepath.Join(m.Home, "alias")
+	if err := os.Symlink(filepath.Join(m.Home, ".config"), alias); err != nil {
+		t.Fatal(err)
+	}
+	m.configHome = alias
+	if err := m.InstallScheduler(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range oldUnits {
+		if _, err := os.Stat(f.path); err != nil {
+			t.Fatalf("alias migration removed the new unit: %v", err)
+		}
+	}
+}
+
+func TestBackupKeysStayAtTheScheduledRunnersPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "custom config"))
+	m, err := ThisMachine(sysutil.Opts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(home, ".config", "ctdev", "backup"); m.Dir != want {
+		t.Errorf("backup dir = %s, want %s", m.Dir, want)
+	}
+	if want := filepath.Join(home, "custom config", "systemd", "user"); m.systemdDir() != want {
+		t.Errorf("systemd dir = %s, want %s", m.systemdDir(), want)
+	}
+}
+
+func TestSystemdMigrationPreservesSharedEnableDirectory(t *testing.T) {
+	m, cmds, _ := realMachine(t, "linux")
+	writeSchedulerFiles(t, m)
+	enableTimer(t, m)
+	legacy := m.systemdDir()
+	m.configHome = filepath.Join(m.Home, "xdg")
+	dir := m.systemdDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"timers.target.wants", systemdUnit + ".timer", systemdUnit + ".service"} {
+		if err := os.Symlink(filepath.Join(legacy, name), filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Model systemctl --force replacing an old link with the new unit.
+	cmds.before = func(cmd string) {
+		if cmd == "systemctl --user enable --now --force "+systemdUnit+".timer" {
+			if err := os.Remove(m.timerWants()); err != nil {
+				t.Fatal(err)
+			}
+			enableTimer(t, m)
+		}
+	}
+	if err := m.InstallScheduler(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !m.SchedulerInstalled() {
+		t.Fatal("removing the legacy units broke the XDG timer")
+	}
+	if _, err := os.Stat(m.timerWants()); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range m.schedulerFiles() {
+		fi, err := os.Lstat(f.path)
+		if err != nil || !fi.Mode().IsRegular() {
+			t.Fatalf("unit %s is not a regular file (%v)", f.path, err)
+		}
+	}
+}

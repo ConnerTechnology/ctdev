@@ -2,10 +2,12 @@ package diagnose
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
-	"net"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -15,29 +17,31 @@ import (
 // out a connection timeout).
 const unreachableController = "https://127.0.0.1:1"
 
-// Sending an API key to a public address over a connection we can't verify
-// would hand the credential to whoever is in the middle. This is the guarantee
-// that makes skipping certificate verification defensible at all.
+// Every numeric address actually dialed must be private, even for a hostname
+// whose answer contains both LAN and non-LAN addresses.
 func TestUnifiRefusesPublicEndpoints(t *testing.T) {
-	origLookup := lookupHostIP
-	lookupHostIP = func(host string) ([]net.IP, error) {
-		if host == "unifi.example.com" {
-			return []net.IP{net.ParseIP("93.184.216.34")}, nil
+	for _, endpoint := range []string{"https://203.0.113.9", "https://8.8.8.8:8443"} {
+		_, err := newUnifiClient(UnifiCreds{Endpoint: endpoint, APIKey: "example"})
+		if !errors.Is(err, errPublicAppliance) {
+			t.Errorf("%s: got %v", endpoint, err)
 		}
-		return nil, errors.New("unexpected lookup: " + host)
 	}
-	t.Cleanup(func() { lookupHostIP = origLookup })
+	original := lookupHostIP
+	lookupHostIP = func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("203.0.113.9")}, nil
+	}
+	t.Cleanup(func() { lookupHostIP = original })
+	client, err := newUnifiClient(UnifiCreds{Endpoint: "https://controller.example.invalid", APIKey: "example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.get(t.Context(), "/stat/device", nil); !errors.Is(err, errPublicAppliance) {
+		t.Fatalf("got %v, want private-address rejection", err)
+	}
+}
 
-	for _, endpoint := range []string{
-		"https://203.0.113.9",
-		"https://8.8.8.8:8443",
-		"https://unifi.example.com",
-	} {
-		_, err := newUnifiClient(UnifiCreds{Endpoint: endpoint, APIKey: "secret"})
-		if !errors.Is(err, errUnifiPublic) {
-			t.Errorf("%s: err = %v, want errUnifiPublic", endpoint, err)
-		}
-	}
+func certPin(srv *httptest.Server) string {
+	return fmt.Sprintf("%x", sha256.Sum256(srv.Certificate().Raw))
 }
 
 func TestUnifiAcceptsPrivateEndpoints(t *testing.T) {
@@ -86,15 +90,13 @@ func TestUnifiAPIPath(t *testing.T) {
 // httptest listens on loopback.
 func newTestClient(t *testing.T, handler http.Handler) (*unifiClient, *httptest.Server) {
 	t.Helper()
-	srv := httptest.NewServer(handler)
+	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 
-	client, err := newUnifiClient(UnifiCreds{Endpoint: srv.URL, APIKey: "test-key"})
+	client, err := newUnifiClient(UnifiCreds{Endpoint: srv.URL, CertSHA256: certPin(srv), APIKey: "test-key"})
 	if err != nil {
 		t.Fatalf("newUnifiClient: %v", err)
 	}
-	// Use the server's own client so plain HTTP works in tests.
-	client.http = srv.Client()
 	return client, srv
 }
 
@@ -170,7 +172,7 @@ func TestUnifiGetHonorsContext(t *testing.T) {
 // looks exactly like bad credentials.
 func TestUnifiLegacyLoginKeepsSession(t *testing.T) {
 	var sawCookie bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/api/login") {
 			http.SetCookie(w, &http.Cookie{Name: "unifises", Value: "abc123", Path: "/"})
 			w.Header().Set("X-CSRF-Token", "csrf-1")
@@ -187,12 +189,11 @@ func TestUnifiLegacyLoginKeepsSession(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, err := newUnifiClient(UnifiCreds{Endpoint: srv.URL, Username: "admin", Password: "pw"})
+	client, err := newUnifiClient(UnifiCreds{Endpoint: srv.URL, CertSHA256: certPin(srv), Username: "admin", Password: "pw"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	client.http.Transport = srv.Client().Transport
-	// httptest serves plain HTTP on a loopback port, so force the legacy path.
+	// The random HTTPS test port needs the legacy controller path.
 	client.legacy = true
 
 	if err := client.login(context.Background()); err != nil {
@@ -210,7 +211,7 @@ func TestUnifiLegacyLoginKeepsSession(t *testing.T) {
 // Losing the device list is fatal to the snapshot, but the enrichment calls
 // are not: a controller that withholds one of them shouldn't cost us the rest.
 func TestCollectUnifiToleratesPartialFailure(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/stat/device"):
 			_, _ = w.Write([]byte(`{"meta":{"rc":"ok"},"data":[{"mac":"aa","name":"AP","state":1,"type":"uap"}]}`))
@@ -220,7 +221,7 @@ func TestCollectUnifiToleratesPartialFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	snap, err := collectUnifi(context.Background(), UnifiCreds{Endpoint: srv.URL, APIKey: "k"})
+	snap, err := collectUnifi(context.Background(), UnifiCreds{Endpoint: srv.URL, CertSHA256: certPin(srv), APIKey: "k"})
 	if err != nil {
 		t.Fatalf("collectUnifi: %v", err)
 	}
@@ -270,7 +271,7 @@ func TestUnifiCredentialsNeverReachTheReport(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			checks, results := CollectIntegrations(context.Background(), Integrations{
-				UniFi: UnifiCreds{Endpoint: endpoint, APIKey: key},
+				UniFi: UnifiCreds{Endpoint: endpoint, CertSHA256: certPin(srv), APIKey: key},
 			})
 			r := Report{Checks: checks, Results: results, Facts: Facts{Hostname: "h"}}
 			if strings.Contains(Markdown(r), key) {
@@ -280,5 +281,57 @@ func TestUnifiCredentialsNeverReachTheReport(t *testing.T) {
 				t.Fatal("the API key reached the terminal report")
 			}
 		})
+	}
+}
+
+func TestApplianceHTTPSAuthenticatesBeforeRequests(t *testing.T) {
+	requests := make(chan struct{}, 1)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests <- struct{}{}
+	}))
+	defer srv.Close()
+	for _, tc := range []struct{ name, endpoint, pin string }{
+		{"HTTP", strings.Replace(srv.URL, "https:", "http:", 1), ""},
+		{"untrusted certificate", srv.URL, ""},
+		{"different certificate", srv.URL, strings.Repeat("ab", 32)},
+		{"truncated pin", srv.URL, certPin(srv)[:32]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, err := privateAPIClient(tc.endpoint, tc.pin)
+			if err == nil {
+				resp, reqErr := client.Get(tc.endpoint)
+				if resp != nil {
+					resp.Body.Close()
+				}
+				err = reqErr
+			}
+			if err == nil {
+				t.Fatal("expected authentication to fail")
+			}
+			select {
+			case <-requests:
+				t.Fatal("sent an HTTP request")
+			default:
+			}
+		})
+	}
+	client, err := privateAPIClient(srv.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Configure the test server's CA as a trusted root for this client.
+	client.Transport.(*http.Transport).TLSClientConfig.RootCAs = srv.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	<-requests
+	req, err := http.NewRequest(http.MethodGet, strings.Replace(srv.URL, "https:", "http:", 1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.CheckRedirect(req, nil); err == nil {
+		t.Fatal("accepted a same-host downgrade")
 	}
 }

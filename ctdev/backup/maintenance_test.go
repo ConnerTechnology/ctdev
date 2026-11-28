@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -312,7 +311,7 @@ func TestTheTestDownloadCatchesDamageTheSliceMissed(t *testing.T) {
 	dueWithSlice(t, d, slice%Slices+1)
 	// The large file: a small file's blob can sit in the pack's last 4 KB,
 	// which corruptExample leaves whole.
-	m.pickFn = func(paths []string) int { return slices.Index(paths, "/example.bin") }
+	m.pickFn = func(path string, _ int) bool { return path == "/example.bin" }
 
 	c, _ := failedRun(t, m)
 	if c.Step != StepDownload || !strings.Contains(c.Error, "from the backup of ~/Projects/website") {
@@ -350,5 +349,49 @@ func TestADataCheckFailureNotifiesOnceAndOnRecovery(t *testing.T) {
 	_, _, _ = m.RunScheduled(context.Background())
 	if got := dataCheck(); len(got) != 2 || got[1] != "Backup data check passing again: example-backups: the data check passed." {
 		t.Errorf("after it passed: %q, want a passing-again notification", got)
+	}
+}
+
+func TestSampleListing(t *testing.T) {
+	const snapshot = `{"message_type":"snapshot","id":"example"}`
+	const dir = `{"message_type":"node","type":"dir","path":"/docs"}`
+	const first = `{"message_type":"node","type":"file","path":"/a","size":0}`
+	const second = `{"message_type":"node","type":"file","path":"/b","size":7}`
+	for _, tc := range []struct {
+		name, listing string
+		pickAt        int
+		want          fileSize
+		wantErr       bool
+	}{
+		{"empty output", "", 0, fileSize{}, true},
+		{"empty snapshot", snapshot + "\n" + dir, 0, fileSize{}, false},
+		{"keep first", first + "\n" + dir + "\n" + second, 1, fileSize{"/a", 0}, false},
+		{"pick second", first + "\n" + dir + "\n" + second, 2, fileSize{"/b", 7}, false},
+		{"malformed after a file", first + "\n{", 1, fileSize{}, true},
+		{"missing record type", "{}", 0, fileSize{}, true},
+		{"oversized record", first + "\n" + strings.Repeat("x", maxJSONLine+1), 1, fileSize{}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := sampleListing(strings.NewReader(tc.listing), func(_ string, n int) bool { return n == tc.pickAt })
+			if got != tc.want || (err != nil) != tc.wantErr {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+		})
+	}
+}
+
+func BenchmarkSampleListing(b *testing.B) {
+	const record = "{\"message_type\":\"node\",\"type\":\"file\",\"path\":\"/example\",\"size\":123}\n"
+	for _, count := range []int{100, 100_000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			data := strings.Repeat(record, count)
+			b.ReportAllocs()
+			b.SetBytes(int64(len(data)))
+			for b.Loop() {
+				if _, err := sampleListing(strings.NewReader(data), func(_ string, n int) bool { return n == 1 }); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }

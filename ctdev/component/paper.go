@@ -52,7 +52,7 @@ func paperInstall(ctx context.Context, opts ExecOpts) error {
 			return unsupportedPMError(paperDisplayName, p.PackageManager)
 		}
 		if p.Arch != "amd64" && p.Arch != "arm64" {
-			return fmt.Errorf("Paper only available for amd64/arm64 (got %s): %w", p.Arch, ErrUnsupportedOS)
+			return fmt.Errorf("no Paper build for %s (requires amd64 or arm64): %w", p.Arch, ErrUnsupportedOS)
 		}
 	default:
 		return ErrUnsupportedOS

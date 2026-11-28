@@ -67,11 +67,11 @@ func herdrDesktopInstall(ctx context.Context, opts ExecOpts) error {
 	switch p.OS {
 	case platform.MacOS:
 		if p.Arch != "arm64" {
-			return fmt.Errorf("Herdr desktop has no Intel Mac build: %w", ErrUnsupportedOS)
+			return fmt.Errorf("no Herdr desktop build for Intel Macs: %w", ErrUnsupportedOS)
 		}
 	case platform.Linux:
 		if p.Arch != "amd64" && p.Arch != "arm64" {
-			return fmt.Errorf("Herdr desktop only available for amd64/arm64 on Linux (got %s): %w", p.Arch, ErrUnsupportedOS)
+			return fmt.Errorf("no Herdr desktop build for Linux %s (requires amd64 or arm64): %w", p.Arch, ErrUnsupportedOS)
 		}
 	default:
 		return ErrUnsupportedOS

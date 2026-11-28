@@ -85,6 +85,12 @@ func TestRunInstallAndUninstall_EdgeCases(t *testing.T) {
 	t.Run("install resolves dependencies in order", func(t *testing.T) {
 		var order []string
 		comp.RegisterForTest(t, comp.Component{
+			Name: "test-unrelated", Detect: func() bool {
+				t.Error("named batch install probed an unrelated component")
+				return false
+			},
+		})
+		comp.RegisterForTest(t, comp.Component{
 			Name: "test-dep-leaf", Root: comp.RootNever,
 			GoInstall: func(context.Context, comp.ExecOpts) error { order = append(order, "leaf"); return nil },
 		})

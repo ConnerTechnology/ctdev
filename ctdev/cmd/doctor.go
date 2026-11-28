@@ -45,7 +45,11 @@ var doctorCmd = &cobra.Command{
 		"Nothing is changed. Every check is read-only, root is never required (checks\n" +
 		"that need it are skipped and say so, and --root offers a password for them),\n" +
 		"no telemetry is sent, and no data leaves the machine beyond the diagnostic\n" +
-		"probes themselves.",
+		"probes themselves.\n\n" +
+		"Vendor credentials require private HTTPS with a trusted certificate. For a\n" +
+		"self-signed appliance, verify its full SHA-256 certificate fingerprint through\n" +
+		"a trusted channel and set CTDEV_UNIFI_CERT_SHA256, CTDEV_SYNOLOGY_CERT_SHA256,\n" +
+		"or CTDEV_PROXMOX_CERT_SHA256 for that appliance.",
 	RunE: runDoctor,
 }
 
@@ -92,16 +96,19 @@ const reportAutoName = "\x00auto"
 func integrationCreds(ctx context.Context, f diagnose.Facts) diagnose.Integrations {
 	var in diagnose.Integrations
 
+	in.UniFi.CertSHA256 = os.Getenv("CTDEV_UNIFI_CERT_SHA256")
 	in.UniFi.Endpoint = firstNonEmpty(flagDoctorUnifi, os.Getenv("CTDEV_UNIFI_HOST"))
 	in.UniFi.APIKey = os.Getenv("CTDEV_UNIFI_API_KEY")
 	in.UniFi.Username = firstNonEmpty(flagDoctorUnifiUser, os.Getenv("CTDEV_UNIFI_USER"))
 	in.UniFi.Password = os.Getenv("CTDEV_UNIFI_PASSWORD")
 	in.UniFi.Site = os.Getenv("CTDEV_UNIFI_SITE")
 
+	in.Synology.CertSHA256 = os.Getenv("CTDEV_SYNOLOGY_CERT_SHA256")
 	in.Synology.Endpoint = os.Getenv("CTDEV_SYNOLOGY_HOST")
 	in.Synology.Username = os.Getenv("CTDEV_SYNOLOGY_USER")
 	in.Synology.Password = os.Getenv("CTDEV_SYNOLOGY_PASSWORD")
 
+	in.Proxmox.CertSHA256 = os.Getenv("CTDEV_PROXMOX_CERT_SHA256")
 	in.Proxmox.Endpoint = os.Getenv("CTDEV_PROXMOX_HOST")
 	in.Proxmox.TokenID = os.Getenv("CTDEV_PROXMOX_TOKEN_ID")
 	in.Proxmox.Secret = os.Getenv("CTDEV_PROXMOX_SECRET")

@@ -43,18 +43,26 @@ removed=false
 
 # The scheduled-backup runner first, so nothing fires against a binary that is gone. The
 # unit and agent names are the ones ctdev/backup/scheduler.go installs.
-unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-if [[ -f "$unit_dir/ctdev-backup.timer" || -f "$unit_dir/ctdev-backup.service" ]]; then
-    info "Removing the scheduled-backup timer..."
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl --user disable --now ctdev-backup.timer 2>/dev/null || true
-    fi
-    rm -f "$unit_dir/ctdev-backup.timer" "$unit_dir/ctdev-backup.service"
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl --user daemon-reload 2>/dev/null || true
-    fi
-    removed=true
+config_roots=("$HOME/.config")
+if [[ "${XDG_CONFIG_HOME:-}" == /* && "$XDG_CONFIG_HOME" != "$HOME/.config" ]]; then
+    config_roots+=("$XDG_CONFIG_HOME")
 fi
+
+for config_root in "${config_roots[@]}"; do
+    unit_dir="$config_root/systemd/user"
+    enable_link="$unit_dir/timers.target.wants/ctdev-backup.timer"
+    if [[ -f "$unit_dir/ctdev-backup.timer" || -f "$unit_dir/ctdev-backup.service" || -L "$enable_link" ]]; then
+        info "Removing the scheduled-backup timer..."
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl --user disable --now ctdev-backup.timer 2>/dev/null || true
+        fi
+        rm -f "$unit_dir/ctdev-backup.timer" "$unit_dir/ctdev-backup.service" "$enable_link"
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl --user daemon-reload 2>/dev/null || true
+        fi
+        removed=true
+    fi
+done
 
 agent="$HOME/Library/LaunchAgents/io.connertechnology.ctdev.backup.plist"
 if [[ -f "$agent" ]]; then
@@ -91,9 +99,11 @@ if [[ -d "$STATE_DIR" ]]; then
     success "Removed $STATE_DIR"
 fi
 
-# Config directory, except the backup keys unless --purge.
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ctdev"
-if [[ -d "$CONFIG_DIR" ]]; then
+# Backup credentials live under ~/.config even when systemd reads its units
+# from XDG_CONFIG_HOME. Preserve backup directories in both roots unless purging.
+for config_root in "${config_roots[@]}"; do
+    CONFIG_DIR="$config_root/ctdev"
+    [[ -d "$CONFIG_DIR" ]] || continue
     if [[ "$PURGE" == true ]]; then
         info "Removing config directory, including the backup keys..."
         rm -rf "$CONFIG_DIR"
@@ -109,7 +119,8 @@ if [[ -d "$CONFIG_DIR" ]]; then
         fi
         success "Removed ctdev's config"
     fi
-fi
+    removed=true
+done
 
 if [[ "$removed" == true ]]; then
     echo

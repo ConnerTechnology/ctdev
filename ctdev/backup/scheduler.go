@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ConnerTechnology/ctdev/ctdev/secretfile"
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
@@ -48,7 +49,49 @@ type schedulerFile struct {
 	path, content string
 }
 
-func (m *Machine) systemdDir() string { return filepath.Join(m.Home, ".config", "systemd", "user") }
+func (m *Machine) systemdDir() string {
+	if filepath.IsAbs(m.configHome) {
+		return filepath.Join(m.configHome, "systemd", "user")
+	}
+	return filepath.Join(m.Home, ".config", "systemd", "user")
+}
+
+// removeLegacyUnits removes files installed by releases which always wrote
+// under ~/.config. A symlinked XDG_CONFIG_HOME can name that same directory.
+func (m *Machine) removeLegacyUnits() error {
+	if m.Opts.DryRun {
+		return nil
+	}
+	legacy := filepath.Join(m.Home, ".config", "systemd", "user")
+	current := m.systemdDir()
+	if current == legacy {
+		return nil
+	}
+	for _, name := range []string{systemdUnit + ".timer", systemdUnit + ".service", filepath.Join("timers.target.wants", systemdUnit+".timer")} {
+		oldPath, newPath := filepath.Join(legacy, name), filepath.Join(current, name)
+		// Either unit directory or just timers.target.wants can be an
+		// alias. Check the parent inode before unlinking this entry.
+		oldDir, err := os.Stat(filepath.Dir(oldPath))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		newDir, err := os.Stat(filepath.Dir(newPath))
+		if err == nil && os.SameFile(oldDir, newDir) {
+			continue
+		}
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if err := os.Remove(oldPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // timerWants is the link `systemctl --user enable` makes; without it the
 // timer doesn't start at login.
@@ -198,7 +241,7 @@ func (m *Machine) writeSchedulerFile(f schedulerFile) error {
 	if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(f.path, []byte(f.content), 0o644)
+	return secretfile.WriteAtomic(f.path, []byte(f.content), 0o644)
 }
 
 // previous is what a scheduler file held before an install, so a failed
@@ -239,7 +282,12 @@ func (m *Machine) installSystemd(ctx context.Context) error {
 	o := m.Opts
 	err := m.runCmd(ctx, o, "systemctl", "--user", "daemon-reload")
 	if err == nil {
-		err = m.runCmd(ctx, o, "systemctl", "--user", "enable", "--now", systemdUnit+".timer")
+		args := []string{"--user", "enable", "--now"}
+		if m.systemdDir() != filepath.Join(m.Home, ".config", "systemd", "user") {
+			// An existing enable link can point to the pre-XDG unit.
+			args = append(args, "--force")
+		}
+		err = m.runCmd(ctx, o, "systemctl", append(args, systemdUnit+".timer")...)
 	}
 	if err != nil && !m.Opts.DryRun {
 		// Put back what was there: a scheduler that worked before keeps
@@ -254,7 +302,10 @@ func (m *Machine) installSystemd(ctx context.Context) error {
 		_ = m.runCmd(ctx, o, "systemctl", "--user", "daemon-reload")
 		return fmt.Errorf("enable the hourly timer: %w", err)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return m.removeLegacyUnits()
 }
 
 // launchdArgs reads the program and arguments `launchctl print` reports for
@@ -345,6 +396,14 @@ func (m *Machine) RemoveScheduler(ctx context.Context) error {
 		}
 	}
 	if m.goos() == "linux" {
+		if !o.DryRun {
+			if err := os.Remove(m.timerWants()); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+		}
+		if err := m.removeLegacyUnits(); err != nil {
+			return err
+		}
 		return m.runCmd(ctx, o, "systemctl", "--user", "daemon-reload")
 	}
 	return nil

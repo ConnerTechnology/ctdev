@@ -24,17 +24,17 @@ func TestCollectUnifi_APIKeyCapturesTLSCertFingerprint(t *testing.T) {
 	defer srv.Close()
 
 	snap, err := collectUnifi(context.Background(), UnifiCreds{
-		Endpoint: srv.URL,
-		APIKey:   "example-api-key",
+		Endpoint: srv.URL, CertSHA256: certPin(srv),
+		APIKey: "example-api-key",
 	})
 	if err != nil {
 		t.Fatalf("collectUnifi: %v", err)
 	}
-	if snap.CertFingerprint == "" {
+	if snap.CertFingerprint != certPin(srv) {
 		t.Fatal("expected CertFingerprint populated after API-key GET request")
 	}
-	if snap.TLSVerified {
-		t.Error("httptest self-signed cert should not report TLSVerified=true")
+	if !snap.CertPinned {
+		t.Error("expected the snapshot to record the verified pin")
 	}
 	results := unifiResults(snap)
 	if _, ok := results["unifi.tls"]; !ok {
@@ -58,11 +58,11 @@ func TestCrossHostRedirectRefused(t *testing.T) {
 
 	t.Run("UniFi client blocks cross-host redirect", func(t *testing.T) {
 		_, err := collectUnifi(context.Background(), UnifiCreds{
-			Endpoint: redirector.URL,
-			APIKey:   "secret-api-key",
+			Endpoint: redirector.URL, CertSHA256: certPin(redirector),
+			APIKey: "secret-api-key",
 		})
-		if err == nil || !errors.Is(err, errUnifiPublic) {
-			t.Errorf("expected cross-host redirect refusal wrapping errUnifiPublic, got %v", err)
+		if err == nil || !strings.Contains(err.Error(), "refusing redirect") {
+			t.Errorf("expected cross-host redirect refusal, got %v", err)
 		}
 		if secretHit {
 			t.Error("UniFi client followed cross-host redirect and leaked request")
@@ -72,11 +72,11 @@ func TestCrossHostRedirectRefused(t *testing.T) {
 	t.Run("Proxmox privateAPIClient blocks cross-host redirect", func(t *testing.T) {
 		secretHit = false
 		_, err := collectProxmox(context.Background(), ProxmoxCreds{
-			Endpoint: redirector.URL,
-			TokenID:  "user@pam!tok",
-			Secret:   "super-secret",
+			Endpoint: redirector.URL, CertSHA256: certPin(redirector),
+			TokenID: "user@pam!tok",
+			Secret:  "super-secret",
 		})
-		if err == nil || !strings.Contains(err.Error(), "refusing cross-host redirect") {
+		if err == nil || !strings.Contains(err.Error(), "refusing redirect") {
 			t.Errorf("expected cross-host redirect refusal, got %v", err)
 		}
 		if secretHit {
@@ -96,7 +96,7 @@ func TestSanitizeAPIErrorAndProxmoxQueryScrubbing(t *testing.T) {
 	}
 
 	// proxmoxGet routes client.Do errors through sanitizeAPIError.
-	client, err := privateAPIClient("https://127.0.0.1:1")
+	client, err := privateAPIClient("https://127.0.0.1:1", "")
 	if err != nil {
 		t.Fatal(err)
 	}
