@@ -32,7 +32,7 @@ func TestLostComputer(t *testing.T) {
 
 	ui := &fakeUI{t: t, Confirms: []any{true}, Forms: wrongTries()}
 	err := lostComputer(ctx, ui, f.dest, lost)
-	if err == nil || !strings.Contains(err.Error(), "Three wrong tries") {
+	if err == nil || !strings.Contains(err.Error(), "incorrect master password after three attempts") {
 		t.Fatalf("wrong master passwords: %v", err)
 	}
 	if after, _ := f.dest.Computers(ctx); len(after) != 3 {
@@ -159,7 +159,7 @@ func TestReplaceBackendCredentials(t *testing.T) {
 	if _, err := kitAndPassword(ctx, ui, Deps{Machine: f.laptop}, f.dest); err != ErrCancelled {
 		t.Fatalf("err = %v, want the menu again, then the script's end", err)
 	}
-	if got := ui.said(Error); !slices.Equal(got, []string{"Three wrong tries; nothing was changed."}) || len(requestsOf[KitScreen](ui)) != 0 {
+	if got := ui.said(Error); !slices.Equal(got, []string{"Incorrect master password after three attempts"}) || len(requestsOf[KitScreen](ui)) != 0 {
 		t.Errorf("wrong master passwords: said %+v", ui.Said)
 	}
 	if menus := requestsOf[Picker](ui); len(menus) != 2 || menus[1].Cursor != replace {

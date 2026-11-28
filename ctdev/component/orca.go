@@ -50,7 +50,7 @@ func orcaDebAsset(arch, ver string) (deb, manifest string, err error) {
 	case "arm64":
 		return fmt.Sprintf("orca-ide_%s_arm64.deb", ver), "latest-linux-arm64.yml", nil
 	}
-	return "", "", fmt.Errorf("Orca only available for amd64/arm64 (got %s): %w", arch, ErrUnsupportedOS)
+	return "", "", fmt.Errorf("no Orca build for %s (requires amd64 or arm64): %w", arch, ErrUnsupportedOS)
 }
 
 func orcaInstall(ctx context.Context, opts ExecOpts) error {

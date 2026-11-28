@@ -299,10 +299,10 @@ func proxmoxGet(ctx context.Context, client *http.Client, target, auth string, o
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("Proxmox rejected the token")
+		return fmt.Errorf("token rejected by Proxmox")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Proxmox returned %s", resp.Status)
+		return fmt.Errorf("unexpected response from Proxmox: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxUnifiResponse))

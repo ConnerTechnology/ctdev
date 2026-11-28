@@ -88,7 +88,7 @@ func unlockAccount(ctx context.Context, ui UI, dest *backup.Destination, page Pa
 		f.Intro = strings.TrimLeft(intro+"\n", "\n") +
 			"  " + dim("If its Secret Key was regenerated on another computer, paste the new kit first.") + "\n  " + dim(left)
 	}
-	return nil, errors.New("Three wrong tries; nothing was changed.")
+	return nil, errors.New("incorrect master password after three attempts")
 }
 
 // manageComputers is Computers under --all: the list, then a computer's

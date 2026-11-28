@@ -63,8 +63,7 @@ jobs:
 
       - name: Check syntax
         run: |
-          for f in install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh scripts/install-test-restic.sh scripts/ci-go-test.sh; do
+          for f in install.sh uninstall.sh devcontainer.sh scripts/*.sh; do
             bash -n "$f" || exit 1
           done
 
@@ -79,8 +78,7 @@ jobs:
 
       - name: Run ShellCheck
         run: |
-          shellcheck install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh \
-            scripts/checks.sh scripts/install-test-restic.sh scripts/ci-go-test.sh
+          shellcheck install.sh uninstall.sh devcontainer.sh scripts/*.sh
 
       # AGENTS.md is a claim about the tree that nothing else compiles — this holds it to
       # paths that exist, and the repo to no real tailnet names.
@@ -185,6 +183,9 @@ jobs:
 
       # Six workers on the four-core runner keep more tests moving while
       # others wait on restic. Keep the same race and shuffle flags.
+      - name: Exercise the standalone installer
+        run: scripts/test-install.sh
+
       - name: Run race tests and vet
         run: scripts/ci-go-test.sh -parallel=6 ./...
 
@@ -364,6 +365,10 @@ jobs:
         run: |
           VERSION=$(cat ../VERSION)
           go build -ldflags "-X main.version=$VERSION" -o ctdev .
+
+      - name: Exercise the standalone installer
+        if: matrix.suite == 'application'
+        run: scripts/test-install.sh
 
       - name: Test CLI commands
         if: matrix.suite == 'application'

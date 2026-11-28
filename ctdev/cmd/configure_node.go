@@ -588,7 +588,7 @@ func runNodeUninstall(ctx context.Context, arg string, batch bool) error {
 		}
 		v = installed[choice-1]
 	} else if !slices.Contains(installed, v) {
-		return fmt.Errorf("Node %s isn't installed (installed: %s)", v, strings.Join(installed, ", "))
+		return fmt.Errorf("no installation of Node %s (installed: %s)", v, strings.Join(installed, ", "))
 	}
 	if why := uninstallRefusal(v, global); why != "" {
 		return errors.New(why)

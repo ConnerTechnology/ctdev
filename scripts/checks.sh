@@ -46,7 +46,8 @@ else
       ctdev/*) want_go=1 want_ubuntu=1 ;;
       # Changes to the workflow or test tools can affect all container jobs.
       .github/workflows/*|.github/actions/*|scripts/checks.sh|scripts/install-test-restic.sh|scripts/ci-go-test.sh) want_shell=1 want_go=1 want_ubuntu=1 want_pwsh=1 ;;
-      install.sh|uninstall.sh|devcontainer.sh) want_shell=1 want_ubuntu=1 ;;
+      scripts/test-install.sh) want_go=1 want_shell=1 ;;
+      install.sh|uninstall.sh|devcontainer.sh) want_go=1 want_shell=1 want_ubuntu=1 ;;
       scripts/*|.shellcheckrc) want_shell=1 ;;
       install.ps1) want_pwsh=1 ;;
     esac
@@ -54,7 +55,7 @@ else
 fi
 
 # The shell scripts ci.yml lints. Keep in step with its shellcheck job.
-shell_files=(install.sh uninstall.sh devcontainer.sh scripts/check-guidance.sh scripts/checks.sh scripts/install-test-restic.sh scripts/ci-go-test.sh)
+shell_files=(install.sh uninstall.sh devcontainer.sh scripts/*.sh)
 
 shell_job() {
   local f present=()
@@ -177,6 +178,7 @@ go_test_job() {
         export PATH=/usr/local/go/bin:/go/bin:/usr/local/bin:/usr/bin:/bin
         export GOCACHE=/home/tester/.cache/go-build GOMODCACHE=/go/pkg/mod CI=1
         restic version
+        /w/repo/scripts/test-install.sh
         cd /w/repo/ctdev
         go test -race -vet=all -shuffle=on -timeout 20m ./...
         pids=()
