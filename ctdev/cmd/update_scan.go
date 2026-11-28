@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/ConnerTechnology/ctdev/ctdev/nodenv"
@@ -773,6 +774,9 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 // scanCTops uses gh for the private release repo, sharing tag selection with
 // install so the checklist offers the same stable channel on Linux and macOS.
 func scanCTops(ctx context.Context) ([]checklist.UpdateItem, error) {
+	// A stalled gh must not hold up the whole scan; ctdev's HTTP checks give up after a minute too.
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
 	current := component.CTopsVersion(ctx)
 	if current == "" {
 		return nil, nil

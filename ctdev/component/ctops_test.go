@@ -116,6 +116,8 @@ func ctopsTestEnv(t *testing.T) (dest, log string) {
 	log = filepath.Join(t.TempDir(), "gh-calls")
 	t.Setenv("CTOPS_TEST_LOG", log)
 	t.Setenv("CTOPS_TEST_AUTH_FAIL", "")
+	t.Setenv("CTOPS_TEST_LIST_FAIL", "")
+	t.Setenv("CTOPS_TEST_NO_ASSET", "")
 	t.Setenv("CTOPS_TEST_RELEASES", `[{"tagName":"ctops/v0.9.0"},{"tagName":"ctops/v0.10.0"}]`)
 	data := "#!/bin/sh\nprintf 'ctops version 0.10.0\\n'\n"
 	t.Setenv("CTOPS_TEST_BINARY", data)
@@ -123,20 +125,27 @@ func ctopsTestEnv(t *testing.T) (dest, log string) {
 	stub := `#!/bin/sh
 printf '%s\n' "$*" >> "$CTOPS_TEST_LOG"
 case "$1 $2" in
-  'auth status') [ -z "$CTOPS_TEST_AUTH_FAIL" ] ;;
+  'auth status')
+    [ "$*" = 'auth status --hostname github.com --active' ] || exit 2
+    [ -z "$CTOPS_TEST_AUTH_FAIL" ] ;;
   'release list')
-    [ "$*" = 'release list --repo ConnerTechnology/infrastructure --json tagName,isDraft,isPrerelease --limit 100' ] || exit 2
+    [ "$*" = 'release list --repo github.com/ConnerTechnology/infrastructure --json tagName,isDraft,isPrerelease --limit 100' ] || exit 2
+    printf 'warning: synthetic gh notice\n' >&2
+    if [ -n "$CTOPS_TEST_LIST_FAIL" ]; then
+      printf 'HTTP 404: Not Found\n' >&2
+      exit 1
+    fi
     printf '%s' "$CTOPS_TEST_RELEASES" ;;
   'release download')
     shift 3
-    [ "$1 $2" = '--repo ConnerTechnology/infrastructure' ] || exit 2
+    [ "$1 $2" = '--repo github.com/ConnerTechnology/infrastructure' ] || exit 2
     shift 2
     [ "$1" = '--pattern' ] || exit 2
     asset=$2
     shift 2
     [ "$1 $2 $3" = '--pattern SHA256SUMS --dir' ] || exit 2
     dir=$4
-    printf '%s' "$CTOPS_TEST_BINARY" > "$dir/$asset"
+    [ -n "$CTOPS_TEST_NO_ASSET" ] || printf '%s' "$CTOPS_TEST_BINARY" > "$dir/$asset"
     if [ "$CTOPS_TEST_SUM" = missing ]; then
       printf '' > "$dir/SHA256SUMS"
     else
@@ -262,5 +271,29 @@ func TestCTopsRegistry(t *testing.T) {
 	}
 	if InstallNeedsRoot("apt", []string{"ctops"}, true) || UninstallNeedsRoot("apt", []string{"ctops"}) {
 		t.Fatal("ctops asked for root")
+	}
+}
+
+func TestCTopsGHStderrNeverReachesParsedOutput(t *testing.T) {
+	ctopsTestEnv(t)
+	if got, err := CTopsLatestVersion(context.Background()); err != nil || got != "0.10.0" {
+		t.Fatalf("a gh warning on stderr broke the release list: %q, %v", got, err)
+	}
+	t.Setenv("CTOPS_TEST_LIST_FAIL", "1")
+	if _, err := CTopsLatestVersion(context.Background()); err == nil || !strings.Contains(err.Error(), "HTTP 404: Not Found") {
+		t.Fatalf("gh's own error must reach the user, got %v", err)
+	}
+}
+
+func TestCTopsMissingAssetSaysSo(t *testing.T) {
+	dest, _ := ctopsTestEnv(t)
+	t.Setenv("CTOPS_TEST_NO_ASSET", "1")
+	var out strings.Builder
+	err := ctopsInstall(context.Background(), ExecOpts{Stdout: &out, Force: true})
+	if err == nil || !strings.Contains(err.Error(), "has no ctops-") {
+		t.Fatalf("want a missing-asset error, got %v", err)
+	}
+	if _, statErr := os.Stat(dest); !os.IsNotExist(statErr) {
+		t.Fatal("nothing may be installed without the asset")
 	}
 }

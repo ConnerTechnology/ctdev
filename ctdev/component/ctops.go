@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -16,7 +17,9 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
-const ctopsRepo = "ConnerTechnology/infrastructure"
+// The host is explicit so a GH_HOST pointing at another GitHub can't redirect
+// the download.
+const ctopsRepo = "github.com/ConnerTechnology/infrastructure"
 
 var ctopsTagPattern = regexp.MustCompile(`^ctops/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
@@ -106,20 +109,35 @@ func ctopsInstalled() bool {
 	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
 }
 
+// ctopsGH runs gh for output ctdev parses. stdout is kept apart from stderr,
+// where gh writes warnings, and a failure carries gh's own explanation.
+func ctopsGH(ctx context.Context, args ...string) ([]byte, error) {
+	out, err := exec.CommandContext(ctx, "gh", args...).Output()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if msg := strings.TrimSpace(string(exitErr.Stderr)); msg != "" {
+			return nil, fmt.Errorf("%w: %s", err, msg)
+		}
+	}
+	return out, err
+}
+
+// ctopsAuth checks only the github.com account gh will use: a stale second
+// account or another host must not block an install that would work.
 func ctopsAuth(ctx context.Context) error {
-	if err := sysutil.Run(ctx, execOpts(ExecOpts{Stdout: io.Discard}), "gh", "auth", "status"); err != nil {
+	if _, err := ctopsGH(ctx, "auth", "status", "--hostname", "github.com", "--active"); err != nil {
 		return fmt.Errorf("ctops releases are in the private %s repo; run gh auth login with access to that repo: %w", ctopsRepo, err)
 	}
 	return nil
 }
 
 func ctopsFetchTag(ctx context.Context) (string, error) {
-	var out strings.Builder
-	if err := sysutil.Run(ctx, execOpts(ExecOpts{Stdout: &out}), "gh", "release", "list", "--repo", ctopsRepo, "--json", "tagName,isDraft,isPrerelease", "--limit", "100"); err != nil {
+	out, err := ctopsGH(ctx, "release", "list", "--repo", ctopsRepo, "--json", "tagName,isDraft,isPrerelease", "--limit", "100")
+	if err != nil {
 		return "", fmt.Errorf("list ctops releases in private %s repo (gh needs repo access): %w", ctopsRepo, err)
 	}
 	var releases []ctopsRelease
-	if err := json.Unmarshal([]byte(out.String()), &releases); err != nil {
+	if err := json.Unmarshal(out, &releases); err != nil {
 		return "", fmt.Errorf("parse ctops releases: %w", err)
 	}
 	return ctopsLatestTag(releases)
@@ -143,11 +161,11 @@ func CTopsVersion(ctx context.Context) string {
 	if err != nil {
 		return ""
 	}
-	var out strings.Builder
-	if err := sysutil.Run(ctx, execOpts(ExecOpts{Stdout: &out}), bin, "--version"); err != nil {
+	out, err := exec.CommandContext(ctx, bin, "--version").Output()
+	if err != nil {
 		return ""
 	}
-	return parseCTopsVersion(out.String())
+	return parseCTopsVersion(string(out))
 }
 
 func parseCTopsVersion(out string) string {
@@ -211,6 +229,9 @@ func ctopsInstallVersion(ctx context.Context, o sysutil.Opts, version string) er
 	}
 	src := filepath.Join(tmp, asset)
 	data, err := os.ReadFile(src)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("ctops %s has no %s asset", tag, asset)
+	}
 	if err != nil {
 		return err
 	}
