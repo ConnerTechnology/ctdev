@@ -600,3 +600,19 @@ func TestAClaimInProgressIsLeftToFinish(t *testing.T) {
 		t.Errorf("after the claim was abandoned: %+v, want this computer to run slice 1", got)
 	}
 }
+
+func TestSampleFileReportsFailedListing(t *testing.T) {
+	m := testMachine(t, "example-laptop")
+	standinDestination(t, m, `ls)
+	echo '{"message_type":"node","type":"file","path":"/example","size":7}'
+	echo 'example listing failed' >&2
+	exit 1 ;;`)
+	d, err := m.Destination("example-backups")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := d.sampleFile(t.Context(), "example-id")
+	if err == nil || !strings.Contains(err.Error(), "example listing failed") || file.path != "" {
+		t.Fatalf("got file %+v, error %v", file, err)
+	}
+}
