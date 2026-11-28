@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,7 +36,7 @@ var updateCmd = &cobra.Command{
 
 func init() {
 	updateCmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "skip confirmation (install all updates)")
-	updateCmd.Flags().BoolVar(&flagCheck, "check", false, "list available updates without installing")
+	updateCmd.Flags().BoolVar(&flagCheck, "check", false, "list available updates without installing; exits nonzero if a source fails to check")
 	updateCmd.Flags().BoolVar(&flagRefreshKeys, "refresh-keys", false, "refresh APT GPG keys before updating")
 	updateCmd.Flags().BoolVar(&flagNoRefresh, "no-refresh", false, "skip refreshing the package index (APT / Homebrew) before scanning")
 	rootCmd.AddCommand(updateCmd)
@@ -68,19 +69,24 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	// Refresh the APT index before scanning so `apt list --upgradable` reflects
 	// reality. Without this, an update run on a machine with a stale index can
 	// report "everything is up to date" while security updates are pending.
-	refreshAptIndex(ctx)
-	refreshBrew(ctx)
-
-	items := scanAll(ctx)
-
-	if len(items) == 0 {
-		fmt.Println(styles.Success.Render("Everything is up to date."))
-		return nil
+	refreshErr := errors.Join(refreshAptIndex(ctx), refreshBrew(ctx))
+	items, scanErr := scanAll(ctx)
+	scanErr = errors.Join(refreshErr, scanErr)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-
+	if len(items) == 0 {
+		if scanErr == nil {
+			fmt.Println(styles.Success.Render("Everything is up to date."))
+		}
+		return scanErr
+	}
 	if flagCheck {
 		printUpdateList(items)
-		return nil
+		return scanErr
+	}
+	if scanErr != nil {
+		fmt.Println(styles.Warning.Render("Scan incomplete. Continuing with the updates found."))
 	}
 
 	var selected []checklist.UpdateItem
@@ -92,22 +98,22 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		result, err := p.Run()
 		resetTerminal()
 		if err != nil {
-			return err
+			return errors.Join(scanErr, err)
 		}
 		checkResult := result.(*checklist.Model).GetResult()
 		if checkResult.Quit || len(checkResult.Selected) == 0 {
-			return nil
+			return scanErr
 		}
 		selected = checkResult.Selected
 	}
 
 	if !flagDryRun && updateNeedsRoot(selected) {
 		if err := ensureSudo(ctx); err != nil {
-			return fmt.Errorf("sudo required for updates: %w", err)
+			return errors.Join(scanErr, fmt.Errorf("sudo required for updates: %w", err))
 		}
 	}
 
-	return executeUpdates(ctx, selected)
+	return errors.Join(scanErr, executeUpdates(ctx, selected))
 }
 
 // updateNeedsRoot reports whether applying these items will shell out as root,
@@ -155,25 +161,24 @@ func updateNeedsRoot(items []checklist.UpdateItem) bool {
 
 // refreshAptIndex runs `apt-get update` before scanning so the upgradable list
 // is accurate. It is a no-op on non-apt systems, in dry-run, or when
-// --no-refresh is passed. Failures (including an unavailable sudo) are
-// non-fatal: we warn and let the scan proceed against the existing index rather
-// than abort the whole update.
-func refreshAptIndex(ctx context.Context) {
+// --no-refresh is passed. A failed refresh leaves the existing index available
+// to scan, and the caller reports the incomplete result.
+func refreshAptIndex(ctx context.Context) error {
 	if _, err := exec.LookPath("apt-get"); err != nil {
-		return
+		return nil
 	}
 	if flagDryRun || flagNoRefresh {
-		return
+		return nil
 	}
 	fmt.Println(styles.Dimmed.Render("Refreshing APT package index..."))
 	if err := ensureSudo(ctx); err != nil {
-		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("sudo unavailable; scanning against a possibly stale index: %v", err)))
-		return
+		return fmt.Errorf("APT index refresh requires sudo: %w", err)
 	}
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 	if err := sysutil.APTUpdate(ctx, o); err != nil {
-		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("apt index refresh failed; results may be stale: %v", err)))
+		return fmt.Errorf("APT index refresh failed, results may be stale: %w", err)
 	}
+	return nil
 }
 
 // shouldRefreshBrew decides whether to refresh Homebrew's catalog before
@@ -188,19 +193,20 @@ func shouldRefreshBrew(dryRun, noRefresh bool) bool {
 // necessary, or `brew outdated` would answer from an arbitrarily stale catalog
 // and report "everything is up to date" while upgrades were pending.
 //
-// Failures are non-fatal — scanning a stale catalog beats aborting the update.
-func refreshBrew(ctx context.Context) {
+// The caller can still scan the cached catalog if this fails.
+func refreshBrew(ctx context.Context) error {
 	if _, err := exec.LookPath("brew"); err != nil {
-		return
+		return nil
 	}
 	if !shouldRefreshBrew(flagDryRun, flagNoRefresh) {
-		return
+		return nil
 	}
 	fmt.Println(styles.Dimmed.Render("Refreshing Homebrew catalog..."))
 	o := sysutil.Opts{Stdout: os.Stdout, DryRun: flagDryRun}
 	if err := sysutil.Run(ctx, o, "brew", "update", "--quiet"); err != nil {
-		fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("brew update failed; results may be stale: %v", err)))
+		return fmt.Errorf("brew update failed, results may be stale: %w", err)
 	}
+	return nil
 }
 
 func printUpdateList(items []checklist.UpdateItem) {

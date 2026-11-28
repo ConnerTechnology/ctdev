@@ -178,38 +178,31 @@ func goArchiveSHA256(releases []goRelease, ver, goos, goarch string) string {
 	return ""
 }
 
-func fetchLatestRubyVersion(ctx context.Context) string {
-	// Use ruby-build's definitions if available (from rbenv)
-	if _, err := exec.LookPath("ruby-build"); err == nil {
-		out, err := exec.CommandContext(ctx, "ruby-build", "--definitions").Output()
-		if err == nil {
-			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-			// Walk backwards to find latest stable (numeric only, no -dev/-preview/-rc)
-			for i := len(lines) - 1; i >= 0; i-- {
-				v := strings.TrimSpace(lines[i])
-				if v == "" {
-					continue
-				}
-				// Skip non-release versions
-				if strings.ContainsAny(v, "-") {
-					continue
-				}
-				// Must start with a digit
-				if v[0] >= '0' && v[0] <= '9' {
-					return v
-				}
-			}
+func fetchLatestRubyVersion(ctx context.Context) (string, error) {
+	if _, err := exec.LookPath("ruby-build"); err != nil {
+		return "", nil
+	}
+	out, err := exec.CommandContext(ctx, "ruby-build", "--definitions").Output()
+	if err != nil {
+		return "", err
+	}
+	// Walk backwards to find the latest stable version.
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		v := strings.TrimSpace(lines[i])
+		if v != "" && !strings.Contains(v, "-") && v[0] >= '0' && v[0] <= '9' {
+			return v, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
-func fetchLatestPythonPatch(ctx context.Context, current string) string {
+func fetchLatestPythonPatch(ctx context.Context, current string) (string, error) {
 	out, err := exec.CommandContext(ctx, "pyenv", "install", "--list").Output()
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return latestPythonPatch(string(out), current)
+	return latestPythonPatch(string(out), current), nil
 }
 
 // latestPythonPatch picks the newest CPython release in the same major.minor

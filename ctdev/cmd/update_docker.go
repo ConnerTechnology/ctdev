@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -79,8 +80,7 @@ func dockerComposeStacksFor(osType component.OS) []dockerStack {
 // scanDocker reports compose stacks with a newer image available. Registry
 // images are compared by digest (local RepoDigest vs the registry's current
 // index digest); locally-built images are tracked through their Dockerfile base
-// images. It never pulls. Returns an error only when no stack could be checked,
-// so a single flaky image doesn't discard the updates we did find.
+// images. It never pulls. Partial results include both known updates and errors.
 func scanDocker(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return nil, nil
@@ -91,19 +91,18 @@ func scanDocker(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 
 	var items []checklist.UpdateItem
-	var errs []string
+	var errs []error
 	for _, s := range stacks {
 		images, err := composeImages(ctx, s.Compose)
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+			errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
 			continue
 		}
 		var stale []string
 		for _, img := range images {
 			changed, label, err := imageHasUpdate(ctx, s, img)
 			if err != nil {
-				errs = append(errs, fmt.Sprintf("%s (%s): %v", s.Name, img, err))
-				continue
+				errs = append(errs, fmt.Errorf("%s (%s): %w", s.Name, img, err))
 			}
 			if changed {
 				stale = append(stale, label)
@@ -118,12 +117,7 @@ func scanDocker(ctx context.Context) ([]checklist.UpdateItem, error) {
 		}
 	}
 
-	// Surface failures only when nothing was found — otherwise returning an error
-	// would make scanAll drop the updates we did detect.
-	if len(items) == 0 && len(errs) > 0 {
-		return nil, fmt.Errorf("%s", strings.Join(errs, "; "))
-	}
-	return items, nil
+	return items, errors.Join(errs...)
 }
 
 // dockerProbeTimeout bounds each docker call made while scanning. The scan runs
@@ -170,7 +164,7 @@ func imageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, strin
 	if err != nil {
 		return false, "", err
 	}
-	if remote == "" || remote == local {
+	if remote == local {
 		return false, "", nil
 	}
 	return true, img, nil
@@ -192,10 +186,12 @@ func builtImageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, 
 
 	changed := false
 	seeded := false
+	var errs []error
 	for _, b := range bases {
 		remote, err := remoteBaseDigest(ctx, b)
-		if err != nil || remote == "" {
-			continue // can't determine this base right now; skip it
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", b, err))
+			continue
 		}
 		if old, ok := recorded[b]; !ok {
 			recorded[b] = remote // first sighting → baseline, don't flag
@@ -210,9 +206,9 @@ func builtImageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, 
 		writeDigestMarker(marker, recorded)
 	}
 	if changed {
-		return true, img + " (rebuild)", nil
+		return true, img + " (rebuild)", errors.Join(errs...)
 	}
-	return false, "", nil
+	return false, "", errors.Join(errs...)
 }
 
 // localIndexDigest returns the registry index digest the local image was pulled
@@ -290,7 +286,7 @@ func pickPlatformDigest(raw []byte, goos, goarch string) string {
 }
 
 // remoteIndexDigest returns the current index digest for img in its registry,
-// via buildx imagetools (no pull). Returns "" if the digest line is absent.
+// via buildx imagetools (no pull).
 func remoteIndexDigest(ctx context.Context, img string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
 	defer cancel()
@@ -298,7 +294,11 @@ func remoteIndexDigest(ctx context.Context, img string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("imagetools inspect: %s", strings.TrimSpace(string(out)))
 	}
-	return parseBuildxDigest(string(out)), nil
+	digest := parseBuildxDigest(string(out))
+	if digest == "" {
+		return "", fmt.Errorf("imagetools inspect returned no digest for %s", img)
+	}
+	return digest, nil
 }
 
 // updateDockerStack updates one selected compose stack. Registry-image stacks

@@ -26,21 +26,31 @@ func init() {
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
-	var selected []string
+	var requested []string
+	var installedBefore map[string]bool
+	batch := isBatchMode()
+	configureAfter := !batch && !flagDryRun
 
 	if len(args) > 0 {
+		if configureAfter {
+			installedBefore = make(map[string]bool, len(args))
+		}
 		for _, name := range args {
-			if comp.FindByName(name) == nil {
+			c := comp.FindByName(name)
+			if c == nil {
 				return fmt.Errorf("unknown component: %s", name)
 			}
+			if configureAfter {
+				installedBefore[name] = c.IsInstalled()
+			}
 		}
-		selected = args
-	} else if isBatchMode() {
+		requested = args
+	} else if batch {
 		return fmt.Errorf("no components specified (batch mode requires arguments)")
 	} else {
-		installed := comp.InstalledSet()
+		installedBefore = comp.InstalledSet()
 		osType := comp.OS(platform.Detect().OS)
-		m := picker.New(comp.Registry, installed, osType, picker.ModeInstall, flagDryRun)
+		m := picker.New(comp.Registry, installedBefore, osType, picker.ModeInstall, flagDryRun)
 		p := tea.NewProgram(&m)
 		result, err := p.Run()
 		resetTerminal()
@@ -55,15 +65,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			fmt.Println("No components selected.")
 			return nil
 		}
-		selected = pickerResult.Selected
+		requested = pickerResult.Selected
 	}
 
-	// Track what the user actually asked for (vs. auto-pulled dependencies) so
-	// only those get a configuration step, and note what was already installed.
-	requested := append([]string(nil), selected...)
-	installedBefore := comp.InstalledSet()
-
-	resolved := comp.ResolveDependencies(comp.Registry, selected)
+	resolved := comp.ResolveDependencies(comp.Registry, requested)
 
 	// Say up front what dependency resolution added, so the first time the user
 	// learns docker is coming isn't when it appears in the progress list.
@@ -105,7 +110,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// alone still configures without installing, except pihole, which has no
 	// subcommand (CTD-171) and is reached by re-running install. Skipped in
 	// batch/dry-run because the wizards are interactive.
-	if flagDryRun || isBatchMode() {
+	if !configureAfter {
 		return nil
 	}
 	for _, name := range requested {

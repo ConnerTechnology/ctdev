@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
@@ -267,11 +268,16 @@ esac
 	}
 	t.Setenv("PATH", binDir)
 
-	items, err := scanDocker(context.Background())
-	if err != nil {
-		t.Fatalf("scanDocker returned error despite finding an update: %v", err)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("NODENV_ROOT", t.TempDir())
+	oldVersion, oldVerbose := version, flagVerbose
+	version, flagVerbose = "dev", true
+	t.Cleanup(func() { version, flagVerbose = oldVersion, oldVerbose })
+	items, err := scanAll(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "test-stack-bad") {
+		t.Fatalf("scan error = %v, want the failed stack", err)
 	}
 	if len(items) != 1 || items[0].Name != "test-stack-ok" {
-		t.Errorf("scanDocker items = %+v, want [test-stack-ok]", items)
+		t.Errorf("scan items = %+v, want [test-stack-ok]", items)
 	}
 }
