@@ -123,8 +123,8 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 //   - among the runtimes only go is privileged (sudo rm/mv into /usr/local/go);
 //     bun, rbenv and pyenv all stay inside $HOME.
 //   - the cli tools resolve their destination at run time via `which` and fall
-//     back to /usr/local/bin, so assume root. The exception is the t3code CLI,
-//     which `t3 update` keeps under ~/.t3.
+//     back to /usr/local/bin, so assume root. The exceptions are the t3code CLI,
+//     which `t3 update` keeps under ~/.t3, and ctops in ~/.local/bin.
 //   - docker stacks can rebuild through `sudo docker compose`.
 //   - the ctdev self-update replaces the binary where it lives, so it needs
 //     root only when that directory (say /usr/local/bin) isn't writable.
@@ -136,8 +136,8 @@ func updateNeedsRoot(items []checklist.UpdateItem) bool {
 		case "apt", "brew-cask", "docker":
 			return true
 		case "cli":
-			// `t3 update` stays inside $HOME; the rest install system-wide.
-			if item.Name != "t3code" {
+			// T3 Code and ctops stay inside $HOME; the rest install system-wide.
+			if item.Name != "t3code" && item.Name != "ctops" {
 				return true
 			}
 		case "ctdev":

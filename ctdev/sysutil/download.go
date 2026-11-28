@@ -231,7 +231,7 @@ func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (s
 	}
 	install := InstallBinary
 	if spec.UserInstall {
-		install = installUserBinary
+		install = InstallUserBinary
 	}
 
 	goos := runtime.GOOS
@@ -286,13 +286,34 @@ func DownloadGitHubBinary(ctx context.Context, o Opts, spec GitHubBinarySpec) (s
 	return ver, install(ctx, o, binaryPath, spec.InstallDest)
 }
 
-// installUserBinary copies a binary into a directory the user owns, creating
-// the directory if needed. No sudo: the destination is under $HOME.
-func installUserBinary(ctx context.Context, o Opts, src, dest string) error {
+// InstallUserBinary installs into a directory the user owns without sudo.
+// Stage beside dest so the rename is atomic even when downloads are on another
+// filesystem, and a failed copy leaves the installed binary usable.
+func InstallUserBinary(ctx context.Context, o Opts, src, dest string) error {
+	if o.DryRun {
+		return Run(ctx, o, "install", "-m", "0755", src, dest)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	return Run(ctx, o, "install", "-m", "0755", src, dest)
+	staged, err := os.CreateTemp(filepath.Dir(dest), ".ctdev-bin-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(staged.Name())
+	if err := staged.Close(); err != nil {
+		return err
+	}
+	if err := Run(ctx, o, "install", "-m", "0755", src, staged.Name()); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return os.Rename(staged.Name(), dest)
 }
 
 // decompressBzip2 writes the bzip2-decompressed contents of src to dest.

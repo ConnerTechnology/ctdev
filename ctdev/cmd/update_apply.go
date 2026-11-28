@@ -177,10 +177,14 @@ func runtimeUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 	return updateStep{}, false
 }
 
-// cliUpdateStep builds the step for a CLI-tool update (helm/kubectl/terraform/t3code/orca).
+// cliUpdateStep builds the step for a CLI-tool update (helm/kubectl/terraform/ctops/t3code/orca).
 func cliUpdateStep(item checklist.UpdateItem) (updateStep, bool) {
 	name := fmt.Sprintf("%s %s → %s", item.Name, item.CurrentVer, item.NewVer)
 	switch item.Name {
+	case "ctops":
+		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
+			return component.CTopsUpdate(ctx, o, item.NewVer)
+		}}, true
 	case "helm":
 		return updateStep{name: name, run: func(ctx context.Context, o sysutil.Opts) error {
 			if o.DryRun {
