@@ -51,6 +51,9 @@ type Machine struct {
 	run func(ctx context.Context, o sysutil.Opts, name string, args ...string) error
 	// capture runs launchctl print; nil means exec. Tests set it.
 	capture func(ctx context.Context, name string, args ...string) ([]byte, error)
+	// configHome selects systemd's user config root. Backup credentials always
+	// use the same home-relative directory, including in a scheduler environment.
+	configHome string
 	// lingerDir is systemd's /var/lib/systemd/linger; tests point it elsewhere.
 	lingerDir string
 	// pickFn can select a specific file during the maintenance test restore.
@@ -94,12 +97,13 @@ func ThisMachine(o sysutil.Opts) (*Machine, error) {
 		exe, _ = filepath.Abs(exe)
 	}
 	return &Machine{
-		Dir:      filepath.Join(home, ".config", "ctdev", "backup"),
-		Home:     home,
-		Hostname: host,
-		Username: name,
-		Opts:     o,
-		Exe:      exe,
+		Dir:        filepath.Join(home, ".config", "ctdev", "backup"),
+		configHome: os.Getenv("XDG_CONFIG_HOME"),
+		Home:       home,
+		Hostname:   host,
+		Username:   name,
+		Opts:       o,
+		Exe:        exe,
 	}, nil
 }
 
