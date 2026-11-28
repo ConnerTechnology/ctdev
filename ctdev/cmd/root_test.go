@@ -54,8 +54,14 @@ func TestWindowsCommandsExist(t *testing.T) {
 }
 
 func TestIsBatchMode_FlagsAndAccessible(t *testing.T) {
-	saved := flagBatch
-	t.Cleanup(func() { flagBatch = saved })
+	savedBatch, savedTerminal := flagBatch, interactiveTerminal
+	t.Cleanup(func() { flagBatch, interactiveTerminal = savedBatch, savedTerminal })
+	interactiveTerminal = func() bool { return true }
+	flagBatch = false
+	t.Setenv("ACCESSIBLE", "")
+	if isBatchMode() {
+		t.Fatal("interactive terminal with no overrides selected batch mode")
+	}
 
 	flagBatch = true
 	if !isBatchMode() {

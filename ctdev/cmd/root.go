@@ -223,22 +223,19 @@ func resetTerminal() {
 // drainStdin is implemented per-platform in drain_linux.go and drain_darwin.go.
 
 func isBatchMode() bool {
-	if flagBatch {
-		return true
-	}
-	// Screen-reader users set ACCESSIBLE to drop the live TUIs in favor of the
-	// plain, line-by-line path (the Charm-ecosystem convention).
-	if os.Getenv("ACCESSIBLE") != "" {
-		return true
-	}
+	// ACCESSIBLE selects the plain, line-by-line path for screen readers.
+	return flagBatch || os.Getenv("ACCESSIBLE") != "" || !interactiveTerminal()
+}
+
+var interactiveTerminal = func() bool {
 	// A TUI needs a terminal on both ends: prompts read stdin, and alt-screen
 	// escape sequences would garble a piped/redirected stdout (`ctdev … | tee`).
 	if !term.IsTerminal(os.Stdout.Fd()) {
-		return true
+		return false
 	}
 	fi, err := os.Stdin.Stat()
 	if err != nil {
-		return true
+		return false
 	}
-	return fi.Mode()&os.ModeCharDevice == 0
+	return fi.Mode()&os.ModeCharDevice != 0
 }

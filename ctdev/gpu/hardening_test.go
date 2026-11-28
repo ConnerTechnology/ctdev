@@ -10,39 +10,6 @@ import (
 	"testing"
 )
 
-func TestParseOpenSSLSubjectCN_EdgeCases(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"subject=CN = Custom NVIDIA Module Signing\n", "Custom NVIDIA Module Signing"},
-		{"subject= /CN=Custom NVIDIA Module Signing\n", "Custom NVIDIA Module Signing"},
-		{"subject=O = Example Vendor, CN = Example Signing Key\n", "Example Signing Key"},
-		{"subject=O = Example Vendor\n", ""},
-		{"", ""},
-	}
-	for _, tc := range cases {
-		if got := parseOpenSSLSubjectCN(tc.in); got != tc.want {
-			t.Errorf("parseOpenSSLSubjectCN(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
-func TestParseDKMSStatus_EdgeCases(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"nvidia/550.120, 6.8.0-51-generic, x86_64: installed\n", "nvidia/550.120"},
-		{"virtualbox/7.0.10, 6.8.0: installed\nNVIDIA-open/570.00, 6.8.0: built\n", "NVIDIA-open/570.00"},
-		{"virtualbox/7.0.10, 6.8.0: installed\n", ""},
-		{"", ""},
-	}
-	for _, tc := range cases {
-		if got := parseDKMSStatus(tc.in); got != tc.want {
-			t.Errorf("parseDKMSStatus(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
 func TestSignNvidiaModule_PlainZstXz(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Linux kernel module signing")

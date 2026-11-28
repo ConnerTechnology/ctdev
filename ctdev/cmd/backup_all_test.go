@@ -1,16 +1,12 @@
 package cmd
 
 import (
-	"bytes"
-	"context"
+	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/ConnerTechnology/ctdev/ctdev/backup"
-	"github.com/ConnerTechnology/ctdev/ctdev/sysutil"
 )
 
 func runBackupAllBatch(t *testing.T) (string, error) {
@@ -40,41 +36,43 @@ func TestBackupAllWithoutATerminalOrADestination(t *testing.T) {
 // Without a terminal, --all prints each destination's header and its
 // folders, grouped by computer.
 func TestBackupAllWithoutATerminalListsTheFolders(t *testing.T) {
-	if _, err := exec.LookPath("restic"); err != nil {
-		if os.Getenv("CI") != "" {
-			t.Fatal("restic is not on PATH; CI must install it before the Go tests")
-		}
-		t.Skip("restic is not installed; install it (ctdev install restic) to run this test")
+	if runtime.GOOS == "windows" {
+		t.Skip("backup runs on Linux and macOS")
 	}
-	dir := backupFolderForTest(t)
-	t.Setenv("RESTIC_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
-	ctx := context.Background()
-	m, err := backup.ThisMachine(sysutil.Opts{Stdout: &bytes.Buffer{}})
+	backupFolderForTest(t)
+	home := os.Getenv("HOME")
+	host, err := os.Hostname()
 	if err != nil {
 		t.Fatal(err)
 	}
-	setup, err := m.CreateDestination(ctx, backup.NewDestination{Name: "example-backups", Address: filepath.Join(t.TempDir(), "repo")}, "correct horse example staple")
+	// The command labels the local host. Pass its JSON string to the
+	// stand-in as data so the shell never interprets the hostname.
+	hostJSON, err := json.Marshal(host)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := backup.NewConfig("example-backups")
-	if err := m.Configure(ctx, setup.Destination, dir, cfg); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := m.Backup(ctx, setup.Destination, dir, &cfg); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("CTDEV_TEST_HOST_JSON", string(hostJSON))
+	writeBackupTestFile(t, filepath.Join(home, ".config", "ctdev", "backup", "destinations", "example-backups.env"),
+		"RESTIC_REPOSITORY="+filepath.Join(home, "repo")+"\nCTDEV_COMPUTER_KEY=example\n", 0o600)
+	writeBackupTestFile(t, filepath.Join(home, ".local", "bin", "restic"), `#!/bin/sh
+case "$1" in
+version) echo 'restic 0.19.1' ;;
+key) printf '[{"id":"abc","hostname":%s,"current":true}]\n' "$CTDEV_TEST_HOST_JSON" ;;
+snapshots) printf '[{"id":"01234567","hostname":%s,"tags":["ctdev-folder:website","ctdev-path:~/Projects/website"]}]\n' "$CTDEV_TEST_HOST_JSON" ;;
+stats) echo '{"total_size":123}' ;;
+*) exit 1 ;;
+esac
+`, 0o755)
 
 	out, err := runBackupAllBatch(t)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	header, _, _ := strings.Cut(out, "\n")
-	if !strings.HasPrefix(header, "example-backups (local path) · 1 computer · 1 folder · ") ||
-		!strings.HasSuffix(header, " stored") || strings.HasSuffix(header, " 0 B stored") {
+	if header != "example-backups (local path) · 1 computer · 1 folder · 123 B stored" {
 		t.Errorf("header = %q, want it to count the space stored", header)
 	}
-	for _, want := range []string{m.Hostname + " (this computer)", "~/Projects/website", "1 backup"} {
+	for _, want := range []string{host + " (this computer)", "~/Projects/website", "1 backup"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)
 		}
