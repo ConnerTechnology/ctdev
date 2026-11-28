@@ -144,8 +144,7 @@ func composeImages(ctx context.Context, compose string) ([]string, error) {
 }
 
 // imageHasUpdate reports whether img has a newer build available and a label for
-// the update list. An image with no local registry digest is treated as
-// locally-built and checked via its Dockerfile base images instead.
+// the update list. Built stacks are checked via their Dockerfile base images.
 func imageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, string, error) {
 	// A locally-built image (caddy-homelab:local) is not in any registry, yet
 	// modern BuildKit still stamps it with a RepoDigest — so the RepoDigest
@@ -156,9 +155,9 @@ func imageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, strin
 	if stackIsBuilt(s) {
 		return builtImageHasUpdate(ctx, s, img)
 	}
-	local, ok := localIndexDigest(ctx, img)
-	if !ok {
-		return builtImageHasUpdate(ctx, s, img)
+	local, err := localIndexDigest(ctx, img)
+	if err != nil || local == "" {
+		return false, "", err
 	}
 	remote, err := remoteIndexDigest(ctx, img)
 	if err != nil {
@@ -212,20 +211,31 @@ func builtImageHasUpdate(ctx context.Context, s dockerStack, img string) (bool, 
 }
 
 // localIndexDigest returns the registry index digest the local image was pulled
-// from (its RepoDigest). ok is false for locally-built or absent images, which
-// have no RepoDigest to compare.
-func localIndexDigest(ctx context.Context, img string) (digest string, ok bool) {
+// from (its RepoDigest). Absent images and images with no registry digests
+// have no local baseline. An unsuccessful inspection leaves coverage incomplete.
+func localIndexDigest(ctx context.Context, img string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "docker", "image", "inspect", img, "--format", "{{json .RepoDigests}}").Output()
 	if err != nil {
-		return "", false
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && strings.HasSuffix(strings.TrimSpace(string(exit.Stderr)), "No such image: "+img) {
+			return "", nil
+		}
+		return "", fmt.Errorf("docker image inspect: %w", err)
 	}
 	var repoDigests []string
 	if err := json.Unmarshal(bytes.TrimSpace(out), &repoDigests); err != nil {
-		return "", false
+		return "", fmt.Errorf("decode RepoDigests: %w", err)
 	}
-	return pickDigest(repoDigests, imageRepo(img))
+	if len(repoDigests) == 0 {
+		return "", nil
+	}
+	digest, ok := pickDigest(repoDigests, imageRepo(img))
+	if !ok || digest == "" {
+		return "", fmt.Errorf("no matching digest in RepoDigests for %s", img)
+	}
+	return digest, nil
 }
 
 // remoteBaseDigest returns the digest ctdev tracks for a Dockerfile base image:
