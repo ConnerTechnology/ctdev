@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
 	"github.com/ConnerTechnology/ctdev/ctdev/nodenv"
@@ -51,6 +52,7 @@ func scanAll(ctx context.Context) ([]checklist.UpdateItem, error) {
 		{"helm", scanHelm},
 		{"kubectl", scanKubectl},
 		{"terraform", scanTerraform},
+		{"ctops", scanCTops},
 		{"t3code", scanT3Code},
 		{"orca", scanOrca},
 	}
@@ -742,6 +744,26 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 		CurrentVer: current,
 		NewVer:     latest,
 	}}, nil
+}
+
+// scanCTops uses gh for the private release repo, sharing tag selection with
+// install so the checklist offers the same stable channel on Linux and macOS.
+func scanCTops(ctx context.Context) ([]checklist.UpdateItem, error) {
+	// A stalled gh must not hold up the whole scan; ctdev's HTTP checks give up after a minute too.
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	current := component.CTopsVersion(ctx)
+	if current == "" {
+		return nil, nil
+	}
+	latest, err := component.CTopsLatestVersion(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check latest ctops: %w", err)
+	}
+	if !versionNewer(latest, current) {
+		return nil, nil
+	}
+	return []checklist.UpdateItem{{Name: "ctops", Source: "cli", CurrentVer: current, NewVer: latest}}, nil
 }
 
 // scanT3Code offers the T3 Code CLI, and the Linux desktop .deb, when either is
