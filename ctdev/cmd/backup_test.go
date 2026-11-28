@@ -79,6 +79,7 @@ func backupFolderForTest(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
 	dir := filepath.Join(home, "Projects", "website")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -158,7 +159,7 @@ func TestBackupWithoutATerminalChecksLocalScheduleAndSnapshots(t *testing.T) {
 			}
 			if tt.installed {
 				if runtime.GOOS == "linux" {
-					systemd := filepath.Join(home, ".config", "systemd", "user")
+					systemd := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "systemd", "user")
 					for _, name := range []string{"ctdev-backup.service", "ctdev-backup.timer", "timers.target.wants/ctdev-backup.timer"} {
 						writeBackupTestFile(t, filepath.Join(systemd, name), "", 0o600)
 					}
