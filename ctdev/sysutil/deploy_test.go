@@ -3,7 +3,9 @@ package sysutil
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -86,5 +88,65 @@ func TestDeployFileCreatesParentDirs(t *testing.T) {
 	got, _ := os.ReadFile(dest)
 	if string(got) != "content" {
 		t.Errorf("expected 'content', got %q", string(got))
+	}
+}
+
+func TestConcurrentDeploymentsKeepAllVersions(t *testing.T) {
+	const count = 16
+	path := filepath.Join(t.TempDir(), "example.conf")
+	if err := os.WriteFile(path, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range count {
+		wg.Go(func() {
+			<-start
+			if err := DeployFile([]byte(strconv.Itoa(i)), path); err != nil {
+				t.Errorf("deploy %d: %v", i, err)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+	backups, err := filepath.Glob(path + ".*.bak")
+	if err != nil || len(backups) != count {
+		t.Fatalf("backups = %d, err %v", len(backups), err)
+	}
+	versions := map[string]bool{}
+	for _, name := range append(backups, path) {
+		data, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		versions[string(data)] = true
+		fi, err := os.Stat(name)
+		if err != nil || fi.Mode().Perm() != 0600 {
+			t.Fatalf("lost private mode for %s", name)
+		}
+	}
+	if len(versions) != count+1 || !versions["original"] {
+		t.Errorf("versions = %v", versions)
+	}
+}
+
+func TestUnwritableDeploymentKeepsOriginal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write through permissions")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "example.conf")
+	if err := os.WriteFile(path, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
+	if err := DeployFile([]byte("replacement"), path); err == nil {
+		t.Fatal("unwritable deployment succeeded")
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "original" {
+		t.Fatalf("live file = %q (%v)", got, err)
 	}
 }

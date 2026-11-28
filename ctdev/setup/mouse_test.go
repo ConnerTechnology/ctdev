@@ -603,6 +603,7 @@ func TestNewestBackupMatchesOnlyBackupPathNames(t *testing.T) {
 	path := filepath.Join(dir, ".xbindkeysrc")
 	for _, name := range []string{
 		".xbindkeysrc.old.bak",
+		".xbindkeysrc.2026-01-02T03-04-05_000000001.bak",
 		".xbindkeysrc.zzz.bak",
 		".xbindkeysrc.2026-01-02T03-04-05.bak.orig",
 		".xbindkeysrc.2025-06-01T00-00-00.bak",
@@ -614,6 +615,7 @@ func TestNewestBackupMatchesOnlyBackupPathNames(t *testing.T) {
 	}
 	got := backupsNewestFirst(path)
 	want := []string{
+		path + ".2026-01-02T03-04-05_000000001.bak",
 		path + ".2026-01-02T03-04-05.bak",
 		path + ".2025-06-01T00-00-00.bak",
 	}
