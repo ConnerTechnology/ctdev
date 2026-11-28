@@ -340,6 +340,9 @@ func updateTerraform(ctx context.Context, o sysutil.Opts, ver string) error {
 }
 
 func updateGo(ctx context.Context, o sysutil.Opts, ver string) error {
+	if err := sysutil.RecoverGoArchive(ctx, o); err != nil {
+		return err
+	}
 	goos := detectUpdateOS()
 	goarch := detectUpdateArch()
 	url := fmt.Sprintf("https://go.dev/dl/go%s.%s-%s.tar.gz", ver, goos, goarch)
@@ -355,41 +358,7 @@ func updateGo(ctx context.Context, o sysutil.Opts, ver string) error {
 		return fmt.Errorf("no published sha256 for go%s %s/%s", ver, goos, goarch)
 	}
 
-	tmpFile, err := os.CreateTemp("", "ctdev-go-*.tar.gz")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	defer os.Remove(tmpPath)
-	if err := sysutil.DownloadFile(ctx, url, tmpPath); err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-	if err := sysutil.VerifyChecksum(tmpPath, expectedSHA); err != nil {
-		return fmt.Errorf("go checksum mismatch: %w", err)
-	}
-	// Extract to a temp directory first so we don't destroy the existing install
-	// if the archive is corrupted or extraction fails.
-	tmpDir, err := os.MkdirTemp("", "ctdev-go-extract-*")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-	if err := sysutil.Run(ctx, o, "tar", "-C", tmpDir, "-xzf", tmpPath); err != nil {
-		return fmt.Errorf("extract failed: %w", err)
-	}
-	// Verify the extraction produced a go directory with a binary
-	if _, err := os.Stat(filepath.Join(tmpDir, "go", "bin", "go")); err != nil {
-		return fmt.Errorf("extracted archive missing go binary: %w", err)
-	}
-	// Safe to replace now
-	if err := sysutil.SudoRun(ctx, o, "rm", "-rf", "/usr/local/go"); err != nil {
-		return fmt.Errorf("remove old go failed: %w", err)
-	}
-	if err := sysutil.SudoRun(ctx, o, "mv", filepath.Join(tmpDir, "go"), "/usr/local/go"); err != nil {
-		return fmt.Errorf("install new go failed: %w", err)
-	}
-	return nil
+	return sysutil.InstallGoArchive(ctx, o, url, expectedSHA)
 }
 
 var releaseTagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)

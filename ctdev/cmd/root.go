@@ -14,7 +14,6 @@ import (
 	"github.com/ConnerTechnology/ctdev/ctdev/tui/styles"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -93,31 +92,30 @@ func Execute() error {
 	}
 	defer setupAskpass()()
 	setupHomebrewEnv()
-	// Bind SIGINT/SIGTERM/SIGHUP to a context so Ctrl-C, or closing the
-	// terminal, cancels in-flight installs, updates, and other long-running
-	// shell-outs via the ctx threaded through sysutil. A second signal aborts hard (signal.NotifyContext stops trapping
-	// once the context is canceled).
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	defer stop()
+	// Unregister the handlers before notifying the command. A second interrupt
+	// then terminates the process even when a child is stuck during cleanup.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	signals := []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP}
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, signals...)
+	defer signal.Stop(interrupt)
+	go func() {
+		select {
+		case <-interrupt:
+			signal.Reset(signals...)
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
-
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&flagDryRun, "dry-run", "n", false, "preview changes without applying")
 	rootCmd.PersistentFlags().BoolVarP(&flagForce, "force", "f", false, "force re-run install scripts, or uninstall what isn't detected as installed")
 	rootCmd.PersistentFlags().BoolVar(&flagBatch, "batch", false, "non-interactive mode")
-
-}
-
-func initConfig() {
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(os.ExpandEnv("$HOME/.config/ctdev"))
-	viper.AutomaticEnv()
-	_ = viper.ReadInConfig()
 }
 
 // sudoPlan decides what ensureSudo should do for a given access level. Split out

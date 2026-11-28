@@ -109,35 +109,10 @@ func ClaudeCodeDrift() ([]ClaudeCodeFileDrift, error) {
 }
 
 // ReplaceClaudeCodeFile writes ctdev's copy over d.Path and returns the backup
-// it made, if any. A regular file is renamed to <file>.<stamp>.bak first and
-// its mode kept; a symlink is removed and its target left untouched.
-func ReplaceClaudeCodeFile(d ClaudeCodeFileDrift) (backup string, err error) {
-	if err := os.MkdirAll(filepath.Dir(d.Path), 0o755); err != nil {
-		return "", err
-	}
-	mode := os.FileMode(0o644)
-	switch {
-	case d.Missing:
-	case d.LinkTarget != "":
-		if err := os.Remove(d.Path); err != nil {
-			return "", fmt.Errorf("remove symlink %s: %w", d.Path, err)
-		}
-	default:
-		if fi, err := os.Stat(d.Path); err == nil {
-			mode = fi.Mode().Perm()
-		}
-		if backup, err = sysutil.BackupFile(d.Path); err != nil {
-			return "", err
-		}
-	}
-	if err := os.WriteFile(d.Path, d.content, mode); err != nil {
-		// Put the old file back rather than leave nothing in its place.
-		if backup != "" {
-			_ = os.Rename(backup, d.Path)
-		}
-		return "", err
-	}
-	return backup, os.Chmod(d.Path, mode)
+// it made, if any. Dotfile deployment preserves a regular file's mode and
+// atomically replaces an old symlink without changing its target.
+func ReplaceClaudeCodeFile(d ClaudeCodeFileDrift) (string, error) {
+	return sysutil.DeployFileWithBackup(d.content, d.Path)
 }
 
 // StrayClaudeSettingsLocal returns ~/.claude/settings.local.json and whether it exists.

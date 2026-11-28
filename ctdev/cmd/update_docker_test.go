@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
@@ -253,11 +254,16 @@ func TestScanDocker_PartialErrorPreservesFoundUpdates(t *testing.T) {
 	})
 
 	binDir := t.TempDir()
-	// Stub docker: badCompose fails `compose config`, okCompose reports a stale image.
+	// Exercise failures before and after Compose resolves the images. A
+	// successful scan of one image must survive failures on its siblings.
 	dockerStub := `#!/bin/sh
 case "$*" in
   *"` + badCompose + `"*) exit 1 ;;
-  *"` + okCompose + `"*) echo "example/app:latest" ;;
+  *"` + okCompose + `"*) printf '%s\n' example/app:latest example/offline example/invalid example/absent example/local ;;
+  *"image inspect example/offline "*) exit 1 ;;
+  *"image inspect example/invalid "*) echo 'malformed response' ;;
+  *"image inspect example/absent "*) echo 'Error response from daemon: No such image: example/absent' >&2; exit 1 ;;
+  *"image inspect example/local "*) echo '[]' ;;
   *"image inspect"*) echo '["example/app@sha256:old"]' ;;
   *"imagetools inspect"*) echo 'Digest: sha256:new' ;;
 esac
@@ -267,11 +273,26 @@ esac
 	}
 	t.Setenv("PATH", binDir)
 
-	items, err := scanDocker(context.Background())
-	if err != nil {
-		t.Fatalf("scanDocker returned error despite finding an update: %v", err)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("NODENV_ROOT", t.TempDir())
+	oldVersion, oldVerbose := version, flagVerbose
+	version, flagVerbose = "dev", true
+	t.Cleanup(func() { version, flagVerbose = oldVersion, oldVerbose })
+	items, err := scanAll(t.Context())
+	if err == nil {
+		t.Fatal("missing scan errors")
 	}
-	if len(items) != 1 || items[0].Name != "test-stack-ok" {
-		t.Errorf("scanDocker items = %+v, want [test-stack-ok]", items)
+	for _, want := range []string{"test-stack-bad", "example/offline", "example/invalid"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("scan error %q omits %q", err, want)
+		}
+	}
+	for _, skipped := range []string{"example/absent", "example/local"} {
+		if strings.Contains(err.Error(), skipped) {
+			t.Errorf("scan error %q includes image without a local baseline: %s", err, skipped)
+		}
+	}
+	if len(items) != 1 || items[0].Name != "test-stack-ok" || items[0].NewVer != "example/app:latest" {
+		t.Errorf("scan items = %+v, want [test-stack-ok]", items)
 	}
 }

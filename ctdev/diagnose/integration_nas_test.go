@@ -9,15 +9,14 @@ import (
 	"testing"
 )
 
-// The same guarantee the UniFi client makes: a credential never leaves for a
-// public address over a connection we can't verify.
+// Appliance credentials stay on private networks.
 func TestPrivateAPIClientRefusesPublic(t *testing.T) {
 	for _, endpoint := range []string{"https://203.0.113.9", "https://8.8.8.8:5001"} {
-		if _, err := privateAPIClient(endpoint); !errors.Is(err, errUnifiPublic) {
+		if _, err := privateAPIClient(endpoint, ""); !errors.Is(err, errPublicAppliance) {
 			t.Errorf("%s: expected a refusal, got %v", endpoint, err)
 		}
 	}
-	if _, err := privateAPIClient("https://192.168.1.50:5001"); err != nil {
+	if _, err := privateAPIClient("https://192.168.1.50:5001", ""); err != nil {
 		t.Errorf("private address should be accepted, got %v", err)
 	}
 }
@@ -111,7 +110,7 @@ func TestProxmoxVerdict(t *testing.T) {
 // exactly the trace this command promises not to leave.
 func TestSynologyLogsOut(t *testing.T) {
 	var sawLogout bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Credentials travel in the body now, so the method does too.
 		_ = r.ParseForm()
 		if r.URL.RawQuery != "" {
@@ -130,7 +129,7 @@ func TestSynologyLogsOut(t *testing.T) {
 	defer srv.Close()
 
 	if _, err := collectSynology(context.Background(), SynologyCreds{
-		Endpoint: srv.URL, Username: "readonly", Password: "pw",
+		Endpoint: srv.URL, CertSHA256: certPin(srv), Username: "readonly", Password: "pw",
 	}); err != nil {
 		t.Fatalf("collectSynology: %v", err)
 	}
@@ -141,14 +140,14 @@ func TestSynologyLogsOut(t *testing.T) {
 
 func TestProxmoxSendsTokenAuth(t *testing.T) {
 	var gotAuth string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online"}]}`))
 	}))
 	defer srv.Close()
 
 	snap, err := collectProxmox(context.Background(), ProxmoxCreds{
-		Endpoint: srv.URL, TokenID: "ctdev@pve!diag", Secret: "s3cr3t",
+		Endpoint: srv.URL, CertSHA256: certPin(srv), TokenID: "ctdev@pve!diag", Secret: "s3cr3t",
 	})
 	if err != nil {
 		t.Fatalf("collectProxmox: %v", err)
@@ -177,8 +176,8 @@ func TestNASCredentialsNeverReachTheReport(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			checks, results := CollectIntegrations(context.Background(), Integrations{
-				Synology: SynologyCreds{Endpoint: endpoint, Username: "u", Password: secret},
-				Proxmox:  ProxmoxCreds{Endpoint: endpoint, TokenID: "t", Secret: secret},
+				Synology: SynologyCreds{Endpoint: endpoint, CertSHA256: certPin(srv), Username: "u", Password: secret},
+				Proxmox:  ProxmoxCreds{Endpoint: endpoint, CertSHA256: certPin(srv), TokenID: "t", Secret: secret},
 			})
 			r := Report{Checks: checks, Results: results, Facts: Facts{Hostname: "h"}}
 			if strings.Contains(Markdown(r), secret) {

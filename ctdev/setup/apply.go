@@ -161,17 +161,6 @@ func cpsToIntervalMs(rate string) string {
 	return strconv.Itoa(1000 / rateCps)
 }
 
-// applySystemdEnable enables and starts a systemd service.
-func applySystemdEnable(ctx context.Context, o sysutil.Opts, service string) error {
-	if err := sysutil.SudoRun(ctx, o, "systemctl", "enable", service); err != nil {
-		return fmt.Errorf("systemctl enable %s: %w", service, err)
-	}
-	if err := sysutil.SudoRun(ctx, o, "systemctl", "start", service); err != nil {
-		return fmt.Errorf("systemctl start %s: %w", service, err)
-	}
-	return nil
-}
-
 // applyPackages installs apt packages quietly.
 func applyPackages(ctx context.Context, o sysutil.Opts, packages []string) error {
 	return sysutil.APTGet(ctx, o, append([]string{"install", "-y", "-qq"}, packages...)...)

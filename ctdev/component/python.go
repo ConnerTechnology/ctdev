@@ -137,9 +137,7 @@ func migrateBrewPython(ctx context.Context, o sysutil.Opts, opts ExecOpts) {
 	for _, f := range remove {
 		fmt.Fprintf(opts.Stdout, "Removing Homebrew %s (replaced by pyenv)...\n", f)
 		args := []string{"uninstall"}
-		for _, d := range dependents[f] { // add-ons first: brew refuses to remove a formula they use
-			args = append(args, d)
-		}
+		args = append(args, dependents[f]...) // remove add-ons before the formula they use
 		args = append(args, f)
 		if err := sysutil.Run(ctx, o, "brew", args...); err != nil {
 			fmt.Fprintf(opts.Stdout, "warning: could not remove %s: %v\n", f, err)

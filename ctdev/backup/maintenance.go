@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"slices"
 	"strconv"
@@ -481,14 +482,13 @@ func (m *Machine) testDownload(ctx context.Context, d *Destination) error {
 		return err
 	}
 	for _, s := range latest {
-		files, err := d.fileSizes(ctx, s.ID)
+		f, err := d.sampleFile(ctx, s.ID)
 		if err != nil {
 			return err
 		}
-		if len(files) == 0 {
+		if f.path == "" {
 			continue // an empty folder has nothing to read back
 		}
-		f := m.pick(files)
 		var n countWriter
 		r := d.asComputer("", "dump", "--retry-lock", retryLock, s.ID, f.path)
 		r.stdout = &n
@@ -500,18 +500,6 @@ func (m *Machine) testDownload(ctx context.Context, d *Destination) error {
 		}
 	}
 	return nil
-}
-
-// pick chooses the file to test-download, at random.
-func (m *Machine) pick(files []fileSize) fileSize {
-	if m.pickFn != nil {
-		paths := make([]string, len(files))
-		for i, f := range files {
-			paths[i] = f.path
-		}
-		return files[m.pickFn(paths)]
-	}
-	return files[rand.IntN(len(files))]
 }
 
 type countWriter int64
@@ -556,26 +544,72 @@ type fileSize struct {
 	size int64
 }
 
-// fileSizes lists the regular files in a backup with their recorded sizes.
-func (d *Destination) fileSizes(ctx context.Context, id string) ([]fileSize, error) {
-	out, err := d.restic(ctx, d.asComputer("", "ls", "--json", "--retry-lock", retryLock, id))
-	if err != nil {
-		return nil, err
+// sampleFile picks a regular file while restic lists the snapshot. Closing the
+// pipe and cancelling on a parse error also stops a still-running listing.
+func (d *Destination) sampleFile(ctx context.Context, id string) (fileSize, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	reader, writer := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r := d.asComputer("", "ls", "--json", "--retry-lock", retryLock, id)
+		r.stdout = writer
+		_, err := d.restic(ctx, r)
+		writer.CloseWithError(err)
+	}()
+	pick := d.m.pickFn
+	if pick == nil {
+		pick = func(_ string, count int) bool { return rand.IntN(count) == 0 }
 	}
-	var files []fileSize
-	sc := bufio.NewScanner(bytes.NewReader(out))
+	file, err := sampleListing(reader, pick)
+	reader.Close()
+	cancel()
+	<-done
+	return file, err
+}
+
+// sampleListing keeps a uniform sample of one file. The nth file replaces
+// the previous sample with probability 1/n, independent of listing order.
+func sampleListing(r io.Reader, pick func(path string, count int) bool) (fileSize, error) {
+	var file fileSize
+	count := 0
+	sawRecord := false
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLine)
 	for sc.Scan() {
+		sawRecord = true
 		var n struct {
-			Type     string `json:"message_type"`
-			NodeType string `json:"type"`
-			Path     string `json:"path"`
-			Size     int64  `json:"size"`
+			MessageType string `json:"message_type"`
+			Type        string `json:"type"`
+			Path        string `json:"path"`
+			Size        int64  `json:"size"`
 		}
-		if json.Unmarshal(sc.Bytes(), &n) == nil && n.Type == "node" && n.NodeType == "file" {
-			files = append(files, fileSize{path: n.Path, size: n.Size})
+		n.Size = -1 // restic includes size for every regular file, including empty files
+		if err := json.Unmarshal(sc.Bytes(), &n); err != nil {
+			return fileSize{}, fmt.Errorf("read restic file listing: %w", err)
+		}
+		if n.MessageType == "snapshot" {
+			continue
+		}
+		if n.MessageType != "node" || n.Type == "" {
+			return fileSize{}, errors.New("unrecognized restic file listing record")
+		}
+		if n.Type != "file" {
+			continue
+		}
+		if n.Path == "" || n.Size < 0 {
+			return fileSize{}, errors.New("invalid file in restic listing")
+		}
+		count++
+		if pick(n.Path, count) {
+			file = fileSize{path: n.Path, size: n.Size}
 		}
 	}
-	slices.SortFunc(files, func(a, b fileSize) int { return cmp.Compare(a.path, b.path) })
-	return files, nil
+	if err := sc.Err(); err != nil {
+		return fileSize{}, fmt.Errorf("read restic file listing: %w", err)
+	}
+	if !sawRecord {
+		return fileSize{}, errors.New("restic returned an empty file listing")
+	}
+	return file, nil
 }

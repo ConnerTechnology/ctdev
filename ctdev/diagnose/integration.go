@@ -212,9 +212,7 @@ func tlsIdentity(ctx context.Context, addr netip.Addr) ([]string, int) {
 				names = append(names, cert.Subject.CommonName)
 			}
 			names = append(names, cert.DNSNames...)
-			for _, org := range cert.Subject.Organization {
-				names = append(names, org)
-			}
+			names = append(names, cert.Subject.Organization...)
 		}
 		conn.Close()
 		if len(names) > 0 {

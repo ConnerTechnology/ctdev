@@ -142,10 +142,10 @@ func installState(all, any bool) string {
 }
 
 // backupName matches the names sysutil.BackupPath gives backups of path:
-// <path>.<YYYY-MM-DDTHH-MM-SS>.bak.
+// a timestamp with an optional same-second sequence.
 func backupName(path string) *regexp.Regexp {
 	return regexp.MustCompile(`^` + regexp.QuoteMeta(path) +
-		`\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.bak$`)
+		`\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:_\d{9})?\.bak$`)
 }
 
 // backupsNewestFirst returns the backups DeployFile made of path, newest

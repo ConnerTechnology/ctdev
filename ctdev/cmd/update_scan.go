@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ConnerTechnology/ctdev/ctdev/component"
@@ -34,10 +33,7 @@ import (
 // otherwise re-runs the install. updateNeedsRoot in update.go assumes a "cli"
 // item needs root, so exempt the name there when its update stays inside $HOME.
 // A component installed as a git clone goes in gitRepos instead.
-func scanAll(ctx context.Context) []checklist.UpdateItem {
-	var mu sync.Mutex
-	var allItems []checklist.UpdateItem
-
+func scanAll(ctx context.Context) ([]checklist.UpdateItem, error) {
 	type namedScanner struct {
 		name string
 		fn   func(context.Context) ([]checklist.UpdateItem, error)
@@ -67,71 +63,41 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		}})
 	}
 
-	// scanErrs collects failures so one broken source doesn't silently make the
-	// machine look up to date. Protected by mu alongside allItems.
-	var scanErrs []string
-
-	total := len(scanners)
-	done := make(chan struct{}, total)
-	printerDone := make(chan struct{})
-
-	go func() {
-		defer close(printerDone)
-		count := 0
-		for range done {
-			count++
-			fmt.Printf("\r  %s", styles.Dimmed.Render(fmt.Sprintf("Scanning for updates... (%d/%d sources checked)", count, total)))
-		}
-		fmt.Println()
-	}()
-
-	var wg sync.WaitGroup
-	for _, s := range scanners {
-		s := s
-		wg.Add(1)
+	// A source can discover updates before one of its probes fails. Deliver both
+	// together so a failed probe never drops the items that can be updated.
+	type result struct {
+		source string
+		items  []checklist.UpdateItem
+		err    error
+	}
+	done := make(chan result)
+	for _, scanner := range scanners {
 		go func() {
-			defer wg.Done()
-			defer func() { done <- struct{}{} }()
+			r := result{source: scanner.name}
 			defer func() {
-				if r := recover(); r != nil {
-					// Record (don't crash on) a panicking scanner so one
-					// failure doesn't take down the entire update check.
-					mu.Lock()
-					scanErrs = append(scanErrs, fmt.Sprintf("%s: panic: %v", s.name, r))
-					mu.Unlock()
+				if p := recover(); p != nil {
+					r.err = fmt.Errorf("panic: %v", p)
 				}
+				done <- r
 			}()
-			items, err := s.fn(ctx)
-			if err != nil {
-				mu.Lock()
-				scanErrs = append(scanErrs, fmt.Sprintf("%s: %v", s.name, err))
-				mu.Unlock()
-				return
-			}
-			if len(items) > 0 {
-				mu.Lock()
-				allItems = append(allItems, items...)
-				mu.Unlock()
-			}
+			r.items, r.err = scanner.fn(ctx)
 		}()
 	}
-
-	wg.Wait()
-	close(done)
-	<-printerDone
-
-	// Surface scanner failures so a rate-limited / broken source isn't mistaken
-	// for "nothing to update". Detail is gated behind --verbose to keep the
-	// common path quiet.
-	if len(scanErrs) > 0 {
-		if flagVerbose {
-			for _, e := range scanErrs {
-				fmt.Printf("  %s\n", styles.Warning.Render("update source failed — "+e))
+	var allItems []checklist.UpdateItem
+	var failures []string
+	for i := range scanners {
+		r := <-done
+		fmt.Printf("\r  %s", styles.Dimmed.Render(fmt.Sprintf("Scanning for updates... (%d/%d sources checked)", i+1, len(scanners))))
+		allItems = append(allItems, r.items...)
+		if r.err != nil {
+			failure := r.source
+			if flagVerbose {
+				failure += ": " + r.err.Error()
 			}
-		} else {
-			fmt.Printf("  %s\n", styles.Warning.Render(fmt.Sprintf("%d update source(s) failed to check (run with -v for detail)", len(scanErrs))))
+			failures = append(failures, failure)
 		}
 	}
+	fmt.Println()
 
 	// Sort by source for grouped display
 	sourceOrder := map[string]int{
@@ -147,7 +113,11 @@ func scanAll(ctx context.Context) []checklist.UpdateItem {
 		return allItems[i].Name < allItems[j].Name
 	})
 
-	return allItems
+	if len(failures) > 0 {
+		sort.Strings(failures)
+		return allItems, fmt.Errorf("update scan incomplete for %s", strings.Join(failures, "; "))
+	}
+	return allItems, nil
 }
 
 func parseAPTUpgradable(output string) []checklist.UpdateItem {
@@ -227,12 +197,9 @@ func scanFlatpak(ctx context.Context) ([]checklist.UpdateItem, error) {
 
 // brewManages reports whether Homebrew owns this formula on this machine.
 //
-// The runtime updaters install upstream tarballs into /usr/local (go) or drive
-// rbenv, which is right on Linux but actively harmful on a Mac where the
-// same tool came from brew: `updateGo` would `sudo rm -rf /usr/local/go` on top
-// of a Homebrew install, and the tool would show up twice in the same update
-// list. The installers already defer to brew here (see component/go.go,
-// component/ruby.go); the scanners have to as well.
+// Homebrew updates the runtimes it owns. Offering the upstream Go archive
+// or rbenv path as well would update a different installation and list the
+// same tool twice.
 //
 // `brew list --versions` exits non-zero when the formula isn't installed, which
 // is exactly the question being asked.
@@ -389,14 +356,12 @@ func scanGitRepo(ctx context.Context, name, dir string) ([]checklist.UpdateItem,
 }
 
 func scanBun(ctx context.Context) ([]checklist.UpdateItem, error) {
-	bunPath, err := exec.LookPath("bun")
-	if err != nil {
+	if _, err := exec.LookPath("bun"); err != nil {
 		return nil, nil
 	}
-	_ = bunPath
 	currentOut, err := exec.CommandContext(ctx, "bun", "--version").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("bun --version: %w", err)
 	}
 	current := strings.TrimSpace(string(currentOut))
 
@@ -437,9 +402,10 @@ func scanPyenv(ctx context.Context) ([]checklist.UpdateItem, error) {
 		return nil, nil
 	}
 
-	// fetchLatestPythonPatch returns "" when pyenv has no usable definition
-	// list, which is a "can't determine", not a failure — stay silent then.
-	latest := fetchLatestPythonPatch(ctx, current)
+	latest, err := fetchLatestPythonPatch(ctx, current)
+	if err != nil {
+		return nil, fmt.Errorf("pyenv install --list: %w", err)
+	}
 	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
@@ -475,19 +441,18 @@ func scanNPMGlobals(ctx context.Context) ([]checklist.UpdateItem, error) {
 	if _, err := exec.LookPath(name); err != nil {
 		return nil, nil
 	}
-	// `npm outdated` exits non-zero precisely when there ARE outdated packages,
-	// so a non-zero exit WITH output is the normal case. Only an error with no
-	// output at all is a genuine failure worth surfacing.
+	// npm exits 1 when it finds outdated packages, but errors such as a
+	// registry failure can also produce JSON. Check both the exit and payload.
 	c := exec.CommandContext(ctx, name, append(prefix, "outdated", "-g", "--json")...)
 	c.Env = append(os.Environ(), env...)
 	out, err := c.Output()
-	if err != nil && len(out) == 0 {
-		return nil, fmt.Errorf("npm outdated -g: %w", err)
-	}
-	// npm outdated -g --json returns {} if nothing outdated, or {"pkg": {"current": "x", "wanted": "y", "latest": "z"}}
-	// Parse manually to avoid encoding/json import overhead for simple case
 	content := strings.TrimSpace(string(out))
-	if content == "" || content == "{}" {
+	if err != nil {
+		if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 || content == "" || content == "{}" {
+			return nil, fmt.Errorf("npm outdated -g: %w", err)
+		}
+	}
+	if content == "" {
 		return nil, nil
 	}
 	return parseNPMOutdatedJSON(content)
@@ -497,9 +462,13 @@ func parseNPMOutdatedJSON(content string) ([]checklist.UpdateItem, error) {
 	var packages map[string]struct {
 		Current string `json:"current"`
 		Latest  string `json:"latest"`
+		Code    string `json:"code"` // npm error envelope
 	}
 	if err := json.Unmarshal([]byte(content), &packages); err != nil {
 		return nil, err
+	}
+	if failure := packages["error"]; failure.Code != "" {
+		return nil, fmt.Errorf("npm outdated failed: %s", failure.Code)
 	}
 	var items []checklist.UpdateItem
 	for name, pkg := range packages {
@@ -568,7 +537,7 @@ func scanGo(ctx context.Context) ([]checklist.UpdateItem, error) {
 	// "go version go1.26.1 linux/amd64"
 	fields := strings.Fields(string(out))
 	if len(fields) < 3 {
-		return nil, nil
+		return nil, fmt.Errorf("could not read go version")
 	}
 	current := strings.TrimPrefix(fields[2], "go")
 
@@ -618,14 +587,17 @@ func scanRuby(ctx context.Context) ([]checklist.UpdateItem, error) {
 		// "ruby 3.4.1 (2024-12-25 revision 48d4efcb85) +PRISM [x86_64-linux]"
 		fields := strings.Fields(string(out))
 		if len(fields) < 2 {
-			return nil, nil
+			return nil, fmt.Errorf("could not read ruby version")
 		}
 		current = fields[1]
 	}
 
 	// fetchLatestRubyVersion returns "" when ruby-build isn't present, which is a
 	// legitimate "can't determine", not a failure — stay silent in that case.
-	latest := fetchLatestRubyVersion(ctx)
+	latest, err := fetchLatestRubyVersion(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ruby-build --definitions: %w", err)
+	}
 	if latest == "" || !versionNewer(latest, current) {
 		return nil, nil
 	}
@@ -643,7 +615,7 @@ func scanHelm(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	out, err := exec.CommandContext(ctx, "helm", "version", "--short").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("helm version: %w", err)
 	}
 	// "v3.16.1+g5a5011d"
 	current := strings.TrimSpace(string(out))
@@ -709,7 +681,7 @@ func scanKubectl(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	out, err := exec.CommandContext(ctx, "kubectl", "version", "--client", "--output=json").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("kubectl version: %w", err)
 	}
 	var kubectlVer struct {
 		ClientVersion struct {
@@ -717,9 +689,12 @@ func scanKubectl(ctx context.Context) ([]checklist.UpdateItem, error) {
 		} `json:"clientVersion"`
 	}
 	if err := json.Unmarshal(out, &kubectlVer); err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("parse kubectl version: %w", err)
 	}
 	current := strings.TrimPrefix(kubectlVer.ClientVersion.GitVersion, "v")
+	if current == "" {
+		return nil, fmt.Errorf("kubectl returned no client version")
+	}
 
 	// Fetch latest stable kubectl version
 	latest, err := fetchLatestKubectlVersion(ctx)
@@ -743,17 +718,17 @@ func scanTerraform(ctx context.Context) ([]checklist.UpdateItem, error) {
 	}
 	out, err := exec.CommandContext(ctx, "terraform", "version", "-json").Output()
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("terraform version: %w", err)
 	}
 	var tfVer struct {
 		TerraformVersion string `json:"terraform_version"`
 	}
 	if err := json.Unmarshal(out, &tfVer); err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("parse terraform version: %w", err)
 	}
 	current := tfVer.TerraformVersion
 	if current == "" {
-		return nil, nil
+		return nil, fmt.Errorf("terraform returned no version")
 	}
 
 	latest, err := sysutil.GitHubLatestVersion(ctx, "hashicorp/terraform")

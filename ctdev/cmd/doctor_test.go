@@ -247,3 +247,14 @@ func TestOnlyNetworkGroups(t *testing.T) {
 		t.Errorf("onlyNetworkGroups() = %+v, want [net.gw dns.pub]", got)
 	}
 }
+
+func TestDoctorCertificatePinsArePerAppliance(t *testing.T) {
+	flagDoctorBatch(t)
+	t.Setenv("CTDEV_UNIFI_CERT_SHA256", "example-unifi-pin")
+	t.Setenv("CTDEV_SYNOLOGY_CERT_SHA256", "example-synology-pin")
+	t.Setenv("CTDEV_PROXMOX_CERT_SHA256", "example-proxmox-pin")
+	creds := integrationCreds(t.Context(), diagnose.Facts{})
+	if creds.UniFi.CertSHA256 != "example-unifi-pin" || creds.Synology.CertSHA256 != "example-synology-pin" || creds.Proxmox.CertSHA256 != "example-proxmox-pin" {
+		t.Fatal("doctor did not pass each appliance its own certificate pin")
+	}
+}

@@ -116,6 +116,13 @@ sudo journalctl -b -1 -p err                      # Errors from previous boot
 sudo nvme smart-log /dev/nvme0n1 | grep unsafe     # Unsafe shutdown count
 ```
 
+### Go is missing after an interrupted archive installation
+
+On Linux, retry with `ctdev --force install go`. An official archive upgrade
+keeps the previous installation in `/usr/local/go.ctdev-install/previous`
+until the new tree is in place. The next archive installation recovers it if
+the system stopped between the two renames.
+
 ## Zsh
 
 **Oh My Zsh not loading:** Check `ls -la ~/.zshrc` — should be a regular file (not a symlink). Re-run `ctdev install zsh`.

@@ -178,7 +178,7 @@ fi
 
 # Fetch the release's checksum first: it decides both whether the binary
 # already installed can stay, and whether the download can be trusted. Fail
-# closed: a missing SUMS file or sha256sum binary aborts the install — anyone
+# closed: a missing SUMS file or SHA-256 verifier aborts the install — anyone
 # who can tamper with the download path could otherwise just break the SUMS
 # fetch to skip verification. CTDEV_SKIP_VERIFY=1 is the explicit escape hatch
 # for old releases that predate checksum publishing.
@@ -187,14 +187,18 @@ expected=""
 if [[ "${CTDEV_SKIP_VERIFY:-}" == "1" ]]; then
     warn "CTDEV_SKIP_VERIFY=1 — skipping checksum verification"
 else
-    if ! command -v sha256sum >/dev/null 2>&1; then
-        error "sha256sum is required to verify the download (or set CTDEV_SKIP_VERIFY=1 to skip)"
+    if command -v sha256sum >/dev/null 2>&1; then
+        hash_cmd=(sha256sum)
+    elif command -v shasum >/dev/null 2>&1; then
+        hash_cmd=(shasum -a 256)
+    else
+        error "sha256sum or shasum is required to verify the download"
     fi
     SUMS_TMP=$(mktemp)
     if ! download "$SUMS_URL" "$SUMS_TMP" 2>/dev/null; then
         error "Could not fetch SHA256SUMS for ${VERSION} — refusing to install an unverified binary.\n  Check that the release exists, retry, or set CTDEV_SKIP_VERIFY=1 if it predates checksums."
     fi
-    expected=$(grep "ctdev-${PLATFORM}\$" "$SUMS_TMP" | awk '{print $1}')
+    expected=$(awk -v asset="ctdev-$PLATFORM" '$2 == asset || $2 == "*" asset { print $1 }' "$SUMS_TMP")
     if [[ -z "$expected" ]]; then
         error "No checksum entry for ctdev-${PLATFORM} in SHA256SUMS — refusing to install (or set CTDEV_SKIP_VERIFY=1)"
     fi
@@ -207,7 +211,7 @@ fi
 # CTDEV_SKIP_VERIFY=1 there is nothing to compare against, so it reinstalls.
 # Ephemeral runs start from an empty temp directory and never match.
 if [[ $EPHEMERAL -eq 0 ]] && [[ -n "$expected" ]] && [[ -f "$INSTALL_DIR/ctdev" ]]; then
-    current=$(sha256sum "$INSTALL_DIR/ctdev" | awk '{print $1}')
+    current=$("${hash_cmd[@]}" < "$INSTALL_DIR/ctdev" | awk '{print $1}')
     if [[ "$current" == "$expected" ]]; then
         success "ctdev ${VERSION} is already installed at $INSTALL_DIR/ctdev"
         exit 0
@@ -230,7 +234,7 @@ if ! download "$BINARY_URL" "$TMP"; then
 fi
 
 if [[ -n "$expected" ]]; then
-    actual=$(sha256sum "$TMP" | awk '{print $1}')
+    actual=$("${hash_cmd[@]}" < "$TMP" | awk '{print $1}')
     if [[ "$expected" != "$actual" ]]; then
         error "Checksum mismatch for ctdev-${PLATFORM}.\n  expected: $expected\n  actual:   $actual"
     fi

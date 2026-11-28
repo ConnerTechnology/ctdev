@@ -2,16 +2,13 @@ package diagnose
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // Synology and Proxmox are the default NAS and hypervisor in this class of
@@ -24,9 +21,10 @@ import (
 // SynologyCreds reaches a DSM box. Create a read-only DSM user for this; it
 // needs nothing more than permission to view storage.
 type SynologyCreds struct {
-	Endpoint string
-	Username string
-	Password string
+	Endpoint   string
+	CertSHA256 string
+	Username   string
+	Password   string
 }
 
 func (c SynologyCreds) usable() bool {
@@ -36,7 +34,8 @@ func (c SynologyCreds) usable() bool {
 // ProxmoxCreds reaches a PVE node. An API token is preferred over a password:
 // it can be scoped read-only and revoked without changing anyone's login.
 type ProxmoxCreds struct {
-	Endpoint string
+	Endpoint   string
+	CertSHA256 string
 	// TokenID is the full "user@realm!tokenname" identifier.
 	TokenID string
 	Secret  string
@@ -44,30 +43,6 @@ type ProxmoxCreds struct {
 
 func (c ProxmoxCreds) usable() bool {
 	return c.Endpoint != "" && c.TokenID != "" && c.Secret != ""
-}
-
-// privateAPIClient builds an HTTP client for a self-signed appliance on the
-// local network, refusing anything that isn't private. Shared by both vendors
-// because the reasoning is identical: NAS and hypervisor web UIs ship
-// self-signed certificates, and the address check is what makes accepting
-// them defensible.
-func privateAPIClient(endpoint string) (*http.Client, error) {
-	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("bad URL %q: %w", endpoint, err)
-	}
-	addr, err := netip.ParseAddr(parsed.Hostname())
-	if err != nil || !IsPrivate(addr) {
-		return nil, errUnifiPublic
-	}
-	return &http.Client{
-		Timeout:       10 * time.Second,
-		CheckRedirect: refuseCrossHostRedirect(parsed),
-		Transport: &http.Transport{
-			//nolint:gosec // Self-signed by design; gated to private addresses above.
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
-		},
-	}, nil
 }
 
 // --- Synology ---
@@ -105,7 +80,7 @@ func collectSynology(ctx context.Context, creds SynologyCreds) (*SynologyStorage
 	if !creds.usable() {
 		return nil, errUnifiNoCreds
 	}
-	client, err := privateAPIClient(creds.Endpoint)
+	client, err := privateAPIClient(creds.Endpoint, creds.CertSHA256)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +242,7 @@ func collectProxmox(ctx context.Context, creds ProxmoxCreds) (*ProxmoxSnapshot, 
 	if !creds.usable() {
 		return nil, errUnifiNoCreds
 	}
-	client, err := privateAPIClient(creds.Endpoint)
+	client, err := privateAPIClient(creds.Endpoint, creds.CertSHA256)
 	if err != nil {
 		return nil, err
 	}
@@ -299,10 +274,10 @@ func proxmoxGet(ctx context.Context, client *http.Client, target, auth string, o
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("Proxmox rejected the token")
+		return fmt.Errorf("token rejected by Proxmox")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Proxmox returned %s", resp.Status)
+		return fmt.Errorf("unexpected response from Proxmox: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxUnifiResponse))
